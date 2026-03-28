@@ -80,25 +80,25 @@ internal fun HomeScreen(
             ) { index ->
                 saveableStateHolder.SaveableStateProvider(index) {
                     when (HomeNavDestination.all[index].route) {
-                        HomeRoute.Photos -> {
+                        HomeRoute.Map -> {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    text = "Photos",
+                                    text = "Map",
                                     style = MaterialTheme.typography.titleLarge,
                                 )
                             }
                         }
 
-                        HomeRoute.Downloads -> {
+                        HomeRoute.Route -> {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    text = "Downloads",
+                                    text = "Route",
                                     style = MaterialTheme.typography.titleLarge,
                                 )
                             }
