@@ -6,20 +6,38 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import me.matsumo.onenavi.core.resource.*
+import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.google_sans_bold
+import me.matsumo.onenavi.core.resource.google_sans_medium
+import me.matsumo.onenavi.core.resource.google_sans_regular
+import me.matsumo.onenavi.core.resource.home_title
 import me.matsumo.onenavi.core.ui.screen.Destination
 import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
+import me.matsumo.onenavi.feature.home.map.HomeMapScreen
+import me.matsumo.onenavi.feature.home.map.HomeMapViewModel
 import org.jetbrains.compose.resources.Font
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
@@ -81,15 +99,12 @@ internal fun HomeScreen(
                 saveableStateHolder.SaveableStateProvider(index) {
                     when (HomeNavDestination.all[index].route) {
                         HomeRoute.Map -> {
-                            Box(
+                            val mapViewModel = koinViewModel<HomeMapViewModel>()
+
+                            HomeMapScreen(
                                 modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = "Map",
-                                    style = MaterialTheme.typography.titleLarge,
-                                )
-                            }
+                                mapBoxToken = mapViewModel.mapBoxToken,
+                            )
                         }
 
                         HomeRoute.Route -> {

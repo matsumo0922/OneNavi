@@ -8,6 +8,7 @@ data class AppConfig(
     val versionName: String,
     val versionCode: Int,
     val developerPin: String,
+    val mapBoxToken: String,
     val adMobAppId: String,
     val adMobInterstitialAdUnitId: String,
     val adMobBannerAdUnitId: String,

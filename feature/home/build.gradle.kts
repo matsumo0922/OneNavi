@@ -23,5 +23,9 @@ kotlin {
 
             implementation(libs.kotlinx.datetime)
         }
+
+        androidMain.dependencies {
+            implementation(libs.bundles.mapbox)
+        }
     }
 }

@@ -60,6 +60,10 @@ zoomable = "2.9.0"
 kolor = "4.0.5"
 colorPicker = "1.1.3"
 
+# Mapbox
+mapbox = "3.21.0-rc.1"
+mapboxExtension = "11.20.2"
+
 # Ads
 lexilabsBasicAds = "1.1.0"
 
@@ -152,6 +156,13 @@ compose-material-icons = { module = "org.jetbrains.compose.material:material-ico
 # Navigation
 compose-navigation3 = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version = "1.0.0-alpha06" }
 compose-navigation3-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3", version = "2.10.0-alpha07" }
+
+# Mapbox
+mapbox-android = { module = "com.mapbox.navigationcore:android-ndk27", version.ref = "mapbox" }
+mapbox-ui-maps = { module = "com.mapbox.navigationcore:ui-maps-ndk27", version.ref = "mapbox" }
+mapbox-ui-components = { module = "com.mapbox.navigationcore:ui-components-ndk27", version.ref = "mapbox" }
+mapbox-tripdata = { module = "com.mapbox.navigationcore:tripdata-ndk27", version.ref = "mapbox" }
+mapbox-extension-compose = { module = "com.mapbox.extension:maps-compose-ndk27", version.ref = "mapboxExtension" }
 
 # Purchase
 purchases-core = { module = "com.revenuecat.purchases:purchases-kmp-core", version.ref = "kmpPurchase" }
@@ -298,4 +309,12 @@ filekit = [
     "filekit-core",
     "filekit-dialogs",
     "filekit-coil",
+]
+
+mapbox = [
+    "mapbox-android",
+    "mapbox-tripdata",
+    "mapbox-ui-maps",
+    "mapbox-ui-components",
+    "mapbox-extension-compose",
 ]
