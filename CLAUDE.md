@@ -48,6 +48,8 @@ feature/
 build-logic/          — Convention Plugins (primitive.*)
 config/detekt/        — detekt 設定
 docs/spec/            — 仕様書
+docs/idea/            — UI リファレンス画像
+docs/design/          — Pencil デザインファイル (.pen)
 ```
 
 ## Build & Run
