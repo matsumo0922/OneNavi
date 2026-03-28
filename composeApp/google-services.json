@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "641570800809",
+    "project_id": "onenavi-368d2",
+    "storage_bucket": "onenavi-368d2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:641570800809:android:2714f74ff59ce9a39a95b8",
+        "android_client_info": {
+          "package_name": "me.matsumo.onenavi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCE_LfdTA3kvfQhaZVMj4PjNJDQzt-oDGY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:641570800809:android:2714f74ff59ce9a39a95b8",
+        "android_client_info": {
+          "package_name": "me.matsumo.onenavi.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCE_LfdTA3kvfQhaZVMj4PjNJDQzt-oDGY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

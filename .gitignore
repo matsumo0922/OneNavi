@@ -1,21 +1,64 @@
-# Environment / Secrets
-.env
-*.keystore
-*.jks
+# built application files
+*.apk
+*.apks
+*.aab
+*.ap_
+.externalNativeBuild
+.cxx
+
+# files for the dex VM
+*.dex
+
+# Java class files
+*.class
+
+# generated files
+bin/
+gen/
+out/
+build/
+composeApp/release/
+!src/**/build/
+
+# Local configuration file (sdk path, etc)
 local.properties
 
-# IDE
-.idea/
-*.iml
+# Eclipse project files
+.classpath
+.project
 
-# Gradle
-.gradle/
-build/
-!gradle/wrapper/gradle-wrapper.jar
-
-# OS
+# MacOS thumbnail db
 .DS_Store
-Thumbs.db
 
-# Mapbox
-secret.properties
+# Keystore
+gradle/keystore/release.keystore
+
+# IDEA/Android Studio project files, because
+# the project can be imported from settings.gradle.kts
+*.iml
+.idea
+
+# Gradle cache
+.gradle
+
+# Kotlin
+.kotlin
+
+# Sandbox stuff
+_sandbox
+
+# Android Studio captures folder
+captures/
+
+# Room schema
+core/database/schemas
+
+# iOS secret files
+iosApp/iosApp/secret.plist
+
+# Xcode (XcodeGen で生成されるファイルを含む)
+xcuserdata
+*.xcodeproj
+iosApp/OneNavi/Info.plist
+iosApp/ShareExtension/Info.plist
+iosApp/Pods

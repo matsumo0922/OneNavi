@@ -1,0 +1,301 @@
+[versions]
+# Application
+versionName = "0.0.3"
+versionCode = "3"
+
+# SDK
+minSdk = "26"
+targetSdk = "36"
+compileSdk = "36"
+
+# Gradle
+gradle = "8.13.2"
+
+# Kotlin
+kotlin = "2.3.10"
+
+# KotlinX
+kotlinxCoroutines = "1.10.2"
+kotlinxDatetime = "0.7.1"
+kotlinxSerializationJson = "1.10.0"
+kotlinxImmutable = "0.4.0"
+
+# KMP
+kmpCompose = "1.10.2"
+kmpComplete = "1.1.0"
+kmpLifecycle = "2.9.6"
+kmpNavigation = "2.9.2"
+kmpPurchase = "2.8.0+17.46.0"
+kmpPurchaseCommon = "14.0.2"
+adaptive = "1.2.0"
+
+# AndroidX
+androidxCore = "1.17.0"
+androidxCoreSplash = "1.2.0"
+androidxAppCompat = "1.7.1"
+androidxActivity = "1.12.2"
+androidxFragment = "1.8.9"
+androidxDataStore = "1.2.0"
+androidxAnnotation = "1.9.1"
+androidxRoom = "2.7.1"
+androidxSqlite = "2.5.1"
+
+# Google
+playReview = "2.0.2"
+playUpdate = "2.1.0"
+playServiceAds = "24.9.0"
+ksp = "2.3.4"
+gms = "4.4.4"
+
+# Firebase
+firebase = "34.7.0"
+firebaseCrashlytics = "3.0.6"
+
+# koin
+koin = "4.1.1"
+
+# UI
+calf = "0.9.0"
+zoomable = "2.9.0"
+kolor = "4.0.5"
+colorPicker = "1.1.3"
+
+# Ads
+lexilabsBasicAds = "1.1.0"
+
+# Others
+gifkt = "0.3.3"
+kmpZip = "0.7.2"
+ktor = "3.3.3"
+coil3 = "3.3.0"
+filekit = "0.13.0"
+detekt = "1.23.8"
+libraries = "13.2.1"
+placeholder = "1.0.2"
+buildKonfig = "0.17.1"
+twitterComposeRule = "0.0.26"
+
+# Debugs
+napier = "2.7.1"
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "gradle" }
+android-library = { id = "com.android.library", version.ref = "gradle" }
+kotlin-compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+gms = { id = "com.google.gms.google-services", version.ref = "gms" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "firebaseCrashlytics" }
+libraries = { id = "com.mikepenz.aboutlibraries.plugin", version.ref = "libraries" }
+kmp = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kmpCompose = { id = "org.jetbrains.compose", version.ref = "kmpCompose" }
+kmpComplete = { id = "com.louiscad.complete-kotlin", version.ref = "kmpComplete" }
+
+[libraries]
+## Dependency of the include build-logic
+android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "gradle" }
+kotlin-gradlePlugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }
+gms-services = { group = "com.google.gms", name = "google-services", version.ref = "gms" }
+build-konfig-gradlePlugin = { group = "com.codingfeline.buildkonfig", name = "buildkonfig-gradle-plugin", version.ref = "buildKonfig" }
+secret-gradlePlugin = { group = "com.google.android.libraries.mapsplatform.secrets-gradle-plugin", name = "secrets-gradle-plugin", version = "2.0.1" }
+detekt-gradlePlugin = { group = "io.gitlab.arturbosch.detekt", name = "detekt-gradle-plugin", version.ref = "detekt" }
+detekt-formatting = { group = "io.gitlab.arturbosch.detekt", name = "detekt-formatting", version.ref = "detekt" }
+
+# Kotlin
+kotlin-bom = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
+kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib-jdk8" }
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect" }
+
+# KotlinX
+kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinxDatetime" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+kotlinx-collections-immutable = { group = "org.jetbrains.kotlinx", name = "kotlinx-collections-immutable", version.ref = "kotlinxImmutable" }
+
+# AndroidX
+androidx-core = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
+androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "androidxCoreSplash" }
+androidx-annotation = { module = "androidx.annotation:annotation", version.ref = "androidxAnnotation" }
+androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidxAppCompat" }
+androidx-activity = { module = "androidx.activity:activity-ktx", version.ref = "androidxActivity" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
+androidx-fragment = { module = "androidx.fragment:fragment-ktx", version.ref = "androidxFragment" }
+androidx-datastore = { module = "androidx.datastore:datastore", version.ref = "androidxDataStore" }
+androidx-datastore-proto = { module = "androidx.datastore:datastore-core", version.ref = "androidxDataStore" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences-core", version.ref = "androidxDataStore" }
+androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "androidxRoom" }
+androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "androidxRoom" }
+androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "androidxSqlite" }
+
+# KMP
+kmp-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "kmpLifecycle" }
+kmp-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "kmpLifecycle" }
+kmp-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "kmpNavigation" }
+kmp-navigation3 = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version = "1.0.0-alpha06" }
+kmp-navigation3-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3", version = "2.10.0-alpha07" }
+
+# Compose
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "kmpCompose" }
+compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "kmpCompose" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "kmpCompose" }
+compose-animation = { module = "org.jetbrains.compose.animation:animation", version.ref = "kmpCompose" }
+compose-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "kmpCompose" }
+compose-saveable = { module = "org.jetbrains.compose.runtime:runtime-saveable", version.ref = "kmpCompose" }
+compose-ui-tooling-preview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "kmpCompose" }
+compose-ui-tooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "kmpCompose" }
+
+# Material
+compose-material3 = { module = "org.jetbrains.compose.material3:material3", version = "1.10.0-alpha05" }
+compose-material3-adaptive-suite = { module = "org.jetbrains.compose.material3:material3-adaptive-navigation-suite", version = "1.9.0" }
+compose-material-icons = { module = "org.jetbrains.compose.material:material-icons-extended", version = "1.7.3" }
+
+# Navigation
+compose-navigation3 = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version = "1.0.0-alpha06" }
+compose-navigation3-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3", version = "2.10.0-alpha07" }
+
+# Purchase
+purchases-core = { module = "com.revenuecat.purchases:purchases-kmp-core", version.ref = "kmpPurchase" }
+purchases-datetime = { module = "com.revenuecat.purchases:purchases-kmp-datetime", version.ref = "kmpPurchase" }
+purchases-result = { module = "com.revenuecat.purchases:purchases-kmp-result", version.ref = "kmpPurchase" }
+
+# Adaptive
+adaptive = { module = "org.jetbrains.compose.material3.adaptive:adaptive", version.ref = "adaptive" }
+adaptive-layout = { module = "org.jetbrains.compose.material3.adaptive:adaptive-layout", version.ref = "adaptive" }
+
+# Firebase
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase" }
+firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
+firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
+
+# Google
+play-review = { module = "com.google.android.play:review-ktx", version.ref = "playReview" }
+play-update = { module = "com.google.android.play:app-update-ktx", version.ref = "playUpdate" }
+play-service-ads = { module = "com.google.android.gms:play-services-ads", version.ref = "playServiceAds" }
+
+# Koin
+koin-bom = { module = "io.insert-koin:koin-bom", version.ref = "koin" }
+koin-core = { module = "io.insert-koin:koin-core" }
+koin-android = { module = "io.insert-koin:koin-android" }
+koin-androidx-startup = { module = "io.insert-koin:koin-androidx-startup", version.ref = "koin" }
+koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
+koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
+
+# Ktor
+ktor-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+ktor-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+ktot-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
+
+# UI
+calf-ui = { module = "com.mohamedrejeb.calf:calf-ui", version.ref = "calf" }
+calf-permission = { module = "com.mohamedrejeb.calf:calf-permissions", version.ref = "calf" }
+calf-filepicker = { module = "com.mohamedrejeb.calf:calf-file-picker", version.ref = "calf" }
+zoomable = { module = "net.engawapg.lib:zoomable", version.ref = "zoomable" }
+kolor = { module = "com.materialkolor:material-kolor", version.ref = "kolor" }
+colorpicker = { module = "com.github.skydoves:colorpicker-compose", version.ref = "colorPicker" }
+
+# FileKit
+filekit-core = { module = "io.github.vinceglb:filekit-core", version.ref = "filekit" }
+filekit-dialogs = { module = "io.github.vinceglb:filekit-dialogs-compose", version.ref = "filekit" }
+filekit-coil = { module = "io.github.vinceglb:filekit-coil", version.ref = "filekit" }
+
+# Others
+coil3-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil3" }
+coil3-network = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil3" }
+desugar = { module = "com.android.tools:desugar_jdk_libs", version = "2.1.5" }
+placeholder = { module = "com.revenuecat.purchases:placeholder", version.ref = "placeholder" }
+libraries-core = { module = "com.mikepenz:aboutlibraries-core", version.ref = "libraries" }
+libraries-ui = { module = "com.mikepenz:aboutlibraries-compose", version.ref = "libraries" }
+
+# GIF / ZIP
+gifkt = { module = "com.shakster:gifkt", version.ref = "gifkt" }
+kmp-zip = { module = "no.synth:kmp-zip", version.ref = "kmpZip" }
+
+# Ads
+lexilabs-basic-ads = { group = "app.lexilabs.basic", name = "basic-ads", version.ref = "lexilabsBasicAds" }
+
+# Debugs
+napier = { module = "io.github.aakira:napier", version.ref = "napier" }
+twitter-compose-rule = { module = "com.twitter.compose.rules:detekt", version.ref = "twitterComposeRule" }
+
+[bundles]
+infra = [
+    "kotlin-stdlib",
+    "kotlin-reflect",
+    "kotlinx-datetime",
+    "kotlinx-serialization-json",
+    "kotlinx-collections-immutable",
+    "napier",
+]
+
+ui-android = [
+    "androidx-core",
+    "androidx-annotation",
+    "androidx-appcompat",
+    "androidx-activity",
+    "androidx-activity-compose",
+    "androidx-fragment",
+]
+
+ui-common = [
+    "kmp-lifecycle-runtime-compose",
+    "kmp-lifecycle-viewmodel-compose",
+    "coil3-compose",
+    "coil3-network",
+    "kolor",
+    "placeholder",
+]
+
+compose = [
+    "compose-runtime",
+    "compose-ui",
+    "compose-foundation",
+    "compose-animation",
+    "compose-saveable",
+    "compose-ui-tooling-preview",
+    "compose-material3",
+    "compose-material3-adaptive-suite",
+    "compose-material-icons",
+    "compose-navigation3",
+    "compose-navigation3-viewmodel",
+]
+
+purchase = [
+    "purchases-core",
+    "purchases-result",
+]
+
+ktor = [
+    "ktor-core",
+    "ktor-content-negotiation",
+    "ktor-serialization-json",
+    "ktot-logging",
+]
+
+koin = [
+    "koin-core",
+    "koin-compose",
+    "koin-compose-viewmodel",
+]
+
+calf = [
+    "calf-ui",
+    "calf-permission",
+    "calf-filepicker",
+]
+
+firebase = [
+    "firebase-analytics",
+    "firebase-crashlytics",
+]
+
+filekit = [
+    "filekit-core",
+    "filekit-dialogs",
+    "filekit-coil",
+]

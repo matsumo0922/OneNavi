@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Common -->
+    <string name="common_ok">OK</string>
+    <string name="common_cancel">キャンセル</string>
+    <string name="common_apply">適用</string>
+    <string name="common_allow">許可</string>
+    <string name="common_denied">拒否</string>
+    <string name="common_retry">再試行</string>
+    <string name="common_reload">再読み込み</string>
+    <string name="common_back">戻る</string>
+    <string name="common_close">閉じる</string>
+    <string name="common_next">次へ</string>
+    <string name="common_finish">完了</string>
+    <string name="common_skip">スキップ</string>
+    <string name="common_loading">処理中…</string>
+    <string name="common_caution">注意</string>
+    <string name="common_error">エラー</string>
+    <string name="common_warning">警告</string>
+    <string name="common_save">保存</string>
+    <string name="common_unknown">不明</string>
+    <string name="common_details">詳細</string>
+    <string name="common_delete">削除</string>
+    <string name="common_completed">完了</string>
+
+    <!-- Common Error -->
+    <string name="error_copy_to_clipboard">エラー内容をコピー</string>
+    <string name="error_executed">エラーが発生しました</string>
+    <string name="error_unknown">不明なエラーが発生しました</string>
+    <string name="error_download">ダウンロードに失敗しました</string>
+    <string name="error_no_data">データがありません</string>
+    <string name="error_network">通信エラーが発生しました</string>
+    <string name="error_network_description">通信環境をご確認の上、再度お試しください</string>
+    <string name="error_paging">ページネーションを継続できません</string>
+    <string name="error_developing_feature">開発中の機能です</string>
+    <string name="error_billing">購入情報を取得できませんでした</string>
+    <string name="error_ad_load_failed">広告の読み込みに失敗しました</string>
+    <string name="error_ad_load_failed_description">サービスの品質維持のために広告を表示しています。</string>
+    <string name="error_no_available_this_device">このデバイスでは利用できない機能です</string>
+
+    <!-- Common Unit -->
+    <string name="unit_day_before">%1$d日前</string>
+    <string name="unit_hour_before">%1$d時間前</string>
+    <string name="unit_minute_before">%1$d分前</string>
+    <string name="unit_second_before">%1$d秒前</string>
+    <string name="unit_favorite">%1$dいいね</string>
+    <string name="unit_tag">%1$d件</string>
+    <string name="unit_jpy">￥%1$d</string>
+    <string name="unit_year">年</string>
+    <string name="unit_month">月</string>
+    <string name="unit_day">日</string>
+    <string name="unit_sheet">枚</string>
+
+    <!-- Platform -->
+    <string name="platform_x">X (Twitter)</string>
+    <string name="platform_pixiv">Pixiv</string>
+
+    <!-- Media -->
+    <string name="media_type_image">画像</string>
+    <string name="media_type_video">動画</string>
+    <string name="media_type_animated_gif">GIF</string>
+
+    <!-- Home -->
+    <string name="home_navigation_photos">写真</string>
+    <string name="home_navigation_downloads">ダウンロード</string>
+    <string name="home_title">OneNavi</string>
+    <string name="home_fab_title">ダウンロード</string>
+    <string name="home_download_dialog_title">ダウンロード</string>
+    <string name="home_download_dialog_description">ダウンロードしたいコンテンツのURLを入力してください。</string>
+    <string name="home_download_dialog_text_field_label">URL</string>
+    <string name="home_download_dialog_paste">貼り付け</string>
+    <string name="home_download_dialog_positive">ダウンロード</string>
+    <string name="home_download_dialog_negative">キャンセル</string>
+    <string name="home_download_dialog_error_no_url">URLが見つかりません</string>
+    <string name="home_download_dialog_error_multiple_urls">複数のURLが含まれています。URLは1つだけ入力してください。</string>
+    <string name="home_download_dialog_error_unsupported_platform">このプラットフォームは現在サポートされていません。</string>
+    <string name="home_subscription_expired_title">Pro プランの失効</string>
+    <string name="home_subscription_expired_message">OneNavi Pro の定期購入が解約または返金されたため、Pro 機能が無効になりました。\n引き続きご利用いただくには、再度アップグレードしてください。</string>
+
+    <!-- Download -->
+    <string name="download_title">ダウンロード</string>
+    <string name="download_select_all">全て選択</string>
+    <string name="download_button">%1$s個のメディアをダウンロード</string>
+    <string name="download_progress_title">ダウンロード中</string>
+    <string name="download_progress_count">%1$d / %2$d</string>
+    <string name="download_progress_status_waiting">待機中</string>
+    <string name="download_progress_status_downloading">ダウンロード中…</string>
+    <string name="download_progress_status_transcoding">変換中…</string>
+    <string name="download_progress_status_saving">保存中…</string>
+    <string name="download_progress_status_completed">完了</string>
+    <string name="download_progress_status_failed">失敗</string>
+    <string name="download_failure_title">ダウンロード結果</string>
+    <string name="download_failure_summary">%1$d件成功, %2$d件失敗</string>
+    <string name="download_failure_item">メディア %1$s のダウンロードに失敗しました</string>
+    <string name="download_no_media">このURLからダウンロード可能なメディアが見つかりませんでした。</string>
+    <string name="download_error_invalid_url">URLの形式が正しくありません。</string>
+    <string name="download_error_post_not_found">投稿が見つからないか、削除されています。</string>
+    <string name="download_error_private_post">非公開の投稿のためアクセスできません。</string>
+    <string name="download_error_rate_limited">リクエストが多すぎます。しばらくしてから再度お試しください。</string>
+    <string name="download_error_parse">レスポンスの解析に失敗しました。プラットフォームのAPIが変更された可能性があります。</string>
+    <string name="download_error_restricted_content">閲覧制限のあるコンテンツ（R-18/NSFW）のためアクセスできません。</string>
+    <string name="download_error_login_required">このコンテンツの閲覧にはログインが必要です。</string>
+    <string name="download_storage_permission_required">ストレージ権限が必要です</string>
+    <string name="download_storage_permission_settings">設定画面からストレージ権限を許可してください</string>
+
+    <!-- Setting -->
+    <string name="setting_title">設定</string>
+    <string name="setting_theme">テーマ</string>
+    <string name="setting_theme_app">アプリのテーマ</string>
+    <string name="setting_theme_app_description">アプリのテーマカラーを選択してください。</string>
+    <string name="setting_theme_app_auto">System</string>
+    <string name="setting_theme_app_light">Light</string>
+    <string name="setting_theme_app_dark">Dark</string>
+    <string name="setting_dynamic_color">ダイナミックカラー</string>
+    <string name="setting_dynamic_color_description">アプリのプライマリカラーを選択してください。</string>
+    <string name="setting_dynamic_color_system">Your System</string>
+    <string name="setting_dynamic_color_user">User Picked</string>
+    <string name="setting_general">一般</string>
+    <string name="setting_information">情報</string>
+    <string name="setting_information_app_id">アプリID</string>
+    <string name="setting_information_app_version">アプリバージョン</string>
+    <string name="setting_other">その他</string>
+    <string name="setting_other_team_of_service">利用規約</string>
+    <string name="setting_other_privacy_policy">プライバシーポリシー</string>
+    <string name="setting_other_open_source_license">オープンソースライセンス</string>
+    <string name="setting_other_open_source_license_description">OSSライブラリのライセンスを表示します。</string>
+    <string name="setting_other_developer_mode">開発モード</string>
+    <string name="setting_other_developer_mode_description">[Warning] Do not enable this mode if you are not a developer.</string>
+    <string name="setting_other_developer_mode_dialog_title">Developer Mode</string>
+    <string name="setting_other_developer_mode_dialog_description">You are trying to turn on this mode. Please enter the developer's PIN.\n\n[Warning] When this mode is turned on, you will not be able to receive any support.</string>
+
+    <!-- Setting Paywall -->
+    <string name="setting_paywall_title">Pro</string>
+    <string name="setting_paywall_upgrade">OneNavi Pro にアップグレード</string>
+    <string name="setting_paywall_description">無制限ダウンロード・高画質・広告なしなど、すべての機能をアンロックします。</string>
+    <string name="setting_paywall_download_limit">残りダウンロード可能回数</string>
+    <string name="setting_paywall_download_limit_description">%1$d 回</string>
+
+    <!-- Download Limit -->
+    <string name="download_limit_title">ダウンロード制限</string>
+    <string name="download_limit_message">無料版ではダウンロード回数に制限があります。\nOneNavi Pro にアップグレードすると、無制限にダウンロードできます。</string>
+    <string name="download_limit_upgrade">Pro にアップグレード</string>
+    <string name="download_limit_watch_ad">広告を見て追加ダウンロード</string>
+    <string name="download_limit_watch_ad_description">現在の制限は%1$d件までです。広告を見るとダウンロード回数を+%2$d回できます。</string>
+    <string name="download_limit_watch_ad_loading">広告を読み込み中…</string>
+
+    <!-- Paywall -->
+    <string name="paywall_title">OneNavi Pro</string>
+    <string name="paywall_subtitle">すべての機能をアンロックして、より快適なダウンロード体験を。</string>
+    <string name="paywall_feature_unlimited_downloads">無制限ダウンロード</string>
+    <string name="paywall_feature_unlimited_downloads_desc">ダウンロード回数の制限なく利用できます。</string>
+    <string name="paywall_feature_high_quality">高画質ダウンロード</string>
+    <string name="paywall_feature_high_quality_desc">オリジナル画質でメディアをダウンロードできます。</string>
+    <string name="paywall_feature_no_ads">広告なし</string>
+    <string name="paywall_feature_no_ads_desc">すべての広告を非表示にします。</string>
+    <string name="paywall_feature_priority_support">優先サポート</string>
+    <string name="paywall_feature_priority_support_desc">お問い合わせへの優先対応を受けられます。</string>
+    <string name="paywall_plan_monthly">月額</string>
+    <string name="paywall_plan_monthly_badge">月額プラン</string>
+    <string name="paywall_plan_yearly">年額</string>
+    <string name="paywall_plan_yearly_badge">おすすめ</string>
+    <string name="paywall_plan_lifetime">買い切り</string>
+    <string name="paywall_plan_lifetime_badge">永久</string>
+    <string name="paywall_subscribe">購入する</string>
+    <string name="paywall_restore">購入を復元</string>
+    <string name="paywall_terms">利用規約</string>
+    <string name="paywall_privacy">プライバシーポリシー</string>
+    <string name="paywall_error_purchase_failed">購入処理に失敗しました。</string>
+    <string name="paywall_error_no_subscription_to_restore">復元可能な購入情報が見つかりませんでした。</string>
+</resources>
