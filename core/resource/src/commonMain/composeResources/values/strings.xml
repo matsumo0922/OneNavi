@@ -66,43 +66,9 @@
     <string name="home_navigation_route">ルート</string>
     <string name="home_title">OneNavi</string>
     <string name="home_fab_title">ダウンロード</string>
-    <string name="home_download_dialog_title">ダウンロード</string>
-    <string name="home_download_dialog_description">ダウンロードしたいコンテンツのURLを入力してください。</string>
-    <string name="home_download_dialog_text_field_label">URL</string>
-    <string name="home_download_dialog_paste">貼り付け</string>
-    <string name="home_download_dialog_positive">ダウンロード</string>
-    <string name="home_download_dialog_negative">キャンセル</string>
-    <string name="home_download_dialog_error_no_url">URLが見つかりません</string>
-    <string name="home_download_dialog_error_multiple_urls">複数のURLが含まれています。URLは1つだけ入力してください。</string>
-    <string name="home_download_dialog_error_unsupported_platform">このプラットフォームは現在サポートされていません。</string>
+    <string name="home_search_bar_placeholder">目的地を検索</string>
     <string name="home_subscription_expired_title">Pro プランの失効</string>
     <string name="home_subscription_expired_message">OneNavi Pro の定期購入が解約または返金されたため、Pro 機能が無効になりました。\n引き続きご利用いただくには、再度アップグレードしてください。</string>
-
-    <!-- Download -->
-    <string name="download_title">ダウンロード</string>
-    <string name="download_select_all">全て選択</string>
-    <string name="download_button">%1$s個のメディアをダウンロード</string>
-    <string name="download_progress_title">ダウンロード中</string>
-    <string name="download_progress_count">%1$d / %2$d</string>
-    <string name="download_progress_status_waiting">待機中</string>
-    <string name="download_progress_status_downloading">ダウンロード中…</string>
-    <string name="download_progress_status_transcoding">変換中…</string>
-    <string name="download_progress_status_saving">保存中…</string>
-    <string name="download_progress_status_completed">完了</string>
-    <string name="download_progress_status_failed">失敗</string>
-    <string name="download_failure_title">ダウンロード結果</string>
-    <string name="download_failure_summary">%1$d件成功, %2$d件失敗</string>
-    <string name="download_failure_item">メディア %1$s のダウンロードに失敗しました</string>
-    <string name="download_no_media">このURLからダウンロード可能なメディアが見つかりませんでした。</string>
-    <string name="download_error_invalid_url">URLの形式が正しくありません。</string>
-    <string name="download_error_post_not_found">投稿が見つからないか、削除されています。</string>
-    <string name="download_error_private_post">非公開の投稿のためアクセスできません。</string>
-    <string name="download_error_rate_limited">リクエストが多すぎます。しばらくしてから再度お試しください。</string>
-    <string name="download_error_parse">レスポンスの解析に失敗しました。プラットフォームのAPIが変更された可能性があります。</string>
-    <string name="download_error_restricted_content">閲覧制限のあるコンテンツ（R-18/NSFW）のためアクセスできません。</string>
-    <string name="download_error_login_required">このコンテンツの閲覧にはログインが必要です。</string>
-    <string name="download_storage_permission_required">ストレージ権限が必要です</string>
-    <string name="download_storage_permission_settings">設定画面からストレージ権限を許可してください</string>
 
     <!-- Setting -->
     <string name="setting_title">設定</string>
@@ -136,14 +102,6 @@
     <string name="setting_paywall_description">無制限ダウンロード・高画質・広告なしなど、すべての機能をアンロックします。</string>
     <string name="setting_paywall_download_limit">残りダウンロード可能回数</string>
     <string name="setting_paywall_download_limit_description">%1$d 回</string>
-
-    <!-- Download Limit -->
-    <string name="download_limit_title">ダウンロード制限</string>
-    <string name="download_limit_message">無料版ではダウンロード回数に制限があります。\nOneNavi Pro にアップグレードすると、無制限にダウンロードできます。</string>
-    <string name="download_limit_upgrade">Pro にアップグレード</string>
-    <string name="download_limit_watch_ad">広告を見て追加ダウンロード</string>
-    <string name="download_limit_watch_ad_description">現在の制限は%1$d件までです。広告を見るとダウンロード回数を+%2$d回できます。</string>
-    <string name="download_limit_watch_ad_loading">広告を読み込み中…</string>
 
     <!-- Paywall -->
     <string name="paywall_title">OneNavi Pro</string>

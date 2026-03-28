@@ -2,8 +2,10 @@ package me.matsumo.onenavi.feature.home
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -13,11 +15,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.SaveableStateHolder
@@ -26,7 +26,6 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import me.matsumo.onenavi.core.resource.Res
@@ -34,7 +33,6 @@ import me.matsumo.onenavi.core.resource.google_sans_bold
 import me.matsumo.onenavi.core.resource.google_sans_medium
 import me.matsumo.onenavi.core.resource.google_sans_regular
 import me.matsumo.onenavi.core.resource.home_title
-import me.matsumo.onenavi.core.ui.screen.Destination
 import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
 import me.matsumo.onenavi.feature.home.map.HomeMapScreen
 import me.matsumo.onenavi.feature.home.map.HomeMapViewModel
@@ -52,11 +50,6 @@ internal fun HomeScreen(
 
     var currentIndex by rememberSaveable { mutableIntStateOf(0) }
     val saveableStateHolder: SaveableStateHolder = rememberSaveableStateHolder()
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
-
-    LaunchedEffect(currentIndex) {
-        scrollBehavior.state.heightOffset = 0f
-    }
 
     NavigationSuiteScaffold(
         modifier = modifier,
@@ -81,16 +74,8 @@ internal fun HomeScreen(
         },
     ) {
         Scaffold(
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            topBar = {
-                HomeTopAppBar(
-                    modifier = Modifier.fillMaxWidth(),
-                    scrollBehavior = scrollBehavior,
-                    onSettingClicked = { navBackStack.add(Destination.Setting.Root) },
-                )
-            },
+            modifier = Modifier.fillMaxSize(),
+            contentWindowInsets = WindowInsets.navigationBars,
         ) { contentPadding ->
             AnimatedContent(
                 modifier = Modifier.fillMaxSize(),
@@ -102,7 +87,9 @@ internal fun HomeScreen(
                             val mapViewModel = koinViewModel<HomeMapViewModel>()
 
                             HomeMapScreen(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .padding(contentPadding)
+                                    .fillMaxSize(),
                                 mapBoxToken = mapViewModel.mapBoxToken,
                             )
                         }

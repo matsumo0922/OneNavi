@@ -130,7 +130,7 @@ buildkonfig {
         setField("VERSION_CODE", libs.versions.versionCode.get())
 
         setField("DEVELOPER_PIN", "1234")
-        setField("MAP_BOX_TOKEN")
+        setField("MAPBOX_TOKEN")
         setField("PURCHASE_ANDROID_API_KEY")
         setField("PURCHASE_IOS_API_KEY")
 
