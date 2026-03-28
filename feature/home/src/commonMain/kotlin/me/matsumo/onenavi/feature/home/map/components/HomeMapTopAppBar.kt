@@ -151,8 +151,7 @@ internal fun InputField(
         placeholder = {
             Text(
                 modifier = Modifier.fillMaxWidth(),
-                text = lastQuery.takeIf { showSearchResult && searchBarState.currentValue != SearchBarValue.Expanded }
-                    ?: stringResource(Res.string.home_search_bar_placeholder),
+                text = lastQuery.takeIf { showSearchResult } ?: stringResource(Res.string.home_search_bar_placeholder),
                 color = if (showSearchResult) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
