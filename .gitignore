@@ -33,6 +33,9 @@ local.properties
 # Keystore
 gradle/keystore/release.keystore
 
+# Env
+.env
+
 # IDEA/Android Studio project files, because
 # the project can be imported from settings.gradle.kts
 *.iml
