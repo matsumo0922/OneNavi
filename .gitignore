@@ -1,0 +1,21 @@
+# Environment / Secrets
+.env
+*.keystore
+*.jks
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Mapbox
+secret.properties
