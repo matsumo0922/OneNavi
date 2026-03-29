@@ -6,6 +6,7 @@
     <string name="common_cancel">キャンセル</string>
     <string name="common_apply">適用</string>
     <string name="common_allow">許可</string>
+    <string name="common_allowed">許可済み</string>
     <string name="common_denied">拒否</string>
     <string name="common_retry">再試行</string>
     <string name="common_reload">再読み込み</string>
@@ -102,6 +103,15 @@
     <string name="setting_paywall_description">無制限ダウンロード・高画質・広告なしなど、すべての機能をアンロックします。</string>
     <string name="setting_paywall_download_limit">残りダウンロード可能回数</string>
     <string name="setting_paywall_download_limit_description">%1$d 回</string>
+
+    <!-- Permission -->
+    <string name="permission_title">権限</string>
+    <string name="permission_location_title">詳細な位置情報（必須）</string>
+    <string name="permission_location_description">デバイスの位置情報を用いてナビゲーションするため、必須です。</string>
+    <string name="permission_notification_title">通知（オプション）</string>
+    <string name="permission_notification_description">ナビゲーション中の案内通知をを送信するために使用します。</string>
+    <string name="permission_microphone_title">マイク（オプション）</string>
+    <string name="permission_microphone_description">音声操作による目的地検索、ハンズフリーナビゲーションに使用します。</string>
 
     <!-- Paywall -->
     <string name="paywall_title">OneNavi Pro</string>

@@ -111,6 +111,7 @@ kotlin {
             implementation(libs.play.review)
             implementation(libs.play.update)
             implementation(libs.koin.androidx.startup)
+            implementation(libs.accompanist.permissions)
         }
     }
 }

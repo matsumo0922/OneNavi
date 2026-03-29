@@ -81,6 +81,7 @@ twitterComposeRule = "0.0.26"
 
 # Debugs
 napier = "2.7.1"
+accompanist = "0.37.3"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "gradle" }
@@ -232,6 +233,7 @@ lexilabs-basic-ads = { group = "app.lexilabs.basic", name = "basic-ads", version
 
 # Debugs
 napier = { module = "io.github.aakira:napier", version.ref = "napier" }
+accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanist" }
 twitter-compose-rule = { module = "com.twitter.compose.rules:detekt", version.ref = "twitterComposeRule" }
 
 [bundles]
