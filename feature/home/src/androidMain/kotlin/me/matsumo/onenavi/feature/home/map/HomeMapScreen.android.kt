@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mapbox.common.MapboxOptions
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.extension.compose.MapEffect
@@ -45,12 +46,9 @@ import com.mapbox.maps.plugin.viewport.ViewportStatus
 import com.mapbox.maps.plugin.viewport.data.DefaultViewportTransitionOptions
 import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateBearing
 import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateOptions
-import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
-import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.HomeMapTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
@@ -63,19 +61,14 @@ private const val TRANSITION_MAX_DURATION_MS = 1000L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal actual fun HomeMapScreen(
-    mapBoxToken: String,
-    suggestions: ImmutableList<SearchSuggestionItem>,
-    histories: ImmutableList<SearchHistory>,
-    selectedResult: SearchResultItem?,
-    isSearching: Boolean,
-    onQueryChanged: (String) -> Unit,
-    onSuggestionSelected: (SearchSuggestionItem) -> Unit,
-    onHistorySelected: (SearchHistory) -> Unit,
-    onRemoveHistory: (String) -> Unit,
-    onDismissResult: () -> Unit,
+internal actual fun HomeMapScreenContent(
+    viewModel: HomeMapViewModel,
     modifier: Modifier,
 ) {
+    val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
+    val histories by viewModel.histories.collectAsStateWithLifecycle()
+    val selectedResult by viewModel.selectedResult.collectAsStateWithLifecycle()
+
     var showSearchResult by rememberSaveable { mutableStateOf(false) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
     var lastTrackingMode by remember { mutableStateOf(LocationTrackingMode.TiltedHeading) }
@@ -86,8 +79,8 @@ internal actual fun HomeMapScreen(
         showSearchResult = false
     }
 
-    LaunchedEffect(mapBoxToken) {
-        MapboxOptions.accessToken = mapBoxToken
+    LaunchedEffect(viewModel.mapBoxToken) {
+        MapboxOptions.accessToken = viewModel.mapBoxToken
     }
 
     val viewportState = rememberMapViewportState()
@@ -155,16 +148,16 @@ internal actual fun HomeMapScreen(
             showSearchResult = showSearchResult,
             suggestions = suggestions,
             histories = histories,
-            onQueryChanged = onQueryChanged,
+            onQueryChanged = viewModel::onQueryChanged,
             onSuggestionSelected = { suggestion ->
-                onSuggestionSelected(suggestion)
+                viewModel.onSuggestionSelected(suggestion)
                 showSearchResult = true
             },
             onHistorySelected = { history ->
-                onHistorySelected(history)
+                viewModel.onHistorySelected(history)
                 showSearchResult = true
             },
-            onRemoveHistory = onRemoveHistory,
+            onRemoveHistory = viewModel::onRemoveHistory,
             onSearchBarExpand = { },
             onBackClicked = { showSearchResult = false },
         )
@@ -233,7 +226,7 @@ internal actual fun HomeMapScreen(
         val sheetState = rememberModalBottomSheetState()
 
         ModalBottomSheet(
-            onDismissRequest = onDismissResult,
+            onDismissRequest = viewModel::onDismissResult,
             sheetState = sheetState,
         ) {
             HomeMapResultSheetContent(
@@ -245,9 +238,11 @@ internal actual fun HomeMapScreen(
 
 @Composable
 private fun HomeMapResultSheetContent(
-    result: SearchResultItem,
+    result: SearchResultItem?,
     modifier: Modifier = Modifier,
 ) {
+    if (result == null) return
+
     Column(
         modifier = modifier
             .fillMaxWidth()
