@@ -10,7 +10,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,9 +72,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         OneNaviTheme(setting) {
                             PermissionScreen(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .systemBarsPadding(),
+                                modifier = Modifier.fillMaxSize()
                             )
                         }
                     }

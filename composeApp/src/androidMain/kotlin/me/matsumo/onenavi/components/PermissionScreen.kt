@@ -101,7 +101,7 @@ internal fun PermissionScreen(
                 modifier = Modifier.fillMaxWidth(),
                 permissionState = permissionState,
             )
-        }
+        },
     ) {
         val data = listOf(
             Triple(
