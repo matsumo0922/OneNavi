@@ -20,6 +20,7 @@ kotlin {
             implementation(project(":core:resource"))
 
             implementation(libs.bundles.ktor)
+            implementation(libs.kotlinx.datetime)
         }
 
         androidMain.dependencies {

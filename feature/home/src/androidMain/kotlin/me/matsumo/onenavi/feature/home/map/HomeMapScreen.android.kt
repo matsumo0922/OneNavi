@@ -2,12 +2,19 @@ package me.matsumo.onenavi.feature.home.map
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,8 +45,12 @@ import com.mapbox.maps.plugin.viewport.ViewportStatus
 import com.mapbox.maps.plugin.viewport.data.DefaultViewportTransitionOptions
 import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateBearing
 import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateOptions
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import me.matsumo.onenavi.core.model.SearchHistory
+import me.matsumo.onenavi.core.model.SearchResultItem
+import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.HomeMapTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
@@ -50,9 +61,19 @@ private const val FOLLOW_PUCK_PITCH = 45.0
 private const val ZOOM_STEP = 1.0
 private const val TRANSITION_MAX_DURATION_MS = 1000L
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal actual fun HomeMapScreen(
     mapBoxToken: String,
+    suggestions: ImmutableList<SearchSuggestionItem>,
+    histories: ImmutableList<SearchHistory>,
+    selectedResult: SearchResultItem?,
+    isSearching: Boolean,
+    onQueryChanged: (String) -> Unit,
+    onSuggestionSelected: (SearchSuggestionItem) -> Unit,
+    onHistorySelected: (SearchHistory) -> Unit,
+    onRemoveHistory: (String) -> Unit,
+    onDismissResult: () -> Unit,
     modifier: Modifier,
 ) {
     var showSearchResult by rememberSaveable { mutableStateOf(false) }
@@ -132,7 +153,18 @@ internal actual fun HomeMapScreen(
                 .statusBarsPadding()
                 .fillMaxWidth(),
             showSearchResult = showSearchResult,
-            onSearchClicked = { showSearchResult = true },
+            suggestions = suggestions,
+            histories = histories,
+            onQueryChanged = onQueryChanged,
+            onSuggestionSelected = { suggestion ->
+                onSuggestionSelected(suggestion)
+                showSearchResult = true
+            },
+            onHistorySelected = { history ->
+                onHistorySelected(history)
+                showSearchResult = true
+            },
+            onRemoveHistory = onRemoveHistory,
             onSearchBarExpand = { },
             onBackClicked = { showSearchResult = false },
         )
@@ -194,6 +226,55 @@ internal actual fun HomeMapScreen(
                     )
                 }
             },
+        )
+    }
+
+    if (selectedResult != null) {
+        val sheetState = rememberModalBottomSheetState()
+
+        ModalBottomSheet(
+            onDismissRequest = onDismissResult,
+            sheetState = sheetState,
+        ) {
+            HomeMapResultSheetContent(
+                result = selectedResult,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeMapResultSheetContent(
+    result: SearchResultItem,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = 24.dp,
+                vertical = 16.dp,
+            ),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = result.name,
+            style = MaterialTheme.typography.titleLarge,
+        )
+
+        val address = result.address
+        if (address != null) {
+            Text(
+                text = address,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Text(
+            text = "%.6f, %.6f".format(result.latitude, result.longitude),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

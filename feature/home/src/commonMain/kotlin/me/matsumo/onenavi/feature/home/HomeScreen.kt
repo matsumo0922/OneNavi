@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.google_sans_bold
 import me.matsumo.onenavi.core.resource.google_sans_medium
@@ -85,12 +86,25 @@ internal fun HomeScreen(
                     when (HomeNavDestination.all[index].route) {
                         HomeRoute.Map -> {
                             val mapViewModel = koinViewModel<HomeMapViewModel>()
+                            val suggestions by mapViewModel.suggestions.collectAsStateWithLifecycle()
+                            val histories by mapViewModel.histories.collectAsStateWithLifecycle()
+                            val selectedResult by mapViewModel.selectedResult.collectAsStateWithLifecycle()
+                            val isSearching by mapViewModel.isSearching.collectAsStateWithLifecycle()
 
                             HomeMapScreen(
                                 modifier = Modifier
                                     .padding(contentPadding)
                                     .fillMaxSize(),
                                 mapBoxToken = mapViewModel.mapBoxToken,
+                                suggestions = suggestions,
+                                histories = histories,
+                                selectedResult = selectedResult,
+                                isSearching = isSearching,
+                                onQueryChanged = mapViewModel::onQueryChanged,
+                                onSuggestionSelected = mapViewModel::onSuggestionSelected,
+                                onHistorySelected = mapViewModel::onHistorySelected,
+                                onRemoveHistory = mapViewModel::onRemoveHistory,
+                                onDismissResult = mapViewModel::onDismissResult,
                             )
                         }
 
