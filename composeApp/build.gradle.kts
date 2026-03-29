@@ -112,6 +112,9 @@ kotlin {
             implementation(libs.play.update)
             implementation(libs.koin.androidx.startup)
             implementation(libs.accompanist.permissions)
+            implementation(libs.androidx.car.app)
+            implementation(libs.mapbox.androidauto)
+            implementation(libs.bundles.mapbox)
         }
     }
 }
