@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "mapbox@mapbox-agent-skills": true
+  }
+}

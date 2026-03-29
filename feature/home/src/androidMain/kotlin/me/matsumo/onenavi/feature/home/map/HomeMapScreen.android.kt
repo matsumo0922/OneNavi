@@ -14,10 +14,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.mapbox.common.MapboxOptions
-import com.mapbox.geojson.Point
+import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
+import com.mapbox.maps.plugin.PuckBearing
+import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
+import com.mapbox.maps.plugin.locationcomponent.location
+import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateBearing
+import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateOptions
 import me.matsumo.onenavi.feature.home.map.components.HomeMapTopAppBar
+
+private const val FOLLOW_PUCK_ZOOM = 16.0
+private const val FOLLOW_PUCK_PITCH = 45.0
 
 @Composable
 internal actual fun HomeMapScreen(
@@ -35,18 +43,31 @@ internal actual fun HomeMapScreen(
         MapboxOptions.accessToken = mapBoxToken
     }
 
-    val viewportState = rememberMapViewportState {
-        setCameraOptions {
-            center(Point.fromLngLat(139.6917, 35.6895))
-            zoom(12.0)
-        }
+    val viewportState = rememberMapViewportState()
+
+    LaunchedEffect(Unit) {
+        viewportState.transitionToFollowPuckState(
+            followPuckViewportStateOptions = FollowPuckViewportStateOptions.Builder()
+                .zoom(FOLLOW_PUCK_ZOOM)
+                .pitch(FOLLOW_PUCK_PITCH)
+                .bearing(FollowPuckViewportStateBearing.Constant(0.0))
+                .build(),
+        )
     }
 
     Box(modifier) {
         MapboxMap(
             modifier = Modifier.fillMaxSize(),
             mapViewportState = viewportState,
-        )
+            scaleBar = {},
+        ) {
+            MapEffect(Unit) { mapView ->
+                mapView.location.enabled = true
+                mapView.location.locationPuck = createDefault2DPuck(withBearing = true)
+                mapView.location.puckBearing = PuckBearing.HEADING
+                mapView.location.puckBearingEnabled = true
+            }
+        }
 
         HomeMapTopAppBar(
             modifier = Modifier
