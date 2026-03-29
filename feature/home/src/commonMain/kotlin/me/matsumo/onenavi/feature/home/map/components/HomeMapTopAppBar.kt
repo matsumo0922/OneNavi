@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.rememberTextFieldState
@@ -23,6 +24,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.SearchBarState
@@ -153,6 +155,7 @@ internal fun HomeMapTopAppBar(
                 HomeMapSearchHistoryList(
                     histories = histories,
                     onHistorySelected = { history ->
+                        lastQuery = history.name
                         onHistorySelected(history)
                         scope.launch {
                             searchBarState.animateToCollapsed()
@@ -164,6 +167,7 @@ internal fun HomeMapTopAppBar(
                 HomeMapSearchSuggestionList(
                     suggestions = suggestions,
                     onSuggestionSelected = { suggestion ->
+                        lastQuery = suggestion.name
                         onSuggestionSelected(suggestion)
                         scope.launch {
                             searchBarState.animateToCollapsed()
@@ -252,10 +256,10 @@ private fun HomeMapSearchSuggestionList(
     LazyColumn(
         modifier = modifier,
     ) {
-        items(
+        itemsIndexed(
             items = suggestions,
-            key = { it.id },
-        ) { suggestion ->
+            key = { index, item -> "${item.id}_$index" },
+        ) { _, suggestion ->
             ListItem(
                 modifier = Modifier.clickable {
                     onSuggestionSelected(suggestion)
@@ -284,6 +288,7 @@ private fun HomeMapSearchSuggestionList(
                         )
                     }
                 },
+                colors = ListItemDefaults.colors(Color.Transparent)
             )
 
             HorizontalDivider()
@@ -343,6 +348,7 @@ private fun HomeMapSearchHistoryList(
                         )
                     }
                 },
+                colors = ListItemDefaults.colors(Color.Transparent)
             )
 
             HorizontalDivider()
