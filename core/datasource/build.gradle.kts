@@ -17,6 +17,7 @@ kotlin {
             implementation(libs.androidx.datastore)
             implementation(libs.androidx.datastore.proto)
             implementation(libs.ktor.okhttp)
+            implementation(libs.mapbox.search)
         }
 
         iosMain.dependencies {
