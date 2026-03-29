@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.google_sans_bold
 import me.matsumo.onenavi.core.resource.google_sans_medium
@@ -36,7 +35,6 @@ import me.matsumo.onenavi.core.resource.google_sans_regular
 import me.matsumo.onenavi.core.resource.home_title
 import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
 import me.matsumo.onenavi.feature.home.map.HomeMapScreen
-import me.matsumo.onenavi.feature.home.map.HomeMapViewModel
 import org.jetbrains.compose.resources.Font
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
@@ -85,26 +83,10 @@ internal fun HomeScreen(
                 saveableStateHolder.SaveableStateProvider(index) {
                     when (HomeNavDestination.all[index].route) {
                         HomeRoute.Map -> {
-                            val mapViewModel = koinViewModel<HomeMapViewModel>()
-                            val suggestions by mapViewModel.suggestions.collectAsStateWithLifecycle()
-                            val histories by mapViewModel.histories.collectAsStateWithLifecycle()
-                            val selectedResult by mapViewModel.selectedResult.collectAsStateWithLifecycle()
-                            val isSearching by mapViewModel.isSearching.collectAsStateWithLifecycle()
-
                             HomeMapScreen(
                                 modifier = Modifier
                                     .padding(contentPadding)
                                     .fillMaxSize(),
-                                mapBoxToken = mapViewModel.mapBoxToken,
-                                suggestions = suggestions,
-                                histories = histories,
-                                selectedResult = selectedResult,
-                                isSearching = isSearching,
-                                onQueryChanged = mapViewModel::onQueryChanged,
-                                onSuggestionSelected = mapViewModel::onSuggestionSelected,
-                                onHistorySelected = mapViewModel::onHistorySelected,
-                                onRemoveHistory = mapViewModel::onRemoveHistory,
-                                onDismissResult = mapViewModel::onDismissResult,
                             )
                         }
 
