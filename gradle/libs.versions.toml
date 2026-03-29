@@ -164,6 +164,7 @@ mapbox-ui-maps = { module = "com.mapbox.navigationcore:ui-maps-ndk27", version.r
 mapbox-ui-components = { module = "com.mapbox.navigationcore:ui-components-ndk27", version.ref = "mapbox" }
 mapbox-tripdata = { module = "com.mapbox.navigationcore:tripdata-ndk27", version.ref = "mapbox" }
 mapbox-extension-compose = { module = "com.mapbox.extension:maps-compose-ndk27", version.ref = "mapboxExtension" }
+mapbox-extension-localization = { module = "com.mapbox.extension:maps-localization-ndk27", version.ref = "mapboxExtension" }
 
 # Purchase
 purchases-core = { module = "com.revenuecat.purchases:purchases-kmp-core", version.ref = "kmpPurchase" }
@@ -319,4 +320,5 @@ mapbox = [
     "mapbox-ui-maps",
     "mapbox-ui-components",
     "mapbox-extension-compose",
+    "mapbox-extension-localization",
 ]
