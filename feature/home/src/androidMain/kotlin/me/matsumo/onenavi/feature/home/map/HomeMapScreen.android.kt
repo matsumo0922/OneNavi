@@ -57,6 +57,7 @@ internal actual fun HomeMapScreen(
 ) {
     var showSearchResult by rememberSaveable { mutableStateOf(false) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
+    var lastTrackingMode by remember { mutableStateOf(LocationTrackingMode.TiltedHeading) }
     val scope = rememberCoroutineScope()
 
     @Suppress("DEPRECATION")
@@ -121,7 +122,7 @@ internal actual fun HomeMapScreen(
                 mapView.location.locationPuck = createDefault2DPuck(withBearing = true)
                 mapView.location.puckBearing = PuckBearing.HEADING
                 mapView.location.puckBearingEnabled = true
-                mapView.mapboxMap.style?.localizeLabels(locale)
+                mapView.mapboxMap.style?.localizeLabels(Locale.JAPANESE)
             }
         }
 
@@ -144,17 +145,33 @@ internal actual fun HomeMapScreen(
             trackingMode = trackingMode,
             onLocationClicked = {
                 scope.launch {
-                    val nextMode = when (trackingMode) {
-                        null -> LocationTrackingMode.TiltedHeading
-                        LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
-                        LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
-                        LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
+                    val currentZoom = viewportState.cameraState?.zoom
+                    if (trackingMode == null) {
+                        trackingMode = lastTrackingMode
+                        viewportState.transitionToFollowPuckState(
+                            followPuckViewportStateOptions = buildFollowPuckOptions(
+                                mode = lastTrackingMode,
+                                zoom = currentZoom,
+                            ),
+                            defaultTransitionOptions = transitionOptions,
+                        )
+                    } else {
+                        val nextMode = when (trackingMode) {
+                            LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
+                            LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
+                            LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
+                            null -> LocationTrackingMode.TiltedHeading
+                        }
+                        trackingMode = nextMode
+                        lastTrackingMode = nextMode
+                        viewportState.transitionToFollowPuckState(
+                            followPuckViewportStateOptions = buildFollowPuckOptions(
+                                mode = nextMode,
+                                zoom = currentZoom,
+                            ),
+                            defaultTransitionOptions = transitionOptions,
+                        )
                     }
-                    trackingMode = nextMode
-                    viewportState.transitionToFollowPuckState(
-                        followPuckViewportStateOptions = buildFollowPuckOptions(nextMode),
-                        defaultTransitionOptions = transitionOptions,
-                    )
                 }
             },
             onZoomInClicked = {
@@ -181,22 +198,26 @@ internal actual fun HomeMapScreen(
     }
 }
 
-private fun buildFollowPuckOptions(mode: LocationTrackingMode): FollowPuckViewportStateOptions {
+private fun buildFollowPuckOptions(
+    mode: LocationTrackingMode,
+    zoom: Double? = null,
+): FollowPuckViewportStateOptions {
+    val effectiveZoom = zoom ?: FOLLOW_PUCK_ZOOM
     return when (mode) {
         LocationTrackingMode.TiltedHeading -> FollowPuckViewportStateOptions.Builder()
-            .zoom(FOLLOW_PUCK_ZOOM)
+            .zoom(effectiveZoom)
             .pitch(FOLLOW_PUCK_PITCH)
             .bearing(FollowPuckViewportStateBearing.SyncWithLocationPuck)
             .build()
 
         LocationTrackingMode.TopDownHeading -> FollowPuckViewportStateOptions.Builder()
-            .zoom(FOLLOW_PUCK_ZOOM)
+            .zoom(effectiveZoom)
             .pitch(0.0)
             .bearing(FollowPuckViewportStateBearing.SyncWithLocationPuck)
             .build()
 
         LocationTrackingMode.TopDownNorth -> FollowPuckViewportStateOptions.Builder()
-            .zoom(FOLLOW_PUCK_ZOOM)
+            .zoom(effectiveZoom)
             .pitch(0.0)
             .bearing(FollowPuckViewportStateBearing.Constant(0.0))
             .build()
