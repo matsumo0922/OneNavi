@@ -31,6 +31,7 @@ adaptive = "1.2.0"
 
 # AndroidX
 androidxCore = "1.17.0"
+androidxCarApp = "1.7.0"
 androidxCoreSplash = "1.2.0"
 androidxAppCompat = "1.7.1"
 androidxActivity = "1.12.2"
@@ -165,6 +166,10 @@ mapbox-ui-components = { module = "com.mapbox.navigationcore:ui-components-ndk27
 mapbox-tripdata = { module = "com.mapbox.navigationcore:tripdata-ndk27", version.ref = "mapbox" }
 mapbox-extension-compose = { module = "com.mapbox.extension:maps-compose-ndk27", version.ref = "mapboxExtension" }
 mapbox-extension-localization = { module = "com.mapbox.extension:maps-localization-ndk27", version.ref = "mapboxExtension" }
+mapbox-androidauto = { module = "com.mapbox.navigationcore:android-auto-components-ndk27", version.ref = "mapbox" }
+
+# Android Auto
+androidx-car-app = { module = "androidx.car.app:app", version.ref = "androidxCarApp" }
 
 # Purchase
 purchases-core = { module = "com.revenuecat.purchases:purchases-kmp-core", version.ref = "kmpPurchase" }
