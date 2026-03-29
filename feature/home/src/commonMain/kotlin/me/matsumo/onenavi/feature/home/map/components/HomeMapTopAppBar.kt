@@ -123,7 +123,7 @@ internal fun HomeMapTopAppBar(
                 )
             },
         ) {
-            // TODO: Search history
+            // TODO: Auto complete
         }
     }
 }
