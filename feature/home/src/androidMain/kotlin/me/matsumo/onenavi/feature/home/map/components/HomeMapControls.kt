@@ -7,9 +7,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.NearMe
@@ -77,7 +78,7 @@ private fun HomeMapZoomButtons(
 ) {
     Surface(
         modifier = modifier.width(48.dp),
-        shape = RoundedCornerShape(16.dp),
+        shape = CircleShape,
         color = FloatingActionButtonDefaults.containerColor(),
         tonalElevation = 6.dp,
         shadowElevation = 6.dp,
@@ -99,6 +100,7 @@ private fun HomeMapZoomButtons(
 
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 8.dp),
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
             )
 
             Box(
@@ -117,11 +119,10 @@ private fun HomeMapZoomButtons(
 }
 
 private fun LocationTrackingMode?.toIcon(): ImageVector = when (this) {
-    LocationTrackingMode.TiltedHeading -> Icons.Default.Navigation
-    LocationTrackingMode.TopDownHeading -> Icons.Default.NearMe
-    LocationTrackingMode.TopDownNorth,
-    null,
-    -> Icons.Default.MyLocation
+    LocationTrackingMode.TiltedHeading -> Icons.Filled.Explore
+    LocationTrackingMode.TopDownHeading -> Icons.Default.Navigation
+    LocationTrackingMode.TopDownNorth -> Icons.Default.NearMe
+    null -> Icons.Default.MyLocation
 }
 
 /**
