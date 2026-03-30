@@ -4,9 +4,12 @@ import com.mapbox.search.ResponseInfo
 import com.mapbox.search.SearchEngine
 import com.mapbox.search.SearchEngineSettings
 import com.mapbox.search.SearchOptions
+import com.mapbox.search.SearchResultCallback
 import com.mapbox.search.SearchSelectionCallback
 import com.mapbox.search.SearchSuggestionsCallback
 import com.mapbox.search.common.SearchRequestException
+import com.mapbox.search.details.DetailsApi
+import com.mapbox.search.details.RetrieveDetailsOptions
 import com.mapbox.search.result.SearchResult
 import com.mapbox.search.result.SearchSuggestion
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -20,6 +23,9 @@ class MapboxSearchDataSource : SearchDataSource {
         settings = SearchEngineSettings(),
         apiType = com.mapbox.search.ApiType.SEARCH_BOX,
     )
+
+    @OptIn(com.mapbox.annotation.MapboxExperimental::class)
+    private val detailsApi = DetailsApi.create()
 
     private var lastSuggestions: List<SearchSuggestion> = emptyList()
 
@@ -86,6 +92,29 @@ class MapboxSearchDataSource : SearchDataSource {
                                 ),
                             ),
                         )
+                    }
+
+                    override fun onError(e: Exception) {
+                        continuation.resume(Result.failure(e))
+                    }
+                },
+            )
+
+            continuation.invokeOnCancellation {
+                task.cancel()
+            }
+        }
+    }
+
+    @OptIn(com.mapbox.annotation.MapboxExperimental::class)
+    override suspend fun retrieve(mapboxId: String): Result<SearchResultItem> {
+        return suspendCancellableCoroutine { continuation ->
+            val task = detailsApi.retrieveDetails(
+                mapboxId = mapboxId,
+                options = RetrieveDetailsOptions(),
+                callback = object : SearchResultCallback {
+                    override fun onResult(result: SearchResult, responseInfo: ResponseInfo) {
+                        continuation.resume(Result.success(result.toResultItem()))
                     }
 
                     override fun onError(e: Exception) {

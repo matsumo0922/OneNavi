@@ -21,9 +21,14 @@ class SearchRepository(
         return searchDataSource.select(suggestionId)
     }
 
+    suspend fun retrieve(mapboxId: String): Result<SearchResultItem> {
+        return searchDataSource.retrieve(mapboxId)
+    }
+
     suspend fun addHistory(result: SearchResultItem) {
         val history = SearchHistory(
             id = result.id,
+            mapboxId = result.mapboxId,
             name = result.name,
             address = result.fullAddress,
             latitude = result.latitude,

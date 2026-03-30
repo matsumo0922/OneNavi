@@ -11,4 +11,8 @@ class IosSearchDataSource : SearchDataSource {
     override suspend fun select(suggestionId: String): Result<SearchResultItem> {
         return Result.failure(UnsupportedOperationException("Search is not available on iOS yet"))
     }
+
+    override suspend fun retrieve(mapboxId: String): Result<SearchResultItem> {
+        return Result.failure(UnsupportedOperationException("Search is not available on iOS yet"))
+    }
 }
