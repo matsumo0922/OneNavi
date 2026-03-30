@@ -78,6 +78,9 @@ class HomeMapViewModel(
                     _selectedResult.value = result
                     searchRepository.addHistory(result)
                 }
+                .onFailure {
+                    Napier.e(it) { "Failed to select suggestion. id: ${suggestion.id}" }
+                }
             _isSearching.value = false
         }
     }
@@ -90,6 +93,9 @@ class HomeMapViewModel(
                 .onSuccess { result ->
                     _selectedResult.value = result
                     searchRepository.addHistory(result)
+                }
+                .onFailure {
+                    Napier.e(it) { "Failed to retrieve history. id: ${history.id}" }
                 }
             _isSearching.value = false
         }

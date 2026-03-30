@@ -37,14 +37,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationEventHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -54,7 +57,7 @@ import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_search_bar_placeholder
 import org.jetbrains.compose.resources.stringResource
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun HomeMapTopAppBar(
     showSearchResult: Boolean,
@@ -64,29 +67,27 @@ internal fun HomeMapTopAppBar(
     onSuggestionSelected: (SearchSuggestionItem) -> Unit,
     onHistorySelected: (SearchHistory) -> Unit,
     onRemoveHistory: (String) -> Unit,
-    onSearchBarExpand: () -> Unit,
     onBackClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     val scope = rememberCoroutineScope()
     val searchBarState = rememberSearchBarState()
     val textFieldState = rememberTextFieldState()
-    var lastQuery by rememberSaveable { mutableStateOf<String?>(null) }
     var canFocus by remember { mutableStateOf(false) }
 
     fun onSearch(query: String) {
-        lastQuery = query
+        textFieldState.setTextAndPlaceCursorAtEnd(query)
         onQueryChanged(query)
+    }
+
+    NavigationEventHandler(navigationState, isBackEnabled = showSearchResult) {
+        textFieldState.clearText()
+        onBackClicked.invoke()
     }
 
     LaunchedEffect(Unit) {
         canFocus = true
-    }
-
-    LaunchedEffect(searchBarState.targetValue) {
-        if (searchBarState.targetValue == SearchBarValue.Expanded) {
-            onSearchBarExpand.invoke()
-        }
     }
 
     LaunchedEffect(textFieldState) {
@@ -95,21 +96,6 @@ internal fun HomeMapTopAppBar(
             .collect { query ->
                 onQueryChanged(query)
             }
-    }
-
-    if (showSearchResult) {
-        LaunchedEffect(searchBarState.currentValue, searchBarState.targetValue) {
-            val currentValue = searchBarState.currentValue
-            val targetValue = searchBarState.targetValue
-
-            if (currentValue == SearchBarValue.Expanded && targetValue == SearchBarValue.Expanded && lastQuery != null) {
-                textFieldState.setTextAndPlaceCursorAtEnd(lastQuery!!)
-            }
-
-            if (targetValue == SearchBarValue.Collapsed) {
-                textFieldState.clearText()
-            }
-        }
     }
 
     Column(
@@ -124,7 +110,6 @@ internal fun HomeMapTopAppBar(
                     },
                     searchBarState = searchBarState,
                     textFieldState = textFieldState,
-                    lastQuery = lastQuery,
                     showSearchResult = showSearchResult,
                     onSearch = ::onSearch,
                     onBackClicked = onBackClicked,
@@ -142,7 +127,6 @@ internal fun HomeMapTopAppBar(
                 HomeMapSearchInputField(
                     searchBarState = searchBarState,
                     textFieldState = textFieldState,
-                    lastQuery = lastQuery,
                     showSearchResult = showSearchResult,
                     onSearch = ::onSearch,
                     onBackClicked = onBackClicked,
@@ -155,7 +139,7 @@ internal fun HomeMapTopAppBar(
                 HomeMapSearchHistoryList(
                     histories = histories,
                     onHistorySelected = { history ->
-                        lastQuery = history.name
+                        textFieldState.setTextAndPlaceCursorAtEnd(history.name)
                         onHistorySelected(history)
                         scope.launch {
                             searchBarState.animateToCollapsed()
@@ -167,7 +151,7 @@ internal fun HomeMapTopAppBar(
                 HomeMapSearchSuggestionList(
                     suggestions = suggestions,
                     onSuggestionSelected = { suggestion ->
-                        lastQuery = suggestion.name
+                        textFieldState.setTextAndPlaceCursorAtEnd(suggestion.name)
                         onSuggestionSelected(suggestion)
                         scope.launch {
                             searchBarState.animateToCollapsed()
@@ -184,7 +168,6 @@ internal fun HomeMapTopAppBar(
 private fun HomeMapSearchInputField(
     searchBarState: SearchBarState,
     textFieldState: TextFieldState,
-    lastQuery: String?,
     showSearchResult: Boolean,
     onSearch: (String) -> Unit,
     onBackClicked: () -> Unit,
@@ -202,8 +185,8 @@ private fun HomeMapSearchInputField(
         placeholder = {
             Text(
                 modifier = Modifier.fillMaxWidth(),
-                text = lastQuery.takeIf { showSearchResult } ?: stringResource(Res.string.home_search_bar_placeholder),
-                color = if (showSearchResult) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                text = stringResource(Res.string.home_search_bar_placeholder),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
         },

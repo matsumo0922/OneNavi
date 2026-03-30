@@ -1,13 +1,11 @@
 package me.matsumo.onenavi.feature.home.map
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,6 +57,7 @@ private const val FOLLOW_PUCK_PITCH = 45.0
 private const val ZOOM_STEP = 1.0
 private const val TRANSITION_MAX_DURATION_MS = 1000L
 
+@Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal actual fun HomeMapScreenContent(
@@ -73,11 +72,6 @@ internal actual fun HomeMapScreenContent(
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
     var lastTrackingMode by remember { mutableStateOf(LocationTrackingMode.TiltedHeading) }
     val scope = rememberCoroutineScope()
-
-    @Suppress("DEPRECATION")
-    BackHandler(showSearchResult) {
-        showSearchResult = false
-    }
 
     LaunchedEffect(viewModel.mapBoxToken) {
         MapboxOptions.accessToken = viewModel.mapBoxToken
@@ -158,14 +152,12 @@ internal actual fun HomeMapScreenContent(
                 showSearchResult = true
             },
             onRemoveHistory = viewModel::onRemoveHistory,
-            onSearchBarExpand = { },
             onBackClicked = { showSearchResult = false },
         )
 
         HomeMapControls(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
                 .padding(16.dp),
             trackingMode = trackingMode,
             onLocationClicked = {
@@ -185,7 +177,7 @@ internal actual fun HomeMapScreenContent(
                             LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
                             LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
                             LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
-                            null -> LocationTrackingMode.TiltedHeading
+                            else -> LocationTrackingMode.TiltedHeading
                         }
                         trackingMode = nextMode
                         lastTrackingMode = nextMode
