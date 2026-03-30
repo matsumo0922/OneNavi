@@ -31,9 +31,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point.fromLngLat
 import com.mapbox.maps.CameraOptions
+import com.mapbox.maps.MapboxExperimental
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
+import com.mapbox.maps.extension.compose.annotation.Marker
 import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
 import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
@@ -60,7 +62,7 @@ private const val ZOOM_STEP = 1.0
 private const val TRANSITION_MAX_DURATION_MS = 1000L
 
 @Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, MapboxExperimental::class)
 @Composable
 internal actual fun HomeMapScreenContent(
     viewModel: HomeMapViewModel,
@@ -149,6 +151,14 @@ internal actual fun HomeMapScreenContent(
                 mapView.location.puckBearing = PuckBearing.HEADING
                 mapView.location.puckBearingEnabled = true
                 mapView.mapboxMap.style?.localizeLabels(Locale.JAPANESE)
+            }
+
+            selectedResult?.let { result ->
+                Marker(
+                    point = fromLngLat(result.longitude, result.latitude),
+                    color = MaterialTheme.colorScheme.primary,
+                    stroke = null
+                )
             }
         }
 
