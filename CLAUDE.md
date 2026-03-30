@@ -55,10 +55,11 @@ docs/design/          — Pencil デザインファイル (.pen)
 
 ## Build & Run
 
-**ビルド確認は CLI ではなく IDE（Android Studio / IntelliJ）経由で行うこと。** IDE の Build > Make Project を使用する。CLI (`./gradlew`) は Configuration Cache の問題が発生する場合がある。
+実装終了後は必ずビルドが通ることを確認すること。
+現状 iOS の実装は行っていないため、Android のビルドが通ることを確認すれば良い。
+なお、CLI (`./gradlew`) は Configuration Cache の問題が発生する場合があるため注意すること。。
 
 ```bash
-# IDE でのビルドが推奨だが、CLI で確認する場合:
 ./gradlew assembleDebug --no-configuration-cache
 
 # detekt (auto-correct)
