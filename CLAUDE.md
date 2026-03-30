@@ -13,6 +13,7 @@ OneNavi は Android 向けカーナビアプリ。Google Maps 等から intent s
 - `06_pricing_analysis.md` — コスト分析
 - `07_phased_roadmap.md` — フェーズ別ロードマップ
 - `08_open_questions.md` — 未解決事項・意思決定ログ
+- `09_etc_card_detection.md` — ETC カード検出 API 調査
 
 ## Tech Stack
 
