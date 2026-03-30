@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +48,7 @@ import com.mapbox.maps.MapboxExperimental
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
+import com.mapbox.maps.extension.compose.annotation.Marker
 import com.mapbox.maps.extension.compose.annotation.ViewAnnotation
 import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
 import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
@@ -67,9 +69,12 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.SearchResultItem
+import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.home_map_search_route
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.HomeMapTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
+import org.jetbrains.compose.resources.stringResource
 import java.util.*
 
 private const val FOLLOW_PUCK_ZOOM = 16.0
@@ -209,9 +214,8 @@ internal actual fun HomeMapScreenContent(
                 }
             } else {
                 selectedResult?.let { result ->
-                    HomeMapNumberedPin(
+                    Marker(
                         point = fromLngLat(result.longitude, result.latitude),
-                        number = 1,
                     )
                 }
             }
@@ -319,6 +323,7 @@ internal actual fun HomeMapScreenContent(
         ) {
             HomeMapResultSheetContent(
                 result = selectedResult,
+                onRouteClicked = {}
             )
         }
     } else if (showSearchResultsSheet && searchResults.isNotEmpty()) {
@@ -483,6 +488,7 @@ private fun formatDistance(meters: Double): String {
 @Composable
 private fun HomeMapResultSheetContent(
     result: SearchResultItem?,
+    onRouteClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (result == null) return
@@ -515,6 +521,13 @@ private fun HomeMapResultSheetContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        Button(onRouteClicked) {
+            Text(
+                text = stringResource(Res.string.home_map_search_route),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
     }
 }
 

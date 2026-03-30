@@ -66,8 +66,8 @@
     <string name="home_navigation_map">マップ</string>
     <string name="home_navigation_route">ルート</string>
     <string name="home_title">OneNavi</string>
-    <string name="home_fab_title">ダウンロード</string>
     <string name="home_search_bar_placeholder">目的地を検索</string>
+    <string name="home_map_search_route">ルート検索</string>
     <string name="home_subscription_expired_title">Pro プランの失効</string>
     <string name="home_subscription_expired_message">OneNavi Pro の定期購入が解約または返金されたため、Pro 機能が無効になりました。\n引き続きご利用いただくには、再度アップグレードしてください。</string>
 
