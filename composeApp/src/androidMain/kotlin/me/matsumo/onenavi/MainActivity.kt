@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         OneNaviTheme(setting) {
                             PermissionScreen(
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier.fillMaxSize(),
                             )
                         }
                     }

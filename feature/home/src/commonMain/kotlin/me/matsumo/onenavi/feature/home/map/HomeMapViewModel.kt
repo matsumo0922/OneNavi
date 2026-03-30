@@ -38,6 +38,9 @@ class HomeMapViewModel(
     private val _suggestions = MutableStateFlow<ImmutableList<SearchSuggestionItem>>(persistentListOf())
     val suggestions: StateFlow<ImmutableList<SearchSuggestionItem>> = _suggestions.asStateFlow()
 
+    private val _searchResults = MutableStateFlow<ImmutableList<SearchResultItem>>(persistentListOf())
+    val searchResults: StateFlow<ImmutableList<SearchResultItem>> = _searchResults.asStateFlow()
+
     private val _selectedResult = MutableStateFlow<SearchResultItem?>(null)
     val selectedResult: StateFlow<SearchResultItem?> = _selectedResult.asStateFlow()
 
@@ -106,7 +109,38 @@ class HomeMapViewModel(
         }
     }
 
+    fun onSearch(query: String, latitude: Double?, longitude: Double?) {
+        searchJob?.cancel()
+        if (query.isBlank()) return
+
+        searchJob = viewModelScope.launch {
+            _isSearching.value = true
+            _selectedResult.value = null
+            searchRepository.searchMultiple(query, latitude, longitude)
+                .onSuccess { results ->
+                    _searchResults.value = results.toImmutableList()
+                }
+                .onFailure {
+                    Napier.e(it) { "Failed to search multiple. query: $query" }
+                    _searchResults.value = persistentListOf()
+                }
+            _isSearching.value = false
+        }
+    }
+
+    fun onSearchResultSelected(result: SearchResultItem) {
+        _selectedResult.value = result
+        viewModelScope.launch {
+            searchRepository.addHistory(result)
+        }
+    }
+
     fun onDismissResult() {
+        _selectedResult.value = null
+    }
+
+    fun onDismissSearchResults() {
+        _searchResults.value = persistentListOf()
         _selectedResult.value = null
     }
 
