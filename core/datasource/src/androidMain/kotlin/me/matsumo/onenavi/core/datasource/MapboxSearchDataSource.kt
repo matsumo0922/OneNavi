@@ -112,12 +112,30 @@ private fun SearchSuggestion.toSuggestionItem(): SearchSuggestionItem {
 }
 
 private fun SearchResult.toResultItem(): SearchResultItem {
+    val routable = routablePoints?.firstOrNull()
+
     return SearchResultItem(
         id = id,
+        mapboxId = mapboxId,
         name = name,
-        address = address?.formattedAddress(),
+        fullAddress = fullAddress ?: address?.formattedAddress(),
+        descriptionText = descriptionText,
+        matchingName = matchingName,
+        accuracy = accuracy?.toString(),
+        makiIcon = makiIcon,
         latitude = coordinate.latitude(),
         longitude = coordinate.longitude(),
+        boundingBoxSouth = boundingBox?.south(),
+        boundingBoxWest = boundingBox?.west(),
+        boundingBoxNorth = boundingBox?.north(),
+        boundingBoxEast = boundingBox?.east(),
+        routableLatitude = routable?.point?.latitude(),
+        routableLongitude = routable?.point?.longitude(),
         categories = categories.orEmpty(),
+        categoryIds = categoryIds.orEmpty(),
+        distanceMeters = distanceMeters,
+        etaMinutes = etaMinutes,
+        externalIds = externalIDs,
+        resultTypes = types.map { it.name },
     )
 }

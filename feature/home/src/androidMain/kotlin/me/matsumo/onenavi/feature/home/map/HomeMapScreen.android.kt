@@ -257,7 +257,7 @@ private fun HomeMapResultSheetContent(
             style = MaterialTheme.typography.titleLarge,
         )
 
-        val address = result.address
+        val address = result.fullAddress
         if (address != null) {
             Text(
                 text = address,

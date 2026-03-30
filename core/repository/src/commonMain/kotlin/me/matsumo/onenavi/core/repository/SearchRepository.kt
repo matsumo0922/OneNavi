@@ -25,7 +25,7 @@ class SearchRepository(
         val history = SearchHistory(
             id = result.id,
             name = result.name,
-            address = result.address,
+            address = result.fullAddress,
             latitude = result.latitude,
             longitude = result.longitude,
             searchedAtEpochMillis = kotlin.time.Clock.System.now().toEpochMilliseconds(),
