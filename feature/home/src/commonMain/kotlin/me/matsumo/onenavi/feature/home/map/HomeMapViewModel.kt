@@ -129,7 +129,9 @@ class HomeMapViewModel(
     }
 
     fun onSearchResultSelected(result: SearchResultItem) {
+        _searchResults.value = persistentListOf()
         _selectedResult.value = result
+
         viewModelScope.launch {
             searchRepository.addHistory(result)
         }
