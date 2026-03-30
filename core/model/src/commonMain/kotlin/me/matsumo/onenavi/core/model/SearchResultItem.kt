@@ -5,9 +5,9 @@ import androidx.compose.runtime.Immutable
 /**
  * 検索結果の詳細データ。
  * 候補選択後に Mapbox SearchResult から変換される。
+ * Search Box API 使用時、[id] は REST API の mapbox_id に相当し、[DetailsApi] での詳細取得に使用できる。
  *
- * @param id Mapbox が返す一意な検索結果 ID
- * @param mapboxId Mapbox POI の永続 ID（存在しない場合は null）
+ * @param id Mapbox の地点 ID。Search Box API 使用時は mapbox_id と同値で、DetailsApi での retrieve に使用可能
  * @param name 地点名称（施設名・住所ラベル等）
  * @param fullAddress フォーマット済みの完全な住所文字列
  * @param descriptionText 検索結果の補足説明テキスト
@@ -15,7 +15,7 @@ import androidx.compose.runtime.Immutable
  * @param accuracy 座標の精度レベル（"rooftop", "interpolated" 等）
  * @param makiIcon Maki アイコン名（UI でのアイコン表示用）
  * @param latitude 緯度
- * @param longitude 緯度
+ * @param longitude 経度
  * @param boundingBoxSouth バウンディングボックス南端緯度（存在しない場合は null）
  * @param boundingBoxWest バウンディングボックス西端経度
  * @param boundingBoxNorth バウンディングボックス北端緯度
@@ -32,7 +32,6 @@ import androidx.compose.runtime.Immutable
 @Immutable
 data class SearchResultItem(
     val id: String,
-    val mapboxId: String?,
     val name: String,
     val fullAddress: String?,
     val descriptionText: String?,

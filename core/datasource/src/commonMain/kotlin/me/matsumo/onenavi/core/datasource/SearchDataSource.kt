@@ -6,5 +6,5 @@ import me.matsumo.onenavi.core.model.SearchSuggestionItem
 interface SearchDataSource {
     suspend fun getSuggestions(query: String): Result<List<SearchSuggestionItem>>
     suspend fun select(suggestionId: String): Result<SearchResultItem>
-    suspend fun retrieve(mapboxId: String): Result<SearchResultItem>
+    suspend fun retrieve(id: String): Result<SearchResultItem>
 }

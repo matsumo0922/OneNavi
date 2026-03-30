@@ -86,10 +86,9 @@ class HomeMapViewModel(
     }
 
     fun onHistorySelected(history: SearchHistory) {
-        val mapboxId = history.mapboxId ?: return
         viewModelScope.launch {
             _isSearching.value = true
-            searchRepository.retrieve(mapboxId)
+            searchRepository.retrieve(history.id)
                 .onSuccess { result ->
                     _selectedResult.value = result
                     searchRepository.addHistory(result)

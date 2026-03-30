@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mapbox.common.MapboxOptions
+import com.mapbox.geojson.Point.fromLngLat
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
@@ -38,6 +39,7 @@ import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
 import com.mapbox.maps.extension.localization.localizeLabels
 import com.mapbox.maps.plugin.PuckBearing
+import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.ViewportStatus
@@ -112,6 +114,22 @@ internal actual fun HomeMapScreenContent(
     LaunchedEffect(isDarkTheme) {
         standardStyleState.configurationsState.lightPreset =
             if (isDarkTheme) LightPresetValue.NIGHT else LightPresetValue.DAY
+    }
+
+    LaunchedEffect(selectedResult) {
+        val result = selectedResult ?: return@LaunchedEffect
+        trackingMode = null
+        viewportState.easeTo(
+            cameraOptions = CameraOptions.Builder()
+                .center(fromLngLat(result.longitude, result.latitude),)
+                .zoom(FOLLOW_PUCK_ZOOM)
+                .pitch(0.0)
+                .bearing(0.0)
+                .build(),
+            animationOptions = MapAnimationOptions.Builder()
+                .duration(1500)
+                .build()
+        )
     }
 
     Box(modifier) {
