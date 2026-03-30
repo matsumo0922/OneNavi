@@ -102,12 +102,15 @@ internal fun HomeMapTopAppBar(
         modifier = modifier,
     ) {
         AppBarWithSearch(
+            modifier = Modifier.fillMaxWidth(),
             state = searchBarState,
             inputField = {
                 HomeMapSearchInputField(
-                    modifier = Modifier.focusProperties {
-                        this.canFocus = canFocus
-                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusProperties {
+                            this.canFocus = canFocus
+                        },
                     searchBarState = searchBarState,
                     textFieldState = textFieldState,
                     showSearchResult = showSearchResult,
