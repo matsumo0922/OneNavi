@@ -233,7 +233,22 @@ private fun HomeMapSearchInputField(
             }
         },
         trailingIcon = {
-            // for space
+            if (textFieldState.text.isNotEmpty()) {
+                IconButton(
+                    onClick = {
+                        textFieldState.clearText()
+
+                        if (searchBarState.currentValue == SearchBarValue.Collapsed) {
+                            onBackClicked.invoke()
+                        }
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                    )
+                }
+            }
         },
     )
 }
