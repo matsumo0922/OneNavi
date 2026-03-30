@@ -11,7 +11,6 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class SearchHistory(
     val id: String,
-    val mapboxId: String?,
     val name: String,
     val address: String?,
     val latitude: Double,

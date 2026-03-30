@@ -107,10 +107,10 @@ class MapboxSearchDataSource : SearchDataSource {
     }
 
     @OptIn(com.mapbox.annotation.MapboxExperimental::class)
-    override suspend fun retrieve(mapboxId: String): Result<SearchResultItem> {
+    override suspend fun retrieve(id: String): Result<SearchResultItem> {
         return suspendCancellableCoroutine { continuation ->
             val task = detailsApi.retrieveDetails(
-                mapboxId = mapboxId,
+                mapboxId = id,
                 options = RetrieveDetailsOptions(),
                 callback = object : SearchResultCallback {
                     override fun onResult(result: SearchResult, responseInfo: ResponseInfo) {
@@ -145,7 +145,6 @@ private fun SearchResult.toResultItem(): SearchResultItem {
 
     return SearchResultItem(
         id = id,
-        mapboxId = mapboxId,
         name = name,
         fullAddress = fullAddress ?: address?.formattedAddress(),
         descriptionText = descriptionText,
