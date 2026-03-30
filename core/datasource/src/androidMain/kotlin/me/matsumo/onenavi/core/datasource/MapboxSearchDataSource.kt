@@ -27,25 +27,26 @@ class MapboxSearchDataSource : SearchDataSource {
         if (query.isBlank()) return Result.success(emptyList())
 
         return suspendCancellableCoroutine { continuation ->
+            val options = SearchOptions.Builder()
+                .limit(10)
+                .build()
+
+            val callback = object : SearchSuggestionsCallback {
+                override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {
+                    lastSuggestions = suggestions
+                    val items = suggestions.map { it.toSuggestionItem() }
+                    continuation.resume(Result.success(items))
+                }
+
+                override fun onError(e: Exception) {
+                    continuation.resume(Result.failure(e))
+                }
+            }
+
             val task = searchEngine.search(
                 query = query,
-                options = SearchOptions.Builder()
-                    .limit(10)
-                    .build(),
-                callback = object : SearchSuggestionsCallback {
-                    override fun onSuggestions(
-                        suggestions: List<SearchSuggestion>,
-                        responseInfo: ResponseInfo,
-                    ) {
-                        lastSuggestions = suggestions
-                        val items = suggestions.map { it.toSuggestionItem() }
-                        continuation.resume(Result.success(items))
-                    }
-
-                    override fun onError(e: Exception) {
-                        continuation.resume(Result.failure(e))
-                    }
-                },
+                options = options,
+                callback = callback,
             )
 
             continuation.invokeOnCancellation {
@@ -62,19 +63,11 @@ class MapboxSearchDataSource : SearchDataSource {
             val task = searchEngine.select(
                 suggestion = suggestion,
                 callback = object : SearchSelectionCallback {
-                    override fun onResult(
-                        suggestion: SearchSuggestion,
-                        result: SearchResult,
-                        responseInfo: ResponseInfo,
-                    ) {
+                    override fun onResult(suggestion: SearchSuggestion, result: SearchResult, responseInfo: ResponseInfo) {
                         continuation.resume(Result.success(result.toResultItem()))
                     }
 
-                    override fun onResults(
-                        suggestion: SearchSuggestion,
-                        results: List<SearchResult>,
-                        responseInfo: ResponseInfo,
-                    ) {
+                    override fun onResults(suggestion: SearchSuggestion, results: List<SearchResult>, responseInfo: ResponseInfo) {
                         val result = results.firstOrNull()
                         if (result != null) {
                             continuation.resume(Result.success(result.toResultItem()))
@@ -83,10 +76,7 @@ class MapboxSearchDataSource : SearchDataSource {
                         }
                     }
 
-                    override fun onSuggestions(
-                        suggestions: List<SearchSuggestion>,
-                        responseInfo: ResponseInfo,
-                    ) {
+                    override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {
                         lastSuggestions = suggestions
                         continuation.resume(
                             Result.failure(
@@ -98,8 +88,8 @@ class MapboxSearchDataSource : SearchDataSource {
                         )
                     }
 
-                    override fun onError(error: Exception) {
-                        continuation.resume(Result.failure(error))
+                    override fun onError(e: Exception) {
+                        continuation.resume(Result.failure(e))
                     }
                 },
             )
