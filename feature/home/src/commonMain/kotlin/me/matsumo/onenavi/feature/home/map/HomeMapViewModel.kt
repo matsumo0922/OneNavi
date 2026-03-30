@@ -85,11 +85,27 @@ class HomeMapViewModel(
     fun onHistorySelected(history: SearchHistory) {
         _selectedResult.value = SearchResultItem(
             id = history.id,
+            mapboxId = null,
             name = history.name,
-            address = history.address,
+            fullAddress = history.address,
+            descriptionText = null,
+            matchingName = null,
+            accuracy = null,
+            makiIcon = null,
             latitude = history.latitude,
             longitude = history.longitude,
+            boundingBoxSouth = null,
+            boundingBoxWest = null,
+            boundingBoxNorth = null,
+            boundingBoxEast = null,
+            routableLatitude = null,
+            routableLongitude = null,
             categories = emptyList(),
+            categoryIds = emptyList(),
+            distanceMeters = null,
+            etaMinutes = null,
+            externalIds = emptyMap(),
+            resultTypes = emptyList(),
         )
     }
 
