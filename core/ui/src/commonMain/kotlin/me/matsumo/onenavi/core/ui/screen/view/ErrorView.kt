@@ -63,7 +63,7 @@ fun ErrorView(
                     },
                 )
             }
-        }
+        },
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
@@ -105,7 +105,7 @@ fun ErrorView(
 
             if (stackTrace != null) {
                 TextButton(
-                    onClick = { clipboardManager.setText(AnnotatedString(stackTrace)) }
+                    onClick = { clipboardManager.setText(AnnotatedString(stackTrace)) },
                 ) {
                     Text(
                         text = stringResource(Res.string.error_copy_to_clipboard),

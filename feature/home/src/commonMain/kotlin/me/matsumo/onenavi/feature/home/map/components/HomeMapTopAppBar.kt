@@ -64,6 +64,7 @@ internal fun HomeMapTopAppBar(
     suggestions: ImmutableList<SearchSuggestionItem>,
     histories: ImmutableList<SearchHistory>,
     onQueryChanged: (String) -> Unit,
+    onSearchSubmitted: (String) -> Unit,
     onSuggestionSelected: (SearchSuggestionItem) -> Unit,
     onHistorySelected: (SearchHistory) -> Unit,
     onRemoveHistory: (String) -> Unit,
@@ -79,6 +80,10 @@ internal fun HomeMapTopAppBar(
     fun onSearch(query: String) {
         textFieldState.setTextAndPlaceCursorAtEnd(query)
         onQueryChanged(query)
+        onSearchSubmitted(query)
+        scope.launch {
+            searchBarState.animateToCollapsed()
+        }
     }
 
     NavigationEventHandler(navigationState, isBackEnabled = showSearchResult) {
@@ -274,7 +279,7 @@ private fun HomeMapSearchSuggestionList(
                         )
                     }
                 },
-                colors = ListItemDefaults.colors(Color.Transparent)
+                colors = ListItemDefaults.colors(Color.Transparent),
             )
 
             HorizontalDivider()
@@ -334,7 +339,7 @@ private fun HomeMapSearchHistoryList(
                         )
                     }
                 },
-                colors = ListItemDefaults.colors(Color.Transparent)
+                colors = ListItemDefaults.colors(Color.Transparent),
             )
 
             HorizontalDivider()

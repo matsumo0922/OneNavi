@@ -199,7 +199,7 @@ private fun TopAppBar(
             Text(
                 text = stringResource(Res.string.permission_title),
             )
-        }
+        },
     )
 }
 

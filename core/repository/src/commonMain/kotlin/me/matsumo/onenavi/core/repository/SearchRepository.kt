@@ -25,6 +25,10 @@ class SearchRepository(
         return searchDataSource.retrieve(id)
     }
 
+    suspend fun searchMultiple(query: String, latitude: Double?, longitude: Double?): Result<List<SearchResultItem>> {
+        return searchDataSource.searchMultiple(query, latitude, longitude)
+    }
+
     suspend fun addHistory(result: SearchResultItem) {
         val history = SearchHistory(
             id = result.id,

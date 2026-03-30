@@ -1,16 +1,24 @@
 package me.matsumo.onenavi.feature.home.map
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -25,17 +33,21 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mapbox.common.MapboxOptions
+import com.mapbox.geojson.Point
 import com.mapbox.geojson.Point.fromLngLat
 import com.mapbox.maps.CameraOptions
+import com.mapbox.maps.EdgeInsets
+import com.mapbox.maps.MapView
 import com.mapbox.maps.MapboxExperimental
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
-import com.mapbox.maps.extension.compose.annotation.Marker
+import com.mapbox.maps.extension.compose.annotation.ViewAnnotation
 import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
 import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
@@ -48,6 +60,10 @@ import com.mapbox.maps.plugin.viewport.ViewportStatus
 import com.mapbox.maps.plugin.viewport.data.DefaultViewportTransitionOptions
 import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateBearing
 import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateOptions
+import com.mapbox.maps.viewannotation.annotationAnchor
+import com.mapbox.maps.viewannotation.geometry
+import com.mapbox.maps.viewannotation.viewAnnotationOptions
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -60,6 +76,9 @@ private const val FOLLOW_PUCK_ZOOM = 16.0
 private const val FOLLOW_PUCK_PITCH = 45.0
 private const val ZOOM_STEP = 1.0
 private const val TRANSITION_MAX_DURATION_MS = 1000L
+private const val CAMERA_PADDING = 100.0
+private const val CAMERA_PADDING_TOP = 200.0
+private const val CAMERA_PADDING_BOTTOM = 400.0
 
 @Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
 @OptIn(ExperimentalMaterial3Api::class, MapboxExperimental::class)
@@ -70,9 +89,12 @@ internal actual fun HomeMapScreenContent(
 ) {
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val histories by viewModel.histories.collectAsStateWithLifecycle()
+    val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val selectedResult by viewModel.selectedResult.collectAsStateWithLifecycle()
 
+    var mapView by remember { mutableStateOf<MapView?>(null) }
     var showSearchResult by rememberSaveable { mutableStateOf(false) }
+    var showSearchResultsSheet by rememberSaveable { mutableStateOf(false) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
     var lastTrackingMode by remember { mutableStateOf(LocationTrackingMode.TiltedHeading) }
     val scope = rememberCoroutineScope()
@@ -118,19 +140,43 @@ internal actual fun HomeMapScreenContent(
             if (isDarkTheme) LightPresetValue.NIGHT else LightPresetValue.DAY
     }
 
+    LaunchedEffect(searchResults, mapView) {
+        if (searchResults.isEmpty()) return@LaunchedEffect
+        val currentMapView = mapView ?: return@LaunchedEffect
+        trackingMode = null
+        showSearchResultsSheet = true
+
+        val points = searchResults.map { fromLngLat(it.longitude, it.latitude) }
+        val padding = EdgeInsets(CAMERA_PADDING_TOP, CAMERA_PADDING, CAMERA_PADDING_BOTTOM, CAMERA_PADDING)
+
+        val cameraOptions = currentMapView.mapboxMap.cameraForCoordinates(
+            coordinates = points,
+            coordinatesPadding = padding,
+            bearing = 0.0,
+            pitch = 0.0,
+        )
+
+        viewportState.flyTo(
+            cameraOptions = cameraOptions,
+            animationOptions = MapAnimationOptions.Builder()
+                .duration(1500)
+                .build(),
+        )
+    }
+
     LaunchedEffect(selectedResult) {
         val result = selectedResult ?: return@LaunchedEffect
         trackingMode = null
         viewportState.easeTo(
             cameraOptions = CameraOptions.Builder()
-                .center(fromLngLat(result.longitude, result.latitude),)
+                .center(fromLngLat(result.longitude, result.latitude))
                 .zoom(FOLLOW_PUCK_ZOOM)
                 .pitch(0.0)
                 .bearing(0.0)
                 .build(),
             animationOptions = MapAnimationOptions.Builder()
                 .duration(1500)
-                .build()
+                .build(),
         )
     }
 
@@ -145,20 +191,29 @@ internal actual fun HomeMapScreenContent(
                 )
             },
         ) {
-            MapEffect(locale) { mapView ->
-                mapView.location.enabled = true
-                mapView.location.locationPuck = createDefault2DPuck(withBearing = true)
-                mapView.location.puckBearing = PuckBearing.HEADING
-                mapView.location.puckBearingEnabled = true
-                mapView.mapboxMap.style?.localizeLabels(Locale.JAPANESE)
+            MapEffect(locale) { view ->
+                mapView = view
+                view.location.enabled = true
+                view.location.locationPuck = createDefault2DPuck(withBearing = true)
+                view.location.puckBearing = PuckBearing.HEADING
+                view.location.puckBearingEnabled = true
+                view.mapboxMap.style?.localizeLabels(Locale.JAPANESE)
             }
 
-            selectedResult?.let { result ->
-                Marker(
-                    point = fromLngLat(result.longitude, result.latitude),
-                    color = MaterialTheme.colorScheme.primary,
-                    stroke = null
-                )
+            if (searchResults.isNotEmpty()) {
+                searchResults.forEachIndexed { index, result ->
+                    HomeMapNumberedPin(
+                        point = fromLngLat(result.longitude, result.latitude),
+                        number = index + 1,
+                    )
+                }
+            } else {
+                selectedResult?.let { result ->
+                    HomeMapNumberedPin(
+                        point = fromLngLat(result.longitude, result.latitude),
+                        number = 1,
+                    )
+                }
             }
         }
 
@@ -171,6 +226,15 @@ internal actual fun HomeMapScreenContent(
             suggestions = suggestions,
             histories = histories,
             onQueryChanged = viewModel::onQueryChanged,
+            onSearchSubmitted = { query ->
+                val center = viewportState.cameraState?.center
+                viewModel.onSearch(
+                    query = query,
+                    latitude = center?.latitude(),
+                    longitude = center?.longitude(),
+                )
+                showSearchResult = true
+            },
             onSuggestionSelected = { suggestion ->
                 viewModel.onSuggestionSelected(suggestion)
                 showSearchResult = true
@@ -180,7 +244,11 @@ internal actual fun HomeMapScreenContent(
                 showSearchResult = true
             },
             onRemoveHistory = viewModel::onRemoveHistory,
-            onBackClicked = { showSearchResult = false },
+            onBackClicked = {
+                showSearchResult = false
+                showSearchResultsSheet = false
+                viewModel.onDismissSearchResults()
+            },
         )
 
         HomeMapControls(
@@ -253,6 +321,162 @@ internal actual fun HomeMapScreenContent(
                 result = selectedResult,
             )
         }
+    } else if (showSearchResultsSheet && searchResults.isNotEmpty()) {
+        val sheetState = rememberModalBottomSheetState()
+
+        ModalBottomSheet(
+            onDismissRequest = { showSearchResultsSheet = false },
+            sheetState = sheetState,
+        ) {
+            HomeMapSearchResultListContent(
+                results = searchResults,
+                onResultSelected = viewModel::onSearchResultSelected,
+            )
+        }
+    }
+}
+
+@OptIn(MapboxExperimental::class)
+@Composable
+private fun HomeMapNumberedPin(
+    point: Point,
+    number: Int,
+    modifier: Modifier = Modifier,
+) {
+    ViewAnnotation(
+        options = viewAnnotationOptions {
+            geometry(point)
+            annotationAnchor {
+                anchor(com.mapbox.maps.ViewAnnotationAnchor.BOTTOM)
+            }
+            allowOverlap(true)
+            allowOverlapWithPuck(true)
+        },
+    ) {
+        Surface(
+            modifier = modifier.size(32.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary,
+            shadowElevation = 4.dp,
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "$number",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeMapSearchResultListContent(
+    results: ImmutableList<SearchResultItem>,
+    onResultSelected: (SearchResultItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+    ) {
+        itemsIndexed(
+            items = results,
+            key = { index, item -> "${item.id}_$index" },
+        ) { index, result ->
+            HomeMapSearchResultListItem(
+                index = index + 1,
+                result = result,
+                onClick = { onResultSelected(result) },
+            )
+
+            if (index < results.lastIndex) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(
+                        horizontal = 24.dp,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeMapSearchResultListItem(
+    index: Int,
+    result: SearchResultItem,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(
+                horizontal = 24.dp,
+                vertical = 12.dp,
+            ),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            modifier = Modifier.size(28.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary,
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "$index",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = result.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            val address = result.fullAddress
+            if (address != null) {
+                Text(
+                    text = address,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+
+        val distance = result.distanceMeters
+        if (distance != null) {
+            Text(
+                text = formatDistance(distance),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun formatDistance(meters: Double): String {
+    return if (meters < 1000) {
+        "${meters.toInt()}m"
+    } else {
+        "%.1fkm".format(meters / 1000)
     }
 }
 
