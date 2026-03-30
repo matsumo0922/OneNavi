@@ -2,6 +2,7 @@ package me.matsumo.onenavi.feature.home.map
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -23,6 +24,7 @@ import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.repository.SearchRepository
+import kotlin.time.Duration.Companion.milliseconds
 
 class HomeMapViewModel(
     private val appConfig: AppConfig,
@@ -55,7 +57,7 @@ class HomeMapViewModel(
     init {
         @OptIn(FlowPreview::class)
         _query
-            .debounce(DEBOUNCE_MS)
+            .debounce(DEBOUNCE.milliseconds)
             .distinctUntilChanged()
             .onEach { query -> performSearch(query) }
             .launchIn(viewModelScope)
@@ -111,12 +113,13 @@ class HomeMapViewModel(
                     _suggestions.value = items.toImmutableList()
                 }
                 .onFailure {
+                    Napier.e(it) { "Failed to search. query: $query" }
                     _suggestions.value = persistentListOf()
                 }
         }
     }
 
     companion object {
-        private const val DEBOUNCE_MS = 300L
+        private const val DEBOUNCE = 300L
     }
 }
