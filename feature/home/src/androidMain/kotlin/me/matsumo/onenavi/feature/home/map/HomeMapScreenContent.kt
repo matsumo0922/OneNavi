@@ -223,6 +223,7 @@ internal actual fun HomeMapScreenContent(
             MapboxMap(
                 modifier = Modifier.fillMaxSize(),
                 mapViewportState = viewportState,
+                compass = {},
                 scaleBar = {},
                 logo = {
                     Logo(
@@ -286,8 +287,18 @@ internal actual fun HomeMapScreenContent(
                         end = 16.dp,
                     )
                     .offset(y = -sheetVisibleHeight),
+                bearing = viewportState.cameraState?.bearing ?: 0.0,
                 trackingMode = trackingMode,
                 viewportState = viewportState,
+                onResetBearing = {
+                    trackingMode = null
+                    viewportState.easeTo(
+                        cameraOptions = CameraOptions.Builder()
+                            .bearing(0.0)
+                            .pitch(0.0)
+                            .build(),
+                    )
+                },
                 onTrackingModeChanged = { trackingMode = it },
             )
 
