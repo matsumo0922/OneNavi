@@ -78,6 +78,19 @@ class HomeMapViewModel(
             .launchIn(viewModelScope)
     }
 
+    fun onViewEvent(event: HomeMapViewEvent) {
+        when (event) {
+            is HomeMapViewEvent.OnQueryChanged -> onQueryChanged(event.query)
+            is HomeMapViewEvent.OnSearch -> onSearch(event.query, event.latitude, event.longitude)
+            is HomeMapViewEvent.OnSuggestionSelected -> onSuggestionSelected(event.suggestion)
+            is HomeMapViewEvent.OnHistorySelected -> onHistorySelected(event.history)
+            is HomeMapViewEvent.OnRemoveHistory -> onRemoveHistory(event.historyId)
+            is HomeMapViewEvent.OnRouteSelected -> onRouteSelected(event.index)
+            HomeMapViewEvent.OnDismissRoutes -> onDismissRoutes()
+            HomeMapViewEvent.OnDismissSearchResult -> onDismissSearchResults()
+        }
+    }
+
     fun onQueryChanged(query: String) {
         _query.value = query
         if (query.isBlank()) {

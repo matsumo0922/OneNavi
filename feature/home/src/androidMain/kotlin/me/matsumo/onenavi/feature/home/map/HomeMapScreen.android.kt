@@ -73,7 +73,6 @@ import com.mapbox.maps.viewannotation.geometry
 import com.mapbox.maps.viewannotation.viewAnnotationOptions
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.resource.Res
@@ -96,7 +95,7 @@ private const val CAMERA_PADDING_BOTTOM = 400.0
 @Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
 @OptIn(ExperimentalMaterial3Api::class, MapboxExperimental::class)
 @Composable
-internal actual fun HomeMapScreenContent(
+internal fun HomeMapScreenContent2(
     viewModel: HomeMapViewModel,
     modifier: Modifier,
 ) {
@@ -345,57 +344,8 @@ internal actual fun HomeMapScreenContent(
                 .align(Alignment.BottomEnd)
                 .padding(16.dp),
             trackingMode = trackingMode,
-            onLocationClicked = {
-                scope.launch {
-                    val currentZoom = viewportState.cameraState?.zoom
-                    if (trackingMode == null) {
-                        trackingMode = lastTrackingMode
-                        viewportState.transitionToFollowPuckState(
-                            followPuckViewportStateOptions = buildFollowPuckOptions(
-                                mode = lastTrackingMode,
-                                zoom = currentZoom,
-                            ),
-                            defaultTransitionOptions = transitionOptions,
-                        )
-                    } else {
-                        val nextMode = when (trackingMode) {
-                            LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
-                            LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
-                            LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
-                            else -> LocationTrackingMode.TiltedHeading
-                        }
-                        trackingMode = nextMode
-                        lastTrackingMode = nextMode
-                        viewportState.transitionToFollowPuckState(
-                            followPuckViewportStateOptions = buildFollowPuckOptions(
-                                mode = nextMode,
-                                zoom = currentZoom,
-                            ),
-                            defaultTransitionOptions = transitionOptions,
-                        )
-                    }
-                }
-            },
-            onZoomInClicked = {
-                scope.launch {
-                    val currentZoom = viewportState.cameraState?.zoom ?: FOLLOW_PUCK_ZOOM
-                    viewportState.easeTo(
-                        CameraOptions.Builder()
-                            .zoom(currentZoom + ZOOM_STEP)
-                            .build(),
-                    )
-                }
-            },
-            onZoomOutClicked = {
-                scope.launch {
-                    val currentZoom = viewportState.cameraState?.zoom ?: FOLLOW_PUCK_ZOOM
-                    viewportState.easeTo(
-                        CameraOptions.Builder()
-                            .zoom(currentZoom - ZOOM_STEP)
-                            .build(),
-                    )
-                }
-            },
+            viewportState = viewportState,
+            onTrackingModeChanged = { trackingMode = it }
         )
     }
 
