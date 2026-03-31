@@ -32,12 +32,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
 import com.mapbox.maps.plugin.viewport.data.DefaultViewportTransitionOptions
@@ -211,8 +207,9 @@ private fun HomeMapZoomButtons(
 }
 
 private const val COMPASS_NORTH_LABEL_FONT_SIZE = 11
-private const val COMPASS_NEEDLE_WIDTH_RATIO = 0.18f
+private const val COMPASS_NEEDLE_WIDTH_RATIO = 0.1f
 private const val COMPASS_NEEDLE_LENGTH_RATIO = 0.35f
+private const val COMPASS_NEEDLE_INSET_RATIO = 0.03f
 
 @Composable
 private fun HomeMapCompass(
@@ -244,6 +241,7 @@ private fun HomeMapCompass(
             val centerY = size.height / 2
             val needleWidth = size.width * COMPASS_NEEDLE_WIDTH_RATIO
             val needleLength = size.height * COMPASS_NEEDLE_LENGTH_RATIO
+            val inset = size.height * COMPASS_NEEDLE_INSET_RATIO
 
             rotate(
                 degrees = rotationDegrees,
@@ -251,9 +249,10 @@ private fun HomeMapCompass(
             ) {
                 // 北側の針（赤）
                 val northPath = Path().apply {
-                    moveTo(centerX, centerY - needleLength)
-                    lineTo(centerX - needleWidth, centerY)
-                    lineTo(centerX + needleWidth, centerY)
+                    moveTo(centerX, centerY - needleLength)                // 先端
+                    lineTo(centerX - needleWidth, centerY)                 // 左肩
+                    lineTo(centerX, centerY - inset)                       // 中央の食い込み
+                    lineTo(centerX + needleWidth, centerY)                 // 右肩
                     close()
                 }
                 drawPath(
@@ -263,31 +262,15 @@ private fun HomeMapCompass(
 
                 // 南側の針（グレー）
                 val southPath = Path().apply {
-                    moveTo(centerX, centerY + needleLength)
-                    lineTo(centerX - needleWidth, centerY)
-                    lineTo(centerX + needleWidth, centerY)
+                    moveTo(centerX, centerY + needleLength)                // 先端
+                    lineTo(centerX - needleWidth, centerY)                 // 左肩
+                    lineTo(centerX, centerY + inset)                       // 中央の食い込み
+                    lineTo(centerX + needleWidth, centerY)                 // 右肩
                     close()
                 }
                 drawPath(
                     path = southPath,
                     color = southColor,
-                )
-
-                // 「N」ラベル
-                val textLayoutResult = textMeasurer.measure(
-                    text = "N",
-                    style = TextStyle(
-                        color = Color.White,
-                        fontSize = COMPASS_NORTH_LABEL_FONT_SIZE.sp,
-                        fontWeight = FontWeight.Bold,
-                    ),
-                )
-                drawText(
-                    textLayoutResult = textLayoutResult,
-                    topLeft = Offset(
-                        x = centerX - textLayoutResult.size.width / 2,
-                        y = centerY - needleLength + 2.dp.toPx(),
-                    ),
                 )
             }
         }
