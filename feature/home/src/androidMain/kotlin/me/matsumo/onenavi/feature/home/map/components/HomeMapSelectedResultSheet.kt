@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.feature.home.map.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -37,6 +38,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -242,6 +245,7 @@ private fun ButtonSection(
                     .height(80.dp)
                     .aspectRatio(aspectRatio)
                     .clip(RoundedCornerShape(12.dp))
+                    .clickable { item.onClick() }
                     .background(containerColor)
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -270,6 +274,8 @@ private fun IncoSection(
     items: ImmutableList<InfoItem>,
     modifier: Modifier = Modifier
 ) {
+    val clipboard = LocalClipboardManager.current
+
     Column(
         modifier = modifier.padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -298,6 +304,9 @@ private fun IncoSection(
                     title = stringResource(item.title),
                     description = item.value,
                     icon = item.icon,
+                    onLongClick = {
+                        clipboard.setText(AnnotatedString(item.value))
+                    }
                 )
             }
         }
