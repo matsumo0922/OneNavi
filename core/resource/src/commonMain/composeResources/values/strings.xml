@@ -71,6 +71,15 @@
     <string name="home_map_search_route">ルート検索</string>
     <string name="home_map_bookmark">保存</string>
     <string name="home_map_street_view">360°</string>
+    <string name="home_map_point">地点情報</string>
+    <string name="home_map_point_address">住所</string>
+    <string name="home_map_point_coordinates">座標</string>
+    <string name="home_map_point_pluss_code">Plus Code</string>
+    <string name="home_map_metadata">メタデータ</string>
+    <string name="home_map_metadata_id">ID</string>
+    <string name="home_map_metadata_external_id">External ID</string>
+    <string name="home_map_metadata_type">Type</string>
+    <string name="home_map_metadata_accutary">精度</string>
     <string name="home_map_route_origin_current_location">現在地</string>
     <string name="home_subscription_expired_title">Pro プランの失効</string>
     <string name="home_subscription_expired_message">OneNavi Pro の定期購入が解約または返金されたため、Pro 機能が無効になりました。\n引き続きご利用いただくには、再度アップグレードしてください。</string>
