@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.BottomSheetScaffold
@@ -266,6 +267,19 @@ internal actual fun HomeMapScreenContent(
                 }
             }
 
+            HomeMapControls(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(
+                        bottom = 16.dp,
+                        end = 16.dp,
+                    )
+                    .offset(y = -sheetVisibleHeight),
+                trackingMode = trackingMode,
+                viewportState = viewportState,
+                onTrackingModeChanged = { trackingMode = it },
+            )
+
             HomeMapTopAppBar(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -275,18 +289,6 @@ internal actual fun HomeMapScreenContent(
                 histories = histories,
                 viewportState = viewportState,
                 onViewEvent = viewModel::onViewEvent,
-            )
-
-            HomeMapControls(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(
-                        bottom = sheetVisibleHeight + 16.dp,
-                        end = 16.dp,
-                    ),
-                trackingMode = trackingMode,
-                viewportState = viewportState,
-                onTrackingModeChanged = { trackingMode = it },
             )
         }
     }
