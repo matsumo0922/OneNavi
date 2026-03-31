@@ -9,10 +9,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled._360
 import androidx.compose.material.icons.filled.Apartment
@@ -29,14 +30,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import me.matsumo.onenavi.core.common.OpenLocationCode
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_share
@@ -49,7 +53,7 @@ import me.matsumo.onenavi.core.resource.home_map_metadata_type
 import me.matsumo.onenavi.core.resource.home_map_point
 import me.matsumo.onenavi.core.resource.home_map_point_address
 import me.matsumo.onenavi.core.resource.home_map_point_coordinates
-import me.matsumo.onenavi.core.resource.home_map_point_pluss_code
+import me.matsumo.onenavi.core.resource.home_map_point_plus_code
 import me.matsumo.onenavi.core.resource.home_map_search_route
 import me.matsumo.onenavi.core.resource.home_map_street_view
 import me.matsumo.onenavi.core.ui.components.CommonSectionItem
@@ -59,21 +63,67 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun HomeMapSelectedResultSheet(
     selectedResult: SearchResultItem,
+    onPeekHeightMeasured: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        modifier = modifier,
+    val plusCode = remember(selectedResult) { OpenLocationCode.encode(selectedResult.effectiveLatitude, selectedResult.effectiveLongitude) }
+
+    val pointItems = persistentListOf(
+        InfoItem(
+            title = Res.string.home_map_point_address,
+            value = selectedResult.fullAddress,
+            icon = Icons.Default.Apartment,
+        ),
+        InfoItem(
+            title = Res.string.home_map_point_coordinates,
+            value = "${selectedResult.latitude}, ${selectedResult.longitude}",
+            icon = Icons.Default.Place,
+        ),
+        InfoItem(
+            title = Res.string.home_map_point_plus_code,
+            value = plusCode,
+            icon = Icons.Default.Code,
+        ),
+    )
+
+    val metadataItems = persistentListOf(
+        InfoItem(
+            title = Res.string.home_map_metadata_id,
+            value = selectedResult.id,
+            icon = Icons.Default.Code,
+        ),
+        InfoItem(
+            title = Res.string.home_map_metadata_external_id,
+            value = selectedResult.externalIds.takeIf { it.isNotEmpty() }?.toString(),
+            icon = Icons.Outlined.Info,
+        ),
+        InfoItem(
+            title = Res.string.home_map_metadata_type,
+            value = selectedResult.resultTypes.takeIf { it.isNotEmpty() }?.toString(),
+            icon = Icons.Outlined.Category,
+        ),
+        InfoItem(
+            title = Res.string.home_map_metadata_accutary,
+            value = selectedResult.accuracy,
+            icon = Icons.Outlined.Check,
+        ),
+    )
+
+    Column(
+        modifier = modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(24.dp),
-        contentPadding = PaddingValues(bottom = 16.dp),
     ) {
-        item {
+        Column(
+            modifier = Modifier.onGloballyPositioned { coordinates ->
+                onPeekHeightMeasured(coordinates.size.height)
+            },
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
             TitleSection(
                 modifier = Modifier.fillMaxWidth(),
                 selectedResult = selectedResult,
             )
-        }
 
-        item {
             ButtonSection(
                 modifier = Modifier.fillMaxWidth(),
                 onRouteClicked = {},
@@ -83,62 +133,19 @@ internal fun HomeMapSelectedResultSheet(
             )
         }
 
-        item {
-            val items = persistentListOf(
-                InfoItem(
-                    title = Res.string.home_map_point_address,
-                    value = selectedResult.fullAddress,
-                    icon = Icons.Default.Apartment,
-                ),
-                InfoItem(
-                    title = Res.string.home_map_point_coordinates,
-                    value = "${selectedResult.latitude}, ${selectedResult.longitude}",
-                    icon = Icons.Default.Place,
-                ),
-                InfoItem(
-                    title = Res.string.home_map_point_pluss_code,
-                    value = "ABCDEFGH",
-                    icon = Icons.Default.Code,
-                )
-            )
+        IncoSection(
+            modifier = Modifier.fillMaxWidth(),
+            title = Res.string.home_map_point,
+            items = pointItems,
+        )
 
-            IncoSection(
-                modifier = Modifier.fillMaxWidth(),
-                title = Res.string.home_map_point,
-                items = items,
-            )
-        }
-
-        item {
-            val items = persistentListOf(
-                InfoItem(
-                    title = Res.string.home_map_metadata_id,
-                    value = selectedResult.id,
-                    icon = Icons.Default.Code,
-                ),
-                InfoItem(
-                    title = Res.string.home_map_metadata_external_id,
-                    value = selectedResult.externalIds.takeIf { it.isNotEmpty() }?.toString(),
-                    icon = Icons.Outlined.Info,
-                ),
-                InfoItem(
-                    title = Res.string.home_map_metadata_type,
-                    value = selectedResult.resultTypes.takeIf { it.isNotEmpty() }?.toString(),
-                    icon = Icons.Outlined.Category,
-                ),
-                InfoItem(
-                    title = Res.string.home_map_metadata_accutary,
-                    value = selectedResult.accuracy,
-                    icon = Icons.Outlined.Check,
-                )
-            )
-
-            IncoSection(
-                modifier = Modifier.fillMaxWidth(),
-                title = Res.string.home_map_metadata,
-                items = items,
-            )
-        }
+        IncoSection(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            title = Res.string.home_map_metadata,
+            items = metadataItems,
+        )
     }
 }
 

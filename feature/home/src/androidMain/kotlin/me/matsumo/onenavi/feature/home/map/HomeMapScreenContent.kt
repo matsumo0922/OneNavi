@@ -59,7 +59,8 @@ private const val FOLLOW_PUCK_ZOOM = 16.0
 private const val CAMERA_PADDING = 100.0
 private const val CAMERA_PADDING_TOP = 200.0
 private const val CAMERA_PADDING_BOTTOM = 400.0
-private val SHEET_PEEK_HEIGHT = 200.dp
+private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
+private val SHEET_DRAG_HANDLE_HEIGHT = 48.dp
 
 @Suppress("COMPOSE_APPLIER_CALL_MISMATCH", "ParamsComparedByRef")
 @OptIn(ExperimentalMaterial3Api::class, MapboxExperimental::class)
@@ -91,10 +92,12 @@ internal actual fun HomeMapScreenContent(
         bottomSheetState = rememberStandardBottomSheetState(
             initialValue = SheetValue.Hidden,
             skipHiddenState = false,
+            confirmValueChange = { it != SheetValue.Hidden },
         ),
     )
 
     var contentHeight by remember { mutableFloatStateOf(0f) }
+    var sheetPeekHeight by remember { mutableStateOf(SHEET_PEEK_HEIGHT_DEFAULT) }
 
     val sheetVisibleHeight by remember {
         derivedStateOf {
@@ -174,7 +177,7 @@ internal actual fun HomeMapScreenContent(
     BottomSheetScaffold(
         modifier = modifier,
         scaffoldState = scaffoldState,
-        sheetPeekHeight = SHEET_PEEK_HEIGHT,
+        sheetPeekHeight = sheetPeekHeight,
         sheetContent = {
             if (searchResults.isNotEmpty()) {
                 searchResults.forEachIndexed { index, result ->
@@ -184,6 +187,10 @@ internal actual fun HomeMapScreenContent(
                 selectedResult?.let { result ->
                     HomeMapSelectedResultSheet(
                         selectedResult = result,
+                        onPeekHeightMeasured = { heightPx ->
+                            val measuredHeight = with(density) { heightPx.toDp() } + SHEET_DRAG_HANDLE_HEIGHT
+                            sheetPeekHeight = measuredHeight
+                        },
                     )
                 }
             }

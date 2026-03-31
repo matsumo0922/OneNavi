@@ -74,7 +74,7 @@
     <string name="home_map_point">地点情報</string>
     <string name="home_map_point_address">住所</string>
     <string name="home_map_point_coordinates">座標</string>
-    <string name="home_map_point_pluss_code">Plus Code</string>
+    <string name="home_map_point_plus_code">Plus Code</string>
     <string name="home_map_metadata">メタデータ</string>
     <string name="home_map_metadata_id">ID</string>
     <string name="home_map_metadata_external_id">External ID</string>
