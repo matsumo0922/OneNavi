@@ -1,5 +1,8 @@
 package me.matsumo.onenavi.feature.home.map.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,8 +32,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
 import com.mapbox.maps.plugin.viewport.data.DefaultViewportTransitionOptions
@@ -60,9 +72,11 @@ private const val ZOOM_STEP = 1.0
 
 @Composable
 internal fun HomeMapControls(
+    bearing: Double,
     trackingMode: LocationTrackingMode?,
     viewportState: MapViewportState,
     modifier: Modifier = Modifier,
+    onResetBearing: () -> Unit,
     onTrackingModeChanged: (LocationTrackingMode) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -97,6 +111,11 @@ internal fun HomeMapControls(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        HomeMapCompass(
+            bearing = bearing,
+            onClicked = onResetBearing,
+        )
+
         HomeMapZoomButtons(
             onZoomInClicked = { setZoom(ZOOM_STEP) },
             onZoomOutClicked = { setZoom(-ZOOM_STEP) },
@@ -187,6 +206,94 @@ private fun HomeMapZoomButtons(
                 Icon(
                     imageVector = Icons.Default.Remove,
                     contentDescription = null,
+                )
+            }
+        }
+    }
+}
+
+private const val COMPASS_ANIMATION_DURATION_MS = 300
+private const val COMPASS_NORTH_LABEL_FONT_SIZE = 11
+private const val COMPASS_NEEDLE_WIDTH_RATIO = 0.18f
+private const val COMPASS_NEEDLE_LENGTH_RATIO = 0.35f
+
+@Composable
+private fun HomeMapCompass(
+    bearing: Double,
+    modifier: Modifier = Modifier,
+    onClicked: () -> Unit,
+) {
+    val animatedBearing by animateFloatAsState(
+        targetValue = -bearing.toFloat(),
+        animationSpec = tween(durationMillis = COMPASS_ANIMATION_DURATION_MS),
+        label = "compass_bearing",
+    )
+
+    val textMeasurer = rememberTextMeasurer()
+    val northColor = Color(0xFFE53935)
+    val southColor = Color(0xFF757575)
+    val surfaceColor = FloatingActionButtonDefaults.containerColor()
+    val onSurfaceColor = MaterialTheme.colorScheme.onPrimaryContainer
+
+    Surface(
+        modifier = modifier.size(48.dp),
+        shape = CircleShape,
+        color = surfaceColor,
+        tonalElevation = 6.dp,
+        shadowElevation = 6.dp,
+        onClick = onClicked,
+    ) {
+        Canvas(
+            modifier = Modifier.size(48.dp),
+        ) {
+            val centerX = size.width / 2
+            val centerY = size.height / 2
+            val needleWidth = size.width * COMPASS_NEEDLE_WIDTH_RATIO
+            val needleLength = size.height * COMPASS_NEEDLE_LENGTH_RATIO
+
+            rotate(
+                degrees = animatedBearing,
+                pivot = Offset(centerX, centerY),
+            ) {
+                // 北側の針（赤）
+                val northPath = Path().apply {
+                    moveTo(centerX, centerY - needleLength)
+                    lineTo(centerX - needleWidth, centerY)
+                    lineTo(centerX + needleWidth, centerY)
+                    close()
+                }
+                drawPath(
+                    path = northPath,
+                    color = northColor,
+                )
+
+                // 南側の針（グレー）
+                val southPath = Path().apply {
+                    moveTo(centerX, centerY + needleLength)
+                    lineTo(centerX - needleWidth, centerY)
+                    lineTo(centerX + needleWidth, centerY)
+                    close()
+                }
+                drawPath(
+                    path = southPath,
+                    color = southColor,
+                )
+
+                // 「N」ラベル
+                val textLayoutResult = textMeasurer.measure(
+                    text = "N",
+                    style = TextStyle(
+                        color = Color.White,
+                        fontSize = COMPASS_NORTH_LABEL_FONT_SIZE.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+                drawText(
+                    textLayoutResult = textLayoutResult,
+                    topLeft = Offset(
+                        x = centerX - textLayoutResult.size.width / 2,
+                        y = centerY - needleLength + 2.dp.toPx(),
+                    ),
                 )
             }
         }
