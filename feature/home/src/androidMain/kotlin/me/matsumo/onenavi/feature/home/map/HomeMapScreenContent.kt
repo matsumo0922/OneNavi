@@ -81,6 +81,7 @@ internal actual fun HomeMapScreenContent(
 
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
+    var deviceBearing by remember { mutableStateOf(0.0) }
 
     val isDarkTheme = isSystemInDarkTheme()
     val viewportState = rememberMapViewportState()
@@ -258,6 +259,9 @@ internal actual fun HomeMapScreenContent(
                             longitude = point.longitude(),
                         )
                     }
+                    view.location.addOnIndicatorBearingChangedListener { bearing ->
+                        deviceBearing = bearing
+                    }
                 }
 
                 if (searchResults.isNotEmpty()) {
@@ -287,7 +291,8 @@ internal actual fun HomeMapScreenContent(
                         end = 16.dp,
                     )
                     .offset(y = -sheetVisibleHeight),
-                bearing = viewportState.cameraState?.bearing ?: 0.0,
+                cameraBearing = viewportState.cameraState?.bearing ?: 0.0,
+                deviceBearing = deviceBearing,
                 trackingMode = trackingMode,
                 viewportState = viewportState,
                 onTrackingModeChanged = { trackingMode = it },

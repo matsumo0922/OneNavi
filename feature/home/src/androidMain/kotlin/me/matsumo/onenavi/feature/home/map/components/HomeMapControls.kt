@@ -63,7 +63,8 @@ private const val ZOOM_STEP = 1.0
 
 @Composable
 internal fun HomeMapControls(
-    bearing: Double,
+    cameraBearing: Double,
+    deviceBearing: Double,
     trackingMode: LocationTrackingMode?,
     viewportState: MapViewportState,
     modifier: Modifier = Modifier,
@@ -102,7 +103,7 @@ internal fun HomeMapControls(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         HomeMapCompass(
-            bearing = bearing,
+            bearing = cameraBearing,
             trackingMode = trackingMode,
             onClicked = {
                 scope.launch {
@@ -111,19 +112,36 @@ internal fun HomeMapControls(
                         LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
                         LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
                         LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
-                        null -> lastTrackingMode
+                        null -> {
+                            val next = when (lastTrackingMode) {
+                                LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
+                                LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
+                                LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
+                            }
+                            lastTrackingMode = next
+                            next
+                        }
                     }
 
-                    lastTrackingMode = nextMode
-                    onTrackingModeChanged(nextMode)
+                    if (trackingMode != null) {
+                        lastTrackingMode = nextMode
+                        onTrackingModeChanged(nextMode)
 
-                    viewportState.transitionToFollowPuckState(
-                        followPuckViewportStateOptions = buildFollowPuckOptions(
-                            mode = nextMode,
-                            zoom = currentZoom,
-                        ),
-                        defaultTransitionOptions = transitionOptions,
-                    )
+                        viewportState.transitionToFollowPuckState(
+                            followPuckViewportStateOptions = buildFollowPuckOptions(
+                                mode = nextMode,
+                                zoom = currentZoom,
+                            ),
+                            defaultTransitionOptions = transitionOptions,
+                        )
+                    } else {
+                        viewportState.easeTo(
+                            buildCameraOptionsForMode(
+                                mode = nextMode,
+                                bearing = deviceBearing,
+                            ),
+                        )
+                    }
                 }
             },
         )
@@ -274,6 +292,28 @@ private fun HomeMapCompass(
                 )
             }
         }
+    }
+}
+
+private fun buildCameraOptionsForMode(
+    mode: LocationTrackingMode,
+    bearing: Double,
+): CameraOptions {
+    return when (mode) {
+        LocationTrackingMode.TiltedHeading -> CameraOptions.Builder()
+            .pitch(FOLLOW_PUCK_PITCH)
+            .bearing(bearing)
+            .build()
+
+        LocationTrackingMode.TopDownHeading -> CameraOptions.Builder()
+            .pitch(0.0)
+            .bearing(bearing)
+            .build()
+
+        LocationTrackingMode.TopDownNorth -> CameraOptions.Builder()
+            .pitch(0.0)
+            .bearing(0.0)
+            .build()
     }
 }
 
