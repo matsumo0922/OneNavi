@@ -51,6 +51,7 @@ import com.mapbox.maps.plugin.viewport.ViewportStatus
 import kotlinx.coroutines.flow.distinctUntilChanged
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
+import me.matsumo.onenavi.feature.home.map.components.HomeMapSearchResultSheet
 import me.matsumo.onenavi.feature.home.map.components.HomeMapSelectedResultSheet
 import me.matsumo.onenavi.feature.home.map.components.HomeMapTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
@@ -188,9 +189,9 @@ internal actual fun HomeMapScreenContent(
         sheetPeekHeight = sheetPeekHeight,
         sheetContent = {
             if (searchResults.isNotEmpty()) {
-                searchResults.forEachIndexed { index, result ->
-                    // TODO
-                }
+                HomeMapSearchResultSheet(
+                    searchResults = searchResults
+                )
             } else {
                 selectedResult?.let { result ->
                     HomeMapSelectedResultSheet(

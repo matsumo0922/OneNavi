@@ -39,22 +39,33 @@ internal fun HomeMapNumberedPin(
             allowOverlapWithPuck(true)
         },
     ) {
-        Surface(
-            shape = CircleShape,
-            color = Color.Red,
-            border = BorderStroke(2.dp, Color.White),
-            shadowElevation = 4.dp,
+        HomeMapNumberedPinContent(
+            number = number,
+        )
+    }
+}
+
+@Composable
+internal fun HomeMapNumberedPinContent(
+    number: Int,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = Color.Red,
+        border = BorderStroke(2.dp, Color.White),
+        shadowElevation = 4.dp,
+    ) {
+        Box(
+            modifier = Modifier.size(32.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier.size(32.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = number.toString(),
-                    style = MaterialTheme.typography.labelMedium.center(),
-                    color = Color.White,
-                )
-            }
+            Text(
+                text = number.toString(),
+                style = MaterialTheme.typography.labelMedium.center(),
+                color = Color.White,
+            )
         }
     }
 }
