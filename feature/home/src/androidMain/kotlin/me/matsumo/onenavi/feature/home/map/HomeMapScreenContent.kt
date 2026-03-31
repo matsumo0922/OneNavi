@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mapbox.common.MapboxOptions
@@ -172,6 +173,9 @@ internal actual fun HomeMapScreenContent(
                 selectedResult?.let { result ->
                     Marker(
                         point = fromLngLat(result.longitude, result.latitude),
+                        color = Color.Red,
+                        innerColor = Color.White,
+                        stroke = Color.White,
                     )
                 }
             }
