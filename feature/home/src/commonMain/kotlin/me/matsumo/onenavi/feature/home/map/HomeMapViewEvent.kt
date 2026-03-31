@@ -2,6 +2,7 @@ package me.matsumo.onenavi.feature.home.map
 
 import androidx.compose.runtime.Immutable
 import me.matsumo.onenavi.core.model.SearchHistory
+import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 
 @Immutable
@@ -16,6 +17,10 @@ sealed interface HomeMapViewEvent {
         val longitude: Double?,
     ) : HomeMapViewEvent
 
+    data class OnSearchResultSelected(
+        val result: SearchResultItem,
+    ) : HomeMapViewEvent
+
     data class OnSuggestionSelected(
         val suggestion: SearchSuggestionItem,
     ) : HomeMapViewEvent
@@ -27,6 +32,8 @@ sealed interface HomeMapViewEvent {
     data class OnRemoveHistory(
         val historyId: String,
     ) : HomeMapViewEvent
+
+    data object OnRouteSearch: HomeMapViewEvent
 
     data class OnRouteSelected(
         val index: Int,

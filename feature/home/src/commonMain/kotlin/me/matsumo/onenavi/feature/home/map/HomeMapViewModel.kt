@@ -82,23 +82,25 @@ class HomeMapViewModel(
         when (event) {
             is HomeMapViewEvent.OnQueryChanged -> onQueryChanged(event.query)
             is HomeMapViewEvent.OnSearch -> onSearch(event.query, event.latitude, event.longitude)
+            is HomeMapViewEvent.OnSearchResultSelected -> onSearchResultSelected(event.result)
             is HomeMapViewEvent.OnSuggestionSelected -> onSuggestionSelected(event.suggestion)
             is HomeMapViewEvent.OnHistorySelected -> onHistorySelected(event.history)
             is HomeMapViewEvent.OnRemoveHistory -> onRemoveHistory(event.historyId)
+            HomeMapViewEvent.OnRouteSearch -> onRouteSearch()
             is HomeMapViewEvent.OnRouteSelected -> onRouteSelected(event.index)
             HomeMapViewEvent.OnDismissRoutes -> onDismissRoutes()
             HomeMapViewEvent.OnDismissSearchResult -> onDismissSearchResults()
         }
     }
 
-    fun onQueryChanged(query: String) {
+    private fun onQueryChanged(query: String) {
         _query.value = query
         if (query.isBlank()) {
             _suggestions.value = persistentListOf()
         }
     }
 
-    fun onSuggestionSelected(suggestion: SearchSuggestionItem) {
+    private fun onSuggestionSelected(suggestion: SearchSuggestionItem) {
         viewModelScope.launch {
             _isSearching.value = true
             searchRepository.select(suggestion.id)
@@ -113,7 +115,7 @@ class HomeMapViewModel(
         }
     }
 
-    fun onHistorySelected(history: SearchHistory) {
+    private fun onHistorySelected(history: SearchHistory) {
         viewModelScope.launch {
             _isSearching.value = true
             searchRepository.retrieve(history.id)
@@ -128,13 +130,13 @@ class HomeMapViewModel(
         }
     }
 
-    fun onRemoveHistory(historyId: String) {
+    private fun onRemoveHistory(historyId: String) {
         viewModelScope.launch {
             searchRepository.removeHistory(historyId)
         }
     }
 
-    fun onSearch(query: String, latitude: Double?, longitude: Double?) {
+    private fun onSearch(query: String, latitude: Double?, longitude: Double?) {
         searchJob?.cancel()
         if (query.isBlank()) return
 
@@ -153,7 +155,7 @@ class HomeMapViewModel(
         }
     }
 
-    fun onSearchResultSelected(result: SearchResultItem) {
+    private fun onSearchResultSelected(result: SearchResultItem) {
         _searchResults.value = persistentListOf()
         _selectedResult.value = result
 
@@ -171,7 +173,7 @@ class HomeMapViewModel(
         _userLongitude.value = longitude
     }
 
-    fun onRouteSearch() {
+   private fun onRouteSearch() {
         val destination = _selectedResult.value ?: return
         val originLat = _userLatitude.value ?: return
         val originLng = _userLongitude.value ?: return

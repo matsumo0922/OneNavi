@@ -19,7 +19,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -81,7 +80,6 @@ internal actual fun HomeMapScreenContent(
     val selectedRouteIndex by viewModel.selectedRouteIndex.collectAsStateWithLifecycle()
 
     var mapView by remember { mutableStateOf<MapView?>(null) }
-    var showSearchResultsSheet by rememberSaveable { mutableStateOf(false) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
 
     val isDarkTheme = isSystemInDarkTheme()
@@ -134,11 +132,19 @@ internal actual fun HomeMapScreenContent(
     }
 
     LaunchedEffect(searchResults, mapView) {
-        if (searchResults.isEmpty()) return@LaunchedEffect
+        if (searchResults.isEmpty()) {
+            if (selectedResult == null) {
+                allowSheetHide = true
+                scaffoldState.bottomSheetState.hide()
+                allowSheetHide = false
+            }
+            return@LaunchedEffect
+        }
         val currentMapView = mapView ?: return@LaunchedEffect
 
         trackingMode = null
-        showSearchResultsSheet = true
+        sheetPeekHeight = SHEET_PEEK_HEIGHT_DEFAULT
+        scaffoldState.bottomSheetState.partialExpand()
 
         val points = searchResults.map { fromLngLat(it.effectiveLongitude, it.effectiveLatitude) }
         val padding = EdgeInsets(CAMERA_PADDING_TOP, CAMERA_PADDING, CAMERA_PADDING_BOTTOM, CAMERA_PADDING)
@@ -160,9 +166,11 @@ internal actual fun HomeMapScreenContent(
 
     LaunchedEffect(selectedResult) {
         val result = selectedResult ?: run {
-            allowSheetHide = true
-            scaffoldState.bottomSheetState.hide()
-            allowSheetHide = false
+            if (searchResults.isEmpty()) {
+                allowSheetHide = true
+                scaffoldState.bottomSheetState.hide()
+                allowSheetHide = false
+            }
             return@LaunchedEffect
         }
 
@@ -190,12 +198,14 @@ internal actual fun HomeMapScreenContent(
         sheetContent = {
             if (searchResults.isNotEmpty()) {
                 HomeMapSearchResultSheet(
-                    searchResults = searchResults
+                    searchResults = searchResults,
+                    onViewEvent = viewModel::onViewEvent,
                 )
             } else {
                 selectedResult?.let { result ->
                     HomeMapSelectedResultSheet(
                         selectedResult = result,
+                        onViewEvent = viewModel::onViewEvent,
                         onPeekHeightMeasured = { heightPx ->
                             val measuredHeight = with(density) { heightPx.toDp() } + SHEET_DRAG_HANDLE_HEIGHT + 16.dp
                             sheetPeekHeight = measuredHeight
