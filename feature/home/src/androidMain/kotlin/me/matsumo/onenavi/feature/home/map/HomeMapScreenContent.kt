@@ -131,7 +131,7 @@ internal actual fun HomeMapScreenContent(
         trackingMode = null
         showSearchResultsSheet = true
 
-        val points = searchResults.map { fromLngLat(it.longitude, it.latitude) }
+        val points = searchResults.map { fromLngLat(it.effectiveLongitude, it.effectiveLatitude) }
         val padding = EdgeInsets(CAMERA_PADDING_TOP, CAMERA_PADDING, CAMERA_PADDING_BOTTOM, CAMERA_PADDING)
 
         val cameraOptions = currentMapView.mapboxMap.cameraForCoordinates(
@@ -160,7 +160,7 @@ internal actual fun HomeMapScreenContent(
 
         viewportState.easeTo(
             cameraOptions = CameraOptions.Builder()
-                .center(fromLngLat(result.longitude, result.latitude))
+                .center(fromLngLat(result.effectiveLongitude, result.effectiveLatitude))
                 .zoom(FOLLOW_PUCK_ZOOM)
                 .pitch(0.0)
                 .bearing(0.0)
@@ -176,10 +176,16 @@ internal actual fun HomeMapScreenContent(
         scaffoldState = scaffoldState,
         sheetPeekHeight = SHEET_PEEK_HEIGHT,
         sheetContent = {
-            selectedResult?.let { result ->
-                HomeMapSelectedResultSheet(
-                    selectedResult = result,
-                )
+            if (searchResults.isNotEmpty()) {
+                searchResults.forEachIndexed { index, result ->
+                    // TODO
+                }
+            } else {
+                selectedResult?.let { result ->
+                    HomeMapSelectedResultSheet(
+                        selectedResult = result,
+                    )
+                }
             }
         },
     ) {
@@ -230,14 +236,14 @@ internal actual fun HomeMapScreenContent(
                 if (searchResults.isNotEmpty()) {
                     searchResults.forEachIndexed { index, result ->
                         HomeMapNumberedPin(
-                            point = fromLngLat(result.longitude, result.latitude),
+                            point = fromLngLat(result.effectiveLongitude, result.effectiveLatitude),
                             number = index + 1,
                         )
                     }
                 } else {
                     selectedResult?.let { result ->
                         Marker(
-                            point = fromLngLat(result.longitude, result.latitude),
+                            point = fromLngLat(result.effectiveLongitude, result.effectiveLatitude),
                             color = Color.Red,
                             innerColor = Color.White,
                             stroke = Color.White,

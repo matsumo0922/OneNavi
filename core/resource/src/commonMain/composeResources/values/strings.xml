@@ -24,6 +24,7 @@
     <string name="common_details">詳細</string>
     <string name="common_delete">削除</string>
     <string name="common_completed">完了</string>
+    <string name="common_share">共有</string>
 
     <!-- Common Error -->
     <string name="error_copy_to_clipboard">エラー内容をコピー</string>
@@ -68,6 +69,8 @@
     <string name="home_title">OneNavi</string>
     <string name="home_search_bar_placeholder">目的地を検索</string>
     <string name="home_map_search_route">ルート検索</string>
+    <string name="home_map_bookmark">保存</string>
+    <string name="home_map_street_view">360°</string>
     <string name="home_map_route_origin_current_location">現在地</string>
     <string name="home_subscription_expired_title">Pro プランの失効</string>
     <string name="home_subscription_expired_message">OneNavi Pro の定期購入が解約または返金されたため、Pro 機能が無効になりました。\n引き続きご利用いただくには、再度アップグレードしてください。</string>
