@@ -52,4 +52,16 @@ data class SearchResultItem(
     val etaMinutes: Double?,
     val externalIds: Map<String, String>,
     val resultTypes: List<String>,
-)
+) {
+    /**
+     * ルーティング用座標の緯度。routableLatitude が存在する場合はそれを、存在しない場合は通常の latitude を返す。
+     */
+    val effectiveLatitude: Double
+        get() = routableLatitude ?: latitude
+
+    /**
+     * ルーティング用座標の経度。routableLongitude が存在する場合はそれを、存在しない場合は通常の longitude を返す。
+     */
+    val effectiveLongitude: Double
+        get() = routableLongitude ?: longitude
+}
