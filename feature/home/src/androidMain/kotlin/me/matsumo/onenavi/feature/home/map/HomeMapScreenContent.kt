@@ -41,7 +41,7 @@ import com.mapbox.maps.plugin.viewport.ViewportStatus
 import kotlinx.coroutines.flow.distinctUntilChanged
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
-import me.matsumo.onenavi.feature.home.map.components.HomeMapTopAppBar2
+import me.matsumo.onenavi.feature.home.map.components.HomeMapTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
 import java.util.*
 
@@ -177,7 +177,7 @@ internal actual fun HomeMapScreenContent(
             }
         }
 
-        HomeMapTopAppBar2(
+        HomeMapTopAppBar(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
