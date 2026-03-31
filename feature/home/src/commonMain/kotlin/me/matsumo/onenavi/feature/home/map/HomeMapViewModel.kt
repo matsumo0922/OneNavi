@@ -20,15 +20,18 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.AppConfig
+import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
+import me.matsumo.onenavi.core.repository.RouteRepository
 import me.matsumo.onenavi.core.repository.SearchRepository
 import kotlin.time.Duration.Companion.milliseconds
 
 class HomeMapViewModel(
     private val appConfig: AppConfig,
     private val searchRepository: SearchRepository,
+    private val routeRepository: RouteRepository,
 ) : ViewModel() {
 
     val mapBoxToken: String get() = appConfig.mapBoxToken
@@ -54,6 +57,15 @@ class HomeMapViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = persistentListOf(),
         )
+
+    private val _userLatitude = MutableStateFlow<Double?>(null)
+    private val _userLongitude = MutableStateFlow<Double?>(null)
+
+    private val _routeResults = MutableStateFlow<ImmutableList<RouteItem>>(persistentListOf())
+    val routeResults: StateFlow<ImmutableList<RouteItem>> = _routeResults.asStateFlow()
+
+    private val _selectedRouteIndex = MutableStateFlow(0)
+    val selectedRouteIndex: StateFlow<Int> = _selectedRouteIndex.asStateFlow()
 
     private var searchJob: Job? = null
 
@@ -139,6 +151,45 @@ class HomeMapViewModel(
 
     fun onDismissResult() {
         _selectedResult.value = null
+    }
+
+    fun onUserLocationUpdated(latitude: Double, longitude: Double) {
+        _userLatitude.value = latitude
+        _userLongitude.value = longitude
+    }
+
+    fun onRouteSearch() {
+        val destination = _selectedResult.value ?: return
+        val originLat = _userLatitude.value ?: return
+        val originLng = _userLongitude.value ?: return
+
+        viewModelScope.launch {
+            _isSearching.value = true
+            routeRepository.searchRoutes(
+                originLatitude = originLat,
+                originLongitude = originLng,
+                destinationLatitude = destination.routableLatitude ?: destination.latitude,
+                destinationLongitude = destination.routableLongitude ?: destination.longitude,
+            )
+                .onSuccess { routes ->
+                    _routeResults.value = routes.toImmutableList()
+                    _selectedRouteIndex.value = 0
+                }
+                .onFailure {
+                    Napier.e(it) { "Failed to search routes." }
+                    _routeResults.value = persistentListOf()
+                }
+            _isSearching.value = false
+        }
+    }
+
+    fun onRouteSelected(index: Int) {
+        _selectedRouteIndex.value = index
+    }
+
+    fun onDismissRoutes() {
+        _routeResults.value = persistentListOf()
+        _selectedRouteIndex.value = 0
     }
 
     fun onDismissSearchResults() {
