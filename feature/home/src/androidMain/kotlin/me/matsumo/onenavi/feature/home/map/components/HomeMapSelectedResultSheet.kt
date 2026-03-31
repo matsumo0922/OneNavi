@@ -61,12 +61,14 @@ import me.matsumo.onenavi.core.resource.home_map_search_route
 import me.matsumo.onenavi.core.resource.home_map_street_view
 import me.matsumo.onenavi.core.ui.components.CommonSectionItem
 import me.matsumo.onenavi.core.ui.theme.semiBold
+import me.matsumo.onenavi.feature.home.map.HomeMapViewEvent
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun HomeMapSelectedResultSheet(
     selectedResult: SearchResultItem,
+    onViewEvent: (HomeMapViewEvent) -> Unit,
     onPeekHeightMeasured: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -130,7 +132,7 @@ internal fun HomeMapSelectedResultSheet(
 
             ButtonSection(
                 modifier = Modifier.fillMaxWidth(),
-                onRouteClicked = {},
+                onRouteClicked = { onViewEvent(HomeMapViewEvent.OnRouteSearch) },
                 onFavoriteClicked = {},
                 onStreetViewClicked = {},
                 onShareClicked = {},
