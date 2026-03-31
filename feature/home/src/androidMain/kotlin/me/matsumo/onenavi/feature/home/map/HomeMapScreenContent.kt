@@ -290,15 +290,6 @@ internal actual fun HomeMapScreenContent(
                 bearing = viewportState.cameraState?.bearing ?: 0.0,
                 trackingMode = trackingMode,
                 viewportState = viewportState,
-                onResetBearing = {
-                    trackingMode = null
-                    viewportState.easeTo(
-                        cameraOptions = CameraOptions.Builder()
-                            .bearing(0.0)
-                            .pitch(0.0)
-                            .build(),
-                    )
-                },
                 onTrackingModeChanged = { trackingMode = it },
             )
 

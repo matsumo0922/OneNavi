@@ -13,10 +13,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.LocationSearching
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -36,7 +34,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -52,7 +49,7 @@ import kotlinx.coroutines.launch
 
 /**
  * 地図の追従モードを表す列挙型。
- * FAB 押下で [TiltedHeading] → [TopDownHeading] → [TopDownNorth] の順にループする。
+ * コンパス押下で [TiltedHeading] → [TopDownHeading] → [TopDownNorth] の順にループする。
  */
 enum class LocationTrackingMode {
     /** 斜め上視点 + 進行方向 */
@@ -76,8 +73,7 @@ internal fun HomeMapControls(
     trackingMode: LocationTrackingMode?,
     viewportState: MapViewportState,
     modifier: Modifier = Modifier,
-    onResetBearing: () -> Unit,
-    onTrackingModeChanged: (LocationTrackingMode) -> Unit,
+    onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var lastTrackingMode by remember { mutableStateOf(LocationTrackingMode.TiltedHeading) }
@@ -113,7 +109,29 @@ internal fun HomeMapControls(
     ) {
         HomeMapCompass(
             bearing = bearing,
-            onClicked = onResetBearing,
+            trackingMode = trackingMode,
+            onClicked = {
+                scope.launch {
+                    val currentZoom = viewportState.cameraState?.zoom
+                    val nextMode = when (trackingMode) {
+                        LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
+                        LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
+                        LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
+                        null -> lastTrackingMode
+                    }
+
+                    lastTrackingMode = nextMode
+                    onTrackingModeChanged(nextMode)
+
+                    viewportState.transitionToFollowPuckState(
+                        followPuckViewportStateOptions = buildFollowPuckOptions(
+                            mode = nextMode,
+                            zoom = currentZoom,
+                        ),
+                        defaultTransitionOptions = transitionOptions,
+                    )
+                }
+            },
         )
 
         HomeMapZoomButtons(
@@ -125,39 +143,21 @@ internal fun HomeMapControls(
             onClick = {
                 scope.launch {
                     val currentZoom = viewportState.cameraState?.zoom
+                    val mode = trackingMode ?: lastTrackingMode
+                    onTrackingModeChanged(mode)
 
-                    if (trackingMode == null) {
-                        onTrackingModeChanged(lastTrackingMode)
-                        viewportState.transitionToFollowPuckState(
-                            followPuckViewportStateOptions = buildFollowPuckOptions(
-                                mode = lastTrackingMode,
-                                zoom = currentZoom,
-                            ),
-                            defaultTransitionOptions = transitionOptions,
-                        )
-                    } else {
-                        val nextMode = when (trackingMode) {
-                            LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
-                            LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
-                            LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
-                        }
-
-                        onTrackingModeChanged(trackingMode)
-                        lastTrackingMode = nextMode
-
-                        viewportState.transitionToFollowPuckState(
-                            followPuckViewportStateOptions = buildFollowPuckOptions(
-                                mode = nextMode,
-                                zoom = currentZoom,
-                            ),
-                            defaultTransitionOptions = transitionOptions,
-                        )
-                    }
+                    viewportState.transitionToFollowPuckState(
+                        followPuckViewportStateOptions = buildFollowPuckOptions(
+                            mode = mode,
+                            zoom = currentZoom,
+                        ),
+                        defaultTransitionOptions = transitionOptions,
+                    )
                 }
             },
         ) {
             Icon(
-                imageVector = trackingMode.toIcon(),
+                imageVector = if (trackingMode != null) Icons.Default.MyLocation else Icons.Default.LocationSearching,
                 contentDescription = null,
             )
         }
@@ -220,6 +220,7 @@ private const val COMPASS_NEEDLE_LENGTH_RATIO = 0.35f
 @Composable
 private fun HomeMapCompass(
     bearing: Double,
+    trackingMode: LocationTrackingMode?,
     modifier: Modifier = Modifier,
     onClicked: () -> Unit,
 ) {
@@ -298,13 +299,6 @@ private fun HomeMapCompass(
             }
         }
     }
-}
-
-private fun LocationTrackingMode?.toIcon(): ImageVector = when (this) {
-    LocationTrackingMode.TiltedHeading -> Icons.Filled.Explore
-    LocationTrackingMode.TopDownHeading -> Icons.Default.Navigation
-    LocationTrackingMode.TopDownNorth -> Icons.Default.NearMe
-    null -> Icons.Default.MyLocation
 }
 
 private fun buildFollowPuckOptions(
