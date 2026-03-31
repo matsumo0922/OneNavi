@@ -1,7 +1,5 @@
 package me.matsumo.onenavi.feature.home.map.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -212,7 +210,6 @@ private fun HomeMapZoomButtons(
     }
 }
 
-private const val COMPASS_ANIMATION_DURATION_MS = 300
 private const val COMPASS_NORTH_LABEL_FONT_SIZE = 11
 private const val COMPASS_NEEDLE_WIDTH_RATIO = 0.18f
 private const val COMPASS_NEEDLE_LENGTH_RATIO = 0.35f
@@ -224,11 +221,7 @@ private fun HomeMapCompass(
     modifier: Modifier = Modifier,
     onClicked: () -> Unit,
 ) {
-    val animatedBearing by animateFloatAsState(
-        targetValue = -bearing.toFloat(),
-        animationSpec = tween(durationMillis = COMPASS_ANIMATION_DURATION_MS),
-        label = "compass_bearing",
-    )
+    val rotationDegrees = -bearing.toFloat()
 
     val textMeasurer = rememberTextMeasurer()
     val northColor = Color(0xFFE53935)
@@ -253,7 +246,7 @@ private fun HomeMapCompass(
             val needleLength = size.height * COMPASS_NEEDLE_LENGTH_RATIO
 
             rotate(
-                degrees = animatedBearing,
+                degrees = rotationDegrees,
                 pivot = Offset(centerX, centerY),
             ) {
                 // 北側の針（赤）
