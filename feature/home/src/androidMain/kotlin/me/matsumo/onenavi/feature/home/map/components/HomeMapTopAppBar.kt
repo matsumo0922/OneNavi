@@ -62,7 +62,7 @@ import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
-internal fun HomeMapTopAppBar2(
+internal fun HomeMapTopAppBar(
     suggestions: ImmutableList<SearchSuggestionItem>,
     histories: ImmutableList<SearchHistory>,
     viewportState: MapViewportState,
