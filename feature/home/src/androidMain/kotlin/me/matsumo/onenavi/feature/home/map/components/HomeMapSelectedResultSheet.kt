@@ -57,6 +57,7 @@ import me.matsumo.onenavi.core.resource.home_map_point_plus_code
 import me.matsumo.onenavi.core.resource.home_map_search_route
 import me.matsumo.onenavi.core.resource.home_map_street_view
 import me.matsumo.onenavi.core.ui.components.CommonSectionItem
+import me.matsumo.onenavi.core.ui.theme.semiBold
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -161,7 +162,7 @@ private fun TitleSection(
         Text(
             modifier = Modifier.fillMaxWidth(),
             text = selectedResult.name,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineSmall.semiBold(),
         )
 
         selectedResult.categories.takeIf { it.isNotEmpty() }?.joinToString()?.let {

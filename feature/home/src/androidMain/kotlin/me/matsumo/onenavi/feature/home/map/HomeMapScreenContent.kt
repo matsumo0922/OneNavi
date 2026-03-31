@@ -88,11 +88,15 @@ internal actual fun HomeMapScreenContent(
         configurationsState.lightPreset = if (isDarkTheme) LightPresetValue.NIGHT else LightPresetValue.DAY
     }
 
+    var allowSheetHide by remember { mutableStateOf(false) }
+
     val scaffoldState = rememberBottomSheetScaffoldState(
         bottomSheetState = rememberStandardBottomSheetState(
             initialValue = SheetValue.Hidden,
             skipHiddenState = false,
-            confirmValueChange = { it != SheetValue.Hidden },
+            confirmValueChange = { newValue ->
+                if (newValue == SheetValue.Hidden) allowSheetHide else true
+            },
         ),
     )
 
@@ -154,10 +158,13 @@ internal actual fun HomeMapScreenContent(
 
     LaunchedEffect(selectedResult) {
         val result = selectedResult ?: run {
+            allowSheetHide = true
             scaffoldState.bottomSheetState.hide()
+            allowSheetHide = false
             return@LaunchedEffect
         }
 
+        sheetPeekHeight = SHEET_PEEK_HEIGHT_DEFAULT
         trackingMode = null
         scaffoldState.bottomSheetState.partialExpand()
 
@@ -188,7 +195,7 @@ internal actual fun HomeMapScreenContent(
                     HomeMapSelectedResultSheet(
                         selectedResult = result,
                         onPeekHeightMeasured = { heightPx ->
-                            val measuredHeight = with(density) { heightPx.toDp() } + SHEET_DRAG_HANDLE_HEIGHT
+                            val measuredHeight = with(density) { heightPx.toDp() } + SHEET_DRAG_HANDLE_HEIGHT + 16.dp
                             sheetPeekHeight = measuredHeight
                         },
                     )
