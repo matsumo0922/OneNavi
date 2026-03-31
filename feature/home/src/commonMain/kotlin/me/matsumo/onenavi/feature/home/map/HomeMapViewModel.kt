@@ -47,9 +47,6 @@ class HomeMapViewModel(
     private val _selectedResult = MutableStateFlow<SearchResultItem?>(null)
     val selectedResult: StateFlow<SearchResultItem?> = _selectedResult.asStateFlow()
 
-    private val _isSearching = MutableStateFlow(false)
-    val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
-
     val histories: StateFlow<ImmutableList<SearchHistory>> = searchRepository.histories
         .map { it.toImmutableList() }
         .stateIn(
@@ -102,7 +99,6 @@ class HomeMapViewModel(
 
     private fun onSuggestionSelected(suggestion: SearchSuggestionItem) {
         viewModelScope.launch {
-            _isSearching.value = true
             searchRepository.select(suggestion.id)
                 .onSuccess { result ->
                     _selectedResult.value = result
@@ -111,13 +107,11 @@ class HomeMapViewModel(
                 .onFailure {
                     Napier.e(it) { "Failed to select suggestion. id: ${suggestion.id}" }
                 }
-            _isSearching.value = false
         }
     }
 
     private fun onHistorySelected(history: SearchHistory) {
         viewModelScope.launch {
-            _isSearching.value = true
             searchRepository.retrieve(history.id)
                 .onSuccess { result ->
                     _selectedResult.value = result
@@ -126,7 +120,6 @@ class HomeMapViewModel(
                 .onFailure {
                     Napier.e(it) { "Failed to retrieve history. id: ${history.id}" }
                 }
-            _isSearching.value = false
         }
     }
 
@@ -141,7 +134,6 @@ class HomeMapViewModel(
         if (query.isBlank()) return
 
         searchJob = viewModelScope.launch {
-            _isSearching.value = true
             _selectedResult.value = null
             searchRepository.searchMultiple(query, latitude, longitude)
                 .onSuccess { results ->
@@ -151,7 +143,6 @@ class HomeMapViewModel(
                     Napier.e(it) { "Failed to search multiple. query: $query" }
                     _searchResults.value = persistentListOf()
                 }
-            _isSearching.value = false
         }
     }
 
@@ -162,10 +153,6 @@ class HomeMapViewModel(
         viewModelScope.launch {
             searchRepository.addHistory(result)
         }
-    }
-
-    fun onDismissResult() {
-        _selectedResult.value = null
     }
 
     fun onUserLocationUpdated(latitude: Double, longitude: Double) {
@@ -179,7 +166,6 @@ class HomeMapViewModel(
         val originLng = _userLongitude.value ?: return
 
         viewModelScope.launch {
-            _isSearching.value = true
             routeRepository.searchRoutes(
                 originLatitude = originLat,
                 originLongitude = originLng,
@@ -194,7 +180,6 @@ class HomeMapViewModel(
                     Napier.e(it) { "Failed to search routes." }
                     _routeResults.value = persistentListOf()
                 }
-            _isSearching.value = false
         }
     }
 
