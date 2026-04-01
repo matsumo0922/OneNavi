@@ -1,6 +1,6 @@
 package me.matsumo.onenavi.core.datasource
 
-import me.matsumo.onenavi.core.model.RouteItem
+import me.matsumo.onenavi.core.model.RouteResult
 
 /**
  * iOS 向けルート検索データソースのスタブ。
@@ -12,7 +12,7 @@ class IosRouteDataSource : RouteDataSource {
         originLongitude: Double,
         destinationLatitude: Double,
         destinationLongitude: Double,
-    ): Result<List<RouteItem>> {
+    ): Result<List<RouteResult>> {
         return Result.failure(UnsupportedOperationException("Route search is not available on iOS yet"))
     }
 }

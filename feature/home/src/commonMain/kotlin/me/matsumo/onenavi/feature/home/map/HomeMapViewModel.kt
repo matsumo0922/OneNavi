@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.AppConfig
-import me.matsumo.onenavi.core.model.RouteItem
+import me.matsumo.onenavi.core.model.RouteResult
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
@@ -58,8 +58,8 @@ class HomeMapViewModel(
     private val _userLatitude = MutableStateFlow<Double?>(null)
     private val _userLongitude = MutableStateFlow<Double?>(null)
 
-    private val _routeResults = MutableStateFlow<ImmutableList<RouteItem>>(persistentListOf())
-    val routeResults: StateFlow<ImmutableList<RouteItem>> = _routeResults.asStateFlow()
+    private val _routeResults = MutableStateFlow<ImmutableList<RouteResult>>(persistentListOf())
+    val routeResults: StateFlow<ImmutableList<RouteResult>> = _routeResults.asStateFlow()
 
     private val _selectedRouteIndex = MutableStateFlow(0)
     val selectedRouteIndex: StateFlow<Int> = _selectedRouteIndex.asStateFlow()

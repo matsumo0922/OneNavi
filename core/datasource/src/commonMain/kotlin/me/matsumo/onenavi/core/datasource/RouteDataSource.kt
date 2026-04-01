@@ -1,6 +1,6 @@
 package me.matsumo.onenavi.core.datasource
 
-import me.matsumo.onenavi.core.model.RouteItem
+import me.matsumo.onenavi.core.model.RouteResult
 
 interface RouteDataSource {
     suspend fun searchRoutes(
@@ -8,5 +8,5 @@ interface RouteDataSource {
         originLongitude: Double,
         destinationLatitude: Double,
         destinationLongitude: Double,
-    ): Result<List<RouteItem>>
+    ): Result<List<RouteResult>>
 }
