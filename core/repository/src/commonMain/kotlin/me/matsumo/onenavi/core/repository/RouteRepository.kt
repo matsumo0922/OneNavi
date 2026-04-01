@@ -1,7 +1,7 @@
 package me.matsumo.onenavi.core.repository
 
 import me.matsumo.onenavi.core.datasource.RouteDataSource
-import me.matsumo.onenavi.core.model.RouteItem
+import me.matsumo.onenavi.core.model.RouteResult
 
 class RouteRepository(
     private val routeDataSource: RouteDataSource,
@@ -11,7 +11,7 @@ class RouteRepository(
         originLongitude: Double,
         destinationLatitude: Double,
         destinationLongitude: Double,
-    ): Result<List<RouteItem>> {
+    ): Result<List<RouteResult>> {
         return routeDataSource.searchRoutes(
             originLatitude = originLatitude,
             originLongitude = originLongitude,

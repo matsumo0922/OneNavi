@@ -178,6 +178,35 @@ internal actual fun HomeMapScreenContent(
         )
     }
 
+    LaunchedEffect(routeResults, mapView) {
+        if (routeResults.isEmpty()) return@LaunchedEffect
+        val currentMapView = mapView ?: return@LaunchedEffect
+
+        trackingMode = null
+
+        val allPoints = routeResults.flatMap { result ->
+            result.item.geometry.map { fromLngLat(it.longitude, it.latitude) }
+        }
+
+        if (allPoints.isEmpty()) return@LaunchedEffect
+
+        val padding = EdgeInsets(CAMERA_PADDING_TOP, CAMERA_PADDING, CAMERA_PADDING_BOTTOM, CAMERA_PADDING)
+
+        val cameraOptions = currentMapView.mapboxMap.cameraForCoordinates(
+            coordinates = allPoints,
+            coordinatesPadding = padding,
+            bearing = 0.0,
+            pitch = 0.0,
+        )
+
+        viewportState.flyTo(
+            cameraOptions = cameraOptions,
+            animationOptions = MapAnimationOptions.Builder()
+                .duration(1500)
+                .build(),
+        )
+    }
+
     BottomSheetScaffold(
         modifier = modifier,
         scaffoldState = scaffoldState,
@@ -202,6 +231,8 @@ internal actual fun HomeMapScreenContent(
                 sheetVisibleHeight = sheetVisibleHeight,
                 searchResults = searchResults,
                 selectedResult = selectedResult,
+                routeResults = routeResults,
+                selectedRouteIndex = selectedRouteIndex,
                 onMapViewChanged = { mapView = it },
                 onUserLocationUpdated = viewModel::onUserLocationUpdated,
                 onBearingChanged = { deviceBearing = it },

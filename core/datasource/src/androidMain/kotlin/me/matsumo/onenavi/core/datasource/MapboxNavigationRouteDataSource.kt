@@ -14,6 +14,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.suspendCancellableCoroutine
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.model.RouteResult
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -35,7 +36,7 @@ class MapboxNavigationRouteDataSource(
         originLongitude: Double,
         destinationLatitude: Double,
         destinationLongitude: Double,
-    ): Result<List<RouteItem>> = runCatching {
+    ): Result<List<RouteResult>> = runCatching {
         val origin = Point.fromLngLat(originLongitude, originLatitude)
         val destination = Point.fromLngLat(destinationLongitude, destinationLatitude)
 
@@ -49,7 +50,10 @@ class MapboxNavigationRouteDataSource(
         val navigation = navigationProvider()
 
         requestRoutes(navigation, routeOptions).map { navigationRoute ->
-            navigationRoute.directionsRoute.toRouteItem()
+            RouteResult(
+                item = navigationRoute.directionsRoute.toRouteItem(),
+                platformRoute = navigationRoute,
+            )
         }
     }
 
