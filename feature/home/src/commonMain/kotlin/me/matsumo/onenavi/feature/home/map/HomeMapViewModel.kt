@@ -160,7 +160,7 @@ class HomeMapViewModel(
         _userLongitude.value = longitude
     }
 
-   private fun onRouteSearch() {
+    private fun onRouteSearch() {
         val destination = _selectedResult.value ?: return
         val originLat = _userLatitude.value ?: return
         val originLng = _userLongitude.value ?: return

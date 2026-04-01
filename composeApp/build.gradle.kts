@@ -135,6 +135,7 @@ buildkonfig {
 
         setField("DEVELOPER_PIN", "1234")
         setField("MAPBOX_TOKEN")
+        setField("GOOGLE_API_KEY")
         setField("PURCHASE_ANDROID_API_KEY")
         setField("PURCHASE_IOS_API_KEY")
 

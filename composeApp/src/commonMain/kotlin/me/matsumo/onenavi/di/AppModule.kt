@@ -48,6 +48,7 @@ val appModule = module {
             versionCode = BuildKonfig.VERSION_CODE.toInt(),
             developerPin = BuildKonfig.DEVELOPER_PIN,
             mapBoxToken = BuildKonfig.MAPBOX_TOKEN,
+            googleApiKey = BuildKonfig.GOOGLE_API_KEY,
             purchaseAndroidApiKey = BuildKonfig.PURCHASE_ANDROID_API_KEY.takeIf { it.isNotBlank() },
             purchaseIosApiKey = BuildKonfig.PURCHASE_IOS_API_KEY.takeIf { it.isNotBlank() },
             adMobAppId = adMobAppId,
