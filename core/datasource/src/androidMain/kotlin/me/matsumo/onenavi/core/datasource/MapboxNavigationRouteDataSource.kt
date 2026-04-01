@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.datasource
 
 import android.content.Context
+import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.geojson.Point
 import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
@@ -9,6 +10,7 @@ import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.base.route.NavigationRouterCallback
 import com.mapbox.navigation.base.route.RouterFailure
 import com.mapbox.navigation.core.MapboxNavigation
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.suspendCancellableCoroutine
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.RoutePoint
@@ -20,6 +22,7 @@ import kotlin.coroutines.resumeWithException
  * Directions API を直接叩くのではなく、SDK 経由でルートを取得することで
  * ナビセッション中のリルート・リフレッシュが無料になる。
  *
+ * @param context アプリケーションコンテキスト（言語設定の取得に使用）
  * @param navigationProvider MapboxNavigation インスタンスを遅延取得するプロバイダ
  */
 class MapboxNavigationRouteDataSource(
@@ -46,16 +49,21 @@ class MapboxNavigationRouteDataSource(
         val navigation = navigationProvider()
 
         requestRoutes(navigation, routeOptions).map { navigationRoute ->
-            val directionsRoute = navigationRoute.directionsRoute
-            val geometry = directionsRoute.geometry() ?: error("Route geometry is null")
-
-            RouteItem(
-                durationSeconds = directionsRoute.duration(),
-                distanceMeters = directionsRoute.distance(),
-                geometry = decodeGeometry(geometry),
-                summary = directionsRoute.legs()?.firstOrNull()?.summary().orEmpty(),
-            )
+            navigationRoute.directionsRoute.toRouteItem()
         }
+    }
+
+    private fun DirectionsRoute.toRouteItem(): RouteItem {
+        val decodedGeometry = geometry()?.let { decodeGeometry(it) }.orEmpty()
+        val allSteps = legs().orEmpty().flatMap { it.steps().orEmpty() }
+
+        return RouteItem(
+            durationSeconds = duration(),
+            distanceMeters = distance(),
+            geometry = decodedGeometry.toImmutableList(),
+            viaRoadNames = extractMainRoadNames(allSteps).toImmutableList(),
+            hasTolls = detectTolls(allSteps),
+        )
     }
 
     private suspend fun requestRoutes(
@@ -91,6 +99,41 @@ class MapboxNavigationRouteDataSource(
     }
 
     companion object {
+        private const val MAX_ROAD_NAMES = 3
+
+        /**
+         * steps から主要道路名を抽出する。
+         * 各 step の道路名を距離で重み付けし、距離が長い順に最大3件を返す。
+         */
+        private fun extractMainRoadNames(
+            steps: List<com.mapbox.api.directions.v5.models.LegStep>,
+        ): List<String> {
+            return steps
+                .filter { !it.name().isNullOrBlank() }
+                .groupBy { it.name().orEmpty() }
+                .mapValues { (_, groupedSteps) ->
+                    groupedSteps.sumOf { it.distance() }
+                }
+                .entries
+                .sortedByDescending { it.value }
+                .take(MAX_ROAD_NAMES)
+                .map { it.key }
+        }
+
+        /**
+         * steps 内の intersection を走査して有料道路区間の有無を判定する。
+         */
+        private fun detectTolls(
+            steps: List<com.mapbox.api.directions.v5.models.LegStep>,
+        ): Boolean {
+            return steps.any { step ->
+                step.intersections().orEmpty().any { intersection ->
+                    intersection.tollCollection() != null ||
+                        intersection.classes().orEmpty().contains("toll")
+                }
+            }
+        }
+
         private fun decodeGeometry(encodedPolyline: String): List<RoutePoint> {
             val points = mutableListOf<RoutePoint>()
             var index = 0
