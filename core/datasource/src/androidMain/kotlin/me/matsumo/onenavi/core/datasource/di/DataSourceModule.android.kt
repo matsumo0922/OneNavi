@@ -1,6 +1,9 @@
 package me.matsumo.onenavi.core.datasource.di
 
+import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
 import me.matsumo.onenavi.core.datasource.GooglePlacesSearchDataSource
+import me.matsumo.onenavi.core.datasource.MapboxNavigationRouteDataSource
+import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.datasource.SearchDataSource
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelperImpl
@@ -21,6 +24,16 @@ internal actual val dataSourcePlatformModule: Module = module {
         GooglePlacesSearchDataSource(
             context = get(),
             googleApiKey = appConfig.googleApiKey,
+        )
+    }
+
+    single<RouteDataSource> {
+        MapboxNavigationRouteDataSource(
+            navigationProvider = {
+                requireNotNull(MapboxNavigationApp.current()) {
+                    "MapboxNavigationApp is not setup. Call MapboxNavigationApp.setup() first."
+                }
+            },
         )
     }
 }

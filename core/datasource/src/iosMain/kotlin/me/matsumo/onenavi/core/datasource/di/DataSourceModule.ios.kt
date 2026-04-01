@@ -1,6 +1,8 @@
 package me.matsumo.onenavi.core.datasource.di
 
+import me.matsumo.onenavi.core.datasource.IosRouteDataSource
 import me.matsumo.onenavi.core.datasource.IosSearchDataSource
+import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.datasource.SearchDataSource
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelperImpl
@@ -16,5 +18,9 @@ internal actual val dataSourcePlatformModule: Module = module {
 
     single<SearchDataSource> {
         IosSearchDataSource()
+    }
+
+    single<RouteDataSource> {
+        IosRouteDataSource()
     }
 }
