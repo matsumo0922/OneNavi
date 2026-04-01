@@ -38,6 +38,7 @@ import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.viewport.ViewportStatus
+import com.mapbox.navigation.base.route.NavigationRoute
 import kotlinx.coroutines.flow.distinctUntilChanged
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.HomeMapTopAppBar
@@ -47,6 +48,7 @@ private const val FOLLOW_PUCK_ZOOM = 16.0
 private const val CAMERA_PADDING = 100.0
 private const val CAMERA_PADDING_TOP = 200.0
 private const val CAMERA_PADDING_BOTTOM = 400.0
+private const val POLYLINE_PRECISION = 6
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
 
 @Suppress("ParamsComparedByRef")
@@ -182,10 +184,14 @@ internal actual fun HomeMapScreenContent(
         if (routeResults.isEmpty()) return@LaunchedEffect
         val currentMapView = mapView ?: return@LaunchedEffect
 
-        trackingMode = null
+        trackingMode = LocationTrackingMode.TopDownNorth
 
         val allPoints = routeResults.flatMap { result ->
-            result.item.geometry.map { fromLngLat(it.longitude, it.latitude) }
+            val navigationRoute = result.platformRoute as? NavigationRoute
+            navigationRoute?.directionsRoute?.geometry()
+                ?.let { com.mapbox.geojson.LineString.fromPolyline(it, POLYLINE_PRECISION) }
+                ?.coordinates()
+                ?: result.item.geometry.map { fromLngLat(it.longitude, it.latitude) }
         }
 
         if (allPoints.isEmpty()) return@LaunchedEffect
