@@ -23,7 +23,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -34,27 +33,17 @@ import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.MapboxExperimental
-import com.mapbox.maps.extension.compose.MapEffect
-import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
-import com.mapbox.maps.extension.compose.annotation.Marker
 import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
-import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
-import com.mapbox.maps.extension.localization.localizeLabels
-import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
-import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
-import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.ViewportStatus
 import kotlinx.coroutines.flow.distinctUntilChanged
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
-import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
 import me.matsumo.onenavi.feature.home.map.components.HomeMapSearchResultSheet
 import me.matsumo.onenavi.feature.home.map.components.HomeMapSelectedResultSheet
 import me.matsumo.onenavi.feature.home.map.components.HomeMapTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
-import java.util.*
 
 private const val FOLLOW_PUCK_ZOOM = 16.0
 private const val CAMERA_PADDING = 100.0
@@ -63,7 +52,7 @@ private const val CAMERA_PADDING_BOTTOM = 400.0
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
 private val SHEET_DRAG_HANDLE_HEIGHT = 48.dp
 
-@Suppress("COMPOSE_APPLIER_CALL_MISMATCH", "ParamsComparedByRef")
+@Suppress("ParamsComparedByRef")
 @OptIn(ExperimentalMaterial3Api::class, MapboxExperimental::class)
 @Composable
 internal actual fun HomeMapScreenContent(
@@ -221,67 +210,16 @@ internal actual fun HomeMapScreenContent(
                 .fillMaxSize()
                 .onGloballyPositioned { contentHeight = it.size.height.toFloat() },
         ) {
-            MapboxMap(
-                modifier = Modifier.fillMaxSize(),
-                mapViewportState = viewportState,
-                compass = {},
-                scaleBar = {},
-                logo = {
-                    Logo(
-                        modifier = Modifier.padding(
-                            bottom = sheetVisibleHeight,
-                        ),
-                    )
-                },
-                attribution = {
-                    Attribution(
-                        modifier = Modifier.padding(
-                            bottom = sheetVisibleHeight,
-                        ),
-                    )
-                },
-                style = {
-                    MapboxStandardStyle(
-                        standardStyleState = standardStyleState,
-                    )
-                },
-            ) {
-                MapEffect { view ->
-                    mapView = view
-                    view.location.enabled = true
-                    view.location.locationPuck = createDefault2DPuck(withBearing = true)
-                    view.location.puckBearing = PuckBearing.HEADING
-                    view.location.puckBearingEnabled = true
-                    view.mapboxMap.style?.localizeLabels(Locale.JAPANESE)
-                    view.location.addOnIndicatorPositionChangedListener { point ->
-                        viewModel.onUserLocationUpdated(
-                            latitude = point.latitude(),
-                            longitude = point.longitude(),
-                        )
-                    }
-                    view.location.addOnIndicatorBearingChangedListener { bearing ->
-                        deviceBearing = bearing
-                    }
-                }
-
-                if (searchResults.isNotEmpty()) {
-                    searchResults.forEachIndexed { index, result ->
-                        HomeMapNumberedPin(
-                            point = fromLngLat(result.longitude, result.latitude),
-                            number = index + 1,
-                        )
-                    }
-                } else {
-                    selectedResult?.let { result ->
-                        Marker(
-                            point = fromLngLat(result.longitude, result.latitude),
-                            color = Color.Red,
-                            innerColor = Color.White,
-                            stroke = Color.White,
-                        )
-                    }
-                }
-            }
+            HomeMapsMapEffectContent(
+                viewportState = viewportState,
+                standardStyleState = standardStyleState,
+                sheetVisibleHeight = sheetVisibleHeight,
+                searchResults = searchResults,
+                selectedResult = selectedResult,
+                onMapViewChanged = { mapView = it },
+                onUserLocationUpdated = viewModel::onUserLocationUpdated,
+                onBearingChanged = { deviceBearing = it },
+            )
 
             HomeMapControls(
                 modifier = Modifier
