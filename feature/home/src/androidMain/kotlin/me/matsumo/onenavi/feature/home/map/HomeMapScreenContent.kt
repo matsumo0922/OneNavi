@@ -147,7 +147,7 @@ internal actual fun HomeMapScreenContent(
         sheetPeekHeight = SHEET_PEEK_HEIGHT_DEFAULT
         scaffoldState.bottomSheetState.partialExpand()
 
-        val points = searchResults.map { fromLngLat(it.effectiveLongitude, it.effectiveLatitude) }
+        val points = searchResults.map { fromLngLat(it.longitude, it.latitude) }
         val padding = EdgeInsets(CAMERA_PADDING_TOP, CAMERA_PADDING, CAMERA_PADDING_BOTTOM, CAMERA_PADDING)
 
         val cameraOptions = currentMapView.mapboxMap.cameraForCoordinates(
@@ -181,7 +181,7 @@ internal actual fun HomeMapScreenContent(
 
         viewportState.easeTo(
             cameraOptions = CameraOptions.Builder()
-                .center(fromLngLat(result.effectiveLongitude, result.effectiveLatitude))
+                .center(fromLngLat(result.longitude, result.latitude))
                 .zoom(FOLLOW_PUCK_ZOOM)
                 .pitch(0.0)
                 .bearing(0.0)
@@ -267,14 +267,14 @@ internal actual fun HomeMapScreenContent(
                 if (searchResults.isNotEmpty()) {
                     searchResults.forEachIndexed { index, result ->
                         HomeMapNumberedPin(
-                            point = fromLngLat(result.effectiveLongitude, result.effectiveLatitude),
+                            point = fromLngLat(result.longitude, result.latitude),
                             number = index + 1,
                         )
                     }
                 } else {
                     selectedResult?.let { result ->
                         Marker(
-                            point = fromLngLat(result.effectiveLongitude, result.effectiveLatitude),
+                            point = fromLngLat(result.longitude, result.latitude),
                             color = Color.Red,
                             innerColor = Color.White,
                             stroke = Color.White,

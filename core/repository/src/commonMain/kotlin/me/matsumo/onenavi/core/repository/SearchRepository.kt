@@ -31,9 +31,9 @@ class SearchRepository(
 
     suspend fun addHistory(result: SearchResultItem) {
         val history = SearchHistory(
-            id = result.id,
+            id = result.placeId,
             name = result.name,
-            address = result.fullAddress,
+            address = result.formattedAddress,
             latitude = result.latitude,
             longitude = result.longitude,
             searchedAtEpochMillis = kotlin.time.Clock.System.now().toEpochMilliseconds(),

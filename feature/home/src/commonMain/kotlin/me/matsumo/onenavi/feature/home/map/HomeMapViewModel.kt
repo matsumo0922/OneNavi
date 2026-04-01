@@ -169,8 +169,8 @@ class HomeMapViewModel(
             routeRepository.searchRoutes(
                 originLatitude = originLat,
                 originLongitude = originLng,
-                destinationLatitude = destination.effectiveLatitude,
-                destinationLongitude = destination.effectiveLongitude,
+                destinationLatitude = destination.latitude,
+                destinationLongitude = destination.longitude,
             )
                 .onSuccess { routes ->
                     _routeResults.value = routes.toImmutableList()
