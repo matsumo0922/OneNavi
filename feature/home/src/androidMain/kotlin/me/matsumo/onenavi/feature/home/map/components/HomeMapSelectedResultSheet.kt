@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -50,7 +49,6 @@ import me.matsumo.onenavi.core.resource.common_share
 import me.matsumo.onenavi.core.resource.home_map_bookmark
 import me.matsumo.onenavi.core.resource.home_map_metadata
 import me.matsumo.onenavi.core.resource.home_map_metadata_accutary
-import me.matsumo.onenavi.core.resource.home_map_metadata_external_id
 import me.matsumo.onenavi.core.resource.home_map_metadata_id
 import me.matsumo.onenavi.core.resource.home_map_metadata_type
 import me.matsumo.onenavi.core.resource.home_map_point
@@ -72,12 +70,12 @@ internal fun HomeMapSelectedResultSheet(
     onPeekHeightMeasured: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val plusCode = remember(selectedResult) { OpenLocationCode.encode(selectedResult.effectiveLatitude, selectedResult.effectiveLongitude) }
+    val plusCode = remember(selectedResult) { OpenLocationCode.encode(selectedResult.latitude, selectedResult.longitude) }
 
     val pointItems = persistentListOf(
         InfoItem(
             title = Res.string.home_map_point_address,
-            value = selectedResult.fullAddress,
+            value = selectedResult.formattedAddress,
             icon = Icons.Default.Apartment,
         ),
         InfoItem(
@@ -95,22 +93,17 @@ internal fun HomeMapSelectedResultSheet(
     val metadataItems = persistentListOf(
         InfoItem(
             title = Res.string.home_map_metadata_id,
-            value = selectedResult.id,
+            value = selectedResult.placeId,
             icon = Icons.Default.Code,
         ),
         InfoItem(
-            title = Res.string.home_map_metadata_external_id,
-            value = selectedResult.externalIds.takeIf { it.isNotEmpty() }?.toString(),
-            icon = Icons.Outlined.Info,
-        ),
-        InfoItem(
             title = Res.string.home_map_metadata_type,
-            value = selectedResult.resultTypes.takeIf { it.isNotEmpty() }?.toString(),
+            value = selectedResult.primaryTypeDisplayName,
             icon = Icons.Outlined.Category,
         ),
         InfoItem(
             title = Res.string.home_map_metadata_accutary,
-            value = selectedResult.accuracy,
+            value = selectedResult.businessStatus,
             icon = Icons.Outlined.Check,
         ),
     )
@@ -170,7 +163,7 @@ private fun TitleSection(
             style = MaterialTheme.typography.headlineSmall.semiBold(),
         )
 
-        selectedResult.categories.takeIf { it.isNotEmpty() }?.joinToString()?.let {
+        selectedResult.primaryTypeDisplayName?.let {
             Text(
                 modifier = Modifier.fillMaxWidth(),
                 text = it,
@@ -179,10 +172,14 @@ private fun TitleSection(
             )
         }
 
-        if (selectedResult.distanceMeters != null || selectedResult.etaMinutes != null) {
+        selectedResult.rating?.let { rating ->
+            val ratingText = buildString {
+                append("★ $rating")
+                selectedResult.userRatingCount?.let { append(" ($it)") }
+            }
             Text(
                 modifier = Modifier.fillMaxWidth(),
-                text = listOfNotNull(selectedResult.distanceMeters, selectedResult.etaMinutes).joinToString(),
+                text = ratingText,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

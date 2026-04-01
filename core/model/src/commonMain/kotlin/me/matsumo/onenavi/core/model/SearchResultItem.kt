@@ -3,65 +3,62 @@ package me.matsumo.onenavi.core.model
 import androidx.compose.runtime.Immutable
 
 /**
- * 検索結果の詳細データ。
- * 候補選択後に Mapbox SearchResult から変換される。
- * Search Box API 使用時、[id] は REST API の mapbox_id に相当し、[DetailsApi] での詳細取得に使用できる。
+ * Google Places API (New) の検索結果詳細データ。
+ * Place Details / Text Search の結果から変換される。
  *
- * @param id Mapbox の地点 ID。Search Box API 使用時は mapbox_id と同値で、DetailsApi での retrieve に使用可能
- * @param name 地点名称（施設名・住所ラベル等）
- * @param fullAddress フォーマット済みの完全な住所文字列
- * @param descriptionText 検索結果の補足説明テキスト
- * @param matchingName クエリにマッチした名称（name と異なる場合のみ非 null）
- * @param accuracy 座標の精度レベル（"rooftop", "interpolated" 等）
- * @param makiIcon Maki アイコン名（UI でのアイコン表示用）
+ * @param placeId Google Place ID。再取得・履歴復元に使用する
+ * @param name ローカライズされた地点名称
+ * @param formattedAddress フォーマット済みの完全な住所文字列
+ * @param shortFormattedAddress 省略形式の住所文字列
  * @param latitude 緯度
  * @param longitude 経度
- * @param boundingBoxSouth バウンディングボックス南端緯度（存在しない場合は null）
- * @param boundingBoxWest バウンディングボックス西端経度
- * @param boundingBoxNorth バウンディングボックス北端緯度
- * @param boundingBoxEast バウンディングボックス東端経度
- * @param routableLatitude ルーティング用入口座標の緯度（建物入口等、存在しない場合は null）
- * @param routableLongitude ルーティング用入口座標の経度
- * @param categories POI カテゴリ名のリスト
- * @param categoryIds POI カテゴリの正規 ID リスト
- * @param distanceMeters 検索元地点からの距離（メートル）
- * @param etaMinutes 検索元地点からの推定到着時間（分）
- * @param externalIds 外部サービスの ID マップ（例: "foursquare" → "xxx"）
- * @param resultTypes 検索結果の種別リスト（"POI", "ADDRESS" 等）
+ * @param viewportSouth ビューポート南端緯度（存在しない場合は null）
+ * @param viewportWest ビューポート西端経度
+ * @param viewportNorth ビューポート北端緯度
+ * @param viewportEast ビューポート東端経度
+ * @param primaryType 地点の主要タイプ ID（例: "restaurant"）
+ * @param primaryTypeDisplayName ローカライズされた主要タイプ表示名（例: "レストラン"）
+ * @param types 地点タイプの ID リスト
+ * @param googleMapsUri Google Maps へのディープリンク URI
+ * @param websiteUri 地点の公式ウェブサイト URI
+ * @param internationalPhoneNumber 国際形式の電話番号
+ * @param nationalPhoneNumber 国内形式の電話番号
+ * @param rating ユーザー評価（0.0〜5.0）
+ * @param userRatingCount 評価件数
+ * @param priceLevel 価格レベル（0〜4）
+ * @param businessStatus 営業状態（"OPERATIONAL", "CLOSED_TEMPORARILY" 等）
+ * @param iconBackgroundColor アイコン背景色の HEX 値
+ * @param iconMaskUrl アイコンマスク画像 URL
+ * @param editorialSummary 編集者によるサマリーテキスト
+ * @param currentOpeningHours 現在の営業時間テキスト（例: "9:00～21:00"）
+ * @param isOpenNow 現在営業中かどうか
  */
 @Immutable
 data class SearchResultItem(
-    val id: String,
+    val placeId: String,
     val name: String,
-    val fullAddress: String?,
-    val descriptionText: String?,
-    val matchingName: String?,
-    val accuracy: String?,
-    val makiIcon: String?,
+    val formattedAddress: String?,
+    val shortFormattedAddress: String?,
     val latitude: Double,
     val longitude: Double,
-    val boundingBoxSouth: Double?,
-    val boundingBoxWest: Double?,
-    val boundingBoxNorth: Double?,
-    val boundingBoxEast: Double?,
-    val routableLatitude: Double?,
-    val routableLongitude: Double?,
-    val categories: List<String>,
-    val categoryIds: List<String>,
-    val distanceMeters: Double?,
-    val etaMinutes: Double?,
-    val externalIds: Map<String, String>,
-    val resultTypes: List<String>,
-) {
-    /**
-     * ルーティング用座標の緯度。routableLatitude が存在する場合はそれを、存在しない場合は通常の latitude を返す。
-     */
-    val effectiveLatitude: Double
-        get() = routableLatitude ?: latitude
-
-    /**
-     * ルーティング用座標の経度。routableLongitude が存在する場合はそれを、存在しない場合は通常の longitude を返す。
-     */
-    val effectiveLongitude: Double
-        get() = routableLongitude ?: longitude
-}
+    val viewportSouth: Double?,
+    val viewportWest: Double?,
+    val viewportNorth: Double?,
+    val viewportEast: Double?,
+    val primaryType: String?,
+    val primaryTypeDisplayName: String?,
+    val types: List<String>,
+    val googleMapsUri: String?,
+    val websiteUri: String?,
+    val internationalPhoneNumber: String?,
+    val nationalPhoneNumber: String?,
+    val rating: Double?,
+    val userRatingCount: Int?,
+    val priceLevel: Int?,
+    val businessStatus: String?,
+    val iconBackgroundColor: String?,
+    val iconMaskUrl: String?,
+    val editorialSummary: String?,
+    val currentOpeningHours: String?,
+    val isOpenNow: Boolean?,
+)

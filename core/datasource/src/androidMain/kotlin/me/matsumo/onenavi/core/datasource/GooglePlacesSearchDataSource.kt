@@ -112,7 +112,19 @@ class GooglePlacesSearchDataSource(
             Place.Field.VIEWPORT,
             Place.Field.TYPES,
             Place.Field.PRIMARY_TYPE,
+            Place.Field.PRIMARY_TYPE_DISPLAY_NAME,
             Place.Field.GOOGLE_MAPS_URI,
+            Place.Field.WEBSITE_URI,
+            Place.Field.INTERNATIONAL_PHONE_NUMBER,
+            Place.Field.NATIONAL_PHONE_NUMBER,
+            Place.Field.RATING,
+            Place.Field.USER_RATING_COUNT,
+            Place.Field.PRICE_LEVEL,
+            Place.Field.BUSINESS_STATUS,
+            Place.Field.ICON_BACKGROUND_COLOR,
+            Place.Field.ICON_MASK_URL,
+            Place.Field.EDITORIAL_SUMMARY,
+            Place.Field.CURRENT_OPENING_HOURS,
         )
     }
 }
@@ -121,28 +133,33 @@ private fun Place.toResultItem(): SearchResultItem {
     val viewport = viewport
 
     return SearchResultItem(
-        id = id ?: "",
+        placeId = id ?: "",
         name = displayName ?: "",
-        fullAddress = formattedAddress,
-        descriptionText = shortFormattedAddress,
-        matchingName = null,
-        accuracy = null,
-        makiIcon = primaryType,
+        formattedAddress = formattedAddress,
+        shortFormattedAddress = shortFormattedAddress,
         latitude = location?.latitude ?: 0.0,
         longitude = location?.longitude ?: 0.0,
-        boundingBoxSouth = viewport?.southwest?.latitude,
-        boundingBoxWest = viewport?.southwest?.longitude,
-        boundingBoxNorth = viewport?.northeast?.latitude,
-        boundingBoxEast = viewport?.northeast?.longitude,
-        routableLatitude = null,
-        routableLongitude = null,
-        categories = placeTypes?.map { it.toString() }.orEmpty(),
-        categoryIds = placeTypes?.map { it.toString() }.orEmpty(),
-        distanceMeters = null,
-        etaMinutes = null,
-        externalIds = buildMap {
-            googleMapsUri?.let { put("google_maps", it.toString()) }
+        viewportSouth = viewport?.southwest?.latitude,
+        viewportWest = viewport?.southwest?.longitude,
+        viewportNorth = viewport?.northeast?.latitude,
+        viewportEast = viewport?.northeast?.longitude,
+        primaryType = primaryType,
+        primaryTypeDisplayName = primaryTypeDisplayName,
+        types = placeTypes?.map { it.toString() }.orEmpty(),
+        googleMapsUri = googleMapsUri?.toString(),
+        websiteUri = websiteUri?.toString(),
+        internationalPhoneNumber = internationalPhoneNumber,
+        nationalPhoneNumber = nationalPhoneNumber,
+        rating = rating,
+        userRatingCount = userRatingCount,
+        priceLevel = priceLevel,
+        businessStatus = businessStatus?.name,
+        iconBackgroundColor = iconBackgroundColor?.let {
+            String.format("#%06X", 0xFFFFFF and it)
         },
-        resultTypes = listOfNotNull(primaryType),
+        iconMaskUrl = iconMaskUrl,
+        editorialSummary = editorialSummary,
+        currentOpeningHours = currentOpeningHours?.weekdayText?.joinToString("\n"),
+        isOpenNow = null,
     )
 }

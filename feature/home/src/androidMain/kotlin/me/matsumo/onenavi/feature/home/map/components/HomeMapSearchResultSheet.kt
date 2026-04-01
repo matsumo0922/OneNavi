@@ -46,7 +46,7 @@ internal fun HomeMapSearchResultSheet(
                     )
 
                     Text(
-                        text = result.fullAddress ?: "${result.effectiveLatitude}, ${result.effectiveLongitude}",
+                        text = result.formattedAddress ?: "${result.latitude}, ${result.longitude}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
