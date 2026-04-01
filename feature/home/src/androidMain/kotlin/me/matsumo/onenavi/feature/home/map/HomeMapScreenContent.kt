@@ -40,8 +40,6 @@ import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.viewport.ViewportStatus
 import kotlinx.coroutines.flow.distinctUntilChanged
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
-import me.matsumo.onenavi.feature.home.map.components.HomeMapSearchResultSheet
-import me.matsumo.onenavi.feature.home.map.components.HomeMapSelectedResultSheet
 import me.matsumo.onenavi.feature.home.map.components.HomeMapTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
 
@@ -50,7 +48,6 @@ private const val CAMERA_PADDING = 100.0
 private const val CAMERA_PADDING_TOP = 200.0
 private const val CAMERA_PADDING_BOTTOM = 400.0
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
-private val SHEET_DRAG_HANDLE_HEIGHT = 48.dp
 
 @Suppress("ParamsComparedByRef")
 @OptIn(ExperimentalMaterial3Api::class, MapboxExperimental::class)
@@ -186,23 +183,12 @@ internal actual fun HomeMapScreenContent(
         scaffoldState = scaffoldState,
         sheetPeekHeight = sheetPeekHeight,
         sheetContent = {
-            if (searchResults.isNotEmpty()) {
-                HomeMapSearchResultSheet(
-                    searchResults = searchResults,
-                    onViewEvent = viewModel::onViewEvent,
-                )
-            } else {
-                selectedResult?.let { result ->
-                    HomeMapSelectedResultSheet(
-                        selectedResult = result,
-                        onViewEvent = viewModel::onViewEvent,
-                        onPeekHeightMeasured = { heightPx ->
-                            val measuredHeight = with(density) { heightPx.toDp() } + SHEET_DRAG_HANDLE_HEIGHT + 16.dp
-                            sheetPeekHeight = measuredHeight
-                        },
-                    )
-                }
-            }
+            HomeMapSheetContent(
+                searchResults = searchResults,
+                selectedResult = selectedResult,
+                onViewEvent = viewModel::onViewEvent,
+                onPeekHeightChanged = { sheetPeekHeight = it },
+            )
         },
     ) {
         Box(
