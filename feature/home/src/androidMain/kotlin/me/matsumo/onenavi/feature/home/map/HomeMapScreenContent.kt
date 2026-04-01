@@ -48,6 +48,9 @@ private const val FOLLOW_PUCK_ZOOM = 16.0
 private const val CAMERA_PADDING = 100.0
 private const val CAMERA_PADDING_TOP = 200.0
 private const val CAMERA_PADDING_BOTTOM = 400.0
+private const val ROUTE_CAMERA_MARGIN_VERTICAL = 150.0
+private const val ROUTE_CAMERA_MARGIN_HORIZONTAL = 100.0
+private const val ROUTE_CAMERA_MARGIN_END = 250.0
 private const val POLYLINE_PRECISION = 6
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
 
@@ -90,6 +93,7 @@ internal actual fun HomeMapScreenContent(
     )
 
     var contentHeight by remember { mutableFloatStateOf(0f) }
+    var topAppBarHeightPx by remember { mutableFloatStateOf(0f) }
     var sheetPeekHeight by remember { mutableStateOf(SHEET_PEEK_HEIGHT_DEFAULT) }
 
     val sheetVisibleHeight by remember {
@@ -196,7 +200,10 @@ internal actual fun HomeMapScreenContent(
 
         if (allPoints.isEmpty()) return@LaunchedEffect
 
-        val padding = EdgeInsets(CAMERA_PADDING_TOP, CAMERA_PADDING, CAMERA_PADDING_BOTTOM, CAMERA_PADDING)
+        val sheetPeekPx = with(density) { sheetPeekHeight.toPx() }.toDouble()
+        val topPadding = topAppBarHeightPx.toDouble() + ROUTE_CAMERA_MARGIN_VERTICAL
+        val bottomPadding = sheetPeekPx + ROUTE_CAMERA_MARGIN_VERTICAL
+        val padding = EdgeInsets(topPadding, ROUTE_CAMERA_MARGIN_HORIZONTAL, bottomPadding, ROUTE_CAMERA_MARGIN_END)
 
         val cameraOptions = currentMapView.mapboxMap.cameraForCoordinates(
             coordinates = allPoints,
@@ -263,7 +270,8 @@ internal actual fun HomeMapScreenContent(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .onGloballyPositioned { topAppBarHeightPx = it.size.height.toFloat() },
                 suggestions = suggestions,
                 histories = histories,
                 viewportState = viewportState,
