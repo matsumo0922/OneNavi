@@ -1,8 +1,10 @@
 package me.matsumo.onenavi.core.datasource
 
+import android.content.Context
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.geojson.Point
 import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
+import com.mapbox.navigation.base.extensions.applyLanguageAndVoiceUnitOptions
 import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.base.route.NavigationRouterCallback
 import com.mapbox.navigation.base.route.RouterFailure
@@ -21,6 +23,7 @@ import kotlin.coroutines.resumeWithException
  * @param navigationProvider MapboxNavigation インスタンスを遅延取得するプロバイダ
  */
 class MapboxNavigationRouteDataSource(
+    private val context: Context,
     private val navigationProvider: () -> MapboxNavigation,
 ) : RouteDataSource {
 
@@ -35,6 +38,7 @@ class MapboxNavigationRouteDataSource(
 
         val routeOptions = RouteOptions.builder()
             .applyDefaultNavigationOptions()
+            .applyLanguageAndVoiceUnitOptions(context)
             .coordinatesList(listOf(origin, destination))
             .alternatives(true)
             .build()
