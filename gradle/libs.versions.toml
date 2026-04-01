@@ -42,6 +42,7 @@ androidxRoom = "2.7.1"
 androidxSqlite = "2.5.1"
 
 # Google
+googlePlaces = "5.1.1"
 playReview = "2.0.2"
 playUpdate = "2.1.0"
 playServiceAds = "24.9.0"
@@ -188,6 +189,7 @@ firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 
 # Google
+google-places = { module = "com.google.android.libraries.places:places", version.ref = "googlePlaces" }
 play-review = { module = "com.google.android.play:review-ktx", version.ref = "playReview" }
 play-update = { module = "com.google.android.play:app-update-ktx", version.ref = "playUpdate" }
 play-service-ads = { module = "com.google.android.gms:play-services-ads", version.ref = "playServiceAds" }
@@ -328,5 +330,4 @@ mapbox = [
     "mapbox-ui-components",
     "mapbox-extension-compose",
     "mapbox-extension-localization",
-    "mapbox-search",
 ]
