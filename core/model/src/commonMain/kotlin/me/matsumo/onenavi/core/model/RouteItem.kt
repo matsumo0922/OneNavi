@@ -12,6 +12,7 @@ import kotlinx.collections.immutable.ImmutableList
  * @param geometry 経路の座標リスト（地図上のポリライン描画用）
  * @param viaRoadNames 経由する主要道路名（距離が長い順に最大3件）
  * @param hasTolls 有料道路区間を含むかどうか
+ * @param tollFee 有料道路の料金（円）。null の場合は料金不明。
  */
 @Immutable
 data class RouteItem(
@@ -20,6 +21,7 @@ data class RouteItem(
     val geometry: ImmutableList<RoutePoint>,
     val viaRoadNames: ImmutableList<String>,
     val hasTolls: Boolean,
+    val tollFee: Int? = null,
 )
 
 /**

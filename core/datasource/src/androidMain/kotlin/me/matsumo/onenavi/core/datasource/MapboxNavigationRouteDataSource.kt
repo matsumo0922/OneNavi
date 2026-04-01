@@ -170,8 +170,8 @@ class MapboxNavigationRouteDataSource(
 
                 points.add(
                     RoutePoint(
-                        latitude = latitude / 1e5,
-                        longitude = longitude / 1e5,
+                        latitude = latitude / 1e6,
+                        longitude = longitude / 1e6,
                     ),
                 )
             }
