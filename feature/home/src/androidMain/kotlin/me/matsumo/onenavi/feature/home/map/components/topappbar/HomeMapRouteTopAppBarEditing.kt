@@ -189,7 +189,7 @@ internal fun HomeMapRouteTopAppBarEditing(
         HorizontalDivider()
 
         Row(
-            modifier = Modifier.align(Alignment.End)
+            modifier = Modifier.align(Alignment.End),
         ) {
             TextButton(
                 onClick = {

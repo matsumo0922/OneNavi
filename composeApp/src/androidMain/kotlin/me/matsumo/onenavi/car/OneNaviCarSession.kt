@@ -15,6 +15,7 @@ import com.mapbox.maps.extension.androidauto.mapboxMapInstaller
 @OptIn(MapboxExperimental::class)
 class OneNaviCarSession : Session() {
 
+    @Suppress("UnusedPrivateProperty")
     private val mapboxCarMap = mapboxMapInstaller()
         .onCreated(OneNaviCarMapObserver())
         .install()

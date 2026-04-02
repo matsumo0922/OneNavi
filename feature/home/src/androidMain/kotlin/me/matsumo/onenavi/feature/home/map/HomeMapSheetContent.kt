@@ -16,8 +16,8 @@ private val SHEET_DRAG_HANDLE_HEIGHT = 48.dp
 internal fun HomeMapSheetContent(
     searchResults: ImmutableList<SearchResultItem>,
     selectedResult: SearchResultItem?,
-    modifier: Modifier = Modifier,
     onViewEvent: (HomeMapViewEvent) -> Unit,
+    modifier: Modifier = Modifier,
     onPeekHeightChanged: (Dp) -> Unit,
 ) {
     val density = LocalDensity.current

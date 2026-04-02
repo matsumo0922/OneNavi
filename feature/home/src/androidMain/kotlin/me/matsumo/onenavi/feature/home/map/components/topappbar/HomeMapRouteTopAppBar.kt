@@ -18,7 +18,6 @@ import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.feature.home.map.HomeMapViewEvent
 
-
 @Composable
 internal fun HomeMapRouteTopAppBar(
     waypoints: ImmutableList<RouteWaypoint>,
@@ -43,7 +42,7 @@ internal fun HomeMapRouteTopAppBar(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        )
+        ),
     ) {
         if (isEditing) {
             HomeMapRouteTopAppBarEditing(
@@ -79,7 +78,6 @@ internal fun HomeMapRouteTopAppBar(
         }
     }
 }
-
 
 internal enum class WaypointPosition {
     First,
