@@ -32,8 +32,6 @@ import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_map_route_done
-import me.matsumo.onenavi.feature.home.map.components.WaypointPosition
-import me.matsumo.onenavi.feature.home.map.components.resolvePosition
 import org.jetbrains.compose.resources.stringResource
 import sh.calvin.reorderable.ReorderableColumn
 
