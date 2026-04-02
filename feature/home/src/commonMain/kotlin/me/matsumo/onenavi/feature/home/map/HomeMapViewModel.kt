@@ -217,9 +217,11 @@ class HomeMapViewModel(
     }
 
     fun onDismissRoutes() {
+        val destination = _selectedResult.value
         _routeResults.value = persistentListOf()
         _selectedRouteIndex.value = 0
         _waypoints.value = persistentListOf()
+        _selectedResult.value = destination
     }
 
     fun onDismissSearchResults() {
