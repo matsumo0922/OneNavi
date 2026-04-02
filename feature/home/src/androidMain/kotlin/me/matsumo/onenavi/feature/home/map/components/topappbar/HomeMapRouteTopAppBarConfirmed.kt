@@ -31,9 +31,9 @@ internal fun HomeMapRouteTopAppBarConfirmed(
     onBackClicked: () -> Unit,
     onEditClicked: () -> Unit,
     onSwapClicked: () -> Unit,
-    modifier: Modifier = Modifier,
     onWaypointClicked: (Int) -> Unit,
     onViewEvent: (HomeMapViewEvent) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(waypointEditResult) {
         val (index, place) = waypointEditResult ?: return@LaunchedEffect
@@ -82,7 +82,7 @@ internal fun HomeMapRouteTopAppBarConfirmed(
 
                 if (index < waypoints.lastIndex) {
                     HomeMapRouteWaypointDivider(
-                        modifier = Modifier.height(16.dp)
+                        modifier = Modifier.height(16.dp),
                     )
                 }
             }

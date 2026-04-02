@@ -32,7 +32,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
@@ -104,7 +103,6 @@ internal fun HomeMapControls(
     ) {
         HomeMapCompass(
             bearing = cameraBearing,
-            trackingMode = trackingMode,
             onClicked = {
                 scope.launch {
                     val currentZoom = viewportState.cameraState?.zoom
@@ -178,8 +176,8 @@ internal fun HomeMapControls(
 
 @Composable
 private fun HomeMapZoomButtons(
-    modifier: Modifier = Modifier,
     onZoomInClicked: () -> Unit,
+    modifier: Modifier = Modifier,
     onZoomOutClicked: () -> Unit,
 ) {
     Surface(
@@ -224,7 +222,6 @@ private fun HomeMapZoomButtons(
     }
 }
 
-private const val COMPASS_NORTH_LABEL_FONT_SIZE = 11
 private const val COMPASS_NEEDLE_WIDTH_RATIO = 0.1f
 private const val COMPASS_NEEDLE_LENGTH_RATIO = 0.35f
 private const val COMPASS_NEEDLE_INSET_RATIO = 0.03f
@@ -232,17 +229,14 @@ private const val COMPASS_NEEDLE_INSET_RATIO = 0.03f
 @Composable
 private fun HomeMapCompass(
     bearing: Double,
-    trackingMode: LocationTrackingMode?,
     modifier: Modifier = Modifier,
     onClicked: () -> Unit,
 ) {
     val rotationDegrees = -bearing.toFloat()
 
-    val textMeasurer = rememberTextMeasurer()
     val northColor = Color(0xFFE53935)
     val southColor = Color(0xFF757575)
     val surfaceColor = FloatingActionButtonDefaults.containerColor()
-    val onSurfaceColor = MaterialTheme.colorScheme.onPrimaryContainer
 
     Surface(
         modifier = modifier.size(48.dp),

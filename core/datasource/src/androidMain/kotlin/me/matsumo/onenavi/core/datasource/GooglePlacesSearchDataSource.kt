@@ -155,7 +155,7 @@ private fun Place.toResultItem(): SearchResultItem {
         priceLevel = priceLevel,
         businessStatus = businessStatus?.name,
         iconBackgroundColor = iconBackgroundColor?.let {
-            String.format("#%06X", 0xFFFFFF and it)
+            String.format(java.util.Locale.US, "#%06X", 0xFFFFFF and it)
         },
         iconMaskUrl = iconMaskUrl,
         editorialSummary = editorialSummary,

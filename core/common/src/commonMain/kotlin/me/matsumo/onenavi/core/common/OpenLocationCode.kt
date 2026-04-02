@@ -21,7 +21,6 @@ object OpenLocationCode {
     private const val PADDING_CHARACTER = '0'
     private const val PAIR_CODE_LENGTH = 10
     private const val MAX_DIGIT_COUNT = 15
-    private const val GRID_CODE_LENGTH = MAX_DIGIT_COUNT - PAIR_CODE_LENGTH
     private const val GRID_COLUMNS = 4
     private const val GRID_ROWS = 5
 

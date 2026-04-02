@@ -10,6 +10,7 @@ internal expect fun HomeMapScreenContent(
     modifier: Modifier = Modifier,
 )
 
+@Suppress("ViewModelForwarding")
 @Composable
 internal fun HomeMapScreen(
     modifier: Modifier = Modifier,

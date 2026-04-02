@@ -51,9 +51,9 @@ internal fun HomeMapsMapEffectContent(
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
     waypoints: ImmutableList<RouteWaypoint>,
-    modifier: Modifier = Modifier,
     onMapViewChanged: (MapView) -> Unit,
     onUserLocationUpdated: (latitude: Double, longitude: Double) -> Unit,
+    modifier: Modifier = Modifier,
     onBearingChanged: (Double) -> Unit,
 ) {
     val context = LocalContext.current
@@ -186,7 +186,7 @@ internal fun HomeMapsMapEffectContent(
         } else if (waypoints.isNotEmpty()) {
             waypoints.lastOrNull()?.let { waypoint ->
                 Marker(
-                    point = fromLngLat(waypoint.longitude , waypoint.latitude),
+                    point = fromLngLat(waypoint.longitude, waypoint.latitude),
                     color = Color.Red,
                     innerColor = Color.White,
                     stroke = Color.White,
