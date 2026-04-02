@@ -14,21 +14,36 @@ import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
+import me.matsumo.onenavi.feature.home.map.HomeMapViewEvent
 
 @Composable
 internal fun HomeMapRouteTopAppBarConfirmed(
     waypoints: ImmutableList<RouteWaypoint>,
+    waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
+    onWaypointEditResultConsumed: () -> Unit,
     onBackClicked: () -> Unit,
     onEditClicked: () -> Unit,
     onSwapClicked: () -> Unit,
     modifier: Modifier = Modifier,
     onWaypointClicked: (Int) -> Unit,
+    onViewEvent: (HomeMapViewEvent) -> Unit,
 ) {
+    LaunchedEffect(waypointEditResult) {
+        val (index, place) = waypointEditResult ?: return@LaunchedEffect
+        if (index !in waypoints.indices) return@LaunchedEffect
+
+        val updated = waypoints.toMutableList().apply { set(index, place) }.toImmutableList()
+        onViewEvent(HomeMapViewEvent.OnRouteWaypointsConfirmed(updated))
+        onWaypointEditResultConsumed()
+    }
+
     val hasWaypoints = waypoints.size > 2
 
     Row(

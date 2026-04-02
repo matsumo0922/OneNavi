@@ -22,6 +22,8 @@ import me.matsumo.onenavi.feature.home.map.HomeMapViewEvent
 @Composable
 internal fun HomeMapRouteTopAppBar(
     waypoints: ImmutableList<RouteWaypoint>,
+    waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
+    onWaypointEditResultConsumed: () -> Unit,
     modifier: Modifier = Modifier,
     onViewEvent: (HomeMapViewEvent) -> Unit,
 ) {
@@ -46,6 +48,8 @@ internal fun HomeMapRouteTopAppBar(
         if (isEditing) {
             HomeMapRouteTopAppBarEditing(
                 waypoints = waypoints,
+                waypointEditResult = waypointEditResult,
+                onWaypointEditResultConsumed = onWaypointEditResultConsumed,
                 onConfirmed = { confirmed ->
                     onViewEvent(HomeMapViewEvent.OnRouteWaypointsConfirmed(confirmed))
                     isEditing = false
@@ -58,6 +62,8 @@ internal fun HomeMapRouteTopAppBar(
         } else {
             HomeMapRouteTopAppBarConfirmed(
                 waypoints = waypoints,
+                waypointEditResult = waypointEditResult,
+                onWaypointEditResultConsumed = onWaypointEditResultConsumed,
                 onEditClicked = { isEditing = true },
                 onSwapClicked = {
                     onViewEvent(HomeMapViewEvent.OnSwapOriginDestination)
@@ -68,6 +74,7 @@ internal fun HomeMapRouteTopAppBar(
                 onBackClicked = {
                     onViewEvent(HomeMapViewEvent.OnDismissRoutes)
                 },
+                onViewEvent = onViewEvent,
             )
         }
     }

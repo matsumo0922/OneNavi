@@ -75,6 +75,7 @@ internal actual fun HomeMapScreenContent(
     val selectedRouteIndex by viewModel.selectedRouteIndex.collectAsStateWithLifecycle()
     val waypoints by viewModel.waypoints.collectAsStateWithLifecycle()
     val editingWaypointIndex by viewModel.editingWaypointIndex.collectAsStateWithLifecycle()
+    val waypointEditResult by viewModel.waypointEditResult.collectAsStateWithLifecycle()
 
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
@@ -297,6 +298,8 @@ internal actual fun HomeMapScreenContent(
                         .padding(horizontal = 16.dp)
                         .onGloballyPositioned { topAppBarHeightPx = it.size.height.toFloat() },
                     waypoints = waypoints,
+                    waypointEditResult = waypointEditResult,
+                    onWaypointEditResultConsumed = viewModel::consumeWaypointEditResult,
                     onViewEvent = viewModel::onViewEvent,
                 )
             } else {
