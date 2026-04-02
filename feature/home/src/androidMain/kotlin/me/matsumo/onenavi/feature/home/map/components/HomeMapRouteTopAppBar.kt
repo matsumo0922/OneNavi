@@ -7,10 +7,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -19,6 +23,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,6 +47,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationEventHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
@@ -63,15 +71,27 @@ internal fun HomeMapRouteTopAppBar(
     modifier: Modifier = Modifier,
     onViewEvent: (HomeMapViewEvent) -> Unit,
 ) {
+    val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     var isEditing by remember { mutableStateOf(false) }
+
+    NavigationEventHandler(navigationState) {
+        if (isEditing) {
+            isEditing = false
+        } else {
+            onViewEvent(HomeMapViewEvent.OnDismissRoutes)
+        }
+    }
 
     ElevatedCard(
         modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        )
     ) {
         if (isEditing) {
             HomeMapRouteTopAppBarEditing(
                 waypoints = waypoints,
-                onBackClicked = { isEditing = false },
                 onConfirmed = { confirmed ->
                     onViewEvent(HomeMapViewEvent.OnRouteWaypointsConfirmed(confirmed))
                     isEditing = false
@@ -79,19 +99,20 @@ internal fun HomeMapRouteTopAppBar(
                 onWaypointClicked = { index ->
                     onViewEvent(HomeMapViewEvent.OnWaypointClicked(index))
                 },
+                onBackClicked = { isEditing = false },
             )
         } else {
             HomeMapRouteTopAppBarConfirmed(
                 waypoints = waypoints,
-                onBackClicked = {
-                    onViewEvent(HomeMapViewEvent.OnDismissRoutes)
-                },
                 onEditClicked = { isEditing = true },
                 onSwapClicked = {
                     onViewEvent(HomeMapViewEvent.OnSwapOriginDestination)
                 },
                 onWaypointClicked = { index ->
                     onViewEvent(HomeMapViewEvent.OnWaypointClicked(index))
+                },
+                onBackClicked = {
+                    onViewEvent(HomeMapViewEvent.OnDismissRoutes)
                 },
             )
         }
@@ -110,15 +131,11 @@ private fun HomeMapRouteTopAppBarConfirmed(
     val hasWaypoints = waypoints.size > 2
 
     Row(
-        modifier = modifier.padding(
-            start = 4.dp,
-            top = 8.dp,
-            bottom = 8.dp,
-            end = 4.dp,
-        ),
-        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
     ) {
         IconButton(
+            modifier = Modifier.size(48.dp),
             onClick = onBackClicked,
         ) {
             Icon(
@@ -128,10 +145,15 @@ private fun HomeMapRouteTopAppBarConfirmed(
         }
 
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .padding(vertical = 8.dp)
+                .weight(1f),
         ) {
             waypoints.forEachIndexed { index, waypoint ->
                 HomeMapRouteWaypointRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(32.dp),
                     waypoint = waypoint,
                     position = resolvePosition(
                         index = index,
@@ -143,13 +165,18 @@ private fun HomeMapRouteTopAppBarConfirmed(
                 )
 
                 if (index < waypoints.lastIndex) {
-                    HomeMapRouteWaypointDivider()
+                    HomeMapRouteWaypointDivider(
+                        modifier = Modifier.height(16.dp)
+                    )
                 }
             }
         }
 
-        if (hasWaypoints) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             IconButton(
+                modifier = Modifier.size(48.dp),
                 onClick = onEditClicked,
             ) {
                 Icon(
@@ -157,20 +184,10 @@ private fun HomeMapRouteTopAppBarConfirmed(
                     contentDescription = null,
                 )
             }
-        } else {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                IconButton(
-                    onClick = onEditClicked,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Settings,
-                        contentDescription = null,
-                    )
-                }
 
+            if (!hasWaypoints) {
                 IconButton(
+                    modifier = Modifier.size(48.dp),
                     onClick = onSwapClicked,
                 ) {
                     Icon(
@@ -379,11 +396,9 @@ private fun HomeMapRouteWaypointRow(
     Row(
         modifier = modifier
             .clickable(onClick = onClicked)
-            .padding(
-                vertical = 8.dp,
-            ),
+            .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         HomeMapRouteWaypointIcon(
             waypoint = waypoint,
@@ -482,21 +497,23 @@ private fun HomeMapRouteWaypointIcon(
 private fun HomeMapRouteWaypointDivider(
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier.padding(
-            start = 8.dp,
-        ),
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = "⋮",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Box(
+            modifier = Modifier.width(24.dp),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Text(
+                text = "⋮",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         HorizontalDivider(
-            modifier = Modifier.padding(
-                start = 16.dp,
-            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
         )
     }
 }
