@@ -54,6 +54,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.SearchHistory
+import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_search_bar_placeholder
@@ -65,6 +66,7 @@ import org.jetbrains.compose.resources.stringResource
 internal fun HomeMapTopAppBar(
     suggestions: ImmutableList<SearchSuggestionItem>,
     histories: ImmutableList<SearchHistory>,
+    selectedResult: SearchResultItem?,
     viewportState: MapViewportState,
     onViewEvent: (HomeMapViewEvent) -> Unit,
     modifier: Modifier = Modifier,
@@ -103,6 +105,13 @@ internal fun HomeMapTopAppBar(
 
     LaunchedEffect(Unit) {
         canFocus = true
+    }
+
+    LaunchedEffect(selectedResult) {
+        if (selectedResult != null) {
+            textFieldState.setTextAndPlaceCursorAtEnd(selectedResult.name)
+            showSearchResult = true
+        }
     }
 
     LaunchedEffect(textFieldState) {
