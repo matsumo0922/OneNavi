@@ -49,7 +49,7 @@ internal fun HomeMapRouteTopAppBarEditing(
 ) {
     var editingList by remember(waypoints) {
         mutableStateOf(
-            buildList<RouteWaypoint?> {
+            buildList {
                 addAll(waypoints)
 
                 if (size < MAX_WAYPOINTS) {
