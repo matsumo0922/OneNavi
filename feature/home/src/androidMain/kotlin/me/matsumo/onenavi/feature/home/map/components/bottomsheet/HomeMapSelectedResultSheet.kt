@@ -1,4 +1,4 @@
-package me.matsumo.onenavi.feature.home.map.components
+package me.matsumo.onenavi.feature.home.map.components.bottomsheet
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
