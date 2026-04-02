@@ -183,6 +183,15 @@ internal fun HomeMapsMapEffectContent(
                     number = index + 1,
                 )
             }
+        } else if (waypoints.isNotEmpty()) {
+            waypoints.lastOrNull()?.let { waypoint ->
+                Marker(
+                    point = fromLngLat(waypoint.longitude , waypoint.latitude),
+                    color = Color.Red,
+                    innerColor = Color.White,
+                    stroke = Color.White,
+                )
+            }
         } else {
             selectedResult?.let { result ->
                 Marker(

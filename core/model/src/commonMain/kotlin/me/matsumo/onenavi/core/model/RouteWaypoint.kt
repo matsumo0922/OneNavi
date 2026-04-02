@@ -8,18 +8,21 @@ import androidx.compose.runtime.Immutable
  */
 @Immutable
 sealed interface RouteWaypoint {
+    val latitude: Double
+    val longitude: Double
+
     /** 現在地を出発地として使用する場合の地点 */
     @Immutable
     data class CurrentLocation(
-        val latitude: Double,
-        val longitude: Double,
+        override val latitude: Double,
+        override val longitude: Double,
     ) : RouteWaypoint
 
     /** 検索結果や手動入力で指定された任意の地点 */
     @Immutable
     data class Place(
         val name: String,
-        val latitude: Double,
-        val longitude: Double,
+        override val latitude: Double,
+        override val longitude: Double,
     ) : RouteWaypoint
 }
