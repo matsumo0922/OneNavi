@@ -8,5 +8,6 @@ interface RouteDataSource {
         originLongitude: Double,
         destinationLatitude: Double,
         destinationLongitude: Double,
+        intermediateWaypoints: List<Pair<Double, Double>> = emptyList(),
     ): Result<List<RouteResult>>
 }

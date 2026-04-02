@@ -31,9 +31,11 @@ import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineViewOptions
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineColorResources
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteResult
+import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
 import me.matsumo.onenavi.feature.home.map.components.HomeMapRouteCalloutAdapter
+import me.matsumo.onenavi.feature.home.map.components.HomeMapWaypointPin
 import java.util.*
 import android.graphics.Color as AndroidColor
 
@@ -48,6 +50,7 @@ internal fun HomeMapsMapEffectContent(
     selectedResult: SearchResultItem?,
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
+    waypoints: ImmutableList<RouteWaypoint>,
     modifier: Modifier = Modifier,
     onMapViewChanged: (MapView) -> Unit,
     onUserLocationUpdated: (latitude: Double, longitude: Double) -> Unit,
@@ -187,6 +190,20 @@ internal fun HomeMapsMapEffectContent(
                     color = Color.Red,
                     innerColor = Color.White,
                     stroke = Color.White,
+                )
+            }
+        }
+
+        if (waypoints.size > 2) {
+            val intermediateWaypoints = waypoints.drop(1).dropLast(1)
+            intermediateWaypoints.forEachIndexed { index, waypoint ->
+                val point = when (waypoint) {
+                    is RouteWaypoint.CurrentLocation -> fromLngLat(waypoint.longitude, waypoint.latitude)
+                    is RouteWaypoint.Place -> fromLngLat(waypoint.longitude, waypoint.latitude)
+                }
+                HomeMapWaypointPin(
+                    point = point,
+                    label = "K${index + 1}",
                 )
             }
         }

@@ -264,6 +264,7 @@ internal actual fun HomeMapScreenContent(
                 selectedResult = selectedResult,
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
+                waypoints = waypoints,
                 onMapViewChanged = { mapView = it },
                 onUserLocationUpdated = viewModel::onUserLocationUpdated,
                 onBearingChanged = { deviceBearing = it },

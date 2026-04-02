@@ -11,12 +11,14 @@ class RouteRepository(
         originLongitude: Double,
         destinationLatitude: Double,
         destinationLongitude: Double,
+        intermediateWaypoints: List<Pair<Double, Double>> = emptyList(),
     ): Result<List<RouteResult>> {
         return routeDataSource.searchRoutes(
             originLatitude = originLatitude,
             originLongitude = originLongitude,
             destinationLatitude = destinationLatitude,
             destinationLongitude = destinationLongitude,
+            intermediateWaypoints = intermediateWaypoints,
         )
     }
 }

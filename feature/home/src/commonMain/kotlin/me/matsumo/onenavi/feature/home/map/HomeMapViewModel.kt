@@ -172,7 +172,7 @@ class HomeMapViewModel(
         val originLat = _userLatitude.value ?: return
         val originLng = _userLongitude.value ?: return
 
-        _waypoints.value = persistentListOf(
+        val newWaypoints = persistentListOf(
             RouteWaypoint.CurrentLocation(
                 latitude = originLat,
                 longitude = originLng,
@@ -184,22 +184,8 @@ class HomeMapViewModel(
             ),
         )
 
-        viewModelScope.launch {
-            routeRepository.searchRoutes(
-                originLatitude = originLat,
-                originLongitude = originLng,
-                destinationLatitude = destination.latitude,
-                destinationLongitude = destination.longitude,
-            )
-                .onSuccess { routes ->
-                    _routeResults.value = routes.toImmutableList()
-                    _selectedRouteIndex.value = 0
-                }
-                .onFailure {
-                    Napier.e(it) { "Failed to search routes." }
-                    _routeResults.value = persistentListOf()
-                }
-        }
+        _waypoints.value = newWaypoints
+        searchRoutesFromWaypoints(newWaypoints)
     }
 
     fun onRouteSelected(index: Int) {
@@ -214,6 +200,59 @@ class HomeMapViewModel(
 
     private fun onRouteWaypointsConfirmed(newWaypoints: ImmutableList<RouteWaypoint>) {
         _waypoints.value = newWaypoints
+        searchRoutesFromWaypoints(newWaypoints)
+    }
+
+    private fun searchRoutesFromWaypoints(waypoints: ImmutableList<RouteWaypoint>) {
+        if (waypoints.size < 2) return
+
+        val origin = waypoints.first()
+        val destination = waypoints.last()
+
+        val originLat = when (origin) {
+            is RouteWaypoint.CurrentLocation -> origin.latitude
+            is RouteWaypoint.Place -> origin.latitude
+        }
+        val originLng = when (origin) {
+            is RouteWaypoint.CurrentLocation -> origin.longitude
+            is RouteWaypoint.Place -> origin.longitude
+        }
+        val destLat = when (destination) {
+            is RouteWaypoint.CurrentLocation -> destination.latitude
+            is RouteWaypoint.Place -> destination.latitude
+        }
+        val destLng = when (destination) {
+            is RouteWaypoint.CurrentLocation -> destination.longitude
+            is RouteWaypoint.Place -> destination.longitude
+        }
+
+        val intermediateWaypoints = waypoints
+            .drop(1)
+            .dropLast(1)
+            .map { waypoint ->
+                when (waypoint) {
+                    is RouteWaypoint.CurrentLocation -> waypoint.latitude to waypoint.longitude
+                    is RouteWaypoint.Place -> waypoint.latitude to waypoint.longitude
+                }
+            }
+
+        viewModelScope.launch {
+            routeRepository.searchRoutes(
+                originLatitude = originLat,
+                originLongitude = originLng,
+                destinationLatitude = destLat,
+                destinationLongitude = destLng,
+                intermediateWaypoints = intermediateWaypoints,
+            )
+                .onSuccess { routes ->
+                    _routeResults.value = routes.toImmutableList()
+                    _selectedRouteIndex.value = 0
+                }
+                .onFailure {
+                    Napier.e(it) { "Failed to search routes." }
+                    _routeResults.value = persistentListOf()
+                }
+        }
     }
 
     fun onDismissRoutes() {
