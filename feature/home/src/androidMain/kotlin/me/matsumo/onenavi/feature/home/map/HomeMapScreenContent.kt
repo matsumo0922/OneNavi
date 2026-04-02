@@ -40,10 +40,12 @@ import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.viewport.ViewportStatus
 import com.mapbox.navigation.base.route.NavigationRoute
 import kotlinx.coroutines.flow.distinctUntilChanged
+import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapRouteTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapTopAppBar
+import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapWaypointSearchScreen
 
 private const val FOLLOW_PUCK_ZOOM = 16.0
 private const val CAMERA_PADDING = 100.0
@@ -72,6 +74,7 @@ internal actual fun HomeMapScreenContent(
     val routeResults by viewModel.routeResults.collectAsStateWithLifecycle()
     val selectedRouteIndex by viewModel.selectedRouteIndex.collectAsStateWithLifecycle()
     val waypoints by viewModel.waypoints.collectAsStateWithLifecycle()
+    val editingWaypointIndex by viewModel.editingWaypointIndex.collectAsStateWithLifecycle()
 
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
@@ -310,6 +313,25 @@ internal actual fun HomeMapScreenContent(
                     onViewEvent = viewModel::onViewEvent,
                 )
             }
+
+            val editingWaypoint = editingWaypointIndex?.let { waypoints.getOrNull(it) }
+            val initialQuery = when (editingWaypoint) {
+                is RouteWaypoint.Place -> editingWaypoint.name
+                else -> null
+            }
+
+            HomeMapWaypointSearchScreen(
+                modifier = Modifier.fillMaxSize(),
+                isVisible = editingWaypointIndex != null,
+                initialQuery = initialQuery,
+                suggestions = suggestions,
+                histories = histories,
+                onSuggestionSelected = viewModel::onWaypointSuggestionSelected,
+                onHistorySelected = viewModel::onWaypointHistorySelected,
+                onRemoveHistory = { viewModel.onViewEvent(HomeMapViewEvent.OnRemoveHistory(it)) },
+                onQueryChanged = { viewModel.onViewEvent(HomeMapViewEvent.OnQueryChanged(it)) },
+                onDismiss = viewModel::onWaypointSearchDismissed,
+            )
         }
     }
 }
