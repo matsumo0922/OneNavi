@@ -71,6 +71,9 @@ class HomeMapViewModel(
     private val _editingWaypointIndex = MutableStateFlow<Int?>(null)
     val editingWaypointIndex: StateFlow<Int?> = _editingWaypointIndex.asStateFlow()
 
+    private val _waypointEditResult = MutableStateFlow<Pair<Int, RouteWaypoint.Place>?>(null)
+    val waypointEditResult: StateFlow<Pair<Int, RouteWaypoint.Place>?> = _waypointEditResult.asStateFlow()
+
     private var searchJob: Job? = null
 
     init {
@@ -269,13 +272,10 @@ class HomeMapViewModel(
             searchRepository.select(suggestion.id)
                 .onSuccess { result ->
                     searchRepository.addHistory(result)
-                    updateWaypoint(
-                        index = index,
-                        place = RouteWaypoint.Place(
-                            name = result.name,
-                            latitude = result.latitude,
-                            longitude = result.longitude,
-                        ),
+                    _waypointEditResult.value = index to RouteWaypoint.Place(
+                        name = result.name,
+                        latitude = result.latitude,
+                        longitude = result.longitude,
                     )
                     _editingWaypointIndex.value = null
                 }
@@ -288,13 +288,10 @@ class HomeMapViewModel(
     fun onWaypointHistorySelected(history: SearchHistory) {
         val index = _editingWaypointIndex.value ?: return
 
-        updateWaypoint(
-            index = index,
-            place = RouteWaypoint.Place(
-                name = history.name,
-                latitude = history.latitude,
-                longitude = history.longitude,
-            ),
+        _waypointEditResult.value = index to RouteWaypoint.Place(
+            name = history.name,
+            latitude = history.latitude,
+            longitude = history.longitude,
         )
         _editingWaypointIndex.value = null
     }
@@ -303,12 +300,8 @@ class HomeMapViewModel(
         _editingWaypointIndex.value = null
     }
 
-    private fun updateWaypoint(index: Int, place: RouteWaypoint.Place) {
-        val current = _waypoints.value.toMutableList()
-        if (index < 0 || index > current.lastIndex) return
-
-        current[index] = place
-        _waypoints.value = current.toImmutableList()
+    fun consumeWaypointEditResult() {
+        _waypointEditResult.value = null
     }
 
     fun onDismissRoutes() {

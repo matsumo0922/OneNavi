@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +43,8 @@ private val DIVIDER_HEIGHT = 16.dp
 @Composable
 internal fun HomeMapRouteTopAppBarEditing(
     waypoints: ImmutableList<RouteWaypoint>,
+    waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
+    onWaypointEditResultConsumed: () -> Unit,
     onBackClicked: () -> Unit,
     onConfirmed: (ImmutableList<RouteWaypoint>) -> Unit,
     modifier: Modifier = Modifier,
@@ -57,6 +60,19 @@ internal fun HomeMapRouteTopAppBarEditing(
                 }
             },
         )
+    }
+
+    LaunchedEffect(waypointEditResult) {
+        val (index, place) = waypointEditResult ?: return@LaunchedEffect
+        if (index !in editingList.indices) return@LaunchedEffect
+
+        editingList = editingList.toMutableList().apply {
+            set(index, place)
+            if (none { it == null } && size < MAX_WAYPOINTS) {
+                add(null)
+            }
+        }
+        onWaypointEditResultConsumed()
     }
 
     val confirmedCount = editingList.count { it != null }

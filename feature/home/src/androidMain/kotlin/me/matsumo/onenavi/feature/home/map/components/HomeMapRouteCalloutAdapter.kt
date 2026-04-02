@@ -3,7 +3,6 @@ package me.matsumo.onenavi.feature.home.map.components
 import android.content.Context
 import android.content.res.ColorStateList
 import android.util.TypedValue
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
@@ -65,13 +64,11 @@ internal class HomeMapRouteCalloutAdapter(
 
         shapeView.text = displayText
         shapeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, TEXT_SIZE_SP)
-        etaView.gravity = Gravity.START
         shapeView.backgroundTintList = ColorStateList.valueOf(SHADOW_COLOR)
 
         etaView.text = displayText
         etaView.setTextSize(TypedValue.COMPLEX_UNIT_SP, TEXT_SIZE_SP)
         etaView.setTextColor(textColor)
-        etaView.gravity = Gravity.START
         etaView.backgroundTintList = ColorStateList.valueOf(bgColor)
 
         return CalloutViewHolder.Builder(wrapper)
@@ -142,6 +139,6 @@ internal class HomeMapRouteCalloutAdapter(
         private const val SELECTED_TEXT = 0xFFFFFFFF.toInt()
         private const val UNSELECTED_TEXT = 0xFF333333.toInt()
         private const val SHADOW_COLOR = 0x40000000
-        private const val TEXT_SIZE_SP = 16f
+        private const val TEXT_SIZE_SP = 14f
     }
 }
