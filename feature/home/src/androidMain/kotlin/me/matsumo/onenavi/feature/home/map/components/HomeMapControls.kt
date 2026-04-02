@@ -267,10 +267,10 @@ private fun HomeMapCompass(
             ) {
                 // 北側の針（赤）
                 val northPath = Path().apply {
-                    moveTo(centerX, centerY - needleLength)                // 先端
-                    lineTo(centerX - needleWidth, centerY)                 // 左肩
-                    lineTo(centerX, centerY - inset)                       // 中央の食い込み
-                    lineTo(centerX + needleWidth, centerY)                 // 右肩
+                    moveTo(centerX, centerY - needleLength) // 先端
+                    lineTo(centerX - needleWidth, centerY) // 左肩
+                    lineTo(centerX, centerY - inset) // 中央の食い込み
+                    lineTo(centerX + needleWidth, centerY) // 右肩
                     close()
                 }
                 drawPath(
@@ -280,10 +280,10 @@ private fun HomeMapCompass(
 
                 // 南側の針（グレー）
                 val southPath = Path().apply {
-                    moveTo(centerX, centerY + needleLength)                // 先端
-                    lineTo(centerX - needleWidth, centerY)                 // 左肩
-                    lineTo(centerX, centerY + inset)                       // 中央の食い込み
-                    lineTo(centerX + needleWidth, centerY)                 // 右肩
+                    moveTo(centerX, centerY + needleLength) // 先端
+                    lineTo(centerX - needleWidth, centerY) // 左肩
+                    lineTo(centerX, centerY + inset) // 中央の食い込み
+                    lineTo(centerX + needleWidth, centerY) // 右肩
                     close()
                 }
                 drawPath(

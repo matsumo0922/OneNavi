@@ -1,6 +1,8 @@
 package me.matsumo.onenavi.feature.home.map
 
 import androidx.compose.runtime.Immutable
+import kotlinx.collections.immutable.ImmutableList
+import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
@@ -33,7 +35,7 @@ sealed interface HomeMapViewEvent {
         val historyId: String,
     ) : HomeMapViewEvent
 
-    data object OnRouteSearch: HomeMapViewEvent
+    data object OnRouteSearch : HomeMapViewEvent
 
     data class OnRouteSelected(
         val index: Int,
@@ -42,4 +44,14 @@ sealed interface HomeMapViewEvent {
     data object OnDismissRoutes : HomeMapViewEvent
 
     data object OnDismissSearchResult : HomeMapViewEvent
+
+    data object OnSwapOriginDestination : HomeMapViewEvent
+
+    data class OnRouteWaypointsConfirmed(
+        val waypoints: ImmutableList<RouteWaypoint>,
+    ) : HomeMapViewEvent
+
+    data class OnWaypointClicked(
+        val index: Int,
+    ) : HomeMapViewEvent
 }

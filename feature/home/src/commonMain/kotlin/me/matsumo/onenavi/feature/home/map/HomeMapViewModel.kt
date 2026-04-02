@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.AppConfig
 import me.matsumo.onenavi.core.model.RouteResult
+import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
@@ -64,6 +65,9 @@ class HomeMapViewModel(
     private val _selectedRouteIndex = MutableStateFlow(0)
     val selectedRouteIndex: StateFlow<Int> = _selectedRouteIndex.asStateFlow()
 
+    private val _waypoints = MutableStateFlow<ImmutableList<RouteWaypoint>>(persistentListOf())
+    val waypoints: StateFlow<ImmutableList<RouteWaypoint>> = _waypoints.asStateFlow()
+
     private var searchJob: Job? = null
 
     init {
@@ -87,6 +91,9 @@ class HomeMapViewModel(
             is HomeMapViewEvent.OnRouteSelected -> onRouteSelected(event.index)
             HomeMapViewEvent.OnDismissRoutes -> onDismissRoutes()
             HomeMapViewEvent.OnDismissSearchResult -> onDismissSearchResults()
+            HomeMapViewEvent.OnSwapOriginDestination -> onSwapOriginDestination()
+            is HomeMapViewEvent.OnRouteWaypointsConfirmed -> onRouteWaypointsConfirmed(event.waypoints)
+            is HomeMapViewEvent.OnWaypointClicked -> { /* TODO: 地点編集画面への遷移 */ }
         }
     }
 
@@ -165,6 +172,18 @@ class HomeMapViewModel(
         val originLat = _userLatitude.value ?: return
         val originLng = _userLongitude.value ?: return
 
+        _waypoints.value = persistentListOf(
+            RouteWaypoint.CurrentLocation(
+                latitude = originLat,
+                longitude = originLng,
+            ),
+            RouteWaypoint.Place(
+                name = destination.name,
+                latitude = destination.latitude,
+                longitude = destination.longitude,
+            ),
+        )
+
         viewModelScope.launch {
             routeRepository.searchRoutes(
                 originLatitude = originLat,
@@ -187,9 +206,20 @@ class HomeMapViewModel(
         _selectedRouteIndex.value = index
     }
 
+    private fun onSwapOriginDestination() {
+        val current = _waypoints.value
+        if (current.size != 2) return
+        _waypoints.value = persistentListOf(current[1], current[0])
+    }
+
+    private fun onRouteWaypointsConfirmed(newWaypoints: ImmutableList<RouteWaypoint>) {
+        _waypoints.value = newWaypoints
+    }
+
     fun onDismissRoutes() {
         _routeResults.value = persistentListOf()
         _selectedRouteIndex.value = 0
+        _waypoints.value = persistentListOf()
     }
 
     fun onDismissSearchResults() {
