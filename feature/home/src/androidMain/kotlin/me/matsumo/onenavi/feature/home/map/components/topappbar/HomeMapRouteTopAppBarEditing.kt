@@ -19,8 +19,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -46,14 +49,16 @@ internal fun HomeMapRouteTopAppBarEditing(
     modifier: Modifier = Modifier,
     onWaypointClicked: (Int) -> Unit,
 ) {
-    val editingList = remember(waypoints) {
-        mutableStateListOf<RouteWaypoint?>().apply {
-            addAll(waypoints)
+    var editingList by remember(waypoints) {
+        mutableStateOf(
+            buildList<RouteWaypoint?> {
+                addAll(waypoints)
 
-            if (size < MAX_WAYPOINTS) {
-                add(null)
-            }
-        }
+                if (size < MAX_WAYPOINTS) {
+                    add(null)
+                }
+            },
+        )
     }
 
     val confirmedCount = editingList.count { it != null }
@@ -98,62 +103,68 @@ internal fun HomeMapRouteTopAppBarEditing(
 
                 ReorderableColumn(
                     list = editingList,
-                    onSettle = { oldIndex, newIndex ->
-                        editingList.add(newIndex, editingList.removeAt(oldIndex))
+                    onSettle = { fromIndex, toIndex ->
+                        editingList = editingList.toMutableList().apply {
+                            add(toIndex, removeAt(fromIndex))
+                        }
                     },
                     verticalArrangement = Arrangement.spacedBy(DIVIDER_HEIGHT),
                 ) { index, item, _ ->
-                    ReorderableItem {
-                        val position = resolvePosition(index, editingList.size)
-                        val waypointIndex = editingList.subList(0, index + 1)
-                            .count { it != null && it !is RouteWaypoint.CurrentLocation } - 1
-                        val waypointLabel = if (position == WaypointPosition.Middle && item != null) {
-                            ('A' + waypointIndex.coerceAtLeast(0)).toString()
-                        } else {
-                            null
-                        }
+                    key(item ?: index) {
+                        ReorderableItem {
+                            val position = resolvePosition(index, editingList.size)
+                            val waypointIndex = editingList.subList(0, index + 1)
+                                .count { it != null && it !is RouteWaypoint.CurrentLocation } - 1
+                            val waypointLabel = if (position == WaypointPosition.Middle && item != null) {
+                                ('A' + waypointIndex.coerceAtLeast(0)).toString()
+                            } else {
+                                null
+                            }
 
-                        Row(
-                            modifier = Modifier
-                                .height(ITEM_HEIGHT)
-                                .fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            HomeMapRouteWaypointRow(
-                                modifier = Modifier.weight(1f),
-                                waypoint = item,
-                                position = position,
-                                isEditing = true,
-                                waypointLabel = waypointLabel,
-                                onClicked = { onWaypointClicked(index) },
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .height(ITEM_HEIGHT)
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                HomeMapRouteWaypointRow(
+                                    modifier = Modifier.weight(1f),
+                                    waypoint = item,
+                                    position = position,
+                                    isEditing = true,
+                                    waypointLabel = waypointLabel,
+                                    onClicked = { onWaypointClicked(index) },
+                                )
 
-                            Icon(
-                                modifier = Modifier.draggableHandle(),
-                                imageVector = Icons.Filled.DragHandle,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                                Icon(
+                                    modifier = Modifier.draggableHandle(),
+                                    imageVector = Icons.Filled.DragHandle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
 
-                            if (item != null) {
-                                IconButton(
-                                    modifier = Modifier.size(40.dp),
-                                    onClick = {
-                                        editingList.removeAt(index)
-                                        if (editingList.none { it == null } && editingList.size < MAX_WAYPOINTS) {
-                                            editingList.add(null)
-                                        }
-                                    },
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Close,
-                                        contentDescription = null,
+                                if (item != null) {
+                                    IconButton(
+                                        modifier = Modifier.size(40.dp),
+                                        onClick = {
+                                            editingList = editingList.toMutableList().apply {
+                                                removeAt(index)
+                                                if (none { it == null } && size < MAX_WAYPOINTS) {
+                                                    add(null)
+                                                }
+                                            }
+                                        },
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Close,
+                                            contentDescription = null,
+                                        )
+                                    }
+                                } else {
+                                    Box(
+                                        modifier = Modifier.size(40.dp),
                                     )
                                 }
-                            } else {
-                                Box(
-                                    modifier = Modifier.size(40.dp),
-                                )
                             }
                         }
                     }
