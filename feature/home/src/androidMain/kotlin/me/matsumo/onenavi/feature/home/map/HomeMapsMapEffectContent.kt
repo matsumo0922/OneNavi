@@ -24,9 +24,6 @@ import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.base.route.NavigationRoute
-import com.mapbox.navigation.ui.maps.route.callout.api.DefaultRouteCalloutAdapter
-import com.mapbox.navigation.ui.maps.route.callout.model.DefaultRouteCalloutAdapterOptions
-import com.mapbox.navigation.ui.maps.route.callout.model.RouteCalloutType
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
@@ -36,8 +33,8 @@ import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteResult
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
+import me.matsumo.onenavi.feature.home.map.components.HomeMapRouteCalloutAdapter
 import java.util.*
-import kotlin.time.Duration.Companion.minutes
 import android.graphics.Color as AndroidColor
 
 @Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
@@ -89,13 +86,7 @@ internal fun HomeMapsMapEffectContent(
     }
 
     val routeCalloutAdapter = remember {
-        DefaultRouteCalloutAdapter(
-            context = context,
-            options = DefaultRouteCalloutAdapterOptions.Builder()
-                .routeCalloutType(RouteCalloutType.ROUTES_OVERVIEW)
-                .similarDurationDelta(1.minutes)
-                .build(),
-        )
+        HomeMapRouteCalloutAdapter(context)
     }
 
     DisposableEffect(Unit) {
@@ -156,6 +147,8 @@ internal fun HomeMapsMapEffectContent(
 
         MapEffect(routeResults, selectedRouteIndex) { mapView ->
             val style = mapView.mapboxMap.style ?: return@MapEffect
+
+            routeCalloutAdapter.updateRouteResults(routeResults)
 
             if (routeResults.isEmpty()) {
                 routeLineApi.clearRouteLine { expected ->
