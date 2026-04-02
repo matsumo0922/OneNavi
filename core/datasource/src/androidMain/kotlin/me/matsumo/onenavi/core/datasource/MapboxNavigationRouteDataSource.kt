@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.datasource
 
 import android.content.Context
+import com.mapbox.api.directions.v5.DirectionsCriteria
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.geojson.Point
@@ -39,21 +40,52 @@ class MapboxNavigationRouteDataSource(
     ): Result<List<RouteResult>> = runCatching {
         val origin = Point.fromLngLat(originLongitude, originLatitude)
         val destination = Point.fromLngLat(destinationLongitude, destinationLatitude)
+        val navigation = navigationProvider()
 
-        val routeOptions = RouteOptions.builder()
+        val baseOptions = RouteOptions.builder()
             .applyDefaultNavigationOptions()
             .applyLanguageAndVoiceUnitOptions(context)
             .coordinatesList(listOf(origin, destination))
+
+        // まず通常検索（alternatives=true で最大3件）
+        val defaultOptions = baseOptions
             .alternatives(true)
             .build()
 
-        val navigation = navigationProvider()
-
-        requestRoutes(navigation, routeOptions).map { navigationRoute ->
+        val defaultRoutes = requestRoutes(navigation, defaultOptions)
+        val defaultResults = defaultRoutes.map { navigationRoute ->
             RouteResult(
                 item = navigationRoute.directionsRoute.toRouteItem(),
                 platformRoute = navigationRoute,
             )
+        }
+
+        val hasTollFreeRoute = defaultResults.any { !it.item.hasTolls }
+
+        if (hasTollFreeRoute) {
+            // 一般道ルートが含まれているならそのまま返す
+            // 一般道ルートを先頭にソート
+            defaultResults.sortedBy { it.item.hasTolls }
+        } else {
+            // 一般道ルートがない場合のみ、追加で exclude=toll リクエスト
+            val tollFreeOptions = baseOptions
+                .alternatives(false)
+                .excludeList(listOf(DirectionsCriteria.EXCLUDE_TOLL))
+                .build()
+
+            val tollFreeRoutes = runCatching {
+                requestRoutes(navigation, tollFreeOptions)
+            }.getOrDefault(emptyList())
+
+            val tollFreeResults = tollFreeRoutes.map { navigationRoute ->
+                RouteResult(
+                    item = navigationRoute.directionsRoute.toRouteItem(),
+                    platformRoute = navigationRoute,
+                )
+            }
+
+            // 一般道ルートを先頭に、有料道路ルートを後ろに配置
+            tollFreeResults + defaultResults
         }
     }
 
