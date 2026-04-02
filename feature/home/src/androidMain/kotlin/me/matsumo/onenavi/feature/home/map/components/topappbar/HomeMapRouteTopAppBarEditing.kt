@@ -35,6 +35,8 @@ import org.jetbrains.compose.resources.stringResource
 import sh.calvin.reorderable.ReorderableColumn
 
 private const val MAX_WAYPOINTS = 5
+private val ITEM_HEIGHT = 32.dp
+private val DIVIDER_HEIGHT = 16.dp
 
 @Composable
 internal fun HomeMapRouteTopAppBarEditing(
@@ -74,75 +76,87 @@ internal fun HomeMapRouteTopAppBarEditing(
                 )
             }
 
-            ReorderableColumn(
+            Box(
                 modifier = Modifier
                     .padding(end = 8.dp)
                     .padding(vertical = 8.dp)
                     .weight(1f),
-                list = editingList,
-                onSettle = { oldIndex, newIndex ->
-                    editingList.add(newIndex, editingList.removeAt(oldIndex))
-                },
-            ) { index, item, _ ->
-                ReorderableItem {
-                    val position = resolvePosition(index, editingList.size)
-                    val waypointIndex = editingList.subList(0, index + 1)
-                        .count { it != null && it !is RouteWaypoint.CurrentLocation } - 1
-                    val waypointLabel = if (position == WaypointPosition.Middle && item != null) {
-                        ('A' + waypointIndex.coerceAtLeast(0)).toString()
-                    } else {
-                        null
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .height(32.dp)
-                            .fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        HomeMapRouteWaypointRow(
-                            modifier = Modifier.weight(1f),
-                            waypoint = item,
-                            position = position,
-                            isEditing = true,
-                            waypointLabel = waypointLabel,
-                            onClicked = { onWaypointClicked(index) },
+            ) {
+                Column {
+                    for (index in editingList.indices) {
+                        Box(
+                            modifier = Modifier.height(ITEM_HEIGHT),
                         )
 
-                        Icon(
-                            modifier = Modifier.draggableHandle(),
-                            imageVector = Icons.Filled.DragHandle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-
-                        if (item != null) {
-                            IconButton(
-                                modifier = Modifier.size(40.dp),
-                                onClick = {
-                                    editingList.removeAt(index)
-                                    if (editingList.none { it == null } && editingList.size < MAX_WAYPOINTS) {
-                                        editingList.add(null)
-                                    }
-                                },
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = null,
-                                )
-                            }
-                        } else {
-                            Box(
-                                modifier = Modifier.size(40.dp),
+                        if (index < editingList.lastIndex) {
+                            HomeMapRouteWaypointDivider(
+                                modifier = Modifier.height(DIVIDER_HEIGHT),
                             )
                         }
                     }
                 }
 
-                if (index < editingList.lastIndex) {
-                    HomeMapRouteWaypointDivider(
-                        modifier = Modifier.height(16.dp)
-                    )
+                ReorderableColumn(
+                    list = editingList,
+                    onSettle = { oldIndex, newIndex ->
+                        editingList.add(newIndex, editingList.removeAt(oldIndex))
+                    },
+                    verticalArrangement = Arrangement.spacedBy(DIVIDER_HEIGHT),
+                ) { index, item, _ ->
+                    ReorderableItem {
+                        val position = resolvePosition(index, editingList.size)
+                        val waypointIndex = editingList.subList(0, index + 1)
+                            .count { it != null && it !is RouteWaypoint.CurrentLocation } - 1
+                        val waypointLabel = if (position == WaypointPosition.Middle && item != null) {
+                            ('A' + waypointIndex.coerceAtLeast(0)).toString()
+                        } else {
+                            null
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .height(ITEM_HEIGHT)
+                                .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            HomeMapRouteWaypointRow(
+                                modifier = Modifier.weight(1f),
+                                waypoint = item,
+                                position = position,
+                                isEditing = true,
+                                waypointLabel = waypointLabel,
+                                onClicked = { onWaypointClicked(index) },
+                            )
+
+                            Icon(
+                                modifier = Modifier.draggableHandle(),
+                                imageVector = Icons.Filled.DragHandle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+
+                            if (item != null) {
+                                IconButton(
+                                    modifier = Modifier.size(40.dp),
+                                    onClick = {
+                                        editingList.removeAt(index)
+                                        if (editingList.none { it == null } && editingList.size < MAX_WAYPOINTS) {
+                                            editingList.add(null)
+                                        }
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = null,
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier.size(40.dp),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
