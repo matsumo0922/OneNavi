@@ -37,15 +37,19 @@ class MapboxNavigationRouteDataSource(
         originLongitude: Double,
         destinationLatitude: Double,
         destinationLongitude: Double,
+        intermediateWaypoints: List<Pair<Double, Double>>,
     ): Result<List<RouteResult>> = runCatching {
         val origin = Point.fromLngLat(originLongitude, originLatitude)
         val destination = Point.fromLngLat(destinationLongitude, destinationLatitude)
+        val waypointPoints = intermediateWaypoints.map { (lat, lng) ->
+            Point.fromLngLat(lng, lat)
+        }
         val navigation = navigationProvider()
 
         val baseOptions = RouteOptions.builder()
             .applyDefaultNavigationOptions()
             .applyLanguageAndVoiceUnitOptions(context)
-            .coordinatesList(listOf(origin, destination))
+            .coordinatesList(listOf(origin) + waypointPoints + listOf(destination))
 
         // まず通常検索（alternatives=true で最大3件）
         val defaultOptions = baseOptions
