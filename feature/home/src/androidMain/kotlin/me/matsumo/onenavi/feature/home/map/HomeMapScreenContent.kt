@@ -188,7 +188,22 @@ internal actual fun HomeMapScreenContent(
     }
 
     LaunchedEffect(routeResults, mapView) {
-        if (routeResults.isEmpty()) return@LaunchedEffect
+        if (routeResults.isEmpty()) {
+            val result = selectedResult ?: return@LaunchedEffect
+            trackingMode = null
+            viewportState.easeTo(
+                cameraOptions = CameraOptions.Builder()
+                    .center(fromLngLat(result.longitude, result.latitude))
+                    .zoom(FOLLOW_PUCK_ZOOM)
+                    .pitch(0.0)
+                    .bearing(0.0)
+                    .build(),
+                animationOptions = MapAnimationOptions.Builder()
+                    .duration(1500)
+                    .build(),
+            )
+            return@LaunchedEffect
+        }
         val currentMapView = mapView ?: return@LaunchedEffect
 
         trackingMode = LocationTrackingMode.TopDownNorth
@@ -289,6 +304,7 @@ internal actual fun HomeMapScreenContent(
                         .onGloballyPositioned { topAppBarHeightPx = it.size.height.toFloat() },
                     suggestions = suggestions,
                     histories = histories,
+                    selectedResult = selectedResult,
                     viewportState = viewportState,
                     onViewEvent = viewModel::onViewEvent,
                 )
