@@ -279,7 +279,7 @@ private fun HomeMapSearchInputField(
 }
 
 @Composable
-private fun HomeMapSearchSuggestionList(
+internal fun HomeMapSearchSuggestionList(
     suggestions: ImmutableList<SearchSuggestionItem>,
     onSuggestionSelected: (SearchSuggestionItem) -> Unit,
     modifier: Modifier = Modifier,
@@ -328,7 +328,7 @@ private fun HomeMapSearchSuggestionList(
 }
 
 @Composable
-private fun HomeMapSearchHistoryList(
+internal fun HomeMapSearchHistoryList(
     histories: ImmutableList<SearchHistory>,
     onHistorySelected: (SearchHistory) -> Unit,
     onRemoveHistory: (String) -> Unit,

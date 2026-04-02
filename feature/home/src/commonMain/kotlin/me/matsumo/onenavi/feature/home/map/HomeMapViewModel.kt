@@ -68,6 +68,9 @@ class HomeMapViewModel(
     private val _waypoints = MutableStateFlow<ImmutableList<RouteWaypoint>>(persistentListOf())
     val waypoints: StateFlow<ImmutableList<RouteWaypoint>> = _waypoints.asStateFlow()
 
+    private val _editingWaypointIndex = MutableStateFlow<Int?>(null)
+    val editingWaypointIndex: StateFlow<Int?> = _editingWaypointIndex.asStateFlow()
+
     private var searchJob: Job? = null
 
     init {
@@ -93,7 +96,7 @@ class HomeMapViewModel(
             HomeMapViewEvent.OnDismissSearchResult -> onDismissSearchResults()
             HomeMapViewEvent.OnSwapOriginDestination -> onSwapOriginDestination()
             is HomeMapViewEvent.OnRouteWaypointsConfirmed -> onRouteWaypointsConfirmed(event.waypoints)
-            is HomeMapViewEvent.OnWaypointClicked -> { /* TODO: 地点編集画面への遷移 */ }
+            is HomeMapViewEvent.OnWaypointClicked -> onWaypointClicked(event.index)
         }
     }
 
@@ -253,6 +256,59 @@ class HomeMapViewModel(
                     _routeResults.value = persistentListOf()
                 }
         }
+    }
+
+    private fun onWaypointClicked(index: Int) {
+        _editingWaypointIndex.value = index
+    }
+
+    fun onWaypointSuggestionSelected(suggestion: SearchSuggestionItem) {
+        val index = _editingWaypointIndex.value ?: return
+
+        viewModelScope.launch {
+            searchRepository.select(suggestion.id)
+                .onSuccess { result ->
+                    searchRepository.addHistory(result)
+                    updateWaypoint(
+                        index = index,
+                        place = RouteWaypoint.Place(
+                            name = result.name,
+                            latitude = result.latitude,
+                            longitude = result.longitude,
+                        ),
+                    )
+                    _editingWaypointIndex.value = null
+                }
+                .onFailure {
+                    Napier.e(it) { "Failed to select waypoint suggestion. id: ${suggestion.id}" }
+                }
+        }
+    }
+
+    fun onWaypointHistorySelected(history: SearchHistory) {
+        val index = _editingWaypointIndex.value ?: return
+
+        updateWaypoint(
+            index = index,
+            place = RouteWaypoint.Place(
+                name = history.name,
+                latitude = history.latitude,
+                longitude = history.longitude,
+            ),
+        )
+        _editingWaypointIndex.value = null
+    }
+
+    fun onWaypointSearchDismissed() {
+        _editingWaypointIndex.value = null
+    }
+
+    private fun updateWaypoint(index: Int, place: RouteWaypoint.Place) {
+        val current = _waypoints.value.toMutableList()
+        if (index < 0 || index > current.lastIndex) return
+
+        current[index] = place
+        _waypoints.value = current.toImmutableList()
     }
 
     fun onDismissRoutes() {
