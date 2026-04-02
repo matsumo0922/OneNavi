@@ -231,6 +231,7 @@ coil3-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil3
 coil3-network = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil3" }
 desugar = { module = "com.android.tools:desugar_jdk_libs", version = "2.1.5" }
 placeholder = { module = "com.revenuecat.purchases:placeholder", version.ref = "placeholder" }
+reorderable = { module = "sh.calvin.reorderable:reorderable", version = "3.0.0" }
 libraries-core = { module = "com.mikepenz:aboutlibraries-core", version.ref = "libraries" }
 libraries-ui = { module = "com.mikepenz:aboutlibraries-compose", version.ref = "libraries" }
 
@@ -272,6 +273,7 @@ ui-common = [
     "coil3-network",
     "kolor",
     "placeholder",
+    "reorderable",
 ]
 
 compose = [

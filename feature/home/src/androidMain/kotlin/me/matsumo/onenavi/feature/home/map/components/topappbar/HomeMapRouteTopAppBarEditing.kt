@@ -1,9 +1,12 @@
 package me.matsumo.onenavi.feature.home.map.components.topappbar
 
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -52,6 +55,7 @@ internal fun HomeMapRouteTopAppBarEditing(
     val editingList = remember(waypoints) {
         mutableStateListOf<RouteWaypoint?>().apply {
             addAll(waypoints)
+
             if (size < MAX_WAYPOINTS) {
                 add(null)
             }
@@ -65,17 +69,14 @@ internal fun HomeMapRouteTopAppBarEditing(
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
 
     Column(
-        modifier = modifier,
+        modifier = modifier.padding(4.dp),
     ) {
         Row(
-            modifier = Modifier.padding(
-                start = 4.dp,
-                top = 8.dp,
-                end = 4.dp,
-            ),
-            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
         ) {
             IconButton(
+                modifier = Modifier.size(48.dp),
                 onClick = onBackClicked,
             ) {
                 Icon(
@@ -183,9 +184,7 @@ internal fun HomeMapRouteTopAppBarEditing(
 
                     if (index < editingList.lastIndex) {
                         HomeMapRouteWaypointDivider(
-                            modifier = Modifier.padding(
-                                start = 12.dp,
-                            ),
+                            modifier = Modifier.height(16.dp)
                         )
                     }
                 }
