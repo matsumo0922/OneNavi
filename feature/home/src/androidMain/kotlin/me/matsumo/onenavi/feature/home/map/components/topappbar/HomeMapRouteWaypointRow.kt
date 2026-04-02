@@ -27,7 +27,6 @@ import me.matsumo.onenavi.core.resource.home_map_route_input_destination
 import me.matsumo.onenavi.core.resource.home_map_route_input_origin
 import me.matsumo.onenavi.core.resource.home_map_route_input_waypoint
 import me.matsumo.onenavi.core.resource.home_map_route_origin_current_location
-import me.matsumo.onenavi.feature.home.map.components.WaypointPosition
 import org.jetbrains.compose.resources.stringResource
 
 @Composable

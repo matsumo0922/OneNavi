@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
-import me.matsumo.onenavi.feature.home.map.components.resolvePosition
 
 @Composable
 internal fun HomeMapRouteTopAppBarConfirmed(
