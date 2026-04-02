@@ -1,4 +1,4 @@
-package me.matsumo.onenavi.feature.home.map.components
+package me.matsumo.onenavi.feature.home.map.components.bottomsheet
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.feature.home.map.HomeMapViewEvent
+import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPinContent
 
 @Composable
 internal fun HomeMapSearchResultSheet(

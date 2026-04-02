@@ -7,8 +7,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.SearchResultItem
-import me.matsumo.onenavi.feature.home.map.components.HomeMapSearchResultSheet
-import me.matsumo.onenavi.feature.home.map.components.HomeMapSelectedResultSheet
+import me.matsumo.onenavi.feature.home.map.components.bottomsheet.HomeMapSearchResultSheet
+import me.matsumo.onenavi.feature.home.map.components.bottomsheet.HomeMapSelectedResultSheet
 
 private val SHEET_DRAG_HANDLE_HEIGHT = 48.dp
 
