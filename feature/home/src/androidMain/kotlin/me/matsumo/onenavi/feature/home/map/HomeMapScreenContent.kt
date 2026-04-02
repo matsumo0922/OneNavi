@@ -41,6 +41,7 @@ import com.mapbox.maps.plugin.viewport.ViewportStatus
 import com.mapbox.navigation.base.route.NavigationRoute
 import kotlinx.coroutines.flow.distinctUntilChanged
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
+import me.matsumo.onenavi.feature.home.map.components.HomeMapRouteTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.HomeMapTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
 
@@ -70,6 +71,7 @@ internal actual fun HomeMapScreenContent(
     val selectedResult by viewModel.selectedResult.collectAsStateWithLifecycle()
     val routeResults by viewModel.routeResults.collectAsStateWithLifecycle()
     val selectedRouteIndex by viewModel.selectedRouteIndex.collectAsStateWithLifecycle()
+    val waypoints by viewModel.waypoints.collectAsStateWithLifecycle()
 
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
@@ -267,17 +269,30 @@ internal actual fun HomeMapScreenContent(
                 onTrackingModeChanged = { trackingMode = it },
             )
 
-            HomeMapTopAppBar(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .fillMaxWidth()
-                    .onGloballyPositioned { topAppBarHeightPx = it.size.height.toFloat() },
-                suggestions = suggestions,
-                histories = histories,
-                viewportState = viewportState,
-                onViewEvent = viewModel::onViewEvent,
-            )
+            if (routeResults.isNotEmpty() && waypoints.isNotEmpty()) {
+                HomeMapRouteTopAppBar(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .onGloballyPositioned { topAppBarHeightPx = it.size.height.toFloat() },
+                    waypoints = waypoints,
+                    onViewEvent = viewModel::onViewEvent,
+                )
+            } else {
+                HomeMapTopAppBar(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .fillMaxWidth()
+                        .onGloballyPositioned { topAppBarHeightPx = it.size.height.toFloat() },
+                    suggestions = suggestions,
+                    histories = histories,
+                    viewportState = viewportState,
+                    onViewEvent = viewModel::onViewEvent,
+                )
+            }
         }
     }
 }

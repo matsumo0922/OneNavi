@@ -70,7 +70,9 @@ internal fun HomeMapSelectedResultSheet(
     onPeekHeightMeasured: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val plusCode = remember(selectedResult) { OpenLocationCode.encode(selectedResult.latitude, selectedResult.longitude) }
+    val plusCode = remember(selectedResult) {
+        OpenLocationCode.encode(selectedResult.latitude, selectedResult.longitude)
+    }
 
     val pointItems = persistentListOf(
         InfoItem(
@@ -216,7 +218,7 @@ private fun ButtonSection(
             text = Res.string.common_share,
             icon = Icons.Filled.Share,
             onClick = onShareClicked,
-        )
+        ),
     )
 
     LazyRow(
@@ -248,7 +250,7 @@ private fun ButtonSection(
                     .background(containerColor)
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Icon(
                     modifier = Modifier.size(24.dp),
@@ -271,7 +273,7 @@ private fun ButtonSection(
 private fun IncoSection(
     title: StringResource,
     items: ImmutableList<InfoItem>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val clipboard = LocalClipboardManager.current
 
@@ -305,7 +307,7 @@ private fun IncoSection(
                     icon = item.icon,
                     onLongClick = {
                         clipboard.setText(AnnotatedString(item.value))
-                    }
+                    },
                 )
             }
         }

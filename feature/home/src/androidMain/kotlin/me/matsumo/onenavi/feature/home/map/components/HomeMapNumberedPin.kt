@@ -48,7 +48,7 @@ internal fun HomeMapNumberedPin(
 @Composable
 internal fun HomeMapNumberedPinContent(
     number: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         modifier = modifier,
