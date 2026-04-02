@@ -145,33 +145,31 @@ internal fun HomeMapsMapEffectContent(
             )
         }
 
-        if (routeResults.isNotEmpty()) {
-            MapEffect(routeResults, selectedRouteIndex) { mapView ->
-                val style = mapView.mapboxMap.style ?: return@MapEffect
+        MapEffect(routeResults, selectedRouteIndex) { mapView ->
+            val style = mapView.mapboxMap.style ?: return@MapEffect
 
-                routeCalloutAdapter.updateRouteResults(routeResults)
-
-                if (routeResults.isEmpty()) {
-                    routeLineApi.clearRouteLine { expected ->
-                        routeLineView.renderClearRouteLineValue(style, expected)
-                    }
-                    return@MapEffect
+            if (routeResults.isEmpty()) {
+                routeLineApi.clearRouteLine { expected ->
+                    routeLineView.renderClearRouteLineValue(style, expected)
                 }
+                return@MapEffect
+            }
 
-                val navigationRoutes = routeResults.mapNotNull { it.platformRoute as? NavigationRoute }
-                if (navigationRoutes.isEmpty()) return@MapEffect
+            routeCalloutAdapter.updateRouteResults(routeResults)
 
-                val reordered = if (selectedRouteIndex in navigationRoutes.indices) {
-                    val selected = navigationRoutes[selectedRouteIndex]
-                    val others = navigationRoutes.filterIndexed { index, _ -> index != selectedRouteIndex }
-                    listOf(selected) + others
-                } else {
-                    navigationRoutes
-                }
+            val navigationRoutes = routeResults.mapNotNull { it.platformRoute as? NavigationRoute }
+            if (navigationRoutes.isEmpty()) return@MapEffect
 
-                routeLineApi.setNavigationRoutes(reordered) { expected ->
-                    routeLineView.renderRouteDrawData(style, expected)
-                }
+            val reordered = if (selectedRouteIndex in navigationRoutes.indices) {
+                val selected = navigationRoutes[selectedRouteIndex]
+                val others = navigationRoutes.filterIndexed { index, _ -> index != selectedRouteIndex }
+                listOf(selected) + others
+            } else {
+                navigationRoutes
+            }
+
+            routeLineApi.setNavigationRoutes(reordered) { expected ->
+                routeLineView.renderRouteDrawData(style, expected)
             }
         }
 
