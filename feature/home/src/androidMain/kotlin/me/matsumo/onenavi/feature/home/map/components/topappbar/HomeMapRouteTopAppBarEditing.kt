@@ -1,13 +1,11 @@
 package me.matsumo.onenavi.feature.home.map.components.topappbar
 
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -21,16 +19,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
@@ -40,7 +32,7 @@ import me.matsumo.onenavi.core.resource.home_map_route_done
 import me.matsumo.onenavi.feature.home.map.components.WaypointPosition
 import me.matsumo.onenavi.feature.home.map.components.resolvePosition
 import org.jetbrains.compose.resources.stringResource
-import kotlin.math.roundToInt
+import sh.calvin.reorderable.ReorderableColumn
 
 private const val MAX_WAYPOINTS = 5
 
@@ -65,9 +57,6 @@ internal fun HomeMapRouteTopAppBarEditing(
     val confirmedCount = editingList.count { it != null }
     val canConfirm = confirmedCount >= 2
 
-    var dragIndex by remember { mutableIntStateOf(-1) }
-    var dragOffsetY by remember { mutableFloatStateOf(0f) }
-
     Column(
         modifier = modifier.padding(4.dp),
     ) {
@@ -85,17 +74,21 @@ internal fun HomeMapRouteTopAppBarEditing(
                 )
             }
 
-            Column(
-                modifier = Modifier.weight(1f),
-            ) {
-                editingList.forEachIndexed { index, waypoint ->
-                    val position = resolvePosition(
-                        index = index,
-                        totalCount = editingList.size,
-                    )
+            ReorderableColumn(
+                modifier = Modifier
+                    .padding(end = 8.dp)
+                    .padding(vertical = 8.dp)
+                    .weight(1f),
+                list = editingList,
+                onSettle = { oldIndex, newIndex ->
+                    editingList.add(newIndex, editingList.removeAt(oldIndex))
+                },
+            ) { index, item, _ ->
+                ReorderableItem {
+                    val position = resolvePosition(index, editingList.size)
                     val waypointIndex = editingList.subList(0, index + 1)
                         .count { it != null && it !is RouteWaypoint.CurrentLocation } - 1
-                    val waypointLabel = if (position == WaypointPosition.Middle && waypoint != null) {
+                    val waypointLabel = if (position == WaypointPosition.Middle && item != null) {
                         ('A' + waypointIndex.coerceAtLeast(0)).toString()
                     } else {
                         null
@@ -103,18 +96,13 @@ internal fun HomeMapRouteTopAppBarEditing(
 
                     Row(
                         modifier = Modifier
-                            .let { rowModifier ->
-                                if (index == dragIndex) {
-                                    rowModifier.offset { IntOffset(0, dragOffsetY.roundToInt()) }
-                                } else {
-                                    rowModifier
-                                }
-                            },
+                            .height(32.dp)
+                            .fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         HomeMapRouteWaypointRow(
                             modifier = Modifier.weight(1f),
-                            waypoint = waypoint,
+                            waypoint = item,
                             position = position,
                             isEditing = true,
                             waypointLabel = waypointLabel,
@@ -122,47 +110,15 @@ internal fun HomeMapRouteTopAppBarEditing(
                         )
 
                         Icon(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .padding(12.dp)
-                                .pointerInput(index) {
-                                    detectDragGestures(
-                                        onDragStart = {
-                                            dragIndex = index
-                                            dragOffsetY = 0f
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            change.consume()
-                                            dragOffsetY += dragAmount.y
-
-                                            val itemHeight = 56f
-                                            val targetIndex = (index + (dragOffsetY / itemHeight).roundToInt())
-                                                .coerceIn(0, editingList.lastIndex)
-
-                                            if (targetIndex != index && targetIndex != dragIndex) {
-                                                val item = editingList.removeAt(dragIndex)
-                                                editingList.add(targetIndex, item)
-                                                dragIndex = targetIndex
-                                                dragOffsetY = 0f
-                                            }
-                                        },
-                                        onDragEnd = {
-                                            dragIndex = -1
-                                            dragOffsetY = 0f
-                                        },
-                                        onDragCancel = {
-                                            dragIndex = -1
-                                            dragOffsetY = 0f
-                                        },
-                                    )
-                                },
+                            modifier = Modifier.draggableHandle(),
                             imageVector = Icons.Filled.DragHandle,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
 
-                        if (waypoint != null) {
+                        if (item != null) {
                             IconButton(
+                                modifier = Modifier.size(40.dp),
                                 onClick = {
                                     editingList.removeAt(index)
                                     if (editingList.none { it == null } && editingList.size < MAX_WAYPOINTS) {
@@ -177,16 +133,16 @@ internal fun HomeMapRouteTopAppBarEditing(
                             }
                         } else {
                             Box(
-                                modifier = Modifier.size(48.dp),
+                                modifier = Modifier.size(40.dp),
                             )
                         }
                     }
+                }
 
-                    if (index < editingList.lastIndex) {
-                        HomeMapRouteWaypointDivider(
-                            modifier = Modifier.height(16.dp)
-                        )
-                    }
+                if (index < editingList.lastIndex) {
+                    HomeMapRouteWaypointDivider(
+                        modifier = Modifier.height(16.dp)
+                    )
                 }
             }
         }
@@ -194,13 +150,7 @@ internal fun HomeMapRouteTopAppBarEditing(
         HorizontalDivider()
 
         Row(
-            modifier = Modifier
-                .align(Alignment.End)
-                .padding(
-                    end = 8.dp,
-                    top = 4.dp,
-                    bottom = 4.dp,
-                ),
+            modifier = Modifier.align(Alignment.End)
         ) {
             TextButton(
                 onClick = {
