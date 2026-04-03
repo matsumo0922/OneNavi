@@ -99,6 +99,10 @@ class GooglePlacesSearchDataSource(
         }
     }
 
+    override suspend fun reverseGeocode(latitude: Double, longitude: Double): Result<SearchResultItem?> {
+        return Result.failure(UnsupportedOperationException("Google reverse geocoding is no longer used"))
+    }
+
     companion object {
         private const val MAX_SEARCH_RESULTS = 10
         private const val PROXIMITY_RADIUS_METERS = 50_000.0

@@ -19,4 +19,8 @@ class IosSearchDataSource : SearchDataSource {
     override suspend fun searchMultiple(query: String, latitude: Double?, longitude: Double?): Result<List<SearchResultItem>> {
         return Result.failure(UnsupportedOperationException("Search is not available on iOS yet"))
     }
+
+    override suspend fun reverseGeocode(latitude: Double, longitude: Double): Result<SearchResultItem?> {
+        return Result.failure(UnsupportedOperationException("Search is not available on iOS yet"))
+    }
 }

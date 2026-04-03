@@ -1,13 +1,12 @@
 package me.matsumo.onenavi.core.datasource.di
 
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
-import me.matsumo.onenavi.core.datasource.GooglePlacesSearchDataSource
 import me.matsumo.onenavi.core.datasource.MapboxNavigationRouteDataSource
+import me.matsumo.onenavi.core.datasource.MapboxSearchDataSource
 import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.datasource.SearchDataSource
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelperImpl
-import me.matsumo.onenavi.core.model.AppConfig
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -20,11 +19,7 @@ internal actual val dataSourcePlatformModule: Module = module {
     }
 
     single<SearchDataSource> {
-        val appConfig: AppConfig = get()
-        GooglePlacesSearchDataSource(
-            context = get(),
-            googleApiKey = appConfig.googleApiKey,
-        )
+        MapboxSearchDataSource()
     }
 
     single<RouteDataSource> {

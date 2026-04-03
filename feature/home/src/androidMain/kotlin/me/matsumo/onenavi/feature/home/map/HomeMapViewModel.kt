@@ -279,29 +279,18 @@ class HomeMapViewModel(
     private fun onMapLandmarkSelected(name: String?, latitude: Double, longitude: Double) {
         _searchResults.value = persistentListOf()
 
-        if (name.isNullOrBlank()) {
-            _selectedResult.value = createCoordinateOnlyResult(latitude, longitude)
-            return
-        }
-
         viewModelScope.launch {
-            searchRepository.searchMultiple(name, latitude, longitude)
+            searchRepository.reverseGeocode(latitude, longitude)
                 .onSuccess { results ->
-                    val closest = results.minByOrNull { result ->
-                        val dLat = result.latitude - latitude
-                        val dLng = result.longitude - longitude
-                        dLat * dLat + dLng * dLng
-                    }
-
-                    if (closest != null) {
-                        _selectedResult.value = closest
-                        searchRepository.addHistory(closest)
+                    if (results != null) {
+                        _selectedResult.value = results
+                        searchRepository.addHistory(results)
                     } else {
                         _selectedResult.value = createCoordinateOnlyResult(latitude, longitude, name)
                     }
                 }
                 .onFailure {
-                    Napier.e(it) { "Failed to search landmark. name: $name" }
+                    Napier.e(it) { "Failed to reverse geocode landmark. name: $name" }
                     _selectedResult.value = createCoordinateOnlyResult(latitude, longitude, name)
                 }
         }

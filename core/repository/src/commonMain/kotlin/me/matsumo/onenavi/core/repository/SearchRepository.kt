@@ -29,6 +29,10 @@ class SearchRepository(
         return searchDataSource.searchMultiple(query, latitude, longitude)
     }
 
+    suspend fun reverseGeocode(latitude: Double, longitude: Double): Result<SearchResultItem?> {
+        return searchDataSource.reverseGeocode(latitude, longitude)
+    }
+
     suspend fun addHistory(result: SearchResultItem) {
         val history = SearchHistory(
             id = result.placeId,

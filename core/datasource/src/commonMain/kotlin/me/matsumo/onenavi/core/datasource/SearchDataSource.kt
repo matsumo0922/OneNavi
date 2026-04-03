@@ -8,4 +8,5 @@ interface SearchDataSource {
     suspend fun select(suggestionId: String): Result<SearchResultItem>
     suspend fun retrieve(id: String): Result<SearchResultItem>
     suspend fun searchMultiple(query: String, latitude: Double?, longitude: Double?): Result<List<SearchResultItem>>
+    suspend fun reverseGeocode(latitude: Double, longitude: Double): Result<SearchResultItem?>
 }
