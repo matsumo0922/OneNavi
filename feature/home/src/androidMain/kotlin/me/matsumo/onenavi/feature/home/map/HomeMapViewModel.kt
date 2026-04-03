@@ -73,7 +73,7 @@ class HomeMapViewModel(
     private var searchJob: Job? = null
 
     init {
-        navigationManager.onAttach()
+        navigationManager.register()
 
         @OptIn(FlowPreview::class)
         _query
@@ -85,7 +85,7 @@ class HomeMapViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        navigationManager.onDetach()
+        navigationManager.unregister()
     }
 
     fun onViewEvent(event: HomeMapViewEvent) {

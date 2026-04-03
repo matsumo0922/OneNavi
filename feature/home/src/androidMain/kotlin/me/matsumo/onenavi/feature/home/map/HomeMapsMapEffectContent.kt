@@ -195,6 +195,7 @@ internal fun HomeMapsMapEffectContent(
                 view.location.removeOnIndicatorBearingChangedListener(bearingListener)
                 view.mapboxMap.removeOnMapClickListener(mapClickListener)
                 routeCalloutAdapter.setOnCalloutClickListener(null)
+                navigationManager.teardownCamera()
             }
         }
 
