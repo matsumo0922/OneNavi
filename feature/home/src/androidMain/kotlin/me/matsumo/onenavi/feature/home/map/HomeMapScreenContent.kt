@@ -20,7 +20,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -36,14 +35,13 @@ import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportS
 import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
-import com.mapbox.maps.plugin.viewport.ViewportStatus
-import kotlinx.coroutines.flow.distinctUntilChanged
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapRouteTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapWaypointSearchScreen
+import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraState
 
 private const val FOLLOW_PUCK_ZOOM = 16.0
 private const val CAMERA_PADDING = 100.0
@@ -77,7 +75,7 @@ internal fun HomeMapScreenContent(
     val navigationRoutes by viewModel.navigationManager.routes.collectAsStateWithLifecycle()
     val alternativeRouteMetadata by viewModel.navigationManager.alternativeRouteMetadata.collectAsStateWithLifecycle()
     val routeProgress by viewModel.navigationManager.routeProgress.collectAsStateWithLifecycle()
-    val enhancedLocation by viewModel.navigationManager.enhancedLocation.collectAsStateWithLifecycle()
+    val navigationCameraState by viewModel.navigationManager.cameraState.collectAsStateWithLifecycle()
 
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
@@ -136,14 +134,10 @@ internal fun HomeMapScreenContent(
         }
     }
 
-    LaunchedEffect(viewportState) {
-        snapshotFlow { viewportState.mapViewportStatus }
-            .distinctUntilChanged()
-            .collect { status ->
-                if (status is ViewportStatus.Idle) {
-                    trackingMode = null
-                }
-            }
+    LaunchedEffect(navigationCameraState) {
+        if (navigationCameraState == NavigationCameraState.IDLE) {
+            trackingMode = null
+        }
     }
 
     LaunchedEffect(isDarkTheme) {
@@ -176,7 +170,7 @@ internal fun HomeMapScreenContent(
             pitch = 0.0,
         )
 
-        viewportState.flyTo(
+        viewModel.navigationManager.flyTo(
             cameraOptions = cameraOptions,
             animationOptions = MapAnimationOptions.Builder()
                 .duration(1500)
@@ -198,7 +192,7 @@ internal fun HomeMapScreenContent(
         trackingMode = null
         scaffoldState.bottomSheetState.partialExpand()
 
-        viewportState.easeTo(
+        viewModel.navigationManager.easeTo(
             cameraOptions = CameraOptions.Builder()
                 .center(fromLngLat(result.longitude, result.latitude))
                 .zoom(FOLLOW_PUCK_ZOOM)
@@ -215,7 +209,7 @@ internal fun HomeMapScreenContent(
         if (routeResults.isEmpty()) {
             val result = selectedResult ?: return@LaunchedEffect
             trackingMode = null
-            viewportState.easeTo(
+            viewModel.navigationManager.easeTo(
                 cameraOptions = CameraOptions.Builder()
                     .center(fromLngLat(result.longitude, result.latitude))
                     .zoom(FOLLOW_PUCK_ZOOM)
@@ -287,10 +281,10 @@ internal fun HomeMapScreenContent(
                         end = 16.dp,
                     )
                     .offset(y = -sheetVisibleHeight),
-                cameraBearing = viewportState.cameraState?.bearing ?: 0.0,
-                deviceBearing = enhancedLocation?.bearing ?: 0.0,
+                cameraBearing = mapView?.mapboxMap?.cameraState?.bearing ?: 0.0,
+                cameraZoom = mapView?.mapboxMap?.cameraState?.zoom ?: FOLLOW_PUCK_ZOOM,
                 trackingMode = trackingMode,
-                viewportState = viewportState,
+                navigationManager = viewModel.navigationManager,
                 onTrackingModeChanged = { trackingMode = it },
             )
 

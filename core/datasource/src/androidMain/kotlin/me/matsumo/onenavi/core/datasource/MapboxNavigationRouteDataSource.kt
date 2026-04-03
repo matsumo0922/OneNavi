@@ -17,6 +17,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteResult
+import java.util.UUID
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -31,6 +32,7 @@ import kotlin.coroutines.resumeWithException
 class MapboxNavigationRouteDataSource(
     private val context: Context,
     private val navigationProvider: () -> MapboxNavigation,
+    private val navigationRouteStore: NavigationRouteStore,
 ) : RouteDataSource {
 
     override suspend fun searchRoutes(
@@ -58,19 +60,14 @@ class MapboxNavigationRouteDataSource(
             .build()
 
         val defaultRoutes = requestRoutes(navigation, defaultOptions)
-        val defaultResults = defaultRoutes.map { navigationRoute ->
-            RouteResult(
-                item = navigationRoute.directionsRoute.toRouteItem(),
-                platformRoute = navigationRoute,
-            )
-        }
+        val defaultResults = defaultRoutes.map { navigationRoute -> navigationRoute.toRouteEntry() }
 
-        val hasTollFreeRoute = defaultResults.any { !it.item.hasTolls }
+        val hasTollFreeRoute = defaultResults.any { !it.result.item.hasTolls }
 
-        if (hasTollFreeRoute) {
+        val resolvedEntries = if (hasTollFreeRoute) {
             // 一般道ルートが含まれているならそのまま返す
             // 一般道ルートを先頭にソート
-            defaultResults.sortedBy { it.item.hasTolls }
+            defaultResults.sortedBy { it.result.item.hasTolls }
         } else {
             // 一般道ルートがない場合のみ、追加で exclude=toll リクエスト
             val tollFreeOptions = baseOptions
@@ -82,16 +79,17 @@ class MapboxNavigationRouteDataSource(
                 requestRoutes(navigation, tollFreeOptions)
             }.getOrDefault(emptyList())
 
-            val tollFreeResults = tollFreeRoutes.map { navigationRoute ->
-                RouteResult(
-                    item = navigationRoute.directionsRoute.toRouteItem(),
-                    platformRoute = navigationRoute,
-                )
-            }
+            val tollFreeResults = tollFreeRoutes.map { navigationRoute -> navigationRoute.toRouteEntry() }
 
             // 一般道ルートを先頭に、有料道路ルートを後ろに配置
             tollFreeResults + defaultResults
         }
+
+        navigationRouteStore.replace(
+            resolvedEntries.associate { it.result.id to it.navigationRoute },
+        )
+
+        resolvedEntries.map { it.result }
     }
 
     private fun DirectionsRoute.toRouteItem(): RouteItem {
@@ -179,5 +177,21 @@ class MapboxNavigationRouteDataSource(
                 }
             }
         }
+    }
+
+    private data class RouteEntry(
+        val result: RouteResult,
+        val navigationRoute: NavigationRoute,
+    )
+
+    private fun NavigationRoute.toRouteEntry(): RouteEntry {
+        val routeId = UUID.randomUUID().toString()
+        return RouteEntry(
+            result = RouteResult(
+                id = routeId,
+                item = directionsRoute.toRouteItem(),
+            ),
+            navigationRoute = this,
+        )
     }
 }

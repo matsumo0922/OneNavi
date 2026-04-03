@@ -2,6 +2,7 @@ package me.matsumo.onenavi.feature.home.map
 
 import androidx.compose.runtime.Immutable
 import com.mapbox.navigation.base.route.NavigationRoute
+import me.matsumo.onenavi.core.datasource.NavigationRouteStore
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.RouteResult as CoreRouteResult
 
@@ -20,10 +21,10 @@ data class RouteResult(
 
 /**
  * core/model の RouteResult から feature 層の型安全な RouteResult に変換する。
- * [CoreRouteResult.platformRoute] が [NavigationRoute] でない場合は null を返す。
+ * [routeStore] から [NavigationRoute] を解決できない場合は null を返す。
  */
-fun CoreRouteResult.toFeatureRouteResult(): RouteResult? {
-    val navRoute = platformRoute as? NavigationRoute ?: return null
+fun CoreRouteResult.toFeatureRouteResult(routeStore: NavigationRouteStore): RouteResult? {
+    val navRoute = routeStore.get(id) ?: return null
     return RouteResult(
         item = item,
         navigationRoute = navRoute,

@@ -1,8 +1,10 @@
 package me.matsumo.onenavi.feature.home.map
 
 import com.mapbox.maps.MapView
+import com.mapbox.maps.CameraOptions
 import com.mapbox.common.location.Location
 import com.mapbox.maps.plugin.animation.camera
+import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.base.trip.model.RouteProgress
@@ -19,6 +21,7 @@ import com.mapbox.navigation.ui.maps.camera.NavigationCamera
 import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
 import com.mapbox.navigation.ui.maps.camera.lifecycle.NavigationBasicGesturesHandler
 import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraState
+import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraStateChangedObserver
 import com.mapbox.navigation.ui.maps.location.NavigationLocationProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -61,6 +64,11 @@ class HomeMapNavigationManager {
     /** 現在の enhanced location。現在地起点のルート探索や bearing 参照に使う。 */
     val enhancedLocation: StateFlow<Location?> = _enhancedLocation.asStateFlow()
 
+    private val _cameraState = MutableStateFlow(NavigationCameraState.IDLE)
+
+    /** NavigationCamera の現在 state。UI の追従モードと同期する。 */
+    val cameraState: StateFlow<NavigationCameraState> = _cameraState.asStateFlow()
+
     // --- Camera ---
 
     /** NavigationCamera。MapView セットアップ後に初期化される。 */
@@ -70,6 +78,8 @@ class HomeMapNavigationManager {
     /** ViewportDataSource。ルート・位置に基づくカメラ位置を計算する。 */
     var viewportDataSource: MapboxNavigationViewportDataSource? = null
         private set
+
+    private var mapView: MapView? = null
 
     // --- Location ---
 
@@ -139,6 +149,10 @@ class HomeMapNavigationManager {
         viewportDataSource?.evaluate()
     }
 
+    private val cameraStateObserver = NavigationCameraStateChangedObserver { state ->
+        _cameraState.value = state
+    }
+
     /**
      * Navigation SDK の Observer を登録する。
      * MapboxNavigation インスタンスが利用可能になった時点で自動コールバックされる。
@@ -160,14 +174,18 @@ class HomeMapNavigationManager {
      * Camera リソースを破棄する。MapView が dispose された時に呼ぶ。
      */
     fun teardownCamera() {
+        navigationCamera?.unregisterNavigationCameraStateChangeObserver(cameraStateObserver)
         navigationCamera = null
         viewportDataSource = null
+        mapView = null
+        _cameraState.value = NavigationCameraState.IDLE
     }
 
     /**
      * MapView が利用可能になった時点で Camera を初期化する。
      */
     fun setupCamera(mapView: MapView) {
+        this.mapView = mapView
         val mapboxMap = mapView.mapboxMap
         val dataSource = MapboxNavigationViewportDataSource(mapboxMap)
         viewportDataSource = dataSource
@@ -177,6 +195,7 @@ class HomeMapNavigationManager {
             mapView.camera,
             dataSource,
         )
+        camera.registerNavigationCameraStateChangeObserver(cameraStateObserver)
         navigationCamera = camera
 
         // ユーザーのジェスチャー操作で Idle に自動遷移
@@ -204,6 +223,37 @@ class HomeMapNavigationManager {
      */
     fun requestCameraIdle() {
         navigationCamera?.requestNavigationCameraToIdle()
+    }
+
+    fun easeTo(
+        cameraOptions: CameraOptions,
+        animationOptions: MapAnimationOptions = MapAnimationOptions.Builder().build(),
+    ) {
+        requestCameraIdle()
+        mapView?.camera?.easeTo(cameraOptions, animationOptions)
+    }
+
+    fun flyTo(
+        cameraOptions: CameraOptions,
+        animationOptions: MapAnimationOptions = MapAnimationOptions.Builder().build(),
+    ) {
+        requestCameraIdle()
+        mapView?.camera?.flyTo(cameraOptions, animationOptions)
+    }
+
+    fun updateFollowingCamera(
+        zoom: Double? = null,
+        pitch: Double? = null,
+        bearing: Double? = null,
+    ) {
+        viewportDataSource?.clearFollowingOverrides()
+        zoom?.let { viewportDataSource?.followingZoomPropertyOverride(it) }
+        pitch?.let { viewportDataSource?.followingPitchPropertyOverride(it) }
+        if (bearing != null) {
+            viewportDataSource?.followingBearingPropertyOverride(bearing)
+        }
+        viewportDataSource?.evaluate()
+        requestCameraFollowing()
     }
 
     /**

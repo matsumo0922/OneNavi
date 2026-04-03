@@ -3,6 +3,7 @@ package me.matsumo.onenavi.core.datasource.di
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
 import me.matsumo.onenavi.core.datasource.MapboxNavigationRouteDataSource
 import me.matsumo.onenavi.core.datasource.MapboxSearchDataSource
+import me.matsumo.onenavi.core.datasource.NavigationRouteStore
 import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.datasource.SearchDataSource
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
@@ -22,6 +23,8 @@ internal actual val dataSourcePlatformModule: Module = module {
         MapboxSearchDataSource()
     }
 
+    single { NavigationRouteStore() }
+
     single<RouteDataSource> {
         MapboxNavigationRouteDataSource(
             context = get(),
@@ -29,6 +32,7 @@ internal actual val dataSourcePlatformModule: Module = module {
                 MapboxNavigationApp.current()
                     ?: error("MapboxNavigation is not yet available")
             },
+            navigationRouteStore = get(),
         )
     }
 }

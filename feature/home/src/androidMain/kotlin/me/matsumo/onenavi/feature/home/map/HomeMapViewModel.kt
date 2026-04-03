@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import me.matsumo.onenavi.core.datasource.NavigationRouteStore
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -30,6 +31,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class HomeMapViewModel(
     private val searchRepository: SearchRepository,
     private val routeRepository: RouteRepository,
+    private val navigationRouteStore: NavigationRouteStore,
     internal val navigationManager: HomeMapNavigationManager,
 ) : ViewModel() {
 
@@ -256,7 +258,7 @@ class HomeMapViewModel(
                 intermediateWaypoints = intermediateWaypoints,
             )
                 .onSuccess { coreResults ->
-                    val featureResults = coreResults.mapNotNull { it.toFeatureRouteResult() }
+                    val featureResults = coreResults.mapNotNull { it.toFeatureRouteResult(navigationRouteStore) }
                     _routeResults.value = featureResults.toImmutableList()
                     _selectedRouteIndex.value = 0
 
