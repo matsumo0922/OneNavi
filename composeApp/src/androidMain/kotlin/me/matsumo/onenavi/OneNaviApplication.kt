@@ -34,7 +34,7 @@ class OneNaviApplication : Application(), KoinStartup {
 
     private fun setupMapboxLanguage() {
         val settingsService = SettingsServiceFactory.getInstance(
-            SettingsServiceStorageType.NON_PERSISTENT,
+            SettingsServiceStorageType.PERSISTENT,
         )
 
         settingsService.set(
