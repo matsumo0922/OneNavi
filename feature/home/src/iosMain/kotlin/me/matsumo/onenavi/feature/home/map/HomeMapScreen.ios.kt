@@ -8,10 +8,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
 @Composable
-internal actual fun HomeMapScreenContent(
-    viewModel: HomeMapViewModel,
-    modifier: Modifier,
-) {
+internal actual fun HomeMapScreen(modifier: Modifier) {
     Box(
         modifier = modifier,
         contentAlignment = Alignment.Center,

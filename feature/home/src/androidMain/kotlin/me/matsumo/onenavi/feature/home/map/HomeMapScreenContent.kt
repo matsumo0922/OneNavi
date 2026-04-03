@@ -61,7 +61,7 @@ private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
 @Suppress("ParamsComparedByRef")
 @OptIn(ExperimentalMaterial3Api::class, MapboxExperimental::class)
 @Composable
-internal actual fun HomeMapScreenContent(
+internal fun HomeMapScreenContent(
     viewModel: HomeMapViewModel,
     modifier: Modifier,
 ) {
