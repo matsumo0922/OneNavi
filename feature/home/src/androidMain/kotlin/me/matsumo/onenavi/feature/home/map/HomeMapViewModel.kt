@@ -14,11 +14,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.seconds
 import me.matsumo.onenavi.core.model.AppConfig
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
@@ -84,6 +87,17 @@ class HomeMapViewModel(
             .debounce(DEBOUNCE.milliseconds)
             .distinctUntilChanged()
             .onEach { query -> performSearch(query) }
+            .launchIn(viewModelScope)
+
+        // enhanced location を 5 秒間隔で throttle して検索 bias 用に保持
+        @OptIn(FlowPreview::class)
+        navigationManager.enhancedLocation
+            .filterNotNull()
+            .sample(LOCATION_THROTTLE_INTERVAL)
+            .onEach { location ->
+                _userLatitude.value = location.latitude
+                _userLongitude.value = location.longitude
+            }
             .launchIn(viewModelScope)
     }
 
@@ -174,11 +188,6 @@ class HomeMapViewModel(
         viewModelScope.launch {
             searchRepository.addHistory(result)
         }
-    }
-
-    fun onUserLocationUpdated(latitude: Double, longitude: Double) {
-        _userLatitude.value = latitude
-        _userLongitude.value = longitude
     }
 
     private fun onRouteSearch() {
@@ -414,5 +423,6 @@ class HomeMapViewModel(
 
     companion object {
         private const val DEBOUNCE = 300L
+        private val LOCATION_THROTTLE_INTERVAL = 5.seconds
     }
 }
