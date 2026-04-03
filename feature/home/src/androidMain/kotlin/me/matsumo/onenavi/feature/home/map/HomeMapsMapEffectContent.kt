@@ -18,7 +18,6 @@ import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
 import com.mapbox.maps.extension.compose.annotation.Marker
 import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
 import com.mapbox.maps.extension.compose.style.standard.StandardStyleState
-import com.mapbox.maps.extension.localization.localizeLabels
 import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
@@ -36,7 +35,6 @@ import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
 import me.matsumo.onenavi.feature.home.map.components.HomeMapRouteCalloutAdapter
 import me.matsumo.onenavi.feature.home.map.components.HomeMapWaypointPin
-import java.util.*
 import android.graphics.Color as AndroidColor
 
 @Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
@@ -130,7 +128,6 @@ internal fun HomeMapsMapEffectContent(
             view.location.locationPuck = createDefault2DPuck(withBearing = true)
             view.location.puckBearing = PuckBearing.HEADING
             view.location.puckBearingEnabled = true
-            view.mapboxMap.style?.localizeLabels(Locale.JAPANESE)
             view.location.addOnIndicatorPositionChangedListener { point ->
                 onUserLocationUpdated(
                     point.latitude(),
