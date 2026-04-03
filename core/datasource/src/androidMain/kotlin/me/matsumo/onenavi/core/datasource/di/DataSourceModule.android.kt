@@ -30,7 +30,10 @@ internal actual val dataSourcePlatformModule: Module = module {
     single<RouteDataSource> {
         MapboxNavigationRouteDataSource(
             context = get(),
-            navigationProvider = { requireNotNull(MapboxNavigationApp.current()) },
+            navigationProvider = {
+                MapboxNavigationApp.current()
+                    ?: error("MapboxNavigation is not yet available")
+            },
         )
     }
 }

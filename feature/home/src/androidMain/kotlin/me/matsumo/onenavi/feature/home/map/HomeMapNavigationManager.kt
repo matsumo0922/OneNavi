@@ -6,6 +6,7 @@ import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
+import com.mapbox.navigation.core.lifecycle.MapboxNavigationObserver
 import com.mapbox.navigation.ui.maps.camera.NavigationCamera
 import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
 import com.mapbox.navigation.ui.maps.camera.lifecycle.NavigationBasicGesturesHandler
@@ -53,22 +54,40 @@ class HomeMapNavigationManager {
 
     // --- Lifecycle ---
 
-    /**
-     * Navigation SDK に接続する。
-     */
-    fun onAttach() {
-        val navigation = MapboxNavigationApp.current() ?: return
-        mapboxNavigation = navigation
+    private val navigationObserver = object : MapboxNavigationObserver {
+        override fun onAttached(mapboxNavigation: MapboxNavigation) {
+            this@HomeMapNavigationManager.mapboxNavigation = mapboxNavigation
+        }
+
+        override fun onDetached(mapboxNavigation: MapboxNavigation) {
+            this@HomeMapNavigationManager.mapboxNavigation = null
+        }
     }
 
     /**
-     * Navigation SDK から切断する。
+     * Navigation SDK の Observer を登録する。
+     * MapboxNavigation インスタンスが利用可能になった時点で自動コールバックされる。
      */
-    fun onDetach() {
-        mapboxNavigation = null
+    fun register() {
+        MapboxNavigationApp.registerObserver(navigationObserver)
+    }
+
+    /**
+     * Navigation SDK の Observer を解除する。
+     */
+    fun unregister() {
+        MapboxNavigationApp.unregisterObserver(navigationObserver)
     }
 
     // --- Camera セットアップ ---
+
+    /**
+     * Camera リソースを破棄する。MapView が dispose された時に呼ぶ。
+     */
+    fun teardownCamera() {
+        navigationCamera = null
+        viewportDataSource = null
+    }
 
     /**
      * MapView が利用可能になった時点で Camera を初期化する。
@@ -145,8 +164,8 @@ class HomeMapNavigationManager {
     fun selectRoute(index: Int) {
         val current = _routes.value
         if (index !in current.indices) return
-        _selectedRouteIndex.value = index
         val reordered = listOf(current[index]) + current.filterIndexed { currentIndex, _ -> currentIndex != index }
+        _selectedRouteIndex.value = 0
         _routes.value = reordered
         mapboxNavigation?.setNavigationRoutes(reordered)
     }
