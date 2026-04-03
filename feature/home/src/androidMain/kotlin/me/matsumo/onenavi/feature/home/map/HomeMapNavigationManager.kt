@@ -1,15 +1,20 @@
 package me.matsumo.onenavi.feature.home.map
 
 import com.mapbox.maps.MapView
+import com.mapbox.common.location.Location
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.base.route.NavigationRoute
+import com.mapbox.navigation.base.trip.model.RouteProgress
 import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.directions.session.RoutesObserver
 import com.mapbox.navigation.core.directions.session.RoutesUpdatedResult
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationObserver
 import com.mapbox.navigation.core.routealternatives.AlternativeRouteMetadata
+import com.mapbox.navigation.core.trip.session.LocationMatcherResult
+import com.mapbox.navigation.core.trip.session.LocationObserver
+import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.ui.maps.camera.NavigationCamera
 import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
 import com.mapbox.navigation.ui.maps.camera.lifecycle.NavigationBasicGesturesHandler
@@ -46,6 +51,11 @@ class HomeMapNavigationManager {
     /** 現在選択中のルートインデックス。 */
     val selectedRouteIndex: StateFlow<Int> = _selectedRouteIndex.asStateFlow()
 
+    private val _routeProgress = MutableStateFlow<RouteProgress?>(null)
+
+    /** 現在の RouteProgress。traveled route / vanishing route line に使う。 */
+    val routeProgress: StateFlow<RouteProgress?> = _routeProgress.asStateFlow()
+
     // --- Camera ---
 
     /** NavigationCamera。MapView セットアップ後に初期化される。 */
@@ -67,6 +77,9 @@ class HomeMapNavigationManager {
         override fun onAttached(mapboxNavigation: MapboxNavigation) {
             this@HomeMapNavigationManager.mapboxNavigation = mapboxNavigation
             mapboxNavigation.registerRoutesObserver(routesObserver)
+            mapboxNavigation.registerLocationObserver(locationObserver)
+            mapboxNavigation.registerRouteProgressObserver(routeProgressObserver)
+            mapboxNavigation.startTripSessionWithPermissionCheck()
 
             if (_routes.value.isNotEmpty()) {
                 mapboxNavigation.setNavigationRoutes(_routes.value)
@@ -75,6 +88,9 @@ class HomeMapNavigationManager {
 
         override fun onDetached(mapboxNavigation: MapboxNavigation) {
             mapboxNavigation.unregisterRoutesObserver(routesObserver)
+            mapboxNavigation.unregisterLocationObserver(locationObserver)
+            mapboxNavigation.unregisterRouteProgressObserver(routeProgressObserver)
+            mapboxNavigation.stopTripSession()
             this@HomeMapNavigationManager.mapboxNavigation = null
         }
     }
@@ -91,9 +107,30 @@ class HomeMapNavigationManager {
             viewportDataSource?.onRouteChanged(navigationRoutes.first())
             viewportDataSource?.evaluate()
         } else {
+            _routeProgress.value = null
             viewportDataSource?.clearRouteData()
             viewportDataSource?.evaluate()
         }
+    }
+
+    private val locationObserver = object : LocationObserver {
+        override fun onNewRawLocation(rawLocation: Location) = Unit
+
+        override fun onNewLocationMatcherResult(locationMatcherResult: LocationMatcherResult) {
+            val enhancedLocation = locationMatcherResult.enhancedLocation
+            navigationLocationProvider.changePosition(
+                enhancedLocation,
+                locationMatcherResult.keyPoints,
+            )
+            viewportDataSource?.onLocationChanged(enhancedLocation)
+            viewportDataSource?.evaluate()
+        }
+    }
+
+    private val routeProgressObserver = RouteProgressObserver { routeProgress ->
+        _routeProgress.value = routeProgress
+        viewportDataSource?.onRouteProgressChanged(routeProgress)
+        viewportDataSource?.evaluate()
     }
 
     /**
@@ -198,6 +235,7 @@ class HomeMapNavigationManager {
         _selectedRouteIndex.value = -1
         _routes.value = emptyList()
         _alternativeRouteMetadata.value = emptyList()
+        _routeProgress.value = null
         mapboxNavigation?.setNavigationRoutes(emptyList())
         viewportDataSource?.clearRouteData()
         viewportDataSource?.evaluate()

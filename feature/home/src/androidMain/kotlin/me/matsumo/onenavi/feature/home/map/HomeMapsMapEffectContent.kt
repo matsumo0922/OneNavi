@@ -27,6 +27,7 @@ import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.base.route.NavigationRoute
+import com.mapbox.navigation.base.trip.model.RouteProgress
 import com.mapbox.navigation.core.routealternatives.AlternativeRouteMetadata
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
@@ -57,6 +58,7 @@ internal fun HomeMapsMapEffectContent(
     waypoints: ImmutableList<RouteWaypoint>,
     navigationRoutes: List<NavigationRoute>,
     alternativeRouteMetadata: List<AlternativeRouteMetadata>,
+    routeProgress: RouteProgress?,
     navigationManager: HomeMapNavigationManager,
     onMapViewChanged: (MapView) -> Unit,
     onUserLocationUpdated: (latitude: Double, longitude: Double) -> Unit,
@@ -144,6 +146,7 @@ internal fun HomeMapsMapEffectContent(
 
             // Location puck セットアップ
             view.location.enabled = true
+            view.location.setLocationProvider(navigationManager.navigationLocationProvider)
             view.location.locationPuck = createDefault2DPuck(withBearing = true)
             view.location.puckBearing = PuckBearing.HEADING
             view.location.puckBearingEnabled = true
@@ -219,6 +222,15 @@ internal fun HomeMapsMapEffectContent(
 
             routeLineApi.setNavigationRoutes(navigationRoutes, alternativeRouteMetadata) { expected ->
                 routeLineView.renderRouteDrawData(style, expected)
+            }
+        }
+
+        MapEffect(routeProgress) { mapView ->
+            val currentRouteProgress = routeProgress ?: return@MapEffect
+            val style = mapView.mapboxMap.style ?: return@MapEffect
+
+            routeLineApi.updateWithRouteProgress(currentRouteProgress) { expected ->
+                routeLineView.renderRouteLineUpdate(style, expected)
             }
         }
 

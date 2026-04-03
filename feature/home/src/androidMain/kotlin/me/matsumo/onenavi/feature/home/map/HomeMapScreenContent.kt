@@ -76,6 +76,7 @@ internal fun HomeMapScreenContent(
     val waypointEditResult by viewModel.waypointEditResult.collectAsStateWithLifecycle()
     val navigationRoutes by viewModel.navigationManager.routes.collectAsStateWithLifecycle()
     val alternativeRouteMetadata by viewModel.navigationManager.alternativeRouteMetadata.collectAsStateWithLifecycle()
+    val routeProgress by viewModel.navigationManager.routeProgress.collectAsStateWithLifecycle()
 
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
@@ -272,6 +273,7 @@ internal fun HomeMapScreenContent(
                 waypoints = waypoints,
                 navigationRoutes = navigationRoutes,
                 alternativeRouteMetadata = alternativeRouteMetadata,
+                routeProgress = routeProgress,
                 navigationManager = viewModel.navigationManager,
                 onMapViewChanged = { mapView = it },
                 onUserLocationUpdated = viewModel::onUserLocationUpdated,
