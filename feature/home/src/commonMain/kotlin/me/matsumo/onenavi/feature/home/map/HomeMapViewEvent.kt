@@ -54,4 +54,10 @@ sealed interface HomeMapViewEvent {
     data class OnWaypointClicked(
         val index: Int,
     ) : HomeMapViewEvent
+
+    data class OnMapLandmarkSelected(
+        val name: String,
+        val latitude: Double,
+        val longitude: Double,
+    ) : HomeMapViewEvent
 }

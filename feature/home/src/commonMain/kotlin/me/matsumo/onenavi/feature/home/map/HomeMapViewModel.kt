@@ -100,6 +100,7 @@ class HomeMapViewModel(
             HomeMapViewEvent.OnSwapOriginDestination -> onSwapOriginDestination()
             is HomeMapViewEvent.OnRouteWaypointsConfirmed -> onRouteWaypointsConfirmed(event.waypoints)
             is HomeMapViewEvent.OnWaypointClicked -> onWaypointClicked(event.index)
+            is HomeMapViewEvent.OnMapLandmarkSelected -> onMapLandmarkSelected(event.name, event.latitude, event.longitude)
         }
     }
 
@@ -257,6 +258,26 @@ class HomeMapViewModel(
                 .onFailure {
                     Napier.e(it) { "Failed to search routes." }
                     _routeResults.value = persistentListOf()
+                }
+        }
+    }
+
+    private fun onMapLandmarkSelected(name: String, latitude: Double, longitude: Double) {
+        viewModelScope.launch {
+            searchRepository.searchMultiple(name, latitude, longitude)
+                .onSuccess { results ->
+                    val closest = results.minByOrNull { result ->
+                        val dLat = result.latitude - latitude
+                        val dLng = result.longitude - longitude
+                        dLat * dLat + dLng * dLng
+                    } ?: return@onSuccess
+
+                    _searchResults.value = persistentListOf()
+                    _selectedResult.value = closest
+                    searchRepository.addHistory(closest)
+                }
+                .onFailure {
+                    Napier.e(it) { "Failed to search landmark. name: $name" }
                 }
         }
     }
