@@ -27,7 +27,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point.fromLngLat
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.EdgeInsets
@@ -133,10 +132,6 @@ internal fun HomeMapScreenContent(
             val offset = runCatching { scaffoldState.bottomSheetState.requireOffset() }.getOrDefault(contentHeight)
             with(density) { (contentHeight - offset).coerceAtLeast(0f).toDp() }
         }
-    }
-
-    LaunchedEffect(viewModel.mapBoxToken) {
-        MapboxOptions.accessToken = viewModel.mapBoxToken
     }
 
     LaunchedEffect(viewportState) {

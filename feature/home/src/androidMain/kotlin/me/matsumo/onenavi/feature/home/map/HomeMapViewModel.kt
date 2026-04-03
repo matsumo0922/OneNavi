@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
-import me.matsumo.onenavi.core.model.AppConfig
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -32,13 +31,10 @@ import me.matsumo.onenavi.core.repository.SearchRepository
 import kotlin.time.Duration.Companion.milliseconds
 
 class HomeMapViewModel(
-    private val appConfig: AppConfig,
     private val searchRepository: SearchRepository,
     private val routeRepository: RouteRepository,
     internal val navigationManager: HomeMapNavigationManager,
 ) : ViewModel() {
-
-    val mapBoxToken: String get() = appConfig.mapBoxToken
 
     private val _query = MutableStateFlow("")
 
