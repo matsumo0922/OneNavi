@@ -271,6 +271,15 @@ internal actual fun HomeMapScreenContent(
                 waypoints = waypoints,
                 onMapViewChanged = { mapView = it },
                 onUserLocationUpdated = viewModel::onUserLocationUpdated,
+                onMapLandmarkClicked = { name, latitude, longitude ->
+                    viewModel.onViewEvent(
+                        HomeMapViewEvent.OnMapLandmarkSelected(
+                            name = name,
+                            latitude = latitude,
+                            longitude = longitude,
+                        ),
+                    )
+                },
                 onBearingChanged = { deviceBearing = it },
             )
 
