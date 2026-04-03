@@ -6,7 +6,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
-import me.matsumo.onenavi.core.model.RouteResult
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.feature.home.map.components.bottomsheet.HomeMapSearchResultSheet
 import me.matsumo.onenavi.feature.home.map.components.bottomsheet.HomeMapSelectedResultSheet

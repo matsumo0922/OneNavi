@@ -34,7 +34,6 @@ import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineViewOptions
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineColorResources
 import kotlinx.collections.immutable.ImmutableList
-import me.matsumo.onenavi.core.model.RouteResult
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
@@ -171,7 +170,7 @@ internal fun HomeMapsMapEffectContent(
                 routeLineApi.findClosestRoute(point, view.mapboxMap, ROUTE_CLICK_PADDING) { result ->
                     result.onValue { closestRoute ->
                         val clickedRoute = closestRoute.navigationRoute
-                        val index = results.indexOfFirst { it.platformRoute === clickedRoute }
+                        val index = results.indexOfFirst { it.navigationRoute === clickedRoute }
                         if (index >= 0 && index != currentSelectedRouteIndex.value) {
                             currentOnRouteSelected.value(index)
                         }
@@ -184,7 +183,7 @@ internal fun HomeMapsMapEffectContent(
             // 吹き出しタップで選択切り替え
             routeCalloutAdapter.setOnCalloutClickListener { clickedRoute ->
                 val results = currentRouteResults.value
-                val index = results.indexOfFirst { it.platformRoute === clickedRoute }
+                val index = results.indexOfFirst { it.navigationRoute === clickedRoute }
                 if (index >= 0 && index != currentSelectedRouteIndex.value) {
                     currentOnRouteSelected.value(index)
                 }
@@ -209,8 +208,7 @@ internal fun HomeMapsMapEffectContent(
                 return@MapEffect
             }
 
-            val navigationRoutes = routeResults.mapNotNull { it.platformRoute as? NavigationRoute }
-            if (navigationRoutes.isEmpty()) return@MapEffect
+            val navigationRoutes = routeResults.map { it.navigationRoute }
 
             val routesChanged = previousRouteResults.value !== routeResults
             previousRouteResults.value = routeResults
