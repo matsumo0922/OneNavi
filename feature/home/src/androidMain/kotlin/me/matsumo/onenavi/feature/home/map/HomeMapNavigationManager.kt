@@ -2,6 +2,7 @@ package me.matsumo.onenavi.feature.home.map
 
 import com.mapbox.maps.MapView
 import com.mapbox.maps.CameraOptions
+import com.mapbox.maps.EdgeInsets
 import com.mapbox.common.location.Location
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
@@ -188,6 +189,7 @@ class HomeMapNavigationManager {
         this.mapView = mapView
         val mapboxMap = mapView.mapboxMap
         val dataSource = MapboxNavigationViewportDataSource(mapboxMap)
+        dataSource.followingPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0)
         viewportDataSource = dataSource
 
         val camera = NavigationCamera(

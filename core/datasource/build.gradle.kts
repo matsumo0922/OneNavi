@@ -19,7 +19,6 @@ kotlin {
             implementation(libs.ktor.okhttp)
             implementation(libs.google.places)
             implementation(libs.mapbox.android)
-            implementation(libs.mapbox.search)
         }
 
         iosMain.dependencies {
