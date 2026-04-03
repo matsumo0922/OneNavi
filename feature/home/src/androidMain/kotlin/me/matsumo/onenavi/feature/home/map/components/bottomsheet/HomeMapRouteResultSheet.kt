@@ -9,5 +9,4 @@ internal fun HomeMapRouteResultSheet(
     routeResult: RouteResult,
     modifier: Modifier = Modifier,
 ) {
-
 }

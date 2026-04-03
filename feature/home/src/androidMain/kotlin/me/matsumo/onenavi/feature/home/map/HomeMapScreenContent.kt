@@ -37,7 +37,6 @@ import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.viewport.ViewportStatus
-
 import kotlinx.coroutines.flow.distinctUntilChanged
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls

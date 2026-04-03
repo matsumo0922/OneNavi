@@ -19,10 +19,10 @@ import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
-import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.ads.MobileAds
+import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.dialogs.init
 import me.matsumo.onenavi.components.PermissionScreen
