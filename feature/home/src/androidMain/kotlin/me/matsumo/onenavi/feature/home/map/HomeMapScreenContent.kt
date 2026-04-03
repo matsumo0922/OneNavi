@@ -271,7 +271,9 @@ internal fun HomeMapScreenContent(
                 waypoints = waypoints,
                 navigationManager = viewModel.navigationManager,
                 onMapViewChanged = { mapView = it },
+                onUserLocationUpdated = viewModel::onUserLocationUpdated,
                 onRouteSelected = { viewModel.onViewEvent(HomeMapViewEvent.OnRouteSelected(it)) },
+                onBearingChanged = { deviceBearing = it },
             )
 
             HomeMapControls(

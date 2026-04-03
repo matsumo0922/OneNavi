@@ -21,6 +21,7 @@ import com.mapbox.maps.extension.compose.annotation.Marker
 import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
 import com.mapbox.maps.extension.compose.style.standard.StandardStyleState
 import com.mapbox.maps.plugin.PuckBearing
+import com.mapbox.maps.plugin.gestures.addOnMapClickListener
 import com.mapbox.maps.plugin.gestures.removeOnMapClickListener
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
@@ -55,8 +56,10 @@ internal fun HomeMapsMapEffectContent(
     waypoints: ImmutableList<RouteWaypoint>,
     navigationManager: HomeMapNavigationManager,
     onMapViewChanged: (MapView) -> Unit,
+    onUserLocationUpdated: (latitude: Double, longitude: Double) -> Unit,
     onRouteSelected: (index: Int) -> Unit,
     modifier: Modifier = Modifier,
+    onBearingChanged: (Double) -> Unit,
 ) {
     val context = LocalContext.current
 
@@ -137,12 +140,24 @@ internal fun HomeMapsMapEffectContent(
             // NavigationCamera + ViewportDataSource セットアップ
             navigationManager.setupCamera(view)
 
-            // NavigationLocationProvider で enhanced location を puck に反映
-            view.location.setLocationProvider(navigationManager.navigationLocationProvider)
-            view.location.locationPuck = createDefault2DPuck(withBearing = true)
-            view.location.puckBearingEnabled = true
-            view.location.puckBearing = PuckBearing.HEADING
+            // Location puck セットアップ
             view.location.enabled = true
+            view.location.locationPuck = createDefault2DPuck(withBearing = true)
+            view.location.puckBearing = PuckBearing.HEADING
+            view.location.puckBearingEnabled = true
+
+            val positionListener = com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener { point ->
+                onUserLocationUpdated(
+                    point.latitude(),
+                    point.longitude(),
+                )
+            }
+            view.location.addOnIndicatorPositionChangedListener(positionListener)
+
+            val bearingListener = com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListener { bearing ->
+                onBearingChanged(bearing)
+            }
+            view.location.addOnIndicatorBearingChangedListener(bearingListener)
 
             // Route Callout を有効化
             routeLineView.setCalloutAdapter(
@@ -178,6 +193,8 @@ internal fun HomeMapsMapEffectContent(
             }
 
             onDispose {
+                view.location.removeOnIndicatorPositionChangedListener(positionListener)
+                view.location.removeOnIndicatorBearingChangedListener(bearingListener)
                 view.mapboxMap.removeOnMapClickListener(mapClickListener)
                 routeCalloutAdapter.setOnCalloutClickListener(null)
             }
