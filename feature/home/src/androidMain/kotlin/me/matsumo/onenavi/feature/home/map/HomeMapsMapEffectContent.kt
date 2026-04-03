@@ -10,7 +10,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import com.mapbox.geojson.Point.fromLngLat
-import com.mapbox.maps.ClickInteraction
 import com.mapbox.maps.MapView
 import com.mapbox.maps.MapboxExperimental
 import com.mapbox.maps.extension.compose.MapEffect
@@ -19,7 +18,6 @@ import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
 import com.mapbox.maps.extension.compose.annotation.Marker
 import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
 import com.mapbox.maps.extension.compose.style.standard.StandardStyleState
-import com.mapbox.maps.interactions.standard.generated.standardPoi
 import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
@@ -53,7 +51,6 @@ internal fun HomeMapsMapEffectContent(
     waypoints: ImmutableList<RouteWaypoint>,
     onMapViewChanged: (MapView) -> Unit,
     onUserLocationUpdated: (latitude: Double, longitude: Double) -> Unit,
-    onMapLandmarkClicked: (name: String, latitude: Double, longitude: Double) -> Unit,
     modifier: Modifier = Modifier,
     onBearingChanged: (Double) -> Unit,
 ) {
@@ -140,16 +137,6 @@ internal fun HomeMapsMapEffectContent(
             view.location.addOnIndicatorBearingChangedListener { bearing ->
                 onBearingChanged(bearing)
             }
-
-            view.mapboxMap.addInteraction(
-                ClickInteraction.standardPoi { poiFeature, _ ->
-                    val name = runCatching { poiFeature.name }.getOrNull()
-                        ?: return@standardPoi false
-                    val point = poiFeature.geometry
-                    onMapLandmarkClicked(name, point.latitude(), point.longitude())
-                    true
-                },
-            )
 
             // Route Callout を有効化
             routeLineView.setCalloutAdapter(

@@ -262,7 +262,14 @@ class HomeMapViewModel(
         }
     }
 
-    private fun onMapLandmarkSelected(name: String, latitude: Double, longitude: Double) {
+    private fun onMapLandmarkSelected(name: String?, latitude: Double, longitude: Double) {
+        _searchResults.value = persistentListOf()
+
+        if (name.isNullOrBlank()) {
+            _selectedResult.value = createCoordinateOnlyResult(latitude, longitude)
+            return
+        }
+
         viewModelScope.launch {
             searchRepository.searchMultiple(name, latitude, longitude)
                 .onSuccess { results ->
@@ -270,16 +277,55 @@ class HomeMapViewModel(
                         val dLat = result.latitude - latitude
                         val dLng = result.longitude - longitude
                         dLat * dLat + dLng * dLng
-                    } ?: return@onSuccess
+                    }
 
-                    _searchResults.value = persistentListOf()
-                    _selectedResult.value = closest
-                    searchRepository.addHistory(closest)
+                    if (closest != null) {
+                        _selectedResult.value = closest
+                        searchRepository.addHistory(closest)
+                    } else {
+                        _selectedResult.value = createCoordinateOnlyResult(latitude, longitude, name)
+                    }
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to search landmark. name: $name" }
+                    _selectedResult.value = createCoordinateOnlyResult(latitude, longitude, name)
                 }
         }
+    }
+
+    private fun createCoordinateOnlyResult(
+        latitude: Double,
+        longitude: Double,
+        name: String? = null,
+    ): SearchResultItem {
+        return SearchResultItem(
+            placeId = "",
+            name = name ?: "${latitude.toString().take(8)}, ${longitude.toString().take(8)}",
+            formattedAddress = null,
+            shortFormattedAddress = null,
+            latitude = latitude,
+            longitude = longitude,
+            viewportSouth = null,
+            viewportWest = null,
+            viewportNorth = null,
+            viewportEast = null,
+            primaryType = null,
+            primaryTypeDisplayName = null,
+            types = emptyList(),
+            googleMapsUri = null,
+            websiteUri = null,
+            internationalPhoneNumber = null,
+            nationalPhoneNumber = null,
+            rating = null,
+            userRatingCount = null,
+            priceLevel = null,
+            businessStatus = null,
+            iconBackgroundColor = null,
+            iconMaskUrl = null,
+            editorialSummary = null,
+            currentOpeningHours = null,
+            isOpenNow = null,
+        )
     }
 
     private fun onWaypointClicked(index: Int) {
