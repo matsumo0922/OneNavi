@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -19,6 +21,7 @@ import com.mapbox.maps.extension.compose.annotation.Marker
 import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
 import com.mapbox.maps.extension.compose.style.standard.StandardStyleState
 import com.mapbox.maps.plugin.PuckBearing
+import com.mapbox.maps.plugin.gestures.addOnMapClickListener
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
@@ -37,6 +40,8 @@ import me.matsumo.onenavi.feature.home.map.components.HomeMapRouteCalloutAdapter
 import me.matsumo.onenavi.feature.home.map.components.HomeMapWaypointPin
 import android.graphics.Color as AndroidColor
 
+private const val ROUTE_CLICK_PADDING = 30f
+
 @Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
 @OptIn(MapboxExperimental::class, ExperimentalPreviewMapboxNavigationAPI::class)
 @Composable
@@ -51,10 +56,15 @@ internal fun HomeMapsMapEffectContent(
     waypoints: ImmutableList<RouteWaypoint>,
     onMapViewChanged: (MapView) -> Unit,
     onUserLocationUpdated: (latitude: Double, longitude: Double) -> Unit,
+    onRouteSelected: (index: Int) -> Unit,
     modifier: Modifier = Modifier,
     onBearingChanged: (Double) -> Unit,
 ) {
     val context = LocalContext.current
+
+    val currentRouteResults = rememberUpdatedState(routeResults)
+    val currentSelectedRouteIndex = rememberUpdatedState(selectedRouteIndex)
+    val currentOnRouteSelected = rememberUpdatedState(onRouteSelected)
 
     val routeLineApi = remember {
         MapboxRouteLineApi(
@@ -89,6 +99,9 @@ internal fun HomeMapsMapEffectContent(
     val routeCalloutAdapter = remember {
         HomeMapRouteCalloutAdapter(context)
     }
+
+    // 前回の routeResults を保持して「ルート自体が変わったか / 選択だけ変わったか」を判定
+    val previousRouteResults = remember { mutableStateOf<ImmutableList<RouteResult>?>(null) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -143,6 +156,32 @@ internal fun HomeMapsMapEffectContent(
                 view.viewAnnotationManager,
                 routeCalloutAdapter,
             )
+
+            // ルートラインタップで選択切り替え
+            view.mapboxMap.addOnMapClickListener { point ->
+                val results = currentRouteResults.value
+                if (results.isEmpty()) return@addOnMapClickListener false
+
+                routeLineApi.findClosestRoute(point, view.mapboxMap, ROUTE_CLICK_PADDING) { result ->
+                    result.onValue { closestRoute ->
+                        val clickedRoute = closestRoute.navigationRoute
+                        val index = results.indexOfFirst { it.platformRoute === clickedRoute }
+                        if (index >= 0 && index != currentSelectedRouteIndex.value) {
+                            currentOnRouteSelected.value(index)
+                        }
+                    }
+                }
+                false
+            }
+
+            // 吹き出しタップで選択切り替え
+            routeCalloutAdapter.setOnCalloutClickListener { clickedRoute ->
+                val results = currentRouteResults.value
+                val index = results.indexOfFirst { it.platformRoute === clickedRoute }
+                if (index >= 0 && index != currentSelectedRouteIndex.value) {
+                    currentOnRouteSelected.value(index)
+                }
+            }
         }
 
         MapEffect(routeResults, selectedRouteIndex) { mapView ->
@@ -152,24 +191,29 @@ internal fun HomeMapsMapEffectContent(
                 routeLineApi.clearRouteLine { expected ->
                     routeLineView.renderClearRouteLineValue(style, expected)
                 }
+                previousRouteResults.value = routeResults
                 return@MapEffect
             }
-
-            routeCalloutAdapter.updateRouteResults(routeResults)
 
             val navigationRoutes = routeResults.mapNotNull { it.platformRoute as? NavigationRoute }
             if (navigationRoutes.isEmpty()) return@MapEffect
 
-            val reordered = if (selectedRouteIndex in navigationRoutes.indices) {
-                val selected = navigationRoutes[selectedRouteIndex]
-                val others = navigationRoutes.filterIndexed { index, _ -> index != selectedRouteIndex }
-                listOf(selected) + others
-            } else {
-                navigationRoutes
-            }
+            val routesChanged = previousRouteResults.value !== routeResults
+            previousRouteResults.value = routeResults
 
-            routeLineApi.setNavigationRoutes(reordered) { expected ->
-                routeLineView.renderRouteDrawData(style, expected)
+            if (routesChanged) {
+                // ルート自体が変わった → フル描画（選択ルートを先頭に並び替え）
+                routeCalloutAdapter.updateRouteResults(routeResults)
+
+                val reordered = reorderRoutes(navigationRoutes, selectedRouteIndex)
+                routeLineApi.setNavigationRoutes(reordered) { expected ->
+                    routeLineView.renderRouteDrawData(style, expected)
+                }
+            } else {
+                // 選択だけ変わった → 吹き出しの色だけ in-place で切り替え
+                // setNavigationRoutes を呼ばないことで、ちらつき・吹き出し位置変更を防止
+                val selectedRoute = navigationRoutes.getOrNull(selectedRouteIndex)
+                routeCalloutAdapter.updateSelectionStyling(selectedRoute)
             }
         }
 
@@ -214,4 +258,14 @@ internal fun HomeMapsMapEffectContent(
             }
         }
     }
+}
+
+private fun reorderRoutes(
+    navigationRoutes: List<NavigationRoute>,
+    selectedIndex: Int,
+): List<NavigationRoute> {
+    if (selectedIndex !in navigationRoutes.indices) return navigationRoutes
+    val selected = navigationRoutes[selectedIndex]
+    val others = navigationRoutes.filterIndexed { index, _ -> index != selectedIndex }
+    return listOf(selected) + others
 }
