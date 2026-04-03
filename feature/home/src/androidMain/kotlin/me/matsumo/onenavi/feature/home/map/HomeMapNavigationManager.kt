@@ -5,8 +5,11 @@ import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.core.MapboxNavigation
+import com.mapbox.navigation.core.directions.session.RoutesObserver
+import com.mapbox.navigation.core.directions.session.RoutesUpdatedResult
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationObserver
+import com.mapbox.navigation.core.routealternatives.AlternativeRouteMetadata
 import com.mapbox.navigation.ui.maps.camera.NavigationCamera
 import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
 import com.mapbox.navigation.ui.maps.camera.lifecycle.NavigationBasicGesturesHandler
@@ -31,6 +34,12 @@ class HomeMapNavigationManager {
 
     /** 現在のルート一覧。 */
     val routes: StateFlow<List<NavigationRoute>> = _routes.asStateFlow()
+
+    private val _alternativeRouteMetadata = MutableStateFlow<List<AlternativeRouteMetadata>>(emptyList())
+
+    /** 現在の代替ルート metadata。route line の重なり表現に使う。 */
+    val alternativeRouteMetadata: StateFlow<List<AlternativeRouteMetadata>> =
+        _alternativeRouteMetadata.asStateFlow()
 
     private val _selectedRouteIndex = MutableStateFlow(0)
 
@@ -57,10 +66,33 @@ class HomeMapNavigationManager {
     private val navigationObserver = object : MapboxNavigationObserver {
         override fun onAttached(mapboxNavigation: MapboxNavigation) {
             this@HomeMapNavigationManager.mapboxNavigation = mapboxNavigation
+            mapboxNavigation.registerRoutesObserver(routesObserver)
+
+            if (_routes.value.isNotEmpty()) {
+                mapboxNavigation.setNavigationRoutes(_routes.value)
+            }
         }
 
         override fun onDetached(mapboxNavigation: MapboxNavigation) {
+            mapboxNavigation.unregisterRoutesObserver(routesObserver)
             this@HomeMapNavigationManager.mapboxNavigation = null
+        }
+    }
+
+    private val routesObserver = RoutesObserver { result: RoutesUpdatedResult ->
+        val navigationRoutes = result.navigationRoutes
+        _routes.value = navigationRoutes
+        _selectedRouteIndex.value = if (navigationRoutes.isEmpty()) -1 else 0
+        _alternativeRouteMetadata.value = mapboxNavigation
+            ?.getAlternativeMetadataFor(navigationRoutes)
+            .orEmpty()
+
+        if (navigationRoutes.isNotEmpty()) {
+            viewportDataSource?.onRouteChanged(navigationRoutes.first())
+            viewportDataSource?.evaluate()
+        } else {
+            viewportDataSource?.clearRouteData()
+            viewportDataSource?.evaluate()
         }
     }
 
@@ -144,18 +176,9 @@ class HomeMapNavigationManager {
      * ルートを Navigation SDK に登録する。
      */
     fun setRoutes(navigationRoutes: List<NavigationRoute>) {
-        _selectedRouteIndex.value = 0
         _routes.value = navigationRoutes
+        _selectedRouteIndex.value = if (navigationRoutes.isEmpty()) -1 else 0
         mapboxNavigation?.setNavigationRoutes(navigationRoutes)
-
-        // ViewportDataSource にルート情報を通知
-        if (navigationRoutes.isNotEmpty()) {
-            viewportDataSource?.onRouteChanged(navigationRoutes.first())
-            viewportDataSource?.evaluate()
-        } else {
-            viewportDataSource?.clearRouteData()
-            viewportDataSource?.evaluate()
-        }
     }
 
     /**
@@ -165,8 +188,6 @@ class HomeMapNavigationManager {
         val current = _routes.value
         if (index !in current.indices) return
         val reordered = listOf(current[index]) + current.filterIndexed { currentIndex, _ -> currentIndex != index }
-        _selectedRouteIndex.value = 0
-        _routes.value = reordered
         mapboxNavigation?.setNavigationRoutes(reordered)
     }
 
@@ -174,8 +195,9 @@ class HomeMapNavigationManager {
      * ルートをクリアする。
      */
     fun clearRoutes() {
-        _selectedRouteIndex.value = 0
+        _selectedRouteIndex.value = -1
         _routes.value = emptyList()
+        _alternativeRouteMetadata.value = emptyList()
         mapboxNavigation?.setNavigationRoutes(emptyList())
         viewportDataSource?.clearRouteData()
         viewportDataSource?.evaluate()

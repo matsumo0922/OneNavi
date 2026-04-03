@@ -26,6 +26,8 @@ import com.mapbox.maps.plugin.gestures.removeOnMapClickListener
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
+import com.mapbox.navigation.base.route.NavigationRoute
+import com.mapbox.navigation.core.routealternatives.AlternativeRouteMetadata
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
@@ -53,6 +55,8 @@ internal fun HomeMapsMapEffectContent(
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
     waypoints: ImmutableList<RouteWaypoint>,
+    navigationRoutes: List<NavigationRoute>,
+    alternativeRouteMetadata: List<AlternativeRouteMetadata>,
     navigationManager: HomeMapNavigationManager,
     onMapViewChanged: (MapView) -> Unit,
     onUserLocationUpdated: (latitude: Double, longitude: Double) -> Unit,
@@ -201,9 +205,8 @@ internal fun HomeMapsMapEffectContent(
 
         // RoutesObserver 駆動: NavigationManager の routes が更新されたら route line を再描画
         // SDK が setNavigationRoutes 時にルートの並び順を管理するため、reorderRoutes は不要
-        MapEffect(routeResults) { mapView ->
+        MapEffect(navigationRoutes, alternativeRouteMetadata) { mapView ->
             val style = mapView.mapboxMap.style ?: return@MapEffect
-            val navigationRoutes = navigationManager.routes.value
 
             if (navigationRoutes.isEmpty()) {
                 routeLineApi.clearRouteLine { expected ->
@@ -214,7 +217,7 @@ internal fun HomeMapsMapEffectContent(
 
             routeCalloutAdapter.updateRouteResults(routeResults)
 
-            routeLineApi.setNavigationRoutes(navigationRoutes) { expected ->
+            routeLineApi.setNavigationRoutes(navigationRoutes, alternativeRouteMetadata) { expected ->
                 routeLineView.renderRouteDrawData(style, expected)
             }
         }

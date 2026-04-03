@@ -199,7 +199,12 @@ class HomeMapViewModel(
     }
 
     fun onRouteSelected(index: Int) {
-        _selectedRouteIndex.value = index
+        val current = _routeResults.value
+        if (index !in current.indices) return
+
+        val reordered = listOf(current[index]) + current.filterIndexed { currentIndex, _ -> currentIndex != index }
+        _routeResults.value = reordered.toImmutableList()
+        _selectedRouteIndex.value = 0
         navigationManager.selectRoute(index)
     }
 
