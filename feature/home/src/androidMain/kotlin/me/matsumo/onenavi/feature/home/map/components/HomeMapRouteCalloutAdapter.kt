@@ -16,7 +16,7 @@ import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.ui.maps.route.callout.api.MapboxRouteCalloutAdapter
 import com.mapbox.navigation.ui.maps.route.callout.model.CalloutViewHolder
 import com.mapbox.navigation.ui.maps.route.callout.model.RouteCallout
-import me.matsumo.onenavi.core.model.RouteResult
+import me.matsumo.onenavi.feature.home.map.RouteResult
 import com.mapbox.navigation.ui.maps.R as NavR
 
 /**
@@ -138,7 +138,7 @@ internal class HomeMapRouteCalloutAdapter(
     }
 
     private fun findTollLabel(navigationRoute: NavigationRoute): String {
-        val matchedItem = routeResults.find { it.platformRoute === navigationRoute }?.item
+        val matchedItem = routeResults.find { it.navigationRoute === navigationRoute }?.item
         return when {
             matchedItem == null -> getTollLabelFromRoute(navigationRoute)
             matchedItem.tollFee != null -> "¥${matchedItem.tollFee}"

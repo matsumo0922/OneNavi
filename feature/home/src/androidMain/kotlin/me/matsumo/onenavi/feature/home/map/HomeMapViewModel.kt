@@ -20,8 +20,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.AppConfig
-import com.mapbox.navigation.base.route.NavigationRoute
-import me.matsumo.onenavi.core.model.RouteResult
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -263,12 +261,12 @@ class HomeMapViewModel(
                 destinationLongitude = destLng,
                 intermediateWaypoints = intermediateWaypoints,
             )
-                .onSuccess { routes ->
-                    _routeResults.value = routes.toImmutableList()
+                .onSuccess { coreResults ->
+                    val featureResults = coreResults.mapNotNull { it.toFeatureRouteResult() }
+                    _routeResults.value = featureResults.toImmutableList()
                     _selectedRouteIndex.value = 0
 
-                    val navigationRoutes = routes.mapNotNull { it.platformRoute as? NavigationRoute }
-                    navigationManager.setRoutes(navigationRoutes)
+                    navigationManager.setRoutes(featureResults.map { it.navigationRoute })
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to search routes." }

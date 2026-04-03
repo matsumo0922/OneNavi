@@ -38,7 +38,7 @@ import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.viewport.ViewportStatus
-import com.mapbox.navigation.base.route.NavigationRoute
+
 import kotlinx.coroutines.flow.distinctUntilChanged
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
@@ -236,8 +236,7 @@ internal fun HomeMapScreenContent(
         trackingMode = LocationTrackingMode.TopDownNorth
 
         val allPoints = routeResults.flatMap { result ->
-            val navigationRoute = result.platformRoute as? NavigationRoute
-            navigationRoute?.directionsRoute?.geometry()
+            result.navigationRoute.directionsRoute.geometry()
                 ?.let { com.mapbox.geojson.LineString.fromPolyline(it, POLYLINE_PRECISION) }
                 ?.coordinates()
                 ?: result.item.geometry.map { fromLngLat(it.longitude, it.latitude) }
