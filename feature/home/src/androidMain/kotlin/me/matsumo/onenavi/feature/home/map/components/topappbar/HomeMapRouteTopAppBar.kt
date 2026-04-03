@@ -40,8 +40,11 @@ internal fun HomeMapRouteTopAppBar(
     ElevatedCard(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 4.dp,
+        ),
         colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
     ) {
         if (isEditing) {

@@ -46,6 +46,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
@@ -142,8 +143,10 @@ internal fun HomeMapTopAppBar(
                     onBackClicked = ::onBackClicked,
                 )
             },
+            shadowElevation = 4.dp,
             colors = SearchBarDefaults.appBarWithSearchColors(
                 appBarContainerColor = Color.Transparent,
+                searchBarColors = SearchBarDefaults.colors(MaterialTheme.colorScheme.surfaceContainerLow)
             ),
             windowInsets = WindowInsets(0),
         )
@@ -159,6 +162,7 @@ internal fun HomeMapTopAppBar(
                     onBackClicked = ::onBackClicked,
                 )
             },
+            colors = SearchBarDefaults.colors(MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
             val query = textFieldState.text.toString()
 
