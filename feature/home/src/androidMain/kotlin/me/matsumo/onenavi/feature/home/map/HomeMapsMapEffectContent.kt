@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -55,6 +54,7 @@ internal fun HomeMapsMapEffectContent(
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
     waypoints: ImmutableList<RouteWaypoint>,
+    navigationManager: HomeMapNavigationManager,
     onMapViewChanged: (MapView) -> Unit,
     onUserLocationUpdated: (latitude: Double, longitude: Double) -> Unit,
     onRouteSelected: (index: Int) -> Unit,
@@ -101,8 +101,6 @@ internal fun HomeMapsMapEffectContent(
         HomeMapRouteCalloutAdapter(context)
     }
 
-    // 前回の routeResults を保持して「ルート自体が変わったか / 選択だけ変わったか」を判定
-    val previousRouteResults = remember { mutableStateOf<ImmutableList<RouteResult>?>(null) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -197,35 +195,23 @@ internal fun HomeMapsMapEffectContent(
             }
         }
 
-        MapEffect(routeResults, selectedRouteIndex) { mapView ->
+        // RoutesObserver 駆動: NavigationManager の routes が更新されたら route line を再描画
+        // SDK が setNavigationRoutes 時にルートの並び順を管理するため、reorderRoutes は不要
+        MapEffect(routeResults) { mapView ->
             val style = mapView.mapboxMap.style ?: return@MapEffect
+            val navigationRoutes = navigationManager.routes.value
 
-            if (routeResults.isEmpty()) {
+            if (navigationRoutes.isEmpty()) {
                 routeLineApi.clearRouteLine { expected ->
                     routeLineView.renderClearRouteLineValue(style, expected)
                 }
-                previousRouteResults.value = routeResults
                 return@MapEffect
             }
 
-            val navigationRoutes = routeResults.map { it.navigationRoute }
+            routeCalloutAdapter.updateRouteResults(routeResults)
 
-            val routesChanged = previousRouteResults.value !== routeResults
-            previousRouteResults.value = routeResults
-
-            if (routesChanged) {
-                // ルート自体が変わった → フル描画（選択ルートを先頭に並び替え）
-                routeCalloutAdapter.updateRouteResults(routeResults)
-
-                val reordered = reorderRoutes(navigationRoutes, selectedRouteIndex)
-                routeLineApi.setNavigationRoutes(reordered) { expected ->
-                    routeLineView.renderRouteDrawData(style, expected)
-                }
-            } else {
-                // 選択だけ変わった → 吹き出しの色だけ in-place で切り替え
-                // setNavigationRoutes を呼ばないことで、ちらつき・吹き出し位置変更を防止
-                val selectedRoute = navigationRoutes.getOrNull(selectedRouteIndex)
-                routeCalloutAdapter.updateSelectionStyling(selectedRoute)
+            routeLineApi.setNavigationRoutes(navigationRoutes) { expected ->
+                routeLineView.renderRouteDrawData(style, expected)
             }
         }
 
@@ -270,14 +256,4 @@ internal fun HomeMapsMapEffectContent(
             }
         }
     }
-}
-
-private fun reorderRoutes(
-    navigationRoutes: List<NavigationRoute>,
-    selectedIndex: Int,
-): List<NavigationRoute> {
-    if (selectedIndex !in navigationRoutes.indices) return navigationRoutes
-    val selected = navigationRoutes[selectedIndex]
-    val others = navigationRoutes.filterIndexed { index, _ -> index != selectedIndex }
-    return listOf(selected) + others
 }
