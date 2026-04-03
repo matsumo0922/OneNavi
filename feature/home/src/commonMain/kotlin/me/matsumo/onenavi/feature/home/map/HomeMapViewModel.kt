@@ -202,7 +202,9 @@ class HomeMapViewModel(
     private fun onSwapOriginDestination() {
         val current = _waypoints.value
         if (current.size != 2) return
-        _waypoints.value = persistentListOf(current[1], current[0])
+        val swapped = persistentListOf(current[1], current[0])
+        _waypoints.value = swapped
+        searchRoutesFromWaypoints(swapped)
     }
 
     private fun onRouteWaypointsConfirmed(newWaypoints: ImmutableList<RouteWaypoint>) {
