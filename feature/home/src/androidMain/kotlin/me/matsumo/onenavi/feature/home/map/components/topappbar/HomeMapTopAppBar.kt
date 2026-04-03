@@ -146,7 +146,7 @@ internal fun HomeMapTopAppBar(
             shadowElevation = 4.dp,
             colors = SearchBarDefaults.appBarWithSearchColors(
                 appBarContainerColor = Color.Transparent,
-                searchBarColors = SearchBarDefaults.colors(MaterialTheme.colorScheme.surfaceContainerLow)
+                searchBarColors = SearchBarDefaults.colors(MaterialTheme.colorScheme.surfaceContainerLow),
             ),
             windowInsets = WindowInsets(0),
         )

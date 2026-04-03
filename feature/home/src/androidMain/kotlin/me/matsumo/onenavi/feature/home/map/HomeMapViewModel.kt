@@ -81,7 +81,6 @@ class HomeMapViewModel(
             .distinctUntilChanged()
             .onEach { query -> performSearch(query) }
             .launchIn(viewModelScope)
-
     }
 
     override fun onCleared() {
