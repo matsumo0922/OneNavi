@@ -32,7 +32,7 @@ class HomeMapViewModel(
     private val appConfig: AppConfig,
     private val searchRepository: SearchRepository,
     private val routeRepository: RouteRepository,
-    private val navigationManager: HomeMapNavigationManager,
+    internal val navigationManager: HomeMapNavigationManager,
 ) : ViewModel() {
 
     val mapBoxToken: String get() = appConfig.mapBoxToken
