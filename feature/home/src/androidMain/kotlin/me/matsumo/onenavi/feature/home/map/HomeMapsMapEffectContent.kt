@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.Dp
 import com.mapbox.geojson.Point.fromLngLat
 import com.mapbox.maps.MapView
 import com.mapbox.maps.MapboxExperimental
+import com.mapbox.maps.extension.compose.DisposableMapEffect
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
@@ -22,6 +23,7 @@ import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
 import com.mapbox.maps.extension.compose.style.standard.StandardStyleState
 import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.plugin.gestures.addOnMapClickListener
+import com.mapbox.maps.plugin.gestures.removeOnMapClickListener
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
@@ -135,21 +137,25 @@ internal fun HomeMapsMapEffectContent(
             )
         },
     ) {
-        MapEffect { view ->
+        DisposableMapEffect(Unit) { view ->
             onMapViewChanged(view)
             view.location.enabled = true
             view.location.locationPuck = createDefault2DPuck(withBearing = true)
             view.location.puckBearing = PuckBearing.HEADING
             view.location.puckBearingEnabled = true
-            view.location.addOnIndicatorPositionChangedListener { point ->
+
+            val positionListener = com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener { point ->
                 onUserLocationUpdated(
                     point.latitude(),
                     point.longitude(),
                 )
             }
-            view.location.addOnIndicatorBearingChangedListener { bearing ->
+            view.location.addOnIndicatorPositionChangedListener(positionListener)
+
+            val bearingListener = com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListener { bearing ->
                 onBearingChanged(bearing)
             }
+            view.location.addOnIndicatorBearingChangedListener(bearingListener)
 
             // Route Callout を有効化
             routeLineView.setCalloutAdapter(
@@ -158,9 +164,9 @@ internal fun HomeMapsMapEffectContent(
             )
 
             // ルートラインタップで選択切り替え
-            view.mapboxMap.addOnMapClickListener { point ->
+            val mapClickListener = com.mapbox.maps.plugin.gestures.OnMapClickListener { point ->
                 val results = currentRouteResults.value
-                if (results.isEmpty()) return@addOnMapClickListener false
+                if (results.isEmpty()) return@OnMapClickListener false
 
                 routeLineApi.findClosestRoute(point, view.mapboxMap, ROUTE_CLICK_PADDING) { result ->
                     result.onValue { closestRoute ->
@@ -173,6 +179,7 @@ internal fun HomeMapsMapEffectContent(
                 }
                 false
             }
+            view.mapboxMap.addOnMapClickListener(mapClickListener)
 
             // 吹き出しタップで選択切り替え
             routeCalloutAdapter.setOnCalloutClickListener { clickedRoute ->
@@ -181,6 +188,13 @@ internal fun HomeMapsMapEffectContent(
                 if (index >= 0 && index != currentSelectedRouteIndex.value) {
                     currentOnRouteSelected.value(index)
                 }
+            }
+
+            onDispose {
+                view.location.removeOnIndicatorPositionChangedListener(positionListener)
+                view.location.removeOnIndicatorBearingChangedListener(bearingListener)
+                view.mapboxMap.removeOnMapClickListener(mapClickListener)
+                routeCalloutAdapter.setOnCalloutClickListener(null)
             }
         }
 

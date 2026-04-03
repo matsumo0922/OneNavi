@@ -37,7 +37,7 @@ internal class HomeMapRouteCalloutAdapter(
         routeResults = results
     }
 
-    fun setOnCalloutClickListener(listener: (NavigationRoute) -> Unit) {
+    fun setOnCalloutClickListener(listener: ((NavigationRoute) -> Unit)?) {
         onCalloutClicked = listener
     }
 
