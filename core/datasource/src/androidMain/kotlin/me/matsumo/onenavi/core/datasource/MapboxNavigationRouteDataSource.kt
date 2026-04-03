@@ -4,6 +4,7 @@ import android.content.Context
 import com.mapbox.api.directions.v5.DirectionsCriteria
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
+import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
 import com.mapbox.navigation.base.extensions.applyLanguageAndVoiceUnitOptions
@@ -94,7 +95,11 @@ class MapboxNavigationRouteDataSource(
     }
 
     private fun DirectionsRoute.toRouteItem(): RouteItem {
-        val decodedGeometry = geometry()?.let { decodeGeometry(it) }.orEmpty()
+        val decodedGeometry = geometry()
+            ?.let { LineString.fromPolyline(it, POLYLINE_PRECISION) }
+            ?.coordinates()
+            ?.map { RoutePoint(latitude = it.latitude(), longitude = it.longitude()) }
+            .orEmpty()
         val allSteps = legs().orEmpty().flatMap { it.steps().orEmpty() }
 
         return RouteItem(
@@ -140,6 +145,7 @@ class MapboxNavigationRouteDataSource(
 
     companion object {
         private const val MAX_ROAD_NAMES = 3
+        private const val POLYLINE_PRECISION = 6
 
         /**
          * steps から主要道路名を抽出する。
@@ -174,45 +180,5 @@ class MapboxNavigationRouteDataSource(
             }
         }
 
-        private fun decodeGeometry(encodedPolyline: String): List<RoutePoint> {
-            val points = mutableListOf<RoutePoint>()
-            var index = 0
-            var latitude = 0
-            var longitude = 0
-
-            while (index < encodedPolyline.length) {
-                var result = 0
-                var shift = 0
-                var byte: Int
-
-                do {
-                    byte = encodedPolyline[index++].code - 63
-                    result = result or ((byte and 0x1F) shl shift)
-                    shift += 5
-                } while (byte >= 0x20)
-
-                latitude += if (result and 1 != 0) (result shr 1).inv() else result shr 1
-
-                result = 0
-                shift = 0
-
-                do {
-                    byte = encodedPolyline[index++].code - 63
-                    result = result or ((byte and 0x1F) shl shift)
-                    shift += 5
-                } while (byte >= 0x20)
-
-                longitude += if (result and 1 != 0) (result shr 1).inv() else result shr 1
-
-                points.add(
-                    RoutePoint(
-                        latitude = latitude / 1e6,
-                        longitude = longitude / 1e6,
-                    ),
-                )
-            }
-
-            return points
-        }
     }
 }
