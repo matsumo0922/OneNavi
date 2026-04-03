@@ -77,10 +77,10 @@ internal fun HomeMapScreenContent(
     val navigationRoutes by viewModel.navigationManager.routes.collectAsStateWithLifecycle()
     val alternativeRouteMetadata by viewModel.navigationManager.alternativeRouteMetadata.collectAsStateWithLifecycle()
     val routeProgress by viewModel.navigationManager.routeProgress.collectAsStateWithLifecycle()
+    val enhancedLocation by viewModel.navigationManager.enhancedLocation.collectAsStateWithLifecycle()
 
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
-    var deviceBearing by remember { mutableStateOf(0.0) }
 
     val isDarkTheme = isSystemInDarkTheme()
     val viewportState = rememberMapViewportState()
@@ -276,9 +276,7 @@ internal fun HomeMapScreenContent(
                 routeProgress = routeProgress,
                 navigationManager = viewModel.navigationManager,
                 onMapViewChanged = { mapView = it },
-                onUserLocationUpdated = viewModel::onUserLocationUpdated,
                 onRouteSelected = { viewModel.onViewEvent(HomeMapViewEvent.OnRouteSelected(it)) },
-                onBearingChanged = { deviceBearing = it },
             )
 
             HomeMapControls(
@@ -290,7 +288,7 @@ internal fun HomeMapScreenContent(
                     )
                     .offset(y = -sheetVisibleHeight),
                 cameraBearing = viewportState.cameraState?.bearing ?: 0.0,
-                deviceBearing = deviceBearing,
+                deviceBearing = enhancedLocation?.bearing ?: 0.0,
                 trackingMode = trackingMode,
                 viewportState = viewportState,
                 onTrackingModeChanged = { trackingMode = it },

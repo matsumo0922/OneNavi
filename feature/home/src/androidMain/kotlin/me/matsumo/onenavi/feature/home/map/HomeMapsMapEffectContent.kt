@@ -61,10 +61,8 @@ internal fun HomeMapsMapEffectContent(
     routeProgress: RouteProgress?,
     navigationManager: HomeMapNavigationManager,
     onMapViewChanged: (MapView) -> Unit,
-    onUserLocationUpdated: (latitude: Double, longitude: Double) -> Unit,
     onRouteSelected: (index: Int) -> Unit,
     modifier: Modifier = Modifier,
-    onBearingChanged: (Double) -> Unit,
 ) {
     val context = LocalContext.current
 
@@ -151,19 +149,6 @@ internal fun HomeMapsMapEffectContent(
             view.location.puckBearing = PuckBearing.HEADING
             view.location.puckBearingEnabled = true
 
-            val positionListener = com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener { point ->
-                onUserLocationUpdated(
-                    point.latitude(),
-                    point.longitude(),
-                )
-            }
-            view.location.addOnIndicatorPositionChangedListener(positionListener)
-
-            val bearingListener = com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListener { bearing ->
-                onBearingChanged(bearing)
-            }
-            view.location.addOnIndicatorBearingChangedListener(bearingListener)
-
             // Route Callout を有効化
             routeLineView.setCalloutAdapter(
                 view.viewAnnotationManager,
@@ -198,8 +183,6 @@ internal fun HomeMapsMapEffectContent(
             }
 
             onDispose {
-                view.location.removeOnIndicatorPositionChangedListener(positionListener)
-                view.location.removeOnIndicatorBearingChangedListener(bearingListener)
                 view.mapboxMap.removeOnMapClickListener(mapClickListener)
                 routeCalloutAdapter.setOnCalloutClickListener(null)
                 navigationManager.teardownCamera()

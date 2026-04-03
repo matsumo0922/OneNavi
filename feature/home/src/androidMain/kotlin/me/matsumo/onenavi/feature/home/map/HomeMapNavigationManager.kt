@@ -56,6 +56,11 @@ class HomeMapNavigationManager {
     /** 現在の RouteProgress。traveled route / vanishing route line に使う。 */
     val routeProgress: StateFlow<RouteProgress?> = _routeProgress.asStateFlow()
 
+    private val _enhancedLocation = MutableStateFlow<Location?>(null)
+
+    /** 現在の enhanced location。現在地起点のルート探索や bearing 参照に使う。 */
+    val enhancedLocation: StateFlow<Location?> = _enhancedLocation.asStateFlow()
+
     // --- Camera ---
 
     /** NavigationCamera。MapView セットアップ後に初期化される。 */
@@ -118,6 +123,7 @@ class HomeMapNavigationManager {
 
         override fun onNewLocationMatcherResult(locationMatcherResult: LocationMatcherResult) {
             val enhancedLocation = locationMatcherResult.enhancedLocation
+            _enhancedLocation.value = enhancedLocation
             navigationLocationProvider.changePosition(
                 enhancedLocation,
                 locationMatcherResult.keyPoints,

@@ -52,9 +52,6 @@ class HomeMapViewModel(
             initialValue = persistentListOf(),
         )
 
-    private val _userLatitude = MutableStateFlow<Double?>(null)
-    private val _userLongitude = MutableStateFlow<Double?>(null)
-
     private val _routeResults = MutableStateFlow<ImmutableList<RouteResult>>(persistentListOf())
     val routeResults: StateFlow<ImmutableList<RouteResult>> = _routeResults.asStateFlow()
 
@@ -172,15 +169,11 @@ class HomeMapViewModel(
         }
     }
 
-    fun onUserLocationUpdated(latitude: Double, longitude: Double) {
-        _userLatitude.value = latitude
-        _userLongitude.value = longitude
-    }
-
     private fun onRouteSearch() {
         val destination = _selectedResult.value ?: return
-        val originLat = _userLatitude.value ?: return
-        val originLng = _userLongitude.value ?: return
+        val currentLocation = navigationManager.enhancedLocation.value ?: return
+        val originLat = currentLocation.latitude
+        val originLng = currentLocation.longitude
 
         val newWaypoints = persistentListOf(
             RouteWaypoint.CurrentLocation(
