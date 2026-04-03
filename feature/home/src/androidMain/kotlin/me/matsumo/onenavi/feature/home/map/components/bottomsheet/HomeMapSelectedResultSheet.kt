@@ -112,12 +112,13 @@ internal fun HomeMapSelectedResultSheet(
 
     Column(
         modifier = modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Column(
-            modifier = Modifier.onGloballyPositioned { coordinates ->
-                onPeekHeightMeasured(coordinates.size.height)
-            },
+            modifier = Modifier
+                .padding(bottom = 24.dp)
+                .onGloballyPositioned { coordinates ->
+                    onPeekHeightMeasured(coordinates.size.height)
+                },
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             TitleSection(
@@ -134,19 +135,25 @@ internal fun HomeMapSelectedResultSheet(
             )
         }
 
-        IncoSection(
-            modifier = Modifier.fillMaxWidth(),
-            title = Res.string.home_map_point,
-            items = pointItems,
-        )
+        if (pointItems.any { !it.value.isNullOrBlank() }) {
+            IncoSection(
+                modifier = Modifier
+                    .padding(bottom = 24.dp)
+                    .fillMaxWidth(),
+                title = Res.string.home_map_point,
+                items = pointItems,
+            )
+        }
 
-        IncoSection(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            title = Res.string.home_map_metadata,
-            items = metadataItems,
-        )
+        if (metadataItems.any { !it.value.isNullOrBlank() }) {
+            IncoSection(
+                modifier = Modifier
+                    .padding(bottom = 24.dp)
+                    .fillMaxWidth(),
+                title = Res.string.home_map_metadata,
+                items = metadataItems,
+            )
+        }
     }
 }
 

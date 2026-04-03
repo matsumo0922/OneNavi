@@ -85,6 +85,31 @@ internal actual fun HomeMapScreenContent(
     val viewportState = rememberMapViewportState()
     val standardStyleState = rememberStandardStyleState {
         configurationsState.lightPreset = if (isDarkTheme) LightPresetValue.NIGHT else LightPresetValue.DAY
+        interactionsState.onPoiClicked { poiFeature, context ->
+            val name = runCatching { poiFeature.name }.getOrNull()
+            val point = context.coordinateInfo.coordinate
+
+            viewModel.onViewEvent(
+                HomeMapViewEvent.OnMapLandmarkSelected(
+                    name = name,
+                    latitude = point.latitude(),
+                    longitude = point.longitude(),
+                ),
+            )
+            true
+        }
+        interactionsState.onMapLongClicked { context ->
+            val point = context.coordinateInfo.coordinate
+
+            viewModel.onViewEvent(
+                HomeMapViewEvent.OnMapLandmarkSelected(
+                    name = null,
+                    latitude = point.latitude(),
+                    longitude = point.longitude(),
+                ),
+            )
+            true
+        }
     }
 
     var allowSheetHide by remember { mutableStateOf(false) }
@@ -105,9 +130,7 @@ internal actual fun HomeMapScreenContent(
 
     val sheetVisibleHeight by remember {
         derivedStateOf {
-            val offset = runCatching {
-                scaffoldState.bottomSheetState.requireOffset()
-            }.getOrDefault(contentHeight)
+            val offset = runCatching { scaffoldState.bottomSheetState.requireOffset() }.getOrDefault(contentHeight)
             with(density) { (contentHeight - offset).coerceAtLeast(0f).toDp() }
         }
     }
@@ -271,15 +294,6 @@ internal actual fun HomeMapScreenContent(
                 waypoints = waypoints,
                 onMapViewChanged = { mapView = it },
                 onUserLocationUpdated = viewModel::onUserLocationUpdated,
-                onMapLandmarkClicked = { name, latitude, longitude ->
-                    viewModel.onViewEvent(
-                        HomeMapViewEvent.OnMapLandmarkSelected(
-                            name = name,
-                            latitude = latitude,
-                            longitude = longitude,
-                        ),
-                    )
-                },
                 onBearingChanged = { deviceBearing = it },
             )
 
