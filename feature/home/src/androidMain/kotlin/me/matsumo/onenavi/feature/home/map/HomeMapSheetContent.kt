@@ -6,6 +6,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
+import me.matsumo.onenavi.core.model.RouteResult
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.feature.home.map.components.bottomsheet.HomeMapSearchResultSheet
 import me.matsumo.onenavi.feature.home.map.components.bottomsheet.HomeMapSelectedResultSheet
@@ -16,6 +17,8 @@ private val SHEET_DRAG_HANDLE_HEIGHT = 48.dp
 internal fun HomeMapSheetContent(
     searchResults: ImmutableList<SearchResultItem>,
     selectedResult: SearchResultItem?,
+    routeResults: ImmutableList<RouteResult>,
+    selectedRouteIndex: Int,
     onViewEvent: (HomeMapViewEvent) -> Unit,
     modifier: Modifier = Modifier,
     onPeekHeightChanged: (Dp) -> Unit,

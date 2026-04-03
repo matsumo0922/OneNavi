@@ -273,6 +273,8 @@ internal actual fun HomeMapScreenContent(
             HomeMapSheetContent(
                 searchResults = searchResults,
                 selectedResult = selectedResult,
+                routeResults = routeResults,
+                selectedRouteIndex = selectedRouteIndex,
                 onViewEvent = viewModel::onViewEvent,
                 onPeekHeightChanged = { sheetPeekHeight = it },
             )
@@ -294,6 +296,7 @@ internal actual fun HomeMapScreenContent(
                 waypoints = waypoints,
                 onMapViewChanged = { mapView = it },
                 onUserLocationUpdated = viewModel::onUserLocationUpdated,
+                onRouteSelected = { viewModel.onViewEvent(HomeMapViewEvent.OnRouteSelected(it)) },
                 onBearingChanged = { deviceBearing = it },
             )
 
