@@ -64,6 +64,13 @@ android {
         }
     }
 
+    dependencies {
+        debugImplementation(libs.ktor.server.core)
+        debugImplementation(libs.ktor.server.cio)
+        debugImplementation(libs.ktor.server.content.negotiation)
+        debugImplementation(libs.ktor.serialization.json)
+    }
+
     androidComponents {
         onVariants {
             val appName = when (it.buildType) {
