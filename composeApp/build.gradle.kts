@@ -68,6 +68,7 @@ android {
         debugImplementation(libs.ktor.server.core)
         debugImplementation(libs.ktor.server.cio)
         debugImplementation(libs.ktor.server.content.negotiation)
+        debugImplementation(libs.ktor.server.cors)
         debugImplementation(libs.ktor.serialization.json)
     }
 
