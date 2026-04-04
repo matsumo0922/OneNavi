@@ -37,10 +37,19 @@ import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.viewport.ViewportStatus
+import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraState
 import kotlinx.coroutines.flow.distinctUntilChanged
+import me.matsumo.onenavi.core.model.GuidanceUiState
+import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
+import me.matsumo.onenavi.feature.home.map.components.guidance.HomeMapGuidanceArrivalScreen
+import me.matsumo.onenavi.feature.home.map.components.guidance.HomeMapGuidanceControlColumn
+import me.matsumo.onenavi.feature.home.map.components.guidance.HomeMapGuidanceManeuverPanel
+import me.matsumo.onenavi.feature.home.map.components.guidance.HomeMapGuidanceReturnButton
+import me.matsumo.onenavi.feature.home.map.components.guidance.HomeMapGuidanceRoadNameBadge
+import me.matsumo.onenavi.feature.home.map.components.guidance.HomeMapGuidanceTripCard
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapRouteTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapWaypointSearchScreen
@@ -74,6 +83,13 @@ internal fun HomeMapScreenContent(
     val waypoints by viewModel.waypoints.collectAsStateWithLifecycle()
     val editingWaypointIndex by viewModel.editingWaypointIndex.collectAsStateWithLifecycle()
     val waypointEditResult by viewModel.waypointEditResult.collectAsStateWithLifecycle()
+    val navigationState by viewModel.navigationState.collectAsStateWithLifecycle()
+    val guidanceUiState by viewModel.guidanceSessionManager.guidanceUiState.collectAsStateWithLifecycle()
+    val arrivalInfo by viewModel.guidanceSessionManager.arrivalInfo.collectAsStateWithLifecycle()
+    val cameraState by viewModel.cameraManager.cameraState.collectAsStateWithLifecycle()
+
+    val isNavigating = navigationState is NavigationState.ActiveGuidance
+    val isArrived = navigationState is NavigationState.Arrival
 
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
@@ -208,6 +224,14 @@ internal fun HomeMapScreenContent(
         )
     }
 
+    LaunchedEffect(isNavigating) {
+        if (isNavigating) {
+            allowSheetHide = true
+            scaffoldState.bottomSheetState.hide()
+            allowSheetHide = false
+        }
+    }
+
     LaunchedEffect(routeResults) {
         if (routeResults.isEmpty()) {
             val result = selectedResult ?: return@LaunchedEffect
@@ -276,22 +300,97 @@ internal fun HomeMapScreenContent(
                 onBearingChanged = { deviceBearing = it },
             )
 
-            HomeMapControls(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(
-                        bottom = 16.dp,
-                        end = 16.dp,
+            if (isNavigating) {
+                val currentManeuver = guidanceUiState.currentManeuver
+                if (currentManeuver != null) {
+                    HomeMapGuidanceManeuverPanel(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .statusBarsPadding()
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 16.dp,
+                                vertical = 8.dp,
+                            ),
+                        currentManeuver = currentManeuver,
+                        nextManeuver = guidanceUiState.nextManeuver,
                     )
-                    .offset(y = -sheetVisibleHeight),
-                cameraBearing = viewportState.cameraState?.bearing ?: 0.0,
-                deviceBearing = deviceBearing,
-                trackingMode = trackingMode,
-                viewportState = viewportState,
-                onTrackingModeChanged = { trackingMode = it },
-            )
+                }
 
-            if (routeResults.isNotEmpty() && waypoints.isNotEmpty()) {
+                HomeMapGuidanceTripCard(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 16.dp,
+                            vertical = 16.dp,
+                        ),
+                    tripProgress = guidanceUiState.tripProgress,
+                    onStopClicked = { viewModel.onViewEvent(HomeMapViewEvent.OnNavigationStopped) },
+                    onAddWaypointClicked = { },
+                    onOverviewClicked = { viewModel.cameraManager.requestCameraOverview() },
+                    onMoreClicked = { },
+                )
+
+                HomeMapGuidanceControlColumn(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 12.dp),
+                    onSettingsClicked = { },
+                    onVolumeClicked = { },
+                    onCompassClicked = { viewModel.cameraManager.toggleCompass() },
+                    onZoomInClicked = { },
+                    onZoomOutClicked = { },
+                )
+
+                val currentRoadName = guidanceUiState.currentRoadName
+                if (currentRoadName != null) {
+                    HomeMapGuidanceRoadNameBadge(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(
+                                start = 16.dp,
+                                bottom = 120.dp,
+                            ),
+                        roadName = currentRoadName,
+                    )
+                }
+
+                if (cameraState == NavigationCameraState.IDLE) {
+                    HomeMapGuidanceReturnButton(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 130.dp),
+                        onClick = { viewModel.cameraManager.requestCameraFollowing() },
+                    )
+                }
+            } else if (isArrived) {
+                val info = arrivalInfo
+                if (info != null) {
+                    HomeMapGuidanceArrivalScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        arrivalInfo = info,
+                        onDismiss = { viewModel.onViewEvent(HomeMapViewEvent.OnNavigationStopped) },
+                    )
+                }
+            } else {
+                HomeMapControls(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(
+                            bottom = 16.dp,
+                            end = 16.dp,
+                        )
+                        .offset(y = -sheetVisibleHeight),
+                    cameraBearing = viewportState.cameraState?.bearing ?: 0.0,
+                    deviceBearing = deviceBearing,
+                    trackingMode = trackingMode,
+                    viewportState = viewportState,
+                    onTrackingModeChanged = { trackingMode = it },
+                )
+            }
+
+            if (!isNavigating && !isArrived && routeResults.isNotEmpty() && waypoints.isNotEmpty()) {
                 HomeMapRouteTopAppBar(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -304,7 +403,7 @@ internal fun HomeMapScreenContent(
                     onWaypointEditResultConsumed = viewModel::consumeWaypointEditResult,
                     onViewEvent = viewModel::onViewEvent,
                 )
-            } else {
+            } else if (!isNavigating && !isArrived) {
                 HomeMapTopAppBar(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
