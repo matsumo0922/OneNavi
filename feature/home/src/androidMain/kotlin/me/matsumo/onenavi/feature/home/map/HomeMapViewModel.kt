@@ -19,8 +19,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import me.matsumo.onenavi.core.model.AppConfig
-import me.matsumo.onenavi.core.model.RouteResult
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -30,12 +28,10 @@ import me.matsumo.onenavi.core.repository.SearchRepository
 import kotlin.time.Duration.Companion.milliseconds
 
 class HomeMapViewModel(
-    private val appConfig: AppConfig,
     private val searchRepository: SearchRepository,
     private val routeRepository: RouteRepository,
+    internal val navigationManager: HomeMapNavigationManager,
 ) : ViewModel() {
-
-    val mapBoxToken: String get() = appConfig.mapBoxToken
 
     private val _query = MutableStateFlow("")
 
@@ -77,12 +73,19 @@ class HomeMapViewModel(
     private var searchJob: Job? = null
 
     init {
+        navigationManager.register()
+
         @OptIn(FlowPreview::class)
         _query
             .debounce(DEBOUNCE.milliseconds)
             .distinctUntilChanged()
             .onEach { query -> performSearch(query) }
             .launchIn(viewModelScope)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        navigationManager.unregister()
     }
 
     fun onViewEvent(event: HomeMapViewEvent) {
@@ -197,6 +200,7 @@ class HomeMapViewModel(
 
     fun onRouteSelected(index: Int) {
         _selectedRouteIndex.value = index
+        navigationManager.selectRoute(index)
     }
 
     private fun onSwapOriginDestination() {
@@ -253,9 +257,12 @@ class HomeMapViewModel(
                 destinationLongitude = destLng,
                 intermediateWaypoints = intermediateWaypoints,
             )
-                .onSuccess { routes ->
-                    _routeResults.value = routes.toImmutableList()
+                .onSuccess { coreResults ->
+                    val featureResults = coreResults.mapNotNull { it.toFeatureRouteResult() }
+                    _routeResults.value = featureResults.toImmutableList()
                     _selectedRouteIndex.value = 0
+
+                    navigationManager.setRoutes(featureResults.map { it.navigationRoute })
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to search routes." }
@@ -377,6 +384,7 @@ class HomeMapViewModel(
         _routeResults.value = persistentListOf()
         _selectedRouteIndex.value = 0
         _waypoints.value = persistentListOf()
+        navigationManager.clearRoutes()
     }
 
     fun onDismissSearchResults() {

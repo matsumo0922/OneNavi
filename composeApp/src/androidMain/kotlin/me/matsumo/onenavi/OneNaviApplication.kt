@@ -6,7 +6,6 @@ import com.mapbox.common.MapboxCommonSettings
 import com.mapbox.common.SettingsServiceFactory
 import com.mapbox.common.SettingsServiceStorageType
 import com.mapbox.navigation.base.options.NavigationOptions
-import com.mapbox.navigation.core.MapboxNavigationProvider
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
 import io.github.aakira.napier.DebugAntilog
 import io.github.aakira.napier.Napier
@@ -48,16 +47,12 @@ class OneNaviApplication : Application(), KoinStartup {
     }
 
     private fun setupMapboxNavigation() {
-        val options = NavigationOptions.Builder(this)
-            .isDebugLoggingEnabled(BuildConfig.DEBUG)
-            .build()
-
         if (!MapboxNavigationApp.isSetup()) {
-            MapboxNavigationApp.setup(options)
-        }
-
-        if (!MapboxNavigationProvider.isCreated()) {
-            MapboxNavigationProvider.create(options)
+            MapboxNavigationApp.setup(
+                NavigationOptions.Builder(this)
+                    .isDebugLoggingEnabled(BuildConfig.DEBUG)
+                    .build(),
+            )
         }
     }
 

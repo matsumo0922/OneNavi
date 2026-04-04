@@ -22,6 +22,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.ads.MobileAds
+import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.dialogs.init
 import me.matsumo.onenavi.components.PermissionScreen
@@ -38,6 +39,7 @@ class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        MapboxNavigationApp.attach(this)
         setContent {
             val userData by viewModel.setting.collectAsStateWithLifecycle(null)
             val isSystemInDarkTheme = shouldUseDarkTheme(userData?.theme ?: Theme.System)

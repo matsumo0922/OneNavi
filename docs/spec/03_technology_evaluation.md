@@ -355,13 +355,19 @@ Mapbox Directions API には高速料金データなし。
 
 ## 11. Geocoding / Search (検索)
 
-### Mapbox Geocoding API — **ADOPTED**
-- 日本の「丁目・番地」ブロックアドレッシング対応
-- `language=ja&country=jp` で最適化
-- 無料枠で十分
+### Google Places API — **ADOPTED**
+- 日本語の検索精度が高い
+- autocomplete / place details / text search が充実
+- Mapbox Geocoding API より日本の POI カバレッジが優秀
+
+### Mapbox Geocoding API — **NOT SELECTED**
+- Mapbox エコシステム統一の観点では理想的
+- しかし日本語検索精度で Google Places に劣る
+- 地図タップ時の POI identity が Mapbox Maps SDK と一致しない問題は、座標ベースのフォールバックで許容する
 
 ### Decision
-Intent share がメインの起動方法なので検索の重要度は低い。**Mapbox Geocoding で十分。**
+**Google Places API を採用。** 日本語検索精度を最優先する設計判断。
+Mapbox ベストプラクティスの Search SDK 統一からは外れるが、カーナビアプリとして検索品質を優先する。
 
 ---
 
