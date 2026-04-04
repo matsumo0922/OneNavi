@@ -44,18 +44,12 @@ body {
 }
 
 /* Search */
-#panel-search input {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.2s;
+#panel-search {
+  min-height: 40px;
 }
 
-#panel-search input:focus {
-  border-color: #4285f4;
+#panel-search gmp-place-autocomplete {
+  width: 100%;
 }
 
 /* Panel sections */
