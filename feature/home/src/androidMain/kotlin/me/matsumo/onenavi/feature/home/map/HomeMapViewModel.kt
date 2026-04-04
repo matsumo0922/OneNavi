@@ -19,10 +19,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
+import me.matsumo.onenavi.core.navigation.CameraManager
+import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
+import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.core.repository.RouteRepository
 import me.matsumo.onenavi.core.repository.SearchRepository
 import kotlin.time.Duration.Companion.milliseconds
@@ -30,7 +34,9 @@ import kotlin.time.Duration.Companion.milliseconds
 class HomeMapViewModel(
     private val searchRepository: SearchRepository,
     private val routeRepository: RouteRepository,
-    internal val navigationManager: HomeMapNavigationManager,
+    internal val routeManager: RouteManager,
+    internal val cameraManager: CameraManager,
+    internal val guidanceSessionManager: GuidanceSessionManager,
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -70,10 +76,14 @@ class HomeMapViewModel(
     private val _waypointEditResult = MutableStateFlow<Pair<Int, RouteWaypoint.Place>?>(null)
     val waypointEditResult: StateFlow<Pair<Int, RouteWaypoint.Place>?> = _waypointEditResult.asStateFlow()
 
+    val navigationState: StateFlow<NavigationState> = guidanceSessionManager.navigationState
+
     private var searchJob: Job? = null
 
     init {
-        navigationManager.register()
+        routeManager.register()
+        cameraManager.register()
+        guidanceSessionManager.register()
 
         @OptIn(FlowPreview::class)
         _query
@@ -85,7 +95,9 @@ class HomeMapViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        navigationManager.unregister()
+        routeManager.unregister()
+        cameraManager.unregister()
+        guidanceSessionManager.unregister()
     }
 
     fun onViewEvent(event: HomeMapViewEvent) {
@@ -104,7 +116,24 @@ class HomeMapViewModel(
             is HomeMapViewEvent.OnRouteWaypointsConfirmed -> onRouteWaypointsConfirmed(event.waypoints)
             is HomeMapViewEvent.OnWaypointClicked -> onWaypointClicked(event.index)
             is HomeMapViewEvent.OnMapLandmarkSelected -> onMapLandmarkSelected(event.name, event.latitude, event.longitude)
+            HomeMapViewEvent.OnNavigationStarted -> onNavigationStarted()
+            HomeMapViewEvent.OnNavigationStopped -> onNavigationStopped()
         }
+    }
+
+    private fun onNavigationStarted() {
+        guidanceSessionManager.startSession()
+        cameraManager.requestCameraFollowing(pitch3D = true)
+    }
+
+    private fun onNavigationStopped() {
+        guidanceSessionManager.stopSession()
+        guidanceSessionManager.returnToBrowsing()
+        routeManager.clearRoutes()
+        cameraManager.clearNavigationPadding()
+        _routeResults.value = persistentListOf()
+        _selectedRouteIndex.value = 0
+        _waypoints.value = persistentListOf()
     }
 
     private fun onQueryChanged(query: String) {
@@ -200,7 +229,7 @@ class HomeMapViewModel(
 
     fun onRouteSelected(index: Int) {
         _selectedRouteIndex.value = index
-        navigationManager.selectRoute(index)
+        routeManager.selectRoute(index)
     }
 
     private fun onSwapOriginDestination() {
@@ -262,7 +291,8 @@ class HomeMapViewModel(
                     _routeResults.value = featureResults.toImmutableList()
                     _selectedRouteIndex.value = 0
 
-                    navigationManager.setRoutes(featureResults.map { it.navigationRoute })
+                    routeManager.setRoutes(featureResults.map { it.navigationRoute })
+                    guidanceSessionManager.setNavigationState(NavigationState.RoutePreview)
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to search routes." }
@@ -384,7 +414,8 @@ class HomeMapViewModel(
         _routeResults.value = persistentListOf()
         _selectedRouteIndex.value = 0
         _waypoints.value = persistentListOf()
-        navigationManager.clearRoutes()
+        routeManager.clearRoutes()
+        guidanceSessionManager.setNavigationState(NavigationState.Browsing)
     }
 
     fun onDismissSearchResults() {
