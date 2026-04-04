@@ -66,10 +66,8 @@ private const val ROUTE_CAMERA_MARGIN_HORIZONTAL = 100.0
 private const val ROUTE_CAMERA_MARGIN_TOP = 300.0
 private const val ROUTE_CAMERA_MARGIN_END = 250.0
 
-private const val NAVIGATION_FOLLOWING_PADDING_TOP = 300.0
-private const val NAVIGATION_FOLLOWING_PADDING_BOTTOM = 250.0
-private const val NAVIGATION_FOLLOWING_PADDING_HORIZONTAL = 40.0
-private const val NAVIGATION_OVERVIEW_PADDING_TOP = 350.0
+private const val NAVIGATION_PADDING_HORIZONTAL = 40.0
+private const val NAVIGATION_PADDING_EXTRA = 32.0
 
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
 
@@ -99,6 +97,9 @@ internal fun HomeMapScreenContent(
 
     val isNavigating = navigationState is NavigationState.ActiveGuidance
     val isArrived = navigationState is NavigationState.Arrival
+
+    var maneuverPanelHeightPx by remember { mutableFloatStateOf(0f) }
+    var tripCardHeightPx by remember { mutableFloatStateOf(0f) }
 
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
@@ -244,20 +245,6 @@ internal fun HomeMapScreenContent(
             mapView?.let { view ->
                 view.location.setLocationProvider(viewModel.cameraManager.navigationLocationProvider)
             }
-
-            val followingPadding = EdgeInsets(
-                NAVIGATION_FOLLOWING_PADDING_TOP,
-                NAVIGATION_FOLLOWING_PADDING_HORIZONTAL,
-                NAVIGATION_FOLLOWING_PADDING_BOTTOM,
-                NAVIGATION_FOLLOWING_PADDING_HORIZONTAL,
-            )
-            val overviewPadding = EdgeInsets(
-                NAVIGATION_OVERVIEW_PADDING_TOP,
-                NAVIGATION_FOLLOWING_PADDING_HORIZONTAL,
-                NAVIGATION_FOLLOWING_PADDING_BOTTOM,
-                NAVIGATION_FOLLOWING_PADDING_HORIZONTAL,
-            )
-            viewModel.cameraManager.applyNavigationPadding(followingPadding, overviewPadding)
         } else {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -267,6 +254,27 @@ internal fun HomeMapScreenContent(
 
             viewModel.cameraManager.clearNavigationPadding()
         }
+    }
+
+    LaunchedEffect(isNavigating, maneuverPanelHeightPx, tripCardHeightPx) {
+        if (!isNavigating) return@LaunchedEffect
+
+        val topPadding = maneuverPanelHeightPx.toDouble() + NAVIGATION_PADDING_EXTRA
+        val bottomPadding = tripCardHeightPx.toDouble() + NAVIGATION_PADDING_EXTRA
+
+        val followingPadding = EdgeInsets(
+            topPadding,
+            NAVIGATION_PADDING_HORIZONTAL,
+            bottomPadding,
+            NAVIGATION_PADDING_HORIZONTAL,
+        )
+        val overviewPadding = EdgeInsets(
+            topPadding,
+            NAVIGATION_PADDING_HORIZONTAL,
+            bottomPadding,
+            NAVIGATION_PADDING_HORIZONTAL,
+        )
+        viewModel.cameraManager.applyNavigationPadding(followingPadding, overviewPadding)
     }
 
     LaunchedEffect(routeResults) {
@@ -349,7 +357,8 @@ internal fun HomeMapScreenContent(
                             .padding(
                                 horizontal = 16.dp,
                                 vertical = 8.dp,
-                            ),
+                            )
+                            .onGloballyPositioned { maneuverPanelHeightPx = it.size.height.toFloat() },
                         currentManeuver = currentManeuver,
                         nextManeuver = guidanceUiState.nextManeuver,
                     )
@@ -362,7 +371,8 @@ internal fun HomeMapScreenContent(
                         .padding(
                             horizontal = 16.dp,
                             vertical = 16.dp,
-                        ),
+                        )
+                        .onGloballyPositioned { tripCardHeightPx = it.size.height.toFloat() },
                     tripProgress = guidanceUiState.tripProgress,
                     onStopClicked = { viewModel.onViewEvent(HomeMapViewEvent.OnNavigationStopped) },
                     onAddWaypointClicked = { },
