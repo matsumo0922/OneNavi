@@ -11,6 +11,7 @@ import com.mapbox.navigation.ui.maps.camera.NavigationCamera
 import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
 import com.mapbox.navigation.ui.maps.camera.lifecycle.NavigationBasicGesturesHandler
 import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraState
+import com.mapbox.navigation.ui.maps.camera.transition.NavigationCameraTransitionOptions
 import com.mapbox.navigation.ui.maps.location.NavigationLocationProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -120,8 +121,11 @@ class HomeMapNavigationManager {
     /**
      * カメラを Overview モードに遷移する（ルート全体表示）。
      */
-    fun requestCameraOverview() {
-        navigationCamera?.requestNavigationCameraToOverview()
+    fun requestCameraOverview(maxDurationMs: Long = DEFAULT_OVERVIEW_DURATION_MS) {
+        val transitionOptions = NavigationCameraTransitionOptions.Builder()
+            .maxDuration(maxDurationMs)
+            .build()
+        navigationCamera?.requestNavigationCameraToOverview(transitionOptions)
     }
 
     /**
@@ -180,5 +184,9 @@ class HomeMapNavigationManager {
         mapboxNavigation?.setNavigationRoutes(emptyList())
         viewportDataSource?.clearRouteData()
         viewportDataSource?.evaluate()
+    }
+
+    companion object {
+        private const val DEFAULT_OVERVIEW_DURATION_MS = 500L
     }
 }
