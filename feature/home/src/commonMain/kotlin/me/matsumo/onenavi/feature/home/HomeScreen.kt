@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -34,16 +35,9 @@ internal fun HomeScreen(
     var isNavigating by rememberSaveable { mutableStateOf(false) }
     val saveableStateHolder: SaveableStateHolder = rememberSaveableStateHolder()
 
-    if (isNavigating) {
-        HomeMapScreen(
-            modifier = Modifier.fillMaxSize(),
-            onNavigatingChanged = { isNavigating = it },
-        )
-        return
-    }
-
     NavigationSuiteScaffold(
         modifier = modifier,
+        layoutType = if (isNavigating) NavigationSuiteType.None else NavigationSuiteType.NavigationBar,
         navigationSuiteItems = {
             for ((index, destination) in HomeNavDestination.all.withIndex()) {
                 item(
