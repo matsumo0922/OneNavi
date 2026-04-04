@@ -64,6 +64,7 @@ internal fun HomeMapsMapEffectContent(
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
     waypoints: ImmutableList<RouteWaypoint>,
+    isNavigating: Boolean,
     routeManager: RouteManager,
     cameraManager: CameraManager,
     onMapViewChanged: (MapView) -> Unit,
@@ -213,8 +214,8 @@ internal fun HomeMapsMapEffectContent(
             )
         }
 
-        // ルート吹き出し: primary を最後に描画して z-order 最上位に配置
-        if (routeResults.isNotEmpty()) {
+        // ルート吹き出し: ナビ中は非表示、プレビュー時のみ表示
+        if (routeResults.isNotEmpty() && !isNavigating) {
             routeResults.forEachIndexed { index, result ->
                 if (index != selectedRouteIndex) {
                     calloutPoints.getOrNull(index)?.let { point ->
@@ -239,7 +240,9 @@ internal fun HomeMapsMapEffectContent(
             }
         }
 
-        if (searchResults.isNotEmpty()) {
+        if (isNavigating) {
+            // ナビ中はマーカー非表示
+        } else if (searchResults.isNotEmpty()) {
             searchResults.forEachIndexed { index, result ->
                 HomeMapNumberedPin(
                     point = Point.fromLngLat(result.longitude, result.latitude),
@@ -266,7 +269,7 @@ internal fun HomeMapsMapEffectContent(
             }
         }
 
-        if (waypoints.size > 2) {
+        if (waypoints.size > 2 && !isNavigating) {
             val intermediateWaypoints = waypoints.drop(1).dropLast(1)
             intermediateWaypoints.forEachIndexed { index, waypoint ->
                 val point = when (waypoint) {

@@ -14,6 +14,7 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -30,7 +31,16 @@ internal fun HomeScreen(
     modifier: Modifier = Modifier,
 ) {
     var currentIndex by rememberSaveable { mutableIntStateOf(0) }
+    var isNavigating by rememberSaveable { mutableStateOf(false) }
     val saveableStateHolder: SaveableStateHolder = rememberSaveableStateHolder()
+
+    if (isNavigating) {
+        HomeMapScreen(
+            modifier = Modifier.fillMaxSize(),
+            onNavigatingChanged = { isNavigating = it },
+        )
+        return
+    }
 
     NavigationSuiteScaffold(
         modifier = modifier,
@@ -69,6 +79,7 @@ internal fun HomeScreen(
                                 modifier = Modifier
                                     .padding(contentPadding)
                                     .fillMaxSize(),
+                                onNavigatingChanged = { isNavigating = it },
                             )
                         }
 
