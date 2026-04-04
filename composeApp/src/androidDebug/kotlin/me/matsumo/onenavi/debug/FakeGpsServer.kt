@@ -5,7 +5,7 @@ import android.location.Location
 import android.location.LocationManager
 import android.location.provider.ProviderProperties
 import android.os.SystemClock
-import io.github.aakira.napier.Napier
+import android.util.Log
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -70,7 +70,7 @@ class FakeGpsServer(
                     lastLocation = data
                     call.respond(SuccessResponse(success = true))
                 }.onFailure { error ->
-                    Napier.e("Failed to set mock location", error)
+                    Log.e(TAG, "Failed to set mock location", error)
                     call.respond(
                         status = HttpStatusCode.InternalServerError,
                         message = ErrorResponse(error = error.message ?: "Unknown error"),
@@ -92,7 +92,7 @@ class FakeGpsServer(
                     removeMockProvider()
                     call.respond(SuccessResponse(success = true))
                 }.onFailure { error ->
-                    Napier.e("Failed to stop mock provider", error)
+                    Log.e(TAG, "Failed to stop mock provider", error)
                     call.respond(
                         status = HttpStatusCode.InternalServerError,
                         message = ErrorResponse(error = error.message ?: "Unknown error"),
@@ -106,9 +106,9 @@ class FakeGpsServer(
         scope.launch {
             runCatching {
                 server.start(wait = false)
-                Napier.d("FakeGpsServer started on port $PORT")
+                Log.d(TAG, "FakeGpsServer started on port $PORT")
             }.onFailure { error ->
-                Napier.e("Failed to start FakeGpsServer", error)
+                Log.e(TAG, "Failed to start FakeGpsServer", error)
             }
         }
     }
@@ -135,7 +135,7 @@ class FakeGpsServer(
         locationManager.setTestProviderEnabled(LocationManager.GPS_PROVIDER, true)
         isProviderActive = true
 
-        Napier.d("Mock GPS provider activated")
+        Log.d(TAG, "Mock GPS provider activated")
     }
 
     private fun setMockLocation(data: LocationData) {
@@ -166,10 +166,11 @@ class FakeGpsServer(
         isProviderActive = false
         lastLocation = null
 
-        Napier.d("Mock GPS provider deactivated")
+        Log.d(TAG, "Mock GPS provider deactivated")
     }
 
     companion object {
+        private const val TAG = "FakeGpsServer"
         private const val PORT = 5556
     }
 }
