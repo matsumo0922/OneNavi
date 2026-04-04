@@ -22,7 +22,10 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -41,6 +44,7 @@ class FakeGpsServer(
 
     private var isProviderActive = false
     private var lastLocation: LocationData? = null
+    private var repeatJob: Job? = null
 
     private val server = embeddedServer(
         factory = CIO,
@@ -142,7 +146,26 @@ class FakeGpsServer(
 
     private fun setMockLocation(data: LocationData) {
         ensureTestProvider()
+        pushLocation(data)
+        startRepeatLoop(data)
+        Log.d(TAG, "Location set: ${data.lat}, ${data.lng} bearing=${data.bearing} speed=${data.speed}")
+    }
 
+    /**
+     * 実 GPS ハードウェアに勝つために、最後の mock 位置を高頻度で再注入し続ける。
+     * Web から新しい位置が来たらループを再起動する。
+     */
+    private fun startRepeatLoop(data: LocationData) {
+        repeatJob?.cancel()
+        repeatJob = scope.launch {
+            while (isActive) {
+                delay(REPEAT_INTERVAL_MS)
+                pushLocation(data)
+            }
+        }
+    }
+
+    private fun pushLocation(data: LocationData) {
         val now = System.currentTimeMillis()
         val elapsedNanos = SystemClock.elapsedRealtimeNanos()
 
@@ -152,19 +175,20 @@ class FakeGpsServer(
                 longitude = data.lng
                 bearing = data.bearing
                 speed = data.speed
-                accuracy = data.accuracy
+                accuracy = MOCK_ACCURACY
                 altitude = data.altitude
                 time = now
                 elapsedRealtimeNanos = elapsedNanos
             }
             locationManager.setTestProviderLocation(provider, location)
         }
-
-        Log.d(TAG, "Location set: ${data.lat}, ${data.lng} bearing=${data.bearing} speed=${data.speed}")
     }
 
     private fun removeMockProvider() {
         if (!isProviderActive) return
+
+        repeatJob?.cancel()
+        repeatJob = null
 
         for (provider in PROVIDERS) {
             runCatching {
@@ -182,6 +206,8 @@ class FakeGpsServer(
     companion object {
         private const val TAG = "FakeGpsServer"
         private const val PORT = 5556
+        private const val REPEAT_INTERVAL_MS = 100L
+        private const val MOCK_ACCURACY = 1.0f
         private val PROVIDERS = listOf(
             LocationManager.GPS_PROVIDER,
             LocationManager.NETWORK_PROVIDER,
