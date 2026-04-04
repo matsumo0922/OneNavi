@@ -163,16 +163,31 @@ class HomeMapNavigationManager {
     }
 
     /**
+     * 選択ルートを先頭にした並び順を返す。
+     * Mapbox Navigation SDK は先頭のルートをプライマリとして描画するため、
+     * この順序で API に渡す必要がある。
+     */
+    fun reorderedRoutes(): List<NavigationRoute> {
+        val current = _routes.value
+        val primaryIndex = _selectedRouteIndex.value
+        if (primaryIndex !in current.indices) return current
+        return buildList {
+            add(current[primaryIndex])
+            current.forEachIndexed { index, route ->
+                if (index != primaryIndex) add(route)
+            }
+        }
+    }
+
+    /**
      * 選択ルートを切り替える。
      * _routes の順序は変更せず、selectedRouteIndex のみ更新する。
-     * Mapbox API には選択ルートを先頭にした並び順で渡す。
      */
     fun selectRoute(index: Int) {
         val current = _routes.value
         if (index !in current.indices) return
         _selectedRouteIndex.value = index
-        val reordered = listOf(current[index]) + current.filterIndexed { currentIndex, _ -> currentIndex != index }
-        mapboxNavigation?.setNavigationRoutes(reordered)
+        mapboxNavigation?.setNavigationRoutes(reorderedRoutes())
     }
 
     /**
