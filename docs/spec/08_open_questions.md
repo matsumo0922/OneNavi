@@ -19,10 +19,10 @@
 - **Decision:** Mapbox の route data から生データを取得し、案内テキストは完全に自前で生成する。
 - **Rationale:** Mapbox デフォルトはマイル表記・不自然な日本語・通称なし・信号機案内なし。音声案内の品質は OneNavi の最大の差別化要素。
 
-### D-004: TTS は Azure Dragon HD を第一候補
-- **Date:** 2026-03-28
-- **Decision:** Azure TTS (Dragon HD) を第一候補、Android 内蔵 TTS をフォールバックとする。
-- **Rationale:** Dragon HD は日本語の自然さが業界最高水準。無料枠 500K 文字/月は個人利用に十分。
+### D-004: TTS は Google Cloud TTS Chirp 3: HD を採用
+- **Date:** 2026-04-04 (revised)
+- **Decision:** Google Cloud TTS (Chirp 3: HD, ボイス: Laomedeia) を採用、Android 内蔵 TTS をフォールバックとする。
+- **Rationale:** Google Places API と API キーを共用でき、OSS ユーザーの設定負担が軽減される。無料枠 1M 文字/月は Azure（500K）の 2 倍。ストリーミング API で ~200ms のレイテンシはナビ用途に十分。東京リージョン対応。
 
 ### D-005: 高速パネルは Mapbox + 同梱 SA/PA データ
 - **Date:** 2026-03-28
@@ -43,7 +43,7 @@
 ### D-008: Overpass API はアプリに搭載しない
 - **Date:** 2026-03-28
 - **Decision:** Overpass API はビルドパイプライン（GitHub Actions）での SA/PA データ抽出にのみ使用。アプリのランタイム依存には含めない。
-- **Rationale:** OSS プロジェクトとして自前の DB サーバーを持てない。SA/PA データは静的 JSON としてリポジトリに同梱し、信号機データは Mapbox API から取得することで、外部依存を Mapbox + Google Routes API + Azure TTS のみに抑える。
+- **Rationale:** OSS プロジェクトとして自前の DB サーバーを持てない。SA/PA データは静的 JSON としてリポジトリに同梱し、信号機データは Mapbox API から取得することで、外部依存を Mapbox + Google Cloud (Routes API + TTS) のみに抑える。
 
 ---
 

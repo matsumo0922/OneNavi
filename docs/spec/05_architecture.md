@@ -20,7 +20,7 @@
 │              │              │  │  └ SA/PA 同梱DB  │  │
 │              │              │  ├─────────────────┤  │
 │              │              │  │ TTS Engine       │  │
-│              │              │  │  ├ Azure TTS     │  │
+│              │              │  │  ├ GCP TTS      │  │
 │              │              │  │  └ Android TTS   │  │
 │              │              │  └─────────────────┘  │
 ├──────────────┴──────────────┤                       │
@@ -128,7 +128,7 @@ setNavigationRoutes() でセッション継続のまま新ルートに切替
 | Mapbox Navigation SDK | ルーティング、リルート、トリップ進捗 | 100 MAU, 1,000 trips/month | MAU + trips |
 | Mapbox Directions API | ルート計算 | (Nav SDK セッション中は無料) | Requests (session 外のみ) |
 | Mapbox Geocoding API | 検索 | 100,000 requests/month | Requests |
-| Azure Cognitive Services TTS | 音声合成 | 500K chars/month | Characters |
+| Google Cloud TTS (Chirp 3: HD) | 音声合成 | 1M chars/month | Characters |
 | Google Routes API | 料金計算のみ | $200 credit/month | Requests |
 
 ## Static Data (リポジトリ同梱)
