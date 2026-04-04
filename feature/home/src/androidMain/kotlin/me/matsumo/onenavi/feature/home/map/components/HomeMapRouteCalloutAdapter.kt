@@ -83,6 +83,8 @@ internal class HomeMapRouteCalloutAdapter(
             .options(
                 viewAnnotationOptions {
                     ignoreCameraPadding(true)
+                    allowOverlap(true)
+                    allowOverlapWithPuck(true)
                     priority(if (isPrimary) 0 else 1)
                     annotationAnchors(
                         { anchor(ViewAnnotationAnchor.BOTTOM_LEFT) },
