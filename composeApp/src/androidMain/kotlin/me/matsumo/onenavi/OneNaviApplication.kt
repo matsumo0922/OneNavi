@@ -9,6 +9,7 @@ import com.mapbox.navigation.base.options.NavigationOptions
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
 import io.github.aakira.napier.DebugAntilog
 import io.github.aakira.napier.Napier
+import me.matsumo.onenavi.debug.DevTools
 import me.matsumo.onenavi.di.applyModules
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -27,6 +28,7 @@ class OneNaviApplication : Application(), KoinStartup {
             Napier.base(DebugAntilog())
         }
 
+        DevTools.initialize(this)
         setupMapboxLanguage()
         setupMapboxNavigation()
     }
