@@ -94,7 +94,6 @@ internal fun HomeMapsMapEffectContent(
     val routeLineView = remember {
         MapboxRouteLineView(
             MapboxRouteLineViewOptions.Builder(context)
-                .routeLineBelowLayerId("road-label")
                 .displaySoftGradientForTraffic(true)
                 .build(),
         )

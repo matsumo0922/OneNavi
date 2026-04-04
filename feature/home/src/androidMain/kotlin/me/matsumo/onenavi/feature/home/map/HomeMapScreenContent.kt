@@ -1,7 +1,7 @@
 package me.matsumo.onenavi.feature.home.map
 
-import android.app.Activity
 import android.view.WindowManager
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,7 +26,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -80,7 +79,7 @@ internal fun HomeMapScreenContent(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
-    val activity = LocalContext.current as? Activity
+    val activity = LocalActivity.current
 
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val histories by viewModel.histories.collectAsStateWithLifecycle()
@@ -242,16 +241,10 @@ internal fun HomeMapScreenContent(
             allowSheetHide = false
 
             activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-            mapView?.let { view ->
-                view.location.setLocationProvider(viewModel.cameraManager.navigationLocationProvider)
-            }
+            mapView?.location?.setLocationProvider(viewModel.cameraManager.navigationLocationProvider)
         } else {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-            mapView?.let { view ->
-                view.location.enabled = true
-            }
+            mapView?.location?.enabled = true
 
             viewModel.cameraManager.clearNavigationPadding()
         }

@@ -25,6 +25,9 @@ import kotlin.coroutines.resumeWithException
  * Directions API を直接叩くのではなく、SDK 経由でルートを取得することで
  * ナビセッション中のリルート・リフレッシュが無料になる。
  *
+ * driving-traffic プロファイルは日本の生活道路に交通データがなく、
+ * 目的地が遠い幹線道路にスナップされる問題があるため driving プロファイルを使用する。
+ *
  * @param context アプリケーションコンテキスト（言語設定の取得に使用）
  * @param navigationProvider MapboxNavigation インスタンスを遅延取得するプロバイダ
  */
@@ -48,7 +51,7 @@ class MapboxNavigationRouteDataSource(
         val navigation = navigationProvider()
 
         val baseOptions = RouteOptions.builder()
-            .applyDefaultNavigationOptions()
+            .applyDefaultNavigationOptions(DirectionsCriteria.PROFILE_DRIVING)
             .applyLanguageAndVoiceUnitOptions(context)
             .coordinatesList(listOf(origin) + waypointPoints + listOf(destination))
 
