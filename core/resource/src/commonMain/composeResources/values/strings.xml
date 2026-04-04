@@ -87,6 +87,13 @@
     <string name="home_map_route_done">完了</string>
     <string name="home_subscription_expired_title">Pro プランの失効</string>
     <string name="home_subscription_expired_message">OneNavi Pro の定期購入が解約または返金されたため、Pro 機能が無効になりました。\n引き続きご利用いただくには、再度アップグレードしてください。</string>
+    <string name="home_map_route_result_duration_distance">%1$s分 (%2$sm)</string>
+    <string name="home_map_route_result_via">%1$s 経由</string>
+    <string name="home_map_route_result_toll_road">有料道路</string>
+    <string name="home_map_route_result_general_road">一般道</string>
+    <string name="home_map_route_result_start_navigation">ナビ開始</string>
+    <string name="home_map_route_placeholder">ルート</string>
+    <string name="home_map_not_available_ios">この機能はiOSでは利用できません</string>
 
     <!-- Setting -->
     <string name="setting_title">設定</string>
@@ -112,7 +119,10 @@
     <string name="setting_other_developer_mode">開発モード</string>
     <string name="setting_other_developer_mode_description">[Warning] Do not enable this mode if you are not a developer.</string>
     <string name="setting_other_developer_mode_dialog_title">Developer Mode</string>
-    <string name="setting_other_developer_mode_dialog_description">You are trying to turn on this mode. Please enter the developer's PIN.\n\n[Warning] When this mode is turned on, you will not be able to receive any support.</string>
+    <string name="setting_other_developer_mode_dialog_description">You are trying to turn on this mode. Please enter the developer\'s PIN.\n\n[Warning] When this mode is turned on, you will not be able to receive any support.</string>
+    <string name="setting_other_developer_mode_pin_label">PIN</string>
+    <string name="setting_other_developer_mode_pin_invalid">Invalid PIN</string>
+    <string name="setting_other_developer_mode_submit">Submit</string>
 
     <!-- Setting Paywall -->
     <string name="setting_paywall_title">Pro</string>

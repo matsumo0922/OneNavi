@@ -20,7 +20,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.mikepenz.aboutlibraries.entity.Library
 import com.mikepenz.aboutlibraries.ui.compose.util.htmlReadyLicenseContent
+import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.common_ok
 import me.matsumo.onenavi.core.ui.theme.center
+import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,7 +63,7 @@ internal fun LicenseDialog(
                 modifier = Modifier.align(Alignment.End),
                 onClick = onDismissRequest,
             ) {
-                Text("OK")
+                Text(stringResource(Res.string.common_ok))
             }
         }
     }

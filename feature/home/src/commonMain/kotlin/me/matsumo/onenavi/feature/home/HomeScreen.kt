@@ -20,6 +20,8 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.home_map_route_placeholder
 import me.matsumo.onenavi.feature.home.map.HomeMapScreen
 import org.jetbrains.compose.resources.stringResource
 
@@ -76,7 +78,7 @@ internal fun HomeScreen(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    text = "Route",
+                                    text = stringResource(Res.string.home_map_route_placeholder),
                                     style = MaterialTheme.typography.titleLarge,
                                 )
                             }
