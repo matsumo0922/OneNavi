@@ -53,53 +53,56 @@
 sealed interface NavigationState {
     data object Browsing : NavigationState
     data object Search : NavigationState
-    data class RoutePreview(
-        val routes: ImmutableList<RouteResult>,
-        val selectedIndex: Int,
-        val waypoints: ImmutableList<RouteWaypoint>,
-    ) : NavigationState
-    data class ActiveGuidance(
-        val guidanceUiState: GuidanceUiState,
-    ) : NavigationState
-    data class Arrival(
-        val destinationName: String,
-        val totalDistanceMeters: Double,
-        val totalDurationSeconds: Double,
-    ) : NavigationState
+    data object RoutePreview : NavigationState
+    data object ActiveGuidance : NavigationState
+    data object Arrival : NavigationState
     data object FreeDrive : NavigationState  // Phase 1 では未使用、定義のみ
 }
 ```
+
+> **設計判断:** NavigationState は全て data object（マーカー）とする。各状態のデータは別の StateFlow で管理する:
+> - RoutePreview のデータ → `routeResults` / `selectedRouteIndex` / `waypoints`（既存 StateFlow）
+> - ActiveGuidance のデータ → `GuidanceSessionManager.guidanceUiState`（別 StateFlow）
+> - Arrival のデータ → `GuidanceSessionManager.arrivalInfo`（別 StateFlow）
+>
+> **理由:** NavigationState にデータを埋め込むと、RouteProgress の毎秒更新で navigationState が変わり、全 UI が毎秒再コンポーズされる。マーカー方式なら navigationState は状態遷移時のみ変わる。
 
 ### 2.2 状態遷移図
 
 ```
                   ┌──────────┐
-                  │ Browsing │◄──────────────────────────┐
-                  └────┬─────┘                           │
-                       │ 検索開始                    閉じる / タイマー / 手動終了
-                       ▼                                 │
-                  ┌──────────┐                           │
-                  │  Search  │                           │
-                  └────┬─────┘                           │
-                       │ ルート検索                       │
-                       ▼                                 │
-               ┌──────────────┐                          │
-               │ RoutePreview │◄──── ルート再検索         │
-               └──────┬───────┘                          │
-                      │ ナビ開始                          │
-                      ▼                                  │
-             ┌────────────────┐                          │
-             │ ActiveGuidance │◄──── リルート（自動）     │
-             └──┬──────────┬──┘                          │
-                │          │ ✕ボタン（手動終了）          │
-                │ 目的地到着 └────────────────────────────┤
-                ▼                                        │
-           ┌──────────┐                                  │
-           │ Arrival  │──────────────────────────────────┘
-           └──────────┘
+          ┌──────►│ Browsing │◄──────────────────────────┐
+          │       └────┬─────┘                           │
+          │            │ 検索開始                    閉じる / タイマー
+          │            ▼                                 │
+          │       ┌──────────┐                           │
+          ├───────┤  Search  │ ← 検索閉じるで Browsing   │
+          │       └────┬─────┘                           │
+          │            │ ルート検索                       │
+          │            ▼                                 │
+          │    ┌──────────────┐                          │
+          ├────┤ RoutePreview │◄──── ルート再検索         │
+          │    └──────┬───────┘ ← 閉じるで Browsing      │
+          │           │ ナビ開始                          │
+          │           ▼                                  │
+          │  ┌────────────────┐                          │
+          ├──┤ ActiveGuidance │◄──── リルート（自動）     │
+          │  └──┬──────────┬──┘                          │
+          │     │          │ ✕ / back（手動終了）         │
+          │     │ 目的地到着 └───────────────────┐        │
+          │     ▼                               │        │
+          │┌──────────┐                         │        │
+          ││ Arrival  │─────────────────────────┼────────┘
+          │└──────────┘                         │
+          │                                     │
+          └─────────────────────────────────────┘
 ```
 
-> **手動終了フロー:** トリップカードの ✕ ボタンをタップ → `stopTripSession()` / `clearRoutes()` / FLAG 解除 → `NavigationState.Browsing` に直接遷移（Arrival 画面は表示しない）
+> **手動終了フロー:** トリップカードの ✕ ボタン **または system back キー** → `stopTripSession()` / `clearRoutes()` / FLAG 解除 → `NavigationState.Browsing` に直接遷移（Arrival 画面は表示しない、確認ダイアログなし）
+>
+> **その他の Browsing 復帰パス:**
+> - Search → Browsing: 検索を閉じる（OnDismissSearchResult）
+> - RoutePreview → Browsing: ルートを閉じる（OnDismissRoutes）
 
 ### 2.3 各状態でのコンポーネント表示
 
@@ -129,7 +132,7 @@ core/model/                          ← Mapbox 非依存のデータモデル
 ├── ManeuverInfo.kt
 └── TripProgressInfo.kt
 
-core/navigation/                     ← Mapbox 依存のナビ管理（新規モジュール）
+core/navigation/                     ← Mapbox 依存のナビ管理（新規モジュール、androidMain のみ）
 ├── RouteManager.kt                  ← ルート管理 + RoutesObserver
 ├── CameraManager.kt                 ← カメラ管理（Following/Overview/Idle）
 ├── GuidanceSessionManager.kt        ← セッション管理 + Observer 群
@@ -166,10 +169,12 @@ feature/home/                        ← UI コンポーネント（既存モジ
   - リルート
   - トラフィックリフレッシュ（5 分毎）
   - 代替ルート探索
-- RouteLineApi / RouteLineView の管理
 - reorderedRoutes() の提供
 - setRoutes() / selectRoute() / clearRoutes()
+- RoutesObserver 内で冪等チェック（ルートが実際に変わった場合のみ StateFlow 更新）
 ```
+
+> **注意:** RouteLineApi / RouteLineView は描画に `MapView` の `Style` が必要なため、**feature/home の HomeMapsMapEffectContent に残す**。RouteManager はデータ管理のみ。描画は UI 層が RouteManager の StateFlow を observe して RouteLineApi に渡す。
 
 #### CameraManager（元 HomeMapNavigationManager のカメラ部分）
 
@@ -210,9 +215,10 @@ feature/home/                        ← UI コンポーネント（既存モジ
 MapboxNavigation (SDK)
   │
   ├── RoutesObserver ──────────────► RouteManager
-  │                                   ├── StateFlow<routes>
-  │                                   ├── RouteLineApi.setNavigationRoutes()
+  │                                   ├── StateFlow<routes> 更新（冪等チェック付き）
   │                                   └── CameraManager.onRouteChanged()
+  │                                   ↓ UI 層が StateFlow を observe
+  │                                   HomeMapsMapEffectContent → RouteLineApi.setNavigationRoutes()
   │
   ├── LocationObserver ────────────► CameraManager
   │                                   ├── NavigationLocationProvider.changePosition()
@@ -220,8 +226,9 @@ MapboxNavigation (SDK)
   │
   ├── RouteProgressObserver ───────► GuidanceSessionManager
   │                                   ├── StateFlow<GuidanceUiState>
-  │                                   ├── RouteLineApi.updateWithRouteProgress()
   │                                   └── CameraManager.onRouteProgressChanged()
+  │                                   ↓ UI 層が RouteProgress を受けて
+  │                                   HomeMapsMapEffectContent → RouteLineApi.updateWithRouteProgress()
   │
   ├── VoiceInstructionsObserver ───► GuidanceSessionManager
   │                                   └── TTS 再生（カスタムテンプレート）
@@ -276,6 +283,19 @@ data class GuidanceUiState(
     val tripProgress: TripProgressInfo,
     val currentRoadName: String?,
     val isOffRoute: Boolean,
+    val isTtsAvailable: Boolean,
+    val isLocationStale: Boolean,
+)
+```
+
+### 4.4 ArrivalInfo
+
+```kotlin
+@Immutable
+data class ArrivalInfo(
+    val destinationName: String,
+    val totalDistanceMeters: Double,
+    val totalDurationSeconds: Double,
 )
 ```
 
@@ -523,6 +543,8 @@ object NavigationColors {
 | 13 | `経由地に到着しました` | maneuver.type=arrive (waypoint) |
 | 14 | `ルートを再計算しました` | リルート完了時 |
 | 15 | `Uターンです` | modifier=uturn |
+| 16 | `{distance}先、鋭角左折です` | modifier=sharp left |
+| 17 | `{distance}先、鋭角右折です` | modifier=sharp right |
 
 ### 8.4 距離の読み上げ
 
@@ -545,7 +567,9 @@ object NavigationColors {
 
 ## 9. バックグラウンド・ForegroundService
 
-### 9.1 TripSession
+### 9.1 TripSession と ForegroundService
+
+Mapbox SDK は `withForegroundService = true` で **SDK 自身が ForegroundService と Notification を管理する**。独自に ForegroundService を作ると通知が二重になるため、**Mapbox の仕組みをそのまま利用する**。
 
 ```kotlin
 mapboxNavigation.startTripSession(
@@ -555,12 +579,25 @@ mapboxNavigation.startTripSession(
 
 ### 9.2 Notification
 
-- **チャネル:** ナビゲーション用の専用 NotificationChannel
-- **表示内容:**
-  - タイトル: 次マニューバ情報（例: `300m 先、左折`）
-  - テキスト: ETA（例: `到着 11:05 · 残り 3.4km`）
-- **更新:** `RouteProgressObserver` のコールバック毎に更新
-- **タップ動作:** アプリのナビ画面を開く
+- **Phase 1:** Mapbox SDK のデフォルト通知をそのまま使用
+- **Phase 2:** `TripNotification` インターフェースを実装して独自通知に差し替え
+
+```kotlin
+// Phase 2 での差し替え例:
+class OneNaviTripNotification(context: Context) : TripNotification {
+    override fun getNotification(): Notification { /* 次マニューバ + ETA */ }
+    override fun onTripSessionStarted() { /* チャネル作成等 */ }
+    override fun onTripSessionStopped() { /* クリーンアップ */ }
+    override fun getNotificationId(): Int = NOTIFICATION_ID
+}
+
+// NavigationOptions で登録（OneNaviApplication.kt）
+NavigationOptions.Builder(context)
+    .tripNotification(OneNaviTripNotification(context))
+    .build()
+```
+
+> **理由:** 独自 ForegroundService を作ると Mapbox SDK の service と競合する。SDK の `TripNotification` をカスタマイズする方が安全。Phase 1 ではデフォルト通知で十分機能する。
 
 ### 9.3 画面 ON 維持
 
@@ -584,10 +621,12 @@ window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 RoutesObserver (SDK からの通知)
   ↓
 RouteManager.onRoutesChanged(result)
-  ├─→ StateFlow<routes> 更新
-  ├─→ RouteLineApi.setNavigationRoutes()
-  ├─→ CameraManager.viewportDataSource.onRouteChanged()
-  └─→ UI（代替ルート表示等）
+  ├─→ StateFlow<routes> 更新（冪等チェック: ルートが実際に変わった場合のみ）
+  └─→ CameraManager.viewportDataSource.onRouteChanged()
+  ↓ UI 層が StateFlow を observe
+HomeMapsMapEffectContent
+  ├─→ RouteLineApi.setNavigationRoutes(routes, alternativesMetadata)
+  └─→ RouteLineView.renderRouteDrawData(style, result)
 
 対象イベント:
 - 初回ルート設定（setNavigationRoutes()）
@@ -596,6 +635,8 @@ RouteManager.onRoutesChanged(result)
 - 代替ルート探索（5 分毎）
 - ユーザーによるルート切替（タップ）
 ```
+
+> **循環呼び出し防止:** `setNavigationRoutes()` を呼ぶと RoutesObserver がコールバックされる。RouteManager 内で冪等チェック（ルートの ID や geometry が実際に変わったかを比較）を行い、不要な StateFlow 更新を防ぐ。
 
 ### 10.2 ルートライン消失エフェクト
 
@@ -633,6 +674,24 @@ routeLineApi.updateWithRouteProgress(routeProgress) { result ->
 - leg が分かれるため、ETA は次の経由地（または目的地）までの値
 - DataSource の API は将来 silent waypoint に対応可能な設計にしておく
 
+### 11.1 経由地到着後の継続
+
+```kotlin
+ArrivalObserver {
+    onWaypointArrival(routeProgress) {
+        tts.speak("経由地に到着しました")
+        mapboxNavigation.navigateNextRouteLeg()
+        // UI は ActiveGuidance のまま
+        // マニューバパネルが次 leg の情報に自動切替
+    }
+    onFinalDestinationArrival(routeProgress) {
+        // NavigationState.Arrival に遷移
+    }
+}
+```
+
+> **設計判断:** `AutoArrivalController` で即継続（Google Maps と同じ）。停車確認 UI は表示しない。運転中のタップ操作を避けるため。
+
 ---
 
 ## 12. レイアウト切替
@@ -664,27 +723,168 @@ when {
 
 ## 13. onNavigationClicked の実装フロー
 
+### 13.1 呼び出し順序と課金境界
+
 ```
+前提: RoutePreview 時点で setNavigationRoutes() は呼び済み
+      （ルートライン描画のために必要）
+
 ユーザーが「ナビ開始」ボタンをタップ
   ↓
 HomeMapViewEvent.OnNavigationStarted を発行
   ↓
 HomeMapViewModel.onNavigationStarted()
-  ├── guidanceSessionManager.startSession(routes, selectedIndex)
+  ├── guidanceSessionManager.startSession()
   │     ├── mapboxNavigation.startTripSession(withForegroundService = true)
+  │     │   ↑ ルートが既に set 済みなので即 Active Guidance に入る
+  │     │   ↑ この時点で Mapbox 課金の trip カウントが増加
   │     ├── 全 Observer を登録
-  │     ├── Android TTS を初期化
-  │     └── ForegroundService 通知を作成
+  │     └── Android TTS を初期化（非同期、失敗時は isTtsAvailable=false）
   ├── cameraManager.requestCameraFollowing(pitch3D = true)
   │     ├── viewportDataSource.followingPadding = (上方に余白大)
-  │     └── navigationCamera.requestNavigationCameraToFollowing()
+  │     └── ※初回 location 受信後に Following が安定する
   ├── NavigationState → ActiveGuidance に遷移
   └── FLAG_KEEP_SCREEN_ON を設定
 ```
 
+> **重要:** `setNavigationRoutes()` は RoutePreview 時に既に呼ばれている。ナビ開始時は `startTripSession()` のみ呼ぶ。この順序が課金境界に直結する（RoutePreview では TripSession を開始しないので Active Guidance 課金されない）。
+
+### 13.2 TTS 初期化
+
+- TTS は `startSession()` 内で初期化（`TextToSpeech(context, listener)`）
+- 初期化は非同期で 1-2 秒かかる。初期化完了前の VoiceInstructions は破棄される
+- 初期化失敗時は `isTtsAvailable = false` を設定し、視覚ガイドのみで継続
+
+### 13.3 「まもなく」テンプレートのトリガー
+
+- Mapbox SDK の `VoiceInstructions` が距離に応じて「まもなく」相当のタイミングを制御する
+- SDK が提供する `announcement` テキストに "まもなく" が含まれるか、または `distanceAlongGeometry` が小さい場合にテンプレート #5/#6 を使用
+- 独自の閾値定義は Phase 2（速度連動タイミング）で実装
+
 ---
 
-## 14. 実装順序
+## 14. Observer ライフサイクル
+
+### 14.1 登録・解除タイミング
+
+| Observer | 登録タイミング | 解除タイミング | 管理者 |
+|----------|-------------|-------------|--------|
+| RoutesObserver | MapboxNavigation attach 時 | MapboxNavigation detach 時 | RouteManager |
+| LocationObserver | MapboxNavigation attach 時 | MapboxNavigation detach 時 | CameraManager |
+| RouteProgressObserver | startSession() 時 | stopSession() 時 | GuidanceSessionManager |
+| VoiceInstructionsObserver | startSession() 時 | stopSession() 時 | GuidanceSessionManager |
+| BannerInstructionsObserver | startSession() 時 | stopSession() 時 | GuidanceSessionManager |
+| OffRouteObserver | startSession() 時 | stopSession() 時 | GuidanceSessionManager |
+| ArrivalObserver | startSession() 時 | stopSession() 時 | GuidanceSessionManager |
+| RoadNameObserver | startSession() 時 | stopSession() 時 | GuidanceSessionManager |
+
+> **設計意図:** RoutesObserver と LocationObserver はナビ外（RoutePreview / Browsing）でも必要なため、MapboxNavigation のライフサイクルに合わせる。ナビ固有の Observer は startSession/stopSession で明示的に管理する。
+
+### 14.2 MapboxNavigationObserver パターン
+
+```kotlin
+// RouteManager / CameraManager は MapboxNavigationObserver を実装
+class RouteManager : MapboxNavigationObserver {
+    override fun onAttached(mapboxNavigation: MapboxNavigation) {
+        mapboxNavigation.registerRoutesObserver(routesObserver)
+    }
+    override fun onDetached(mapboxNavigation: MapboxNavigation) {
+        mapboxNavigation.unregisterRoutesObserver(routesObserver)
+    }
+}
+```
+
+---
+
+## 15. エラーハンドリング（Phase 1）
+
+### 15.1 対応するエラーケース
+
+| エラー | 検出方法 | 対応 |
+|--------|---------|------|
+| TTS 初期化失敗 | `TextToSpeech.OnInitListener` の status | `isTtsAvailable = false`、音声ボタンに「利用不可」表示、視覚ガイドのみで継続 |
+| 位置権限の途中剥奪 | LocationObserver でのコールバック停止 or runtime check | ナビ強制終了 → Browsing に戻る → 権限要求ダイアログ |
+| GPS 信号喪失 | `RouteProgress.stale` or LocationObserver のタイムアウト | `isLocationStale = true`、UI に「GPS なし」バッジ表示、enhanced location で補完継続 |
+
+### 15.2 Phase 2 以降で対応するエラーケース
+
+- process death からのセッション復帰
+- POST_NOTIFICATIONS 未許可（Android 13+）
+- battery optimization によるプロセス kill
+- screen rotation 時の状態復元
+
+---
+
+## 16. Enhanced Location と Puck 切替
+
+### 16.1 ナビ開始時
+
+ナビ開始時に MapView の location component を `NavigationLocationProvider` に切り替える:
+
+```kotlin
+// ナビ開始時（HomeMapsMapEffectContent 内）
+mapView.location.setLocationProvider(cameraManager.navigationLocationProvider)
+
+// ナビ終了時
+mapView.location.setLocationProvider(null) // デフォルトに戻す
+// or location.enabled = true で raw GPS に復帰
+```
+
+### 16.2 LocationObserver → NavigationLocationProvider → MapView
+
+```
+LocationObserver.onNewRawLocation(rawLocation)
+LocationObserver.onNewLocationMatcherResult(matcherResult)
+  ↓
+CameraManager:
+  navigationLocationProvider.changePosition(
+      matcherResult.enhancedLocation,
+      matcherResult.keyPoints,
+  )
+  viewportDataSource.onLocationChanged(matcherResult.enhancedLocation)
+  viewportDataSource.evaluate()
+  ↓
+MapView の location puck が enhanced location に追従
+```
+
+> **重要:** 現在のコード（HomeMapsMapEffectContent L136-139）は raw GPS の `createDefault2DPuck` を使用している。ナビ中は `NavigationLocationProvider` を経由した map-matched / enhanced location に切り替えること。
+
+---
+
+## 17. ルートライン消失の詳細
+
+### 17.1 必要な処理
+
+vanishingRouteLineEnabled は 2 つの更新元が必要:
+
+```kotlin
+// 1. RouteProgressObserver 内（GuidanceSessionManager が通知）
+routeLineApi.updateWithRouteProgress(routeProgress) { result ->
+    routeLineView.renderRouteLineUpdate(style, result)
+}
+
+// 2. OnIndicatorPositionChangedListener 内（スムーズな消失のため）
+mapView.location.addOnIndicatorPositionChangedListener { point ->
+    val result = routeLineApi.updateTraveledRouteLine(point)
+    routeLineView.renderRouteLineUpdate(style, result)
+}
+```
+
+> **注意:** `updateWithRouteProgress` だけでは消失がカクつく。`updateTraveledRouteLine` を位置更新ごとに呼ぶことでスムーズになる。
+
+### 17.2 代替ルートの重複部分
+
+```kotlin
+// 代替ルートの metadata を取得して主ルートとの重複部分を非表示にする
+val alternativesMetadata = mapboxNavigation.getAlternativeMetadataFor(routes)
+routeLineApi.setNavigationRoutes(routes, alternativesMetadata) { result ->
+    routeLineView.renderRouteDrawData(style, result)
+}
+```
+
+---
+
+## 18. 実装順序
 
 以下の順序で段階的に実装する。各ステップはビルド可能な状態を維持する。
 
@@ -694,6 +894,7 @@ HomeMapViewModel.onNavigationStarted()
 - `GuidanceUiState.kt`
 - `ManeuverInfo.kt`
 - `TripProgressInfo.kt`
+- `ArrivalInfo.kt`
 
 ### Step 2: core/navigation モジュール新設
 
@@ -724,9 +925,9 @@ HomeMapViewModel.onNavigationStarted()
 
 ### Step 5: ForegroundService + 通知
 
-- NotificationChannel 作成
-- 通知の構築・更新ロジック
+- Mapbox SDK のデフォルト通知をそのまま使用（Phase 1）
 - FLAG_KEEP_SCREEN_ON の制御
+- Enhanced Location への puck 切替（ナビ開始/終了時）
 
 ### Step 6: TTS パイプライン
 
@@ -745,7 +946,7 @@ HomeMapViewModel.onNavigationStarted()
 
 ---
 
-## 15. Mapbox SDK バージョン
+## 19. Mapbox SDK バージョン
 
 - **Navigation SDK:** `3.21.0-rc.1`（RC のまま進行）
 - **Maps SDK:** `11.20.2`
@@ -753,7 +954,7 @@ HomeMapViewModel.onNavigationStarted()
 
 ---
 
-## 16. 課金境界の注意
+## 20. 課金境界の注意
 
 - `startTripSession()` + `setNavigationRoutes(routes)` で **Active Guidance** 扱いになる
 - RoutePreview 状態では TripSession を開始しない（Free Drive 課金を避ける）
