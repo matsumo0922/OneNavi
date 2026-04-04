@@ -28,8 +28,7 @@ import me.matsumo.onenavi.core.model.GuidanceUiState
 import me.matsumo.onenavi.core.model.ManeuverInfo
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.TripProgressInfo
-import java.util.Locale
-import java.util.UUID
+import java.util.*
 
 /**
  * ナビゲーションセッション全体のライフサイクルを管理するクラス。
@@ -79,14 +78,12 @@ class GuidanceSessionManager(
         onRouteProgressForRouteLine?.invoke(routeProgress)
     }
 
-    private val voiceInstructionsObserver = object : VoiceInstructionsObserver {
-        override fun onNewVoiceInstructions(voiceInstructions: VoiceInstructions) {
-            val announcement = voiceInstructions.announcement()
-            if (announcement != null) {
-                speakTts(
-                    generateJapaneseAnnouncement(voiceInstructions) ?: announcement,
-                )
-            }
+    private val voiceInstructionsObserver = VoiceInstructionsObserver { voiceInstructions ->
+        val announcement = voiceInstructions.announcement()
+        if (announcement != null) {
+            speakTts(
+                generateJapaneseAnnouncement(voiceInstructions) ?: announcement,
+            )
         }
     }
 
