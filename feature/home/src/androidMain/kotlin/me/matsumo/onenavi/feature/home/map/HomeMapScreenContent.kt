@@ -43,6 +43,7 @@ import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.ViewportStatus
 import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraState
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
@@ -262,18 +263,9 @@ internal fun HomeMapScreenContent(
         val topPadding = maneuverPanelHeightPx.toDouble() + NAVIGATION_PADDING_EXTRA
         val bottomPadding = tripCardHeightPx.toDouble() + NAVIGATION_PADDING_EXTRA
 
-        val followingPadding = EdgeInsets(
-            topPadding,
-            NAVIGATION_PADDING_HORIZONTAL,
-            bottomPadding,
-            NAVIGATION_PADDING_HORIZONTAL,
-        )
-        val overviewPadding = EdgeInsets(
-            topPadding,
-            NAVIGATION_PADDING_HORIZONTAL,
-            bottomPadding,
-            NAVIGATION_PADDING_HORIZONTAL,
-        )
+        val followingPadding = EdgeInsets(topPadding, NAVIGATION_PADDING_HORIZONTAL, bottomPadding, NAVIGATION_PADDING_HORIZONTAL)
+        val overviewPadding = EdgeInsets(topPadding, NAVIGATION_PADDING_HORIZONTAL, bottomPadding, NAVIGATION_PADDING_HORIZONTAL)
+
         viewModel.cameraManager.applyNavigationPadding(followingPadding, overviewPadding)
     }
 
@@ -296,15 +288,20 @@ internal fun HomeMapScreenContent(
         }
 
         // NavigationCamera の Overview モードでルート全体を表示
-        // ViewportDataSource が RoutesObserver 経由でルート情報を受け取り、最適なカメラ位置を計算
+        // RoutesObserver 経由で viewportDataSource にルートデータが渡されるのを待ってからカメラを移動
         trackingMode = null
+
         val sheetPeekPx = with(density) { sheetPeekHeight.toPx() }.toDouble()
         val topPadding = topAppBarHeightPx.toDouble() + ROUTE_CAMERA_MARGIN_TOP
         val bottomPadding = sheetPeekPx + ROUTE_CAMERA_MARGIN_VERTICAL
         val padding = EdgeInsets(topPadding, ROUTE_CAMERA_MARGIN_HORIZONTAL, bottomPadding, ROUTE_CAMERA_MARGIN_END)
 
-        viewModel.cameraManager.viewportDataSource?.overviewPadding = padding
-        viewModel.cameraManager.viewportDataSource?.evaluate()
+        viewModel.routeManager.routes.first { it.isNotEmpty() }
+
+        viewModel.cameraManager.applyNavigationPadding(
+            followingPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0),
+            overviewPadding = padding,
+        )
         viewModel.cameraManager.requestCameraOverview()
     }
 

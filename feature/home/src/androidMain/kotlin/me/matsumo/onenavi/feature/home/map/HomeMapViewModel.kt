@@ -85,6 +85,10 @@ class HomeMapViewModel(
         cameraManager.register()
         guidanceSessionManager.register()
 
+        routeManager.routes
+            .onEach { routes -> cameraManager.onRouteChanged(routes.firstOrNull()) }
+            .launchIn(viewModelScope)
+
         @OptIn(FlowPreview::class)
         _query
             .debounce(DEBOUNCE.milliseconds)
@@ -288,11 +292,11 @@ class HomeMapViewModel(
             )
                 .onSuccess { coreResults ->
                     val featureResults = coreResults.mapNotNull { it.toFeatureRouteResult() }
-                    _routeResults.value = featureResults.toImmutableList()
                     _selectedRouteIndex.value = 0
 
                     routeManager.setRoutes(featureResults.map { it.navigationRoute })
                     guidanceSessionManager.setNavigationState(NavigationState.RoutePreview)
+                    _routeResults.value = featureResults.toImmutableList()
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to search routes." }
