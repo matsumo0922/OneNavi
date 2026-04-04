@@ -38,8 +38,8 @@ fake-gps-dev: fake-gps-forward
 fake-gps: fake-gps-setup fake-gps-dev
 
 fake-gps-status:
-	@curl -s http://localhost:$(FAKE_GPS_PORT)/status | python3 -m json.tool 2>/dev/null || echo "[fake-gps] Not connected"
+	@curl -s --max-time 3 http://localhost:$(FAKE_GPS_PORT)/status | python3 -m json.tool 2>/dev/null || echo "[fake-gps] Not connected (server not running?)"
 
 fake-gps-stop:
-	@curl -s -X POST http://localhost:$(FAKE_GPS_PORT)/stop | python3 -m json.tool 2>/dev/null || echo "[fake-gps] Not connected"
+	@curl -s --max-time 3 -X POST http://localhost:$(FAKE_GPS_PORT)/stop | python3 -m json.tool 2>/dev/null || echo "[fake-gps] Not connected"
 	-adb forward --remove tcp:$(FAKE_GPS_PORT)
