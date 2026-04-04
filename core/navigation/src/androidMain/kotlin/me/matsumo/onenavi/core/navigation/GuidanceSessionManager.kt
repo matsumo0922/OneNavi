@@ -226,6 +226,10 @@ class GuidanceSessionManager(
                 isTtsReady = result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED
                 _guidanceUiState.value = _guidanceUiState.value.copy(isTtsAvailable = isTtsReady)
                 Napier.d(tag = TAG) { "TTS initialized: ready=$isTtsReady" }
+
+                if (isTtsReady) {
+                    speakTts(START_ANNOUNCEMENT)
+                }
             } else {
                 isTtsReady = false
                 _guidanceUiState.value = _guidanceUiState.value.copy(isTtsAvailable = false)
@@ -351,5 +355,6 @@ class GuidanceSessionManager(
 
     companion object {
         private const val TAG = "GuidanceSessionManager"
+        private const val START_ANNOUNCEMENT = "音声案内を開始します。実際の交通規制に従って、走行してください。"
     }
 }

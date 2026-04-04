@@ -66,6 +66,11 @@ private const val ROUTE_CAMERA_MARGIN_HORIZONTAL = 100.0
 private const val ROUTE_CAMERA_MARGIN_TOP = 300.0
 private const val ROUTE_CAMERA_MARGIN_END = 250.0
 
+private const val NAVIGATION_FOLLOWING_PADDING_TOP = 300.0
+private const val NAVIGATION_FOLLOWING_PADDING_BOTTOM = 250.0
+private const val NAVIGATION_FOLLOWING_PADDING_HORIZONTAL = 40.0
+private const val NAVIGATION_OVERVIEW_PADDING_TOP = 350.0
+
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
 
 @Suppress("ParamsComparedByRef")
@@ -239,12 +244,28 @@ internal fun HomeMapScreenContent(
             mapView?.let { view ->
                 view.location.setLocationProvider(viewModel.cameraManager.navigationLocationProvider)
             }
+
+            val followingPadding = EdgeInsets(
+                NAVIGATION_FOLLOWING_PADDING_TOP,
+                NAVIGATION_FOLLOWING_PADDING_HORIZONTAL,
+                NAVIGATION_FOLLOWING_PADDING_BOTTOM,
+                NAVIGATION_FOLLOWING_PADDING_HORIZONTAL,
+            )
+            val overviewPadding = EdgeInsets(
+                NAVIGATION_OVERVIEW_PADDING_TOP,
+                NAVIGATION_FOLLOWING_PADDING_HORIZONTAL,
+                NAVIGATION_FOLLOWING_PADDING_BOTTOM,
+                NAVIGATION_FOLLOWING_PADDING_HORIZONTAL,
+            )
+            viewModel.cameraManager.applyNavigationPadding(followingPadding, overviewPadding)
         } else {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
             mapView?.let { view ->
                 view.location.enabled = true
             }
+
+            viewModel.cameraManager.clearNavigationPadding()
         }
     }
 
@@ -308,6 +329,7 @@ internal fun HomeMapScreenContent(
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
                 waypoints = waypoints,
+                isNavigating = isNavigating || isArrived,
                 routeManager = viewModel.routeManager,
                 cameraManager = viewModel.cameraManager,
                 onMapViewChanged = { mapView = it },
