@@ -10,8 +10,12 @@ import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_map_not_available_ios
 import org.jetbrains.compose.resources.stringResource
 
+@Suppress("UnusedParameter")
 @Composable
-internal actual fun HomeMapScreen(modifier: Modifier) {
+internal actual fun HomeMapScreen(
+    onNavigatingChanged: (Boolean) -> Unit,
+    modifier: Modifier,
+) {
     Box(
         modifier = modifier,
         contentAlignment = Alignment.Center,
