@@ -8,6 +8,11 @@ import com.mapbox.api.directions.v5.models.VoiceInstructions
  */
 object JapaneseAnnouncementGenerator {
 
+    private const val NEARBY_THRESHOLD_METERS = 100.0
+
+    /** リルート完了時の案内テキスト。 */
+    const val REROUTE_ANNOUNCEMENT = "ルートを再計算しました"
+
     /**
      * VoiceInstructions から日本語の案内テキストを生成する。
      * 対応するテンプレートがない場合は null を返し、呼び出し側で Mapbox デフォルトの announcement を使用する。
@@ -23,11 +28,6 @@ object JapaneseAnnouncementGenerator {
 
         return generateFromTemplate(type, modifier, distanceAlongGeometry, isNearby, announcement)
     }
-
-    /**
-     * リルート完了時の案内テキスト。
-     */
-    fun rerouteAnnouncement(): String = "ルートを再計算しました"
 
     private fun generateFromTemplate(
         type: String?,
@@ -159,6 +159,4 @@ object JapaneseAnnouncementGenerator {
         val pattern = Regex("toward[s]?\\s+(.+)", RegexOption.IGNORE_CASE)
         return pattern.find(announcement)?.groupValues?.getOrNull(1)?.trim()
     }
-
-    private const val NEARBY_THRESHOLD_METERS = 100.0
 }

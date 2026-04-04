@@ -6,11 +6,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -35,7 +35,6 @@ internal fun HomeMapGuidanceControlColumn(
     ) {
         GuidanceControlButton(
             onClick = onSettingsClicked,
-            contentDescription = "設定",
         ) {
             Icon(
                 imageVector = Icons.Default.Settings,
@@ -46,7 +45,6 @@ internal fun HomeMapGuidanceControlColumn(
 
         GuidanceControlButton(
             onClick = onVolumeClicked,
-            contentDescription = "音量",
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.VolumeUp,
@@ -57,7 +55,6 @@ internal fun HomeMapGuidanceControlColumn(
 
         GuidanceControlButton(
             onClick = onCompassClicked,
-            contentDescription = "コンパス",
         ) {
             Icon(
                 imageVector = Icons.Default.Explore,
@@ -68,7 +65,6 @@ internal fun HomeMapGuidanceControlColumn(
 
         GuidanceControlButton(
             onClick = onZoomInClicked,
-            contentDescription = "ズームイン",
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
@@ -79,7 +75,6 @@ internal fun HomeMapGuidanceControlColumn(
 
         GuidanceControlButton(
             onClick = onZoomOutClicked,
-            contentDescription = "ズームアウト",
         ) {
             Icon(
                 imageVector = Icons.Default.Remove,
@@ -93,7 +88,6 @@ internal fun HomeMapGuidanceControlColumn(
 @Composable
 private fun GuidanceControlButton(
     onClick: () -> Unit,
-    contentDescription: String,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
