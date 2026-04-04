@@ -25,10 +25,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
+import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.home_map_route_result_duration_distance
+import me.matsumo.onenavi.core.resource.home_map_route_result_general_road
+import me.matsumo.onenavi.core.resource.home_map_route_result_start_navigation
+import me.matsumo.onenavi.core.resource.home_map_route_result_toll_road
+import me.matsumo.onenavi.core.resource.home_map_route_result_via
 import me.matsumo.onenavi.feature.home.map.RouteResult
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun HomeMapRouteResultSheet(
@@ -88,20 +94,21 @@ private fun HomeMapRouteResultItem(
         ) {
             Text(
                 modifier = Modifier.fillMaxWidth(),
-                text = buildAnnotatedString {
-                    append("$duration min")
-                    append(" ($distance m)")
-                },
+                text = stringResource(Res.string.home_map_route_result_duration_distance, duration, distance),
                 style = MaterialTheme.typography.titleLarge,
             )
 
             Text(
-                text = "${routeResult.item.viaRoadNames.joinToString(", ")} 経由",
+                text = stringResource(Res.string.home_map_route_result_via, routeResult.item.viaRoadNames.joinToString(", ")),
                 style = MaterialTheme.typography.bodyMedium,
             )
 
             Text(
-                text = if (routeResult.item.hasTolls) "有料道路" else "一般道",
+                text = if (routeResult.item.hasTolls) {
+                    stringResource(Res.string.home_map_route_result_toll_road)
+                } else {
+                    stringResource(Res.string.home_map_route_result_general_road)
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -121,7 +128,7 @@ private fun HomeMapRouteResultItem(
                 modifier = Modifier.size(ButtonDefaults.IconSpacing),
             )
 
-            Text("ナビ開始")
+            Text(stringResource(Res.string.home_map_route_result_start_navigation))
         }
     }
 }

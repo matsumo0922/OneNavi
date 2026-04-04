@@ -6,6 +6,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.home_map_not_available_ios
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal actual fun HomeMapScreen(modifier: Modifier) {
@@ -14,7 +17,7 @@ internal actual fun HomeMapScreen(modifier: Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = "Map is not available on iOS yet",
+            text = stringResource(Res.string.home_map_not_available_ios),
             style = MaterialTheme.typography.bodyLarge,
         )
     }

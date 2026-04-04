@@ -18,8 +18,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.common_cancel
 import me.matsumo.onenavi.core.resource.setting_other_developer_mode_dialog_description
 import me.matsumo.onenavi.core.resource.setting_other_developer_mode_dialog_title
+import me.matsumo.onenavi.core.resource.setting_other_developer_mode_pin_invalid
+import me.matsumo.onenavi.core.resource.setting_other_developer_mode_pin_label
+import me.matsumo.onenavi.core.resource.setting_other_developer_mode_submit
 import me.matsumo.onenavi.core.ui.theme.LocalAppConfig
 import org.jetbrains.compose.resources.stringResource
 
@@ -58,11 +62,11 @@ internal fun SettingDeveloperModeDialog(
                     value = pin,
                     onValueChange = { pin = it },
                     label = {
-                        Text("PIN")
+                        Text(stringResource(Res.string.setting_other_developer_mode_pin_label))
                     },
                     supportingText = {
                         if (error) {
-                            Text("Invalid PIN")
+                            Text(stringResource(Res.string.setting_other_developer_mode_pin_invalid))
                         }
                     },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
@@ -81,12 +85,12 @@ internal fun SettingDeveloperModeDialog(
                     }
                 },
             ) {
-                Text("Submit")
+                Text(stringResource(Res.string.setting_other_developer_mode_submit))
             }
         },
         dismissButton = {
             TextButton(onDismissRequest) {
-                Text("Cancel")
+                Text(stringResource(Res.string.common_cancel))
             }
         },
     )
