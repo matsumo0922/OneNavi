@@ -116,62 +116,76 @@ class FakeGpsServer(
     private fun ensureTestProvider() {
         if (isProviderActive) return
 
-        runCatching {
-            locationManager.removeTestProvider(LocationManager.GPS_PROVIDER)
+        for (provider in PROVIDERS) {
+            runCatching {
+                locationManager.removeTestProvider(provider)
+            }
+
+            locationManager.addTestProvider(
+                provider,
+                false,
+                false,
+                false,
+                false,
+                true,
+                true,
+                true,
+                ProviderProperties.POWER_USAGE_LOW,
+                ProviderProperties.ACCURACY_FINE,
+            )
+            locationManager.setTestProviderEnabled(provider, true)
+            Log.d(TAG, "Test provider activated: $provider")
         }
 
-        locationManager.addTestProvider(
-            LocationManager.GPS_PROVIDER,
-            false,
-            false,
-            false,
-            false,
-            true,
-            true,
-            true,
-            ProviderProperties.POWER_USAGE_LOW,
-            ProviderProperties.ACCURACY_FINE,
-        )
-        locationManager.setTestProviderEnabled(LocationManager.GPS_PROVIDER, true)
         isProviderActive = true
-
-        Log.d(TAG, "Mock GPS provider activated")
     }
 
     private fun setMockLocation(data: LocationData) {
         ensureTestProvider()
 
-        val location = Location(LocationManager.GPS_PROVIDER).apply {
-            latitude = data.lat
-            longitude = data.lng
-            bearing = data.bearing
-            speed = data.speed
-            accuracy = data.accuracy
-            altitude = data.altitude
-            time = System.currentTimeMillis()
-            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+        val now = System.currentTimeMillis()
+        val elapsedNanos = SystemClock.elapsedRealtimeNanos()
+
+        for (provider in PROVIDERS) {
+            val location = Location(provider).apply {
+                latitude = data.lat
+                longitude = data.lng
+                bearing = data.bearing
+                speed = data.speed
+                accuracy = data.accuracy
+                altitude = data.altitude
+                time = now
+                elapsedRealtimeNanos = elapsedNanos
+            }
+            locationManager.setTestProviderLocation(provider, location)
         }
 
-        locationManager.setTestProviderLocation(LocationManager.GPS_PROVIDER, location)
+        Log.d(TAG, "Location set: ${data.lat}, ${data.lng} bearing=${data.bearing} speed=${data.speed}")
     }
 
     private fun removeMockProvider() {
         if (!isProviderActive) return
 
-        runCatching {
-            locationManager.setTestProviderEnabled(LocationManager.GPS_PROVIDER, false)
-            locationManager.removeTestProvider(LocationManager.GPS_PROVIDER)
+        for (provider in PROVIDERS) {
+            runCatching {
+                locationManager.setTestProviderEnabled(provider, false)
+                locationManager.removeTestProvider(provider)
+            }
         }
 
         isProviderActive = false
         lastLocation = null
 
-        Log.d(TAG, "Mock GPS provider deactivated")
+        Log.d(TAG, "Mock providers deactivated")
     }
 
     companion object {
         private const val TAG = "FakeGpsServer"
         private const val PORT = 5556
+        private val PROVIDERS = listOf(
+            LocationManager.GPS_PROVIDER,
+            LocationManager.NETWORK_PROVIDER,
+        )
     }
 }
 
