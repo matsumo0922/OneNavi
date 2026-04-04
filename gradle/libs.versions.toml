@@ -190,6 +190,7 @@ firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 
 # Google
 google-places = { module = "com.google.android.libraries.places:places", version.ref = "googlePlaces" }
+play-services-location = { module = "com.google.android.gms:play-services-location", version = "21.3.0" }
 play-review = { module = "com.google.android.play:review-ktx", version.ref = "playReview" }
 play-update = { module = "com.google.android.play:app-update-ktx", version.ref = "playUpdate" }
 play-service-ads = { module = "com.google.android.gms:play-services-ads", version.ref = "playServiceAds" }
@@ -211,6 +212,10 @@ ktor-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation",
 ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 ktot-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
+ktor-server-content-negotiation = { module = "io.ktor:ktor-server-content-negotiation", version.ref = "ktor" }
+ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 
 # UI
