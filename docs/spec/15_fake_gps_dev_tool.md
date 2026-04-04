@@ -133,8 +133,9 @@ OneNavi のナビゲーション機能をデバッグするための開発者向
 
 ```
 composeApp/src/
+├── debug/
+│   └── AndroidManifest.xml              ← ACCESS_MOCK_LOCATION パーミッション追加 (AGP source set)
 ├── androidDebug/
-│   ├── AndroidManifest.xml              ← ACCESS_MOCK_LOCATION パーミッション追加
 │   └── kotlin/me/matsumo/onenavi/debug/
 │       ├── DevTools.kt                  ← FakeGpsServer を起動する実装
 │       └── FakeGpsServer.kt             ← HTTP サーバー + Mock Location Provider

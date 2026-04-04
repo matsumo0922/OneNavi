@@ -6,12 +6,15 @@ import android.location.LocationManager
 import android.location.provider.ProviderProperties
 import android.os.SystemClock
 import io.github.aakira.napier.Napier
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
@@ -43,6 +46,13 @@ class FakeGpsServer(
         factory = CIO,
         port = PORT,
     ) {
+        install(CORS) {
+            anyHost()
+            allowHeader(HttpHeaders.ContentType)
+            allowMethod(HttpMethod.Post)
+            allowMethod(HttpMethod.Get)
+        }
+
         install(ContentNegotiation) {
             json(
                 Json {
