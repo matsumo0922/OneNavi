@@ -25,20 +25,10 @@ import com.mapbox.maps.viewannotation.viewAnnotationOptions
 import me.matsumo.onenavi.feature.home.map.RouteResult
 import com.mapbox.navigation.ui.maps.R as NavR
 
-private const val SELECTED_BG = 0xFF4285F4.toInt()
-private const val UNSELECTED_BG = 0xFFFFFFFF.toInt()
-private const val SELECTED_TEXT = 0xFFFFFFFF.toInt()
-private const val UNSELECTED_TEXT = 0xFF333333.toInt()
-private const val SHADOW_COLOR = 0x40000000
-private const val TEXT_SIZE_SP = 14f
-
 /**
  * ルート吹き出し。
  * Mapbox SDK の 9-patch drawable を流用し、ViewAnnotation composable で
- * ルートの中間地点に直接配置する。SDK の setCalloutAdapter と異なり
- * ズームレベルに関係なく常に表示される。
- *
- * アンカー位置の変更に応じて矢印の向きを自動的に切り替える。
+ * 指定座標に配置する。アンカー位置の変更に応じて矢印の向きを自動切り替えする。
  */
 @Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
 @OptIn(MapboxExperimental::class)
@@ -47,6 +37,7 @@ internal fun HomeMapRouteCallout(
     point: Point,
     routeResult: RouteResult,
     isPrimary: Boolean,
+    style: RouteCalloutStyle,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -78,7 +69,7 @@ internal fun HomeMapRouteCallout(
     ) {
         HomeMapRouteCalloutContent(
             routeResult = routeResult,
-            isPrimary = isPrimary,
+            style = style,
             anchor = currentAnchor,
             onClick = onClick,
         )
@@ -88,7 +79,7 @@ internal fun HomeMapRouteCallout(
 @Composable
 private fun HomeMapRouteCalloutContent(
     routeResult: RouteResult,
-    isPrimary: Boolean,
+    style: RouteCalloutStyle,
     anchor: ViewAnnotationAnchor,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -96,9 +87,6 @@ private fun HomeMapRouteCalloutContent(
     val durationMinutes = (routeResult.item.durationSeconds / 60).toInt()
     val tollLabel = buildTollLabel(routeResult)
     val displayText = "$durationMinutes 分\n$tollLabel"
-
-    val bgColor = if (isPrimary) SELECTED_BG else UNSELECTED_BG
-    val textColor = if (isPrimary) SELECTED_TEXT else UNSELECTED_TEXT
 
     val bgRes = anchorToBgRes(anchor)
     val shadowRes = anchorToShadowRes(anchor)
@@ -127,14 +115,14 @@ private fun HomeMapRouteCalloutContent(
             val etaView = wrapper.findViewById<TextView>(NavR.id.eta)
 
             shapeView.text = displayText
-            shapeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, TEXT_SIZE_SP)
-            shapeView.backgroundTintList = ColorStateList.valueOf(SHADOW_COLOR)
+            shapeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, style.textSizeSp)
+            shapeView.backgroundTintList = ColorStateList.valueOf(style.shadowColor)
             shapeView.setBackgroundResource(shadowRes)
 
             etaView.text = displayText
-            etaView.setTextSize(TypedValue.COMPLEX_UNIT_SP, TEXT_SIZE_SP)
-            etaView.setTextColor(textColor)
-            etaView.backgroundTintList = ColorStateList.valueOf(bgColor)
+            etaView.setTextSize(TypedValue.COMPLEX_UNIT_SP, style.textSizeSp)
+            etaView.setTextColor(style.textColor)
+            etaView.backgroundTintList = ColorStateList.valueOf(style.backgroundColor)
             etaView.setBackgroundResource(bgRes)
         },
     )
