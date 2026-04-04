@@ -16,7 +16,7 @@ import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.ui.maps.route.callout.api.MapboxRouteCalloutAdapter
 import com.mapbox.navigation.ui.maps.route.callout.model.CalloutViewHolder
 import com.mapbox.navigation.ui.maps.route.callout.model.RouteCallout
-import me.matsumo.onenavi.core.model.RouteResult
+import me.matsumo.onenavi.feature.home.map.RouteResult
 import com.mapbox.navigation.ui.maps.R as NavR
 
 /**
@@ -31,29 +31,13 @@ internal class HomeMapRouteCalloutAdapter(
 
     private var routeResults: List<RouteResult> = emptyList()
     private var onCalloutClicked: ((NavigationRoute) -> Unit)? = null
-    private val calloutViews = mutableMapOf<NavigationRoute, View>()
 
     fun updateRouteResults(results: List<RouteResult>) {
         routeResults = results
     }
 
-    fun setOnCalloutClickListener(listener: (NavigationRoute) -> Unit) {
+    fun setOnCalloutClickListener(listener: ((NavigationRoute) -> Unit)?) {
         onCalloutClicked = listener
-    }
-
-    /**
-     * 既存の吹き出し View の選択色を in-place で切り替える。
-     * View の再生成や位置の再計算は行わない。
-     */
-    fun updateSelectionStyling(selectedRoute: NavigationRoute?) {
-        for ((route, view) in calloutViews) {
-            val isSelected = route === selectedRoute
-            val etaView = view.findViewById<TextView>(NavR.id.eta) ?: continue
-            etaView.setTextColor(if (isSelected) SELECTED_TEXT else UNSELECTED_TEXT)
-            etaView.backgroundTintList = ColorStateList.valueOf(
-                if (isSelected) SELECTED_BG else UNSELECTED_BG,
-            )
-        }
     }
 
     override fun onCreateViewHolder(callout: RouteCallout): CalloutViewHolder {
@@ -94,8 +78,6 @@ internal class HomeMapRouteCalloutAdapter(
         wrapper.setOnClickListener {
             onCalloutClicked?.invoke(callout.route)
         }
-
-        calloutViews[callout.route] = wrapper
 
         return CalloutViewHolder.Builder(wrapper)
             .options(
@@ -138,7 +120,7 @@ internal class HomeMapRouteCalloutAdapter(
     }
 
     private fun findTollLabel(navigationRoute: NavigationRoute): String {
-        val matchedItem = routeResults.find { it.platformRoute === navigationRoute }?.item
+        val matchedItem = routeResults.find { it.navigationRoute === navigationRoute }?.item
         return when {
             matchedItem == null -> getTollLabelFromRoute(navigationRoute)
             matchedItem.tollFee != null -> "¥${matchedItem.tollFee}"

@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -14,6 +13,7 @@ import androidx.compose.ui.unit.Dp
 import com.mapbox.geojson.Point.fromLngLat
 import com.mapbox.maps.MapView
 import com.mapbox.maps.MapboxExperimental
+import com.mapbox.maps.extension.compose.DisposableMapEffect
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
@@ -22,17 +22,16 @@ import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
 import com.mapbox.maps.extension.compose.style.standard.StandardStyleState
 import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.plugin.gestures.addOnMapClickListener
+import com.mapbox.maps.plugin.gestures.removeOnMapClickListener
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
-import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineViewOptions
 import com.mapbox.navigation.ui.maps.route.line.model.RouteLineColorResources
 import kotlinx.collections.immutable.ImmutableList
-import me.matsumo.onenavi.core.model.RouteResult
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
@@ -54,6 +53,7 @@ internal fun HomeMapsMapEffectContent(
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
     waypoints: ImmutableList<RouteWaypoint>,
+    navigationManager: HomeMapNavigationManager,
     onMapViewChanged: (MapView) -> Unit,
     onUserLocationUpdated: (latitude: Double, longitude: Double) -> Unit,
     onRouteSelected: (index: Int) -> Unit,
@@ -100,9 +100,6 @@ internal fun HomeMapsMapEffectContent(
         HomeMapRouteCalloutAdapter(context)
     }
 
-    // 前回の routeResults を保持して「ルート自体が変わったか / 選択だけ変わったか」を判定
-    val previousRouteResults = remember { mutableStateOf<ImmutableList<RouteResult>?>(null) }
-
     DisposableEffect(Unit) {
         onDispose {
             routeLineApi.cancel()
@@ -135,21 +132,30 @@ internal fun HomeMapsMapEffectContent(
             )
         },
     ) {
-        MapEffect { view ->
+        DisposableMapEffect(Unit) { view ->
             onMapViewChanged(view)
+
+            // NavigationCamera + ViewportDataSource セットアップ
+            navigationManager.setupCamera(view)
+
+            // Location puck セットアップ
             view.location.enabled = true
             view.location.locationPuck = createDefault2DPuck(withBearing = true)
             view.location.puckBearing = PuckBearing.HEADING
             view.location.puckBearingEnabled = true
-            view.location.addOnIndicatorPositionChangedListener { point ->
+
+            val positionListener = com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener { point ->
                 onUserLocationUpdated(
                     point.latitude(),
                     point.longitude(),
                 )
             }
-            view.location.addOnIndicatorBearingChangedListener { bearing ->
+            view.location.addOnIndicatorPositionChangedListener(positionListener)
+
+            val bearingListener = com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListener { bearing ->
                 onBearingChanged(bearing)
             }
+            view.location.addOnIndicatorBearingChangedListener(bearingListener)
 
             // Route Callout を有効化
             routeLineView.setCalloutAdapter(
@@ -158,14 +164,14 @@ internal fun HomeMapsMapEffectContent(
             )
 
             // ルートラインタップで選択切り替え
-            view.mapboxMap.addOnMapClickListener { point ->
+            val mapClickListener = com.mapbox.maps.plugin.gestures.OnMapClickListener { point ->
                 val results = currentRouteResults.value
-                if (results.isEmpty()) return@addOnMapClickListener false
+                if (results.isEmpty()) return@OnMapClickListener false
 
                 routeLineApi.findClosestRoute(point, view.mapboxMap, ROUTE_CLICK_PADDING) { result ->
                     result.onValue { closestRoute ->
                         val clickedRoute = closestRoute.navigationRoute
-                        val index = results.indexOfFirst { it.platformRoute === clickedRoute }
+                        val index = results.indexOfFirst { it.navigationRoute === clickedRoute }
                         if (index >= 0 && index != currentSelectedRouteIndex.value) {
                             currentOnRouteSelected.value(index)
                         }
@@ -173,47 +179,43 @@ internal fun HomeMapsMapEffectContent(
                 }
                 false
             }
+            view.mapboxMap.addOnMapClickListener(mapClickListener)
 
             // 吹き出しタップで選択切り替え
             routeCalloutAdapter.setOnCalloutClickListener { clickedRoute ->
                 val results = currentRouteResults.value
-                val index = results.indexOfFirst { it.platformRoute === clickedRoute }
+                val index = results.indexOfFirst { it.navigationRoute === clickedRoute }
                 if (index >= 0 && index != currentSelectedRouteIndex.value) {
                     currentOnRouteSelected.value(index)
                 }
             }
+
+            onDispose {
+                view.location.removeOnIndicatorPositionChangedListener(positionListener)
+                view.location.removeOnIndicatorBearingChangedListener(bearingListener)
+                view.mapboxMap.removeOnMapClickListener(mapClickListener)
+                routeCalloutAdapter.setOnCalloutClickListener(null)
+                navigationManager.teardownCamera()
+            }
         }
 
-        MapEffect(routeResults, selectedRouteIndex) { mapView ->
+        // RoutesObserver 駆動: NavigationManager の routes が更新されたら route line を再描画
+        // SDK が setNavigationRoutes 時にルートの並び順を管理するため、reorderRoutes は不要
+        MapEffect(routeResults) { mapView ->
             val style = mapView.mapboxMap.style ?: return@MapEffect
+            val navigationRoutes = navigationManager.routes.value
 
-            if (routeResults.isEmpty()) {
+            if (navigationRoutes.isEmpty()) {
                 routeLineApi.clearRouteLine { expected ->
                     routeLineView.renderClearRouteLineValue(style, expected)
                 }
-                previousRouteResults.value = routeResults
                 return@MapEffect
             }
 
-            val navigationRoutes = routeResults.mapNotNull { it.platformRoute as? NavigationRoute }
-            if (navigationRoutes.isEmpty()) return@MapEffect
+            routeCalloutAdapter.updateRouteResults(routeResults)
 
-            val routesChanged = previousRouteResults.value !== routeResults
-            previousRouteResults.value = routeResults
-
-            if (routesChanged) {
-                // ルート自体が変わった → フル描画（選択ルートを先頭に並び替え）
-                routeCalloutAdapter.updateRouteResults(routeResults)
-
-                val reordered = reorderRoutes(navigationRoutes, selectedRouteIndex)
-                routeLineApi.setNavigationRoutes(reordered) { expected ->
-                    routeLineView.renderRouteDrawData(style, expected)
-                }
-            } else {
-                // 選択だけ変わった → 吹き出しの色だけ in-place で切り替え
-                // setNavigationRoutes を呼ばないことで、ちらつき・吹き出し位置変更を防止
-                val selectedRoute = navigationRoutes.getOrNull(selectedRouteIndex)
-                routeCalloutAdapter.updateSelectionStyling(selectedRoute)
+            routeLineApi.setNavigationRoutes(navigationRoutes) { expected ->
+                routeLineView.renderRouteDrawData(style, expected)
             }
         }
 
@@ -258,14 +260,4 @@ internal fun HomeMapsMapEffectContent(
             }
         }
     }
-}
-
-private fun reorderRoutes(
-    navigationRoutes: List<NavigationRoute>,
-    selectedIndex: Int,
-): List<NavigationRoute> {
-    if (selectedIndex !in navigationRoutes.indices) return navigationRoutes
-    val selected = navigationRoutes[selectedIndex]
-    val others = navigationRoutes.filterIndexed { index, _ -> index != selectedIndex }
-    return listOf(selected) + others
 }

@@ -27,7 +27,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point.fromLngLat
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.EdgeInsets
@@ -38,7 +37,6 @@ import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.viewport.ViewportStatus
-import com.mapbox.navigation.base.route.NavigationRoute
 import kotlinx.coroutines.flow.distinctUntilChanged
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
@@ -55,13 +53,13 @@ private const val ROUTE_CAMERA_MARGIN_VERTICAL = 150.0
 private const val ROUTE_CAMERA_MARGIN_HORIZONTAL = 100.0
 private const val ROUTE_CAMERA_MARGIN_TOP = 300.0
 private const val ROUTE_CAMERA_MARGIN_END = 250.0
-private const val POLYLINE_PRECISION = 6
+
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
 
 @Suppress("ParamsComparedByRef")
 @OptIn(ExperimentalMaterial3Api::class, MapboxExperimental::class)
 @Composable
-internal actual fun HomeMapScreenContent(
+internal fun HomeMapScreenContent(
     viewModel: HomeMapViewModel,
     modifier: Modifier,
 ) {
@@ -133,10 +131,6 @@ internal actual fun HomeMapScreenContent(
             val offset = runCatching { scaffoldState.bottomSheetState.requireOffset() }.getOrDefault(contentHeight)
             with(density) { (contentHeight - offset).coerceAtLeast(0f).toDp() }
         }
-    }
-
-    LaunchedEffect(viewModel.mapBoxToken) {
-        MapboxOptions.accessToken = viewModel.mapBoxToken
     }
 
     LaunchedEffect(viewportState) {
@@ -214,7 +208,7 @@ internal actual fun HomeMapScreenContent(
         )
     }
 
-    LaunchedEffect(routeResults, mapView) {
+    LaunchedEffect(routeResults) {
         if (routeResults.isEmpty()) {
             val result = selectedResult ?: return@LaunchedEffect
             trackingMode = null
@@ -231,38 +225,18 @@ internal actual fun HomeMapScreenContent(
             )
             return@LaunchedEffect
         }
-        val currentMapView = mapView ?: return@LaunchedEffect
 
-        trackingMode = LocationTrackingMode.TopDownNorth
-
-        val allPoints = routeResults.flatMap { result ->
-            val navigationRoute = result.platformRoute as? NavigationRoute
-            navigationRoute?.directionsRoute?.geometry()
-                ?.let { com.mapbox.geojson.LineString.fromPolyline(it, POLYLINE_PRECISION) }
-                ?.coordinates()
-                ?: result.item.geometry.map { fromLngLat(it.longitude, it.latitude) }
-        }
-
-        if (allPoints.isEmpty()) return@LaunchedEffect
-
+        // NavigationCamera の Overview モードでルート全体を表示
+        // ViewportDataSource が RoutesObserver 経由でルート情報を受け取り、最適なカメラ位置を計算
+        trackingMode = null
         val sheetPeekPx = with(density) { sheetPeekHeight.toPx() }.toDouble()
         val topPadding = topAppBarHeightPx.toDouble() + ROUTE_CAMERA_MARGIN_TOP
         val bottomPadding = sheetPeekPx + ROUTE_CAMERA_MARGIN_VERTICAL
         val padding = EdgeInsets(topPadding, ROUTE_CAMERA_MARGIN_HORIZONTAL, bottomPadding, ROUTE_CAMERA_MARGIN_END)
 
-        val cameraOptions = currentMapView.mapboxMap.cameraForCoordinates(
-            coordinates = allPoints,
-            coordinatesPadding = padding,
-            bearing = 0.0,
-            pitch = 0.0,
-        )
-
-        viewportState.flyTo(
-            cameraOptions = cameraOptions,
-            animationOptions = MapAnimationOptions.Builder()
-                .duration(1500)
-                .build(),
-        )
+        viewModel.navigationManager.viewportDataSource?.overviewPadding = padding
+        viewModel.navigationManager.viewportDataSource?.evaluate()
+        viewModel.navigationManager.requestCameraOverview()
     }
 
     BottomSheetScaffold(
@@ -294,6 +268,7 @@ internal actual fun HomeMapScreenContent(
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
                 waypoints = waypoints,
+                navigationManager = viewModel.navigationManager,
                 onMapViewChanged = { mapView = it },
                 onUserLocationUpdated = viewModel::onUserLocationUpdated,
                 onRouteSelected = { viewModel.onViewEvent(HomeMapViewEvent.OnRouteSelected(it)) },
