@@ -22,7 +22,6 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -35,6 +34,9 @@ import kotlinx.serialization.json.Json
  * Ktor CIO エンジンでポート 5556 に HTTP サーバーを起動し、
  * PC 上の Web アプリから ADB forward 経由で受信した位置情報を
  * LocationManager の TestProvider として注入する。
+ *
+ * 実 GPS ハードウェア (gps_hardware) との競合を避けるため、
+ * 永続ループで最新の mock 位置を 100ms 間隔で再注入し続ける。
  */
 class FakeGpsServer(
     private val context: Context,
@@ -43,8 +45,9 @@ class FakeGpsServer(
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
     private var isProviderActive = false
-    private var lastLocation: LocationData? = null
-    private var repeatJob: Job? = null
+
+    @Volatile
+    private var currentLocation: LocationData? = null
 
     private val server = embeddedServer(
         factory = CIO,
@@ -70,8 +73,8 @@ class FakeGpsServer(
             post("/location") {
                 runCatching {
                     val data = call.receive<LocationData>()
-                    setMockLocation(data)
-                    lastLocation = data
+                    ensureTestProvider()
+                    currentLocation = data
                     call.respond(SuccessResponse(success = true))
                 }.onFailure { error ->
                     Log.e(TAG, "Failed to set mock location", error)
@@ -86,7 +89,7 @@ class FakeGpsServer(
                 call.respond(
                     StatusResponse(
                         active = isProviderActive,
-                        lastLocation = lastLocation,
+                        lastLocation = currentLocation,
                     ),
                 )
             }
@@ -113,6 +116,17 @@ class FakeGpsServer(
                 Log.d(TAG, "FakeGpsServer started on port $PORT")
             }.onFailure { error ->
                 Log.e(TAG, "Failed to start FakeGpsServer", error)
+            }
+        }
+
+        // 永続ループ: currentLocation が非 null の間、100ms ごとに再注入
+        scope.launch {
+            while (isActive) {
+                val data = currentLocation
+                if (data != null && isProviderActive) {
+                    pushLocation(data)
+                }
+                delay(REPEAT_INTERVAL_MS)
             }
         }
     }
@@ -144,27 +158,6 @@ class FakeGpsServer(
         isProviderActive = true
     }
 
-    private fun setMockLocation(data: LocationData) {
-        ensureTestProvider()
-        pushLocation(data)
-        startRepeatLoop(data)
-        Log.d(TAG, "Location set: ${data.lat}, ${data.lng} bearing=${data.bearing} speed=${data.speed}")
-    }
-
-    /**
-     * 実 GPS ハードウェアに勝つために、最後の mock 位置を高頻度で再注入し続ける。
-     * Web から新しい位置が来たらループを再起動する。
-     */
-    private fun startRepeatLoop(data: LocationData) {
-        repeatJob?.cancel()
-        repeatJob = scope.launch {
-            while (isActive) {
-                delay(REPEAT_INTERVAL_MS)
-                pushLocation(data)
-            }
-        }
-    }
-
     private fun pushLocation(data: LocationData) {
         val now = System.currentTimeMillis()
         val elapsedNanos = SystemClock.elapsedRealtimeNanos()
@@ -187,8 +180,7 @@ class FakeGpsServer(
     private fun removeMockProvider() {
         if (!isProviderActive) return
 
-        repeatJob?.cancel()
-        repeatJob = null
+        currentLocation = null
 
         for (provider in PROVIDERS) {
             runCatching {
@@ -198,8 +190,6 @@ class FakeGpsServer(
         }
 
         isProviderActive = false
-        lastLocation = null
-
         Log.d(TAG, "Mock providers deactivated")
     }
 
