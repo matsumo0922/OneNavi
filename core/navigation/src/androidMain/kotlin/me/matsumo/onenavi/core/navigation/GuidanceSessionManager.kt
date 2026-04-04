@@ -289,10 +289,9 @@ class GuidanceSessionManager(
 
     // --- 日本語テンプレート ---
 
-    @Suppress("UnusedParameter")
     private fun generateJapaneseAnnouncement(
         voiceInstructions: VoiceInstructions,
-    ): String? = null // Step 6 で本格実装
+    ): String? = JapaneseAnnouncementGenerator.generate(voiceInstructions)
 
     // --- RouteProgress → GuidanceUiState ---
 
