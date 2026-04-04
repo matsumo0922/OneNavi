@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OneNavi Fake GPS</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <div id="panel">
+      <div id="panel-search">
+        <input id="search-input" type="text" placeholder="Search location..." />
+      </div>
+
+      <div class="panel-section">
+        <h3>Waypoints</h3>
+        <div id="waypoint-list"></div>
+        <div class="button-row">
+          <button id="btn-add-via" title="Add via point">+ Via</button>
+          <button id="btn-find-route" title="Find route">Route</button>
+          <button id="btn-clear" title="Clear all">Clear</button>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h3>Controls</h3>
+        <div class="button-row">
+          <button id="btn-play" title="Play">&#9654;</button>
+          <button id="btn-pause" title="Pause">&#10074;&#10074;</button>
+          <button id="btn-stop" title="Stop">&#9632;</button>
+        </div>
+        <div id="speed-buttons" class="button-row">
+          <button class="speed-btn" data-speed="0.5">0.5x</button>
+          <button class="speed-btn active" data-speed="1">1x</button>
+          <button class="speed-btn" data-speed="2">2x</button>
+          <button class="speed-btn" data-speed="5">5x</button>
+          <button class="speed-btn" data-speed="10">10x</button>
+        </div>
+        <div id="progress-bar">
+          <div id="progress-fill"></div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h3>Status</h3>
+        <div id="status">
+          <div id="connection-status">&#9679; Disconnected</div>
+          <div id="position-info">--</div>
+          <div id="bearing-info">--</div>
+          <div id="speed-info">--</div>
+          <div id="mode-info">Mode: Idle</div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h3>Import</h3>
+        <div class="button-row">
+          <button id="btn-load-gpx" title="Load GPX file">Load GPX</button>
+        </div>
+        <input id="gpx-file-input" type="file" accept=".gpx" hidden />
+        <div id="drop-zone">Drop .gpx here</div>
+      </div>
+
+      <div id="keyboard-hint">
+        Arrow keys: Move &middot; Space: Pause/Resume
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
