@@ -22,7 +22,16 @@ import com.mapbox.maps.viewannotation.OnViewAnnotationUpdatedListener
 import com.mapbox.maps.viewannotation.annotationAnchors
 import com.mapbox.maps.viewannotation.geometry
 import com.mapbox.maps.viewannotation.viewAnnotationOptions
+import me.matsumo.onenavi.core.common.formatDuration
+import me.matsumo.onenavi.core.common.formatYen
+import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.common_unit_day
+import me.matsumo.onenavi.core.resource.common_unit_hour
+import me.matsumo.onenavi.core.resource.common_unit_minute
+import me.matsumo.onenavi.core.resource.home_map_route_result_general_road
+import me.matsumo.onenavi.core.resource.home_map_route_result_toll_road
 import me.matsumo.onenavi.feature.home.map.RouteResult
+import org.jetbrains.compose.resources.stringResource
 import com.mapbox.navigation.ui.maps.R as NavR
 
 /**
@@ -84,9 +93,18 @@ private fun HomeMapRouteCalloutContent(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val durationMinutes = (routeResult.item.durationSeconds / 60).toInt()
-    val tollLabel = buildTollLabel(routeResult)
-    val displayText = "$durationMinutes 分\n$tollLabel"
+    val durationText = formatDuration(
+        totalSeconds = routeResult.item.durationSeconds,
+        dayLabel = stringResource(Res.string.common_unit_day),
+        hourLabel = stringResource(Res.string.common_unit_hour),
+        minuteLabel = stringResource(Res.string.common_unit_minute),
+    )
+    val tollLabel = buildTollLabel(
+        routeResult = routeResult,
+        tollRoadLabel = stringResource(Res.string.home_map_route_result_toll_road),
+        generalRoadLabel = stringResource(Res.string.home_map_route_result_general_road),
+    )
+    val displayText = "$durationText\n$tollLabel"
 
     val bgRes = anchorToBgRes(anchor)
     val shadowRes = anchorToShadowRes(anchor)
@@ -144,11 +162,16 @@ private fun anchorToShadowRes(anchor: ViewAnnotationAnchor): Int = when (anchor)
     else -> NavR.drawable.mapbox_ic_route_callout_bottom_left_shadow
 }
 
-private fun buildTollLabel(routeResult: RouteResult): String {
+private fun buildTollLabel(
+    routeResult: RouteResult,
+    tollRoadLabel: String,
+    generalRoadLabel: String,
+): String {
     val item = routeResult.item
+    val fee = item.tollFee
     return when {
-        item.tollFee != null -> "¥${item.tollFee}"
-        item.hasTolls -> "有料道路"
-        else -> "一般道"
+        fee != null -> formatYen(fee)
+        item.hasTolls -> tollRoadLabel
+        else -> generalRoadLabel
     }
 }

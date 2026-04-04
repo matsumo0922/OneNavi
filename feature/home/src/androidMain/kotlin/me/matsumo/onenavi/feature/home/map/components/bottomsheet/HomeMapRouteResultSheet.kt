@@ -27,7 +27,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
+import me.matsumo.onenavi.core.common.formatDistance
+import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.common_unit_day
+import me.matsumo.onenavi.core.resource.common_unit_hour
+import me.matsumo.onenavi.core.resource.common_unit_kilometer
+import me.matsumo.onenavi.core.resource.common_unit_meter
+import me.matsumo.onenavi.core.resource.common_unit_minute
 import me.matsumo.onenavi.core.resource.home_map_route_result_duration_distance
 import me.matsumo.onenavi.core.resource.home_map_route_result_general_road
 import me.matsumo.onenavi.core.resource.home_map_route_result_start_navigation
@@ -67,10 +74,29 @@ private fun HomeMapRouteResultItem(
     isSelected: Boolean,
     onNavigationClicked: () -> Unit,
     onRouteResultSelected: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    val duration = remember(routeResult) { routeResult.item.durationSeconds.toInt().toString() }
-    val distance = remember(routeResult) { routeResult.item.distanceMeters.toInt().toString() }
+    val dayLabel = stringResource(Res.string.common_unit_day)
+    val hourLabel = stringResource(Res.string.common_unit_hour)
+    val minuteLabel = stringResource(Res.string.common_unit_minute)
+    val meterLabel = stringResource(Res.string.common_unit_meter)
+    val kilometerLabel = stringResource(Res.string.common_unit_kilometer)
+
+    val duration = remember(routeResult, dayLabel, hourLabel, minuteLabel) {
+        formatDuration(
+            totalSeconds = routeResult.item.durationSeconds,
+            dayLabel = dayLabel,
+            hourLabel = hourLabel,
+            minuteLabel = minuteLabel,
+        )
+    }
+    val distance = remember(routeResult, meterLabel, kilometerLabel) {
+        formatDistance(
+            meters = routeResult.item.distanceMeters,
+            meterLabel = meterLabel,
+            kilometerLabel = kilometerLabel,
+        )
+    }
 
     Row(
         modifier = modifier
@@ -81,7 +107,7 @@ private fun HomeMapRouteResultItem(
                     Modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 } else {
                     Modifier
-                }
+                },
             )
             .clickable { onRouteResultSelected.invoke() }
             .padding(16.dp),
@@ -116,7 +142,7 @@ private fun HomeMapRouteResultItem(
 
         Button(
             onClick = onNavigationClicked,
-            contentPadding = ButtonDefaults.SmallContentPadding
+            contentPadding = ButtonDefaults.SmallContentPadding,
         ) {
             Icon(
                 modifier = Modifier.size(ButtonDefaults.SmallIconSize),

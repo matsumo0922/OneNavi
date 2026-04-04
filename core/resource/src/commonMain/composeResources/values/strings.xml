@@ -2,6 +2,12 @@
 <resources>
 
     <!-- Common -->
+    <string name="common_unit_day">日</string>
+    <string name="common_unit_hour">時間</string>
+    <string name="common_unit_minute">分</string>
+    <string name="common_unit_meter">m</string>
+    <string name="common_unit_kilometer">km</string>
+
     <string name="common_ok">OK</string>
     <string name="common_cancel">キャンセル</string>
     <string name="common_apply">適用</string>
@@ -87,7 +93,7 @@
     <string name="home_map_route_done">完了</string>
     <string name="home_subscription_expired_title">Pro プランの失効</string>
     <string name="home_subscription_expired_message">OneNavi Pro の定期購入が解約または返金されたため、Pro 機能が無効になりました。\n引き続きご利用いただくには、再度アップグレードしてください。</string>
-    <string name="home_map_route_result_duration_distance">%1$s分 (%2$sm)</string>
+    <string name="home_map_route_result_duration_distance">%1$s（%2$s）</string>
     <string name="home_map_route_result_via">%1$s 経由</string>
     <string name="home_map_route_result_toll_road">有料道路</string>
     <string name="home_map_route_result_general_road">一般道</string>

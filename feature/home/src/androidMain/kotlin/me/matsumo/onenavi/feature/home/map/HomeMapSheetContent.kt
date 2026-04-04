@@ -30,7 +30,7 @@ internal fun HomeMapSheetContent(
             modifier = modifier,
             routeResults = routeResults,
             selectedRouteIndex = selectedRouteIndex,
-            onNavigationClicked = {  },
+            onNavigationClicked = { },
             onRouteResultSelected = { onViewEvent(HomeMapViewEvent.OnRouteSelected(it)) },
         )
     } else if (searchResults.isNotEmpty()) {
