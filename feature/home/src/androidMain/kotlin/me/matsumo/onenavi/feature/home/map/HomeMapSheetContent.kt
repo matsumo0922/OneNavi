@@ -7,6 +7,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.SearchResultItem
+import me.matsumo.onenavi.feature.home.map.components.bottomsheet.HomeMapRouteResultSheet
 import me.matsumo.onenavi.feature.home.map.components.bottomsheet.HomeMapSearchResultSheet
 import me.matsumo.onenavi.feature.home.map.components.bottomsheet.HomeMapSelectedResultSheet
 
@@ -24,7 +25,15 @@ internal fun HomeMapSheetContent(
 ) {
     val density = LocalDensity.current
 
-    if (searchResults.isNotEmpty()) {
+    if (routeResults.isNotEmpty()) {
+        HomeMapRouteResultSheet(
+            modifier = modifier,
+            routeResults = routeResults,
+            selectedRouteIndex = selectedRouteIndex,
+            onNavigationClicked = {  },
+            onRouteResultSelected = { onViewEvent(HomeMapViewEvent.OnRouteSelected(it)) },
+        )
+    } else if (searchResults.isNotEmpty()) {
         HomeMapSearchResultSheet(
             modifier = modifier,
             searchResults = searchResults,
