@@ -31,7 +31,7 @@
 - 交差点拡大図
 - 料金表示
 - 二輪車対応
-- Azure TTS 統合
+- Google Cloud TTS (Chirp 3: HD) ストリーミング統合
 
 ---
 
@@ -41,7 +41,7 @@
 
 ### Scope
 
-- Azure TTS (Dragon HD) 統合
+- Google Cloud TTS (Chirp 3: HD, Laomedeia) ストリーミング統合
 - 通称辞書の構築と統合
   - 初期データ: 主要都市の幹線道路 300-500 件
   - OSM `alt_name` タグからの自動抽出パイプライン（GitHub Actions）
@@ -102,7 +102,7 @@
 |---|---|---|---|
 | Mapbox の車線データカバレッジ不足 | 車線案内の品質低下 | Medium | カバレッジ外では案内をスキップ |
 | Mapbox Junction View が日本非対応 | 交差点拡大図なし | High | プロシージャル生成で代替 |
-| Azure TTS のレイテンシ | 音声案内の遅延 | Medium | 定型フレーズキャッシュ + Android TTS フォールバック |
+| Google Cloud TTS のレイテンシ | 音声案内の遅延 | Low | ストリーミング API (~200ms) + 定型フレーズキャッシュ + Android TTS フォールバック |
 | Mapbox の料金体系変更 | コスト増 | Low | 個人利用なら影響小 |
 | 信号機フラグのカバレッジ不足 | 信号機案内の品質低下 | Medium | カバレッジ外では距離ベース案内にフォールバック |
 | Android Auto の制約 | パネル表示等の機能制限 | High（確定） | Phone 側でフル機能提供、Auto はページネーションで対応 |

@@ -27,7 +27,7 @@ OneNavi は Android 向けカーナビアプリ。Google Maps 等から intent s
 - **Build**: Gradle 9.4 + build-logic (Convention Plugins)
 - **Lint**: detekt + Twitter Compose Rules
 - **Map/Navigation**: Mapbox Maps SDK + Navigation SDK (未統合)
-- **TTS**: Azure TTS Dragon HD + Android 内蔵 TTS (未統合)
+- **TTS**: Google Cloud TTS Chirp 3 HD (Laomedeia) + Android 内蔵 TTS (未統合)
 - **Toll**: Google Routes API (未統合)
 
 ## Module Structure

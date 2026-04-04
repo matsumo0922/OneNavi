@@ -119,30 +119,32 @@ Mapbox から取得できるデータ:
 
 ### 3b. TTS Engine
 
-#### Azure Cognitive Services TTS (Dragon HD) — **ADOPTED (primary candidate)**
-- 日本語音声品質が業界最高水準
-- Dragon HD: Nanami (女性), Masaru (男性)
-- 感情スタイル対応（`chat`, `cheerful` 等）
-- 無料枠: 500K 文字/月（Neural）
-- SSML 対応で発音・速度・強調を細かく制御可能
+#### Google Cloud TTS (Chirp 3: HD) — **ADOPTED (primary)**
+- 28 種の日本語音声（男 14 / 女 14）、採用ボイス: **Laomedeia**
+- ストリーミング API で ~200ms のレイテンシ（ナビ用途に十分）
+- 無料枠: **1M 文字/月**（Chirp 3: HD）
+- Google Places API と同じ Google Cloud プロジェクト・API キーを共用可能 → OSS ユーザーの設定負担が軽い
+- `asia-northeast1`（東京）リージョン対応
+- ストリーミング時は SSML 非対応 → プレーンテキスト + pause マークアップで制御
 
-#### Google Cloud TTS (Chirp3-HD) — **ALTERNATIVE**
-- 30 以上の日本語音声
-- 品質は Azure に次いで高い
-- 無料枠: 1M 文字/月（Standard）、500K 文字/月（WaveNet/Neural2）
+#### Azure Cognitive Services TTS (Dragon HD) — **NOT SELECTED**
+- 日本語音声品質は業界最高水準だが、別途 Azure アカウント・API キーが必要
+- OSS ユーザーに Google Cloud + Azure の二重セットアップを要求するのは負担が大きい
+- 無料枠: 500K 文字/月（Chirp 3: HD の半分）
 
 #### Amazon Polly — **NOT SELECTED**
 - 日本語音声の選択肢が少ない（Takumi のみ Neural 対応）
 
 #### Gemini TTS — **NOT SELECTED**
-- レイテンシが高すぎリアルタイムナビには不向き
+- レイテンシが高すぎリアルタイムナビには不向き（Flash ~200ms / Pro ~450ms + ネットワーク遅延）
+- Google 自身がリアルタイム用途には Live API を推奨
 
 #### Android 端末内蔵 TTS — **FALLBACK**
 - オフライン時やコスト削減のフォールバック
 - 品質は劣るが、遅延なしで動作
 
 ### Decision
-**Azure TTS (Dragon HD) を第一候補とし、Android 内蔵 TTS をフォールバックにする。** 案内テキストは自前生成し、通称辞書・信号機案内・合流案内・速度連動タイミングをコアの差別化とする。
+**Google Cloud TTS (Chirp 3: HD, Laomedeia) を採用し、Android 内蔵 TTS をフォールバックにする。** Google Places API と API キーを共用できるため OSS ユーザーの設定が簡素化される。案内テキストは自前生成し、通称辞書・信号機案内・合流案内・速度連動タイミングをコアの差別化とする。
 
 ---
 
