@@ -36,6 +36,8 @@ import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineViewOptions
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchResultItem
+import me.matsumo.onenavi.core.navigation.CameraManager
+import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
 import me.matsumo.onenavi.feature.home.map.components.HomeMapRouteCallout
 import me.matsumo.onenavi.feature.home.map.components.HomeMapWaypointPin
@@ -62,7 +64,8 @@ internal fun HomeMapsMapEffectContent(
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
     waypoints: ImmutableList<RouteWaypoint>,
-    navigationManager: HomeMapNavigationManager,
+    routeManager: RouteManager,
+    cameraManager: CameraManager,
     onMapViewChanged: (MapView) -> Unit,
     onUserLocationUpdated: (latitude: Double, longitude: Double) -> Unit,
     onRouteSelected: (index: Int) -> Unit,
@@ -131,7 +134,7 @@ internal fun HomeMapsMapEffectContent(
         DisposableMapEffect(Unit) { view ->
             onMapViewChanged(view)
 
-            navigationManager.setupCamera(view)
+            cameraManager.setupCamera(view)
 
             view.location.enabled = true
             view.location.locationPuck = createDefault2DPuck(withBearing = true)
@@ -182,14 +185,14 @@ internal fun HomeMapsMapEffectContent(
                 view.location.removeOnIndicatorBearingChangedListener(bearingListener)
                 view.mapboxMap.removeOnMapClickListener(mapClickListener)
                 cameraChangeCancelable.cancel()
-                navigationManager.teardownCamera()
+                cameraManager.teardownCamera()
             }
         }
 
         // ルートライン描画: 選択ルートを先頭にした並び順で描画
         MapEffect(routeResults, selectedRouteIndex) { mapView ->
             val style = mapView.mapboxMap.style ?: return@MapEffect
-            val navigationRoutes = navigationManager.routes.value
+            val navigationRoutes = routeManager.routes.value
 
             if (navigationRoutes.isEmpty()) {
                 routeLineApi.clearRouteLine { expected ->
@@ -199,7 +202,7 @@ internal fun HomeMapsMapEffectContent(
                 return@MapEffect
             }
 
-            routeLineApi.setNavigationRoutes(navigationManager.reorderedRoutes()) { expected ->
+            routeLineApi.setNavigationRoutes(routeManager.reorderedRoutes()) { expected ->
                 routeLineView.renderRouteDrawData(style, expected)
             }
 

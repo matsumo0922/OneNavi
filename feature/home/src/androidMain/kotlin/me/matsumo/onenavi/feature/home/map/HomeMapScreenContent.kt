@@ -234,9 +234,9 @@ internal fun HomeMapScreenContent(
         val bottomPadding = sheetPeekPx + ROUTE_CAMERA_MARGIN_VERTICAL
         val padding = EdgeInsets(topPadding, ROUTE_CAMERA_MARGIN_HORIZONTAL, bottomPadding, ROUTE_CAMERA_MARGIN_END)
 
-        viewModel.navigationManager.viewportDataSource?.overviewPadding = padding
-        viewModel.navigationManager.viewportDataSource?.evaluate()
-        viewModel.navigationManager.requestCameraOverview()
+        viewModel.cameraManager.viewportDataSource?.overviewPadding = padding
+        viewModel.cameraManager.viewportDataSource?.evaluate()
+        viewModel.cameraManager.requestCameraOverview()
     }
 
     BottomSheetScaffold(
@@ -268,7 +268,8 @@ internal fun HomeMapScreenContent(
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
                 waypoints = waypoints,
-                navigationManager = viewModel.navigationManager,
+                routeManager = viewModel.routeManager,
+                cameraManager = viewModel.cameraManager,
                 onMapViewChanged = { mapView = it },
                 onUserLocationUpdated = viewModel::onUserLocationUpdated,
                 onRouteSelected = { viewModel.onViewEvent(HomeMapViewEvent.OnRouteSelected(it)) },
