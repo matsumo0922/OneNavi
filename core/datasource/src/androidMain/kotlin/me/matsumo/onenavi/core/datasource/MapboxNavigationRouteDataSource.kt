@@ -163,7 +163,7 @@ class MapboxNavigationRouteDataSource(
                 .entries
                 .sortedByDescending { it.value }
                 .take(MAX_ROAD_NAMES)
-                .map { it.key }
+                .map { it.key.split(";").first() }
         }
 
         /**
