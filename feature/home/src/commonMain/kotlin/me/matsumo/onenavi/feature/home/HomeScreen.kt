@@ -10,10 +10,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -30,10 +34,16 @@ internal fun HomeScreen(
     modifier: Modifier = Modifier,
 ) {
     var currentIndex by rememberSaveable { mutableIntStateOf(0) }
+    var isNavigating by rememberSaveable { mutableStateOf(false) }
     val saveableStateHolder: SaveableStateHolder = rememberSaveableStateHolder()
 
     NavigationSuiteScaffold(
         modifier = modifier,
+        layoutType = if (isNavigating) {
+            NavigationSuiteType.None
+        } else {
+            NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(currentWindowAdaptiveInfo())
+        },
         navigationSuiteItems = {
             for ((index, destination) in HomeNavDestination.all.withIndex()) {
                 item(
@@ -69,6 +79,7 @@ internal fun HomeScreen(
                                 modifier = Modifier
                                     .padding(contentPadding)
                                     .fillMaxSize(),
+                                onNavigatingChanged = { isNavigating = it },
                             )
                         }
 

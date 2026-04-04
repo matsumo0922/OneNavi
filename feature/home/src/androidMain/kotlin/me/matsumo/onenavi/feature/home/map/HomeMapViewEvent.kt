@@ -60,4 +60,8 @@ sealed interface HomeMapViewEvent {
         val latitude: Double,
         val longitude: Double,
     ) : HomeMapViewEvent
+
+    data object OnNavigationStarted : HomeMapViewEvent
+
+    data object OnNavigationStopped : HomeMapViewEvent
 }

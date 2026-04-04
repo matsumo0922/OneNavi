@@ -1,5 +1,7 @@
 package me.matsumo.onenavi.feature.home.map
 
+import android.app.Activity
+import android.view.WindowManager
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +26,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -36,11 +39,20 @@ import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportS
 import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
+import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.ViewportStatus
+import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraState
 import kotlinx.coroutines.flow.distinctUntilChanged
+import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
+import me.matsumo.onenavi.feature.home.map.components.guidance.HomeMapGuidanceArrivalScreen
+import me.matsumo.onenavi.feature.home.map.components.guidance.HomeMapGuidanceControlColumn
+import me.matsumo.onenavi.feature.home.map.components.guidance.HomeMapGuidanceManeuverPanel
+import me.matsumo.onenavi.feature.home.map.components.guidance.HomeMapGuidanceReturnButton
+import me.matsumo.onenavi.feature.home.map.components.guidance.HomeMapGuidanceRoadNameBadge
+import me.matsumo.onenavi.feature.home.map.components.guidance.HomeMapGuidanceTripCard
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapRouteTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapWaypointSearchScreen
@@ -54,6 +66,9 @@ private const val ROUTE_CAMERA_MARGIN_HORIZONTAL = 100.0
 private const val ROUTE_CAMERA_MARGIN_TOP = 300.0
 private const val ROUTE_CAMERA_MARGIN_END = 250.0
 
+private const val NAVIGATION_PADDING_HORIZONTAL = 40.0
+private const val NAVIGATION_PADDING_EXTRA = 120.0
+
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
 
 @Suppress("ParamsComparedByRef")
@@ -61,9 +76,10 @@ private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
 @Composable
 internal fun HomeMapScreenContent(
     viewModel: HomeMapViewModel,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
+    val activity = LocalContext.current as? Activity
 
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val histories by viewModel.histories.collectAsStateWithLifecycle()
@@ -74,6 +90,16 @@ internal fun HomeMapScreenContent(
     val waypoints by viewModel.waypoints.collectAsStateWithLifecycle()
     val editingWaypointIndex by viewModel.editingWaypointIndex.collectAsStateWithLifecycle()
     val waypointEditResult by viewModel.waypointEditResult.collectAsStateWithLifecycle()
+    val navigationState by viewModel.navigationState.collectAsStateWithLifecycle()
+    val guidanceUiState by viewModel.guidanceSessionManager.guidanceUiState.collectAsStateWithLifecycle()
+    val arrivalInfo by viewModel.guidanceSessionManager.arrivalInfo.collectAsStateWithLifecycle()
+    val cameraState by viewModel.cameraManager.cameraState.collectAsStateWithLifecycle()
+
+    val isNavigating = navigationState is NavigationState.ActiveGuidance
+    val isArrived = navigationState is NavigationState.Arrival
+
+    var maneuverPanelHeightPx by remember { mutableFloatStateOf(0f) }
+    var tripCardHeightPx by remember { mutableFloatStateOf(0f) }
 
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
@@ -208,6 +234,49 @@ internal fun HomeMapScreenContent(
         )
     }
 
+    LaunchedEffect(isNavigating) {
+        if (isNavigating) {
+            allowSheetHide = true
+            scaffoldState.bottomSheetState.hide()
+            allowSheetHide = false
+
+            activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+            mapView?.let { view ->
+                view.location.setLocationProvider(viewModel.cameraManager.navigationLocationProvider)
+            }
+        } else {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+            mapView?.let { view ->
+                view.location.enabled = true
+            }
+
+            viewModel.cameraManager.clearNavigationPadding()
+        }
+    }
+
+    LaunchedEffect(isNavigating, maneuverPanelHeightPx, tripCardHeightPx) {
+        if (!isNavigating) return@LaunchedEffect
+
+        val topPadding = maneuverPanelHeightPx.toDouble() + NAVIGATION_PADDING_EXTRA
+        val bottomPadding = tripCardHeightPx.toDouble() + NAVIGATION_PADDING_EXTRA
+
+        val followingPadding = EdgeInsets(
+            topPadding,
+            NAVIGATION_PADDING_HORIZONTAL,
+            bottomPadding,
+            NAVIGATION_PADDING_HORIZONTAL,
+        )
+        val overviewPadding = EdgeInsets(
+            topPadding,
+            NAVIGATION_PADDING_HORIZONTAL,
+            bottomPadding,
+            NAVIGATION_PADDING_HORIZONTAL,
+        )
+        viewModel.cameraManager.applyNavigationPadding(followingPadding, overviewPadding)
+    }
+
     LaunchedEffect(routeResults) {
         if (routeResults.isEmpty()) {
             val result = selectedResult ?: return@LaunchedEffect
@@ -234,9 +303,9 @@ internal fun HomeMapScreenContent(
         val bottomPadding = sheetPeekPx + ROUTE_CAMERA_MARGIN_VERTICAL
         val padding = EdgeInsets(topPadding, ROUTE_CAMERA_MARGIN_HORIZONTAL, bottomPadding, ROUTE_CAMERA_MARGIN_END)
 
-        viewModel.navigationManager.viewportDataSource?.overviewPadding = padding
-        viewModel.navigationManager.viewportDataSource?.evaluate()
-        viewModel.navigationManager.requestCameraOverview()
+        viewModel.cameraManager.viewportDataSource?.overviewPadding = padding
+        viewModel.cameraManager.viewportDataSource?.evaluate()
+        viewModel.cameraManager.requestCameraOverview()
     }
 
     BottomSheetScaffold(
@@ -268,29 +337,108 @@ internal fun HomeMapScreenContent(
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
                 waypoints = waypoints,
-                navigationManager = viewModel.navigationManager,
+                isNavigating = isNavigating || isArrived,
+                routeManager = viewModel.routeManager,
+                cameraManager = viewModel.cameraManager,
                 onMapViewChanged = { mapView = it },
                 onUserLocationUpdated = viewModel::onUserLocationUpdated,
                 onRouteSelected = { viewModel.onViewEvent(HomeMapViewEvent.OnRouteSelected(it)) },
                 onBearingChanged = { deviceBearing = it },
             )
 
-            HomeMapControls(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(
-                        bottom = 16.dp,
-                        end = 16.dp,
+            if (isNavigating) {
+                val currentManeuver = guidanceUiState.currentManeuver
+                if (currentManeuver != null) {
+                    HomeMapGuidanceManeuverPanel(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .statusBarsPadding()
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 16.dp,
+                                vertical = 8.dp,
+                            )
+                            .onGloballyPositioned { maneuverPanelHeightPx = it.size.height.toFloat() },
+                        currentManeuver = currentManeuver,
+                        nextManeuver = guidanceUiState.nextManeuver,
                     )
-                    .offset(y = -sheetVisibleHeight),
-                cameraBearing = viewportState.cameraState?.bearing ?: 0.0,
-                deviceBearing = deviceBearing,
-                trackingMode = trackingMode,
-                viewportState = viewportState,
-                onTrackingModeChanged = { trackingMode = it },
-            )
+                }
 
-            if (routeResults.isNotEmpty() && waypoints.isNotEmpty()) {
+                HomeMapGuidanceTripCard(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 16.dp,
+                            vertical = 16.dp,
+                        )
+                        .onGloballyPositioned { tripCardHeightPx = it.size.height.toFloat() },
+                    tripProgress = guidanceUiState.tripProgress,
+                    onStopClicked = { viewModel.onViewEvent(HomeMapViewEvent.OnNavigationStopped) },
+                    onAddWaypointClicked = { },
+                    onOverviewClicked = { viewModel.cameraManager.requestCameraOverview() },
+                    onMoreClicked = { },
+                )
+
+                HomeMapGuidanceControlColumn(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 12.dp),
+                    onSettingsClicked = { },
+                    onVolumeClicked = { },
+                    onCompassClicked = { viewModel.cameraManager.toggleCompass() },
+                    onZoomInClicked = { },
+                    onZoomOutClicked = { },
+                )
+
+                val currentRoadName = guidanceUiState.currentRoadName
+                if (currentRoadName != null) {
+                    HomeMapGuidanceRoadNameBadge(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(
+                                start = 16.dp,
+                                bottom = 120.dp,
+                            ),
+                        roadName = currentRoadName,
+                    )
+                }
+
+                if (cameraState == NavigationCameraState.IDLE) {
+                    HomeMapGuidanceReturnButton(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 130.dp),
+                        onClick = { viewModel.cameraManager.requestCameraFollowing() },
+                    )
+                }
+            } else if (isArrived) {
+                val info = arrivalInfo
+                if (info != null) {
+                    HomeMapGuidanceArrivalScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        arrivalInfo = info,
+                        onDismiss = { viewModel.onViewEvent(HomeMapViewEvent.OnNavigationStopped) },
+                    )
+                }
+            } else {
+                HomeMapControls(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(
+                            bottom = 16.dp,
+                            end = 16.dp,
+                        )
+                        .offset(y = -sheetVisibleHeight),
+                    cameraBearing = viewportState.cameraState?.bearing ?: 0.0,
+                    deviceBearing = deviceBearing,
+                    trackingMode = trackingMode,
+                    viewportState = viewportState,
+                    onTrackingModeChanged = { trackingMode = it },
+                )
+            }
+
+            if (!isNavigating && !isArrived && routeResults.isNotEmpty() && waypoints.isNotEmpty()) {
                 HomeMapRouteTopAppBar(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -303,7 +451,7 @@ internal fun HomeMapScreenContent(
                     onWaypointEditResultConsumed = viewModel::consumeWaypointEditResult,
                     onViewEvent = viewModel::onViewEvent,
                 )
-            } else {
+            } else if (!isNavigating && !isArrived) {
                 HomeMapTopAppBar(
                     modifier = Modifier
                         .align(Alignment.TopCenter)

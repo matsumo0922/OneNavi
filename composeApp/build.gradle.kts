@@ -107,6 +107,7 @@ kotlin {
             implementation(project(":core:datasource"))
             implementation(project(":core:repository"))
             implementation(project(":core:billing"))
+            implementation(project(":core:navigation"))
             implementation(project(":core:ui"))
             implementation(project(":core:resource"))
 
