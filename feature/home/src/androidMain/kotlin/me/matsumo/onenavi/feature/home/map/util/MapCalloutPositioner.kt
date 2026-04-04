@@ -62,7 +62,7 @@ object MapCalloutPositioner {
      * 重なり回避で試行する、可視区間上のオフセット候補。
      * 中央を避けて前方・後方の候補を試行し、空きスペースを探す。
      */
-    private val DEFAULT_OFFSET_CANDIDATES = doubleArrayOf(0.15, 0.85, 0.05, 0.95)
+    private val DEFAULT_OFFSET_CANDIDATES = doubleArrayOf(0.3, 0.7, 0.15, 0.85, 0.05, 0.95)
 
     /**
      * 各座標列に対して、ビューポート内の可視区間から重なりを回避した配置位置を計算する。
