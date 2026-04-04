@@ -190,6 +190,7 @@ firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 
 # Google
 google-places = { module = "com.google.android.libraries.places:places", version.ref = "googlePlaces" }
+play-services-location = { module = "com.google.android.gms:play-services-location", version = "21.3.0" }
 play-review = { module = "com.google.android.play:review-ktx", version.ref = "playReview" }
 play-update = { module = "com.google.android.play:app-update-ktx", version.ref = "playUpdate" }
 play-service-ads = { module = "com.google.android.gms:play-services-ads", version.ref = "playServiceAds" }

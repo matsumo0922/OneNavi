@@ -3,9 +3,10 @@ package me.matsumo.onenavi.debug
 import android.content.Context
 import android.location.Location
 import android.location.LocationManager
-import android.location.provider.ProviderProperties
 import android.os.SystemClock
 import android.util.Log
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -32,19 +33,19 @@ import kotlinx.serialization.json.Json
 /**
  * デバッグ用 Fake GPS サーバー。
  * Ktor CIO エンジンでポート 5556 に HTTP サーバーを起動し、
- * PC 上の Web アプリから ADB forward 経由で受信した位置情報を
- * LocationManager の TestProvider として注入する。
+ * PC 上の Web アプリから ADB forward 経由で受信した位置情報を注入する。
  *
- * 実 GPS ハードウェア (gps_hardware) との競合を避けるため、
- * 永続ループで最新の mock 位置を 100ms 間隔で再注入し続ける。
+ * FusedLocationProviderClient.setMockLocation() を使い、
+ * Google Maps 等の FusedLocation 利用アプリにもリアルタイムで反映させる。
  */
 class FakeGpsServer(
     private val context: Context,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    private val fusedClient: FusedLocationProviderClient =
+        LocationServices.getFusedLocationProviderClient(context)
 
-    private var isProviderActive = false
+    private var isMockMode = false
 
     @Volatile
     private var currentLocation: LocationData? = null
@@ -73,8 +74,9 @@ class FakeGpsServer(
             post("/location") {
                 runCatching {
                     val data = call.receive<LocationData>()
-                    ensureTestProvider()
+                    enableMockMode()
                     currentLocation = data
+                    pushLocation(data)
                     call.respond(SuccessResponse(success = true))
                 }.onFailure { error ->
                     Log.e(TAG, "Failed to set mock location", error)
@@ -88,7 +90,7 @@ class FakeGpsServer(
             get("/status") {
                 call.respond(
                     StatusResponse(
-                        active = isProviderActive,
+                        active = isMockMode,
                         lastLocation = currentLocation,
                     ),
                 )
@@ -96,7 +98,7 @@ class FakeGpsServer(
 
             post("/stop") {
                 runCatching {
-                    removeMockProvider()
+                    disableMockMode()
                     call.respond(SuccessResponse(success = true))
                 }.onFailure { error ->
                     Log.e(TAG, "Failed to stop mock provider", error)
@@ -119,11 +121,11 @@ class FakeGpsServer(
             }
         }
 
-        // 永続ループ: currentLocation が非 null の間、100ms ごとに再注入
+        // 永続ループ: currentLocation を 100ms ごとに再注入
         scope.launch {
             while (isActive) {
                 val data = currentLocation
-                if (data != null && isProviderActive) {
+                if (data != null && isMockMode) {
                     pushLocation(data)
                 }
                 delay(REPEAT_INTERVAL_MS)
@@ -131,77 +133,53 @@ class FakeGpsServer(
         }
     }
 
-    private fun ensureTestProvider() {
-        if (isProviderActive) return
+    @Suppress("MissingPermission")
+    private fun enableMockMode() {
+        if (isMockMode) return
 
-        for (provider in PROVIDERS) {
-            runCatching {
-                locationManager.removeTestProvider(provider)
-            }
-
-            locationManager.addTestProvider(
-                provider,
-                false,
-                false,
-                false,
-                false,
-                true,
-                true,
-                true,
-                ProviderProperties.POWER_USAGE_LOW,
-                ProviderProperties.ACCURACY_FINE,
-            )
-            locationManager.setTestProviderEnabled(provider, true)
-            Log.d(TAG, "Test provider activated: $provider")
+        runCatching {
+            fusedClient.setMockMode(true)
+            Log.d(TAG, "FusedLocation mock mode enabled")
+        }.onFailure { error ->
+            Log.e(TAG, "Failed to enable mock mode", error)
         }
 
-        isProviderActive = true
+        isMockMode = true
     }
 
+    @Suppress("MissingPermission")
     private fun pushLocation(data: LocationData) {
-        val now = System.currentTimeMillis()
-        val elapsedNanos = SystemClock.elapsedRealtimeNanos()
-
-        for (provider in PROVIDERS) {
-            val location = Location(provider).apply {
-                latitude = data.lat
-                longitude = data.lng
-                bearing = data.bearing
-                speed = data.speed
-                accuracy = MOCK_ACCURACY
-                altitude = data.altitude
-                time = now
-                elapsedRealtimeNanos = elapsedNanos
-            }
-            locationManager.setTestProviderLocation(provider, location)
+        val location = Location(LocationManager.GPS_PROVIDER).apply {
+            latitude = data.lat
+            longitude = data.lng
+            bearing = data.bearing
+            speed = data.speed
+            accuracy = MOCK_ACCURACY
+            altitude = data.altitude
+            time = System.currentTimeMillis()
+            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
         }
+
+        fusedClient.setMockLocation(location)
     }
 
-    private fun removeMockProvider() {
-        if (!isProviderActive) return
-
+    @Suppress("MissingPermission")
+    private fun disableMockMode() {
         currentLocation = null
 
-        for (provider in PROVIDERS) {
-            runCatching {
-                locationManager.setTestProviderEnabled(provider, false)
-                locationManager.removeTestProvider(provider)
-            }
+        runCatching {
+            fusedClient.setMockMode(false)
         }
 
-        isProviderActive = false
-        Log.d(TAG, "Mock providers deactivated")
+        isMockMode = false
+        Log.d(TAG, "FusedLocation mock mode disabled")
     }
 
     companion object {
         private const val TAG = "FakeGpsServer"
         private const val PORT = 5556
         private const val REPEAT_INTERVAL_MS = 100L
-        private const val MOCK_ACCURACY = 1.0f
-        private val PROVIDERS = listOf(
-            LocationManager.GPS_PROVIDER,
-            LocationManager.NETWORK_PROVIDER,
-        )
+        private const val MOCK_ACCURACY = 3.0f
     }
 }
 
