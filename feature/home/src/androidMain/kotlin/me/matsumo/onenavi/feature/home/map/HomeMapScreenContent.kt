@@ -67,7 +67,7 @@ private const val ROUTE_CAMERA_MARGIN_TOP = 300.0
 private const val ROUTE_CAMERA_MARGIN_END = 250.0
 
 private const val NAVIGATION_PADDING_HORIZONTAL = 40.0
-private const val NAVIGATION_PADDING_EXTRA = 32.0
+private const val NAVIGATION_PADDING_EXTRA = 120.0
 
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
 
