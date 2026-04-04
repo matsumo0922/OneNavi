@@ -35,15 +35,14 @@ import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.MapboxExperimental
-import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
 import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
+import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.ViewportStatus
 import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraState
 import kotlinx.coroutines.flow.distinctUntilChanged
-import me.matsumo.onenavi.core.model.GuidanceUiState
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
@@ -74,7 +73,7 @@ private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
 @Composable
 internal fun HomeMapScreenContent(
     viewModel: HomeMapViewModel,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     val activity = LocalContext.current as? Activity

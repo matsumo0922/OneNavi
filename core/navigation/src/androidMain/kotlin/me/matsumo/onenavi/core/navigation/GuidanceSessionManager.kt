@@ -238,6 +238,7 @@ class GuidanceSessionManager(
             override fun onDone(utteranceId: String?) {
                 releaseAudioFocus()
             }
+
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
                 releaseAudioFocus()
