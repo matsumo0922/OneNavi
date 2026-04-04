@@ -30,14 +30,12 @@ import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineViewOptions
-import com.mapbox.navigation.ui.maps.route.line.model.RouteLineColorResources
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
 import me.matsumo.onenavi.feature.home.map.components.HomeMapRouteCalloutAdapter
 import me.matsumo.onenavi.feature.home.map.components.HomeMapWaypointPin
-import android.graphics.Color as AndroidColor
 
 private const val ROUTE_CLICK_PADDING = 30f
 
@@ -77,21 +75,8 @@ internal fun HomeMapsMapEffectContent(
     val routeLineView = remember {
         MapboxRouteLineView(
             MapboxRouteLineViewOptions.Builder(context)
-                .routeLineColorResources(
-                    RouteLineColorResources.Builder()
-                        .routeDefaultColor(AndroidColor.parseColor("#4285F4"))
-                        .routeLowCongestionColor(AndroidColor.parseColor("#4CAF50"))
-                        .routeModerateCongestionColor(AndroidColor.parseColor("#FFC107"))
-                        .routeHeavyCongestionColor(AndroidColor.parseColor("#F44336"))
-                        .routeSevereCongestionColor(AndroidColor.parseColor("#880E4F"))
-                        .routeUnknownCongestionColor(AndroidColor.parseColor("#4285F4"))
-                        .alternativeRouteDefaultColor(AndroidColor.parseColor("#B0B0B0"))
-                        .alternativeRouteUnknownCongestionColor(AndroidColor.parseColor("#B0B0B0"))
-                        .build(),
-                )
                 .routeLineBelowLayerId("road-label")
                 .displaySoftGradientForTraffic(true)
-                .softGradientTransition(30.0)
                 .build(),
         )
     }
@@ -200,8 +185,8 @@ internal fun HomeMapsMapEffectContent(
         }
 
         // RoutesObserver 駆動: NavigationManager の routes が更新されたら route line を再描画
-        // SDK が setNavigationRoutes 時にルートの並び順を管理するため、reorderRoutes は不要
-        MapEffect(routeResults) { mapView ->
+        // routeLineApi には選択ルートを先頭にした並び順で渡す（Mapbox は先頭をプライマリとして描画する）
+        MapEffect(routeResults, selectedRouteIndex) { mapView ->
             val style = mapView.mapboxMap.style ?: return@MapEffect
             val navigationRoutes = navigationManager.routes.value
 
@@ -214,7 +199,14 @@ internal fun HomeMapsMapEffectContent(
 
             routeCalloutAdapter.updateRouteResults(routeResults)
 
-            routeLineApi.setNavigationRoutes(navigationRoutes) { expected ->
+            val primaryIndex = navigationManager.selectedRouteIndex.value
+            val reorderedRoutes = if (primaryIndex in navigationRoutes.indices) {
+                listOf(navigationRoutes[primaryIndex]) + navigationRoutes.filterIndexed { index, _ -> index != primaryIndex }
+            } else {
+                navigationRoutes
+            }
+
+            routeLineApi.setNavigationRoutes(reorderedRoutes) { expected ->
                 routeLineView.renderRouteDrawData(style, expected)
             }
         }
