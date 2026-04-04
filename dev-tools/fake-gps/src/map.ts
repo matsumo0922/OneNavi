@@ -6,8 +6,10 @@ const DEFAULT_ZOOM = 14;
 
 let map: google.maps.Map;
 let currentMarker: google.maps.marker.AdvancedMarkerElement | null = null;
+let markerHeadingEl: HTMLElement | null = null;
 let waypointMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
-let routePolylines: google.maps.Polyline[] = [];
+let directionsService: google.maps.DirectionsService;
+let directionsRenderer: google.maps.DirectionsRenderer;
 let gpxPolyline: google.maps.Polyline | null = null;
 
 /** 地図クリック時のコールバック */
@@ -20,7 +22,6 @@ export async function initMap(): Promise<void> {
   const { Map } = (await google.maps.importLibrary("maps")) as google.maps.MapsLibrary;
   await google.maps.importLibrary("marker");
   await google.maps.importLibrary("places");
-  await google.maps.importLibrary("routes");
 
   map = new Map(document.getElementById("map")!, {
     center: DEFAULT_CENTER,
@@ -34,28 +35,35 @@ export async function initMap(): Promise<void> {
     fullscreenControl: false,
   });
 
+  directionsService = new google.maps.DirectionsService();
+  directionsRenderer = new google.maps.DirectionsRenderer({
+    map,
+    suppressMarkers: true,
+    polylineOptions: {
+      strokeColor: "#4285f4",
+      strokeWeight: 5,
+      strokeOpacity: 0.8,
+    },
+  });
+
   map.addListener("click", (event: google.maps.MapMouseEvent) => {
     if (event.latLng && onMapClickCallback) {
       onMapClickCallback({ lat: event.latLng.lat(), lng: event.latLng.lng() });
     }
   });
 
-  // PlaceAutocompleteElement (新 API)
+  // 初期位置に現在地マーカーを表示
+  updateCurrentPosition(DEFAULT_CENTER, 0);
+
   initPlaceAutocomplete();
 }
 
 /**
  * PlaceAutocompleteElement を初期化する。
- * 旧 google.maps.places.Autocomplete の代替。
  */
 function initPlaceAutocomplete(): void {
   const searchContainer = document.getElementById("panel-search")!;
 
-  // 旧 input 要素を削除
-  const oldInput = document.getElementById("search-input");
-  if (oldInput) oldInput.remove();
-
-  // PlaceAutocompleteElement を生成・挿入
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const PlaceAutocompleteElement = (google.maps.places as any).PlaceAutocompleteElement;
   const autocompleteEl = new PlaceAutocompleteElement({}) as HTMLElement;
@@ -63,13 +71,11 @@ function initPlaceAutocomplete(): void {
   autocompleteEl.style.width = "100%";
   searchContainer.appendChild(autocompleteEl);
 
-  // 地図の bounds で結果をバイアス
   map.addListener("bounds_changed", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (autocompleteEl as any).locationBias = map.getBounds();
   });
 
-  // 選択イベント
   autocompleteEl.addEventListener("gmp-select", async (event: Event) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { placePrediction } = event as any;
@@ -102,10 +108,11 @@ export function updateCurrentPosition(position: LatLng, bearing: number): void {
   if (!currentMarker) {
     const el = document.createElement("div");
     el.className = "current-marker";
-    el.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="10" fill="#4285f4" stroke="white" stroke-width="2"/>
-      <polygon points="12,2 16,12 12,9 8,12" fill="white" opacity="0.9"/>
+    el.innerHTML = `<svg width="32" height="32" viewBox="0 0 32 32">
+      <circle cx="16" cy="16" r="12" fill="#4285f4" stroke="white" stroke-width="3"/>
+      <polygon points="16,2 21,14 16,10 11,14" fill="white" opacity="0.9"/>
     </svg>`;
+    markerHeadingEl = el;
 
     currentMarker = new google.maps.marker.AdvancedMarkerElement({
       map,
@@ -117,13 +124,10 @@ export function updateCurrentPosition(position: LatLng, bearing: number): void {
     currentMarker.position = position;
   }
 
-  // bearing に合わせてマーカーを回転
-  const el = currentMarker.content as HTMLElement;
-  if (el) {
-    el.style.transform = `rotate(${bearing}deg)`;
+  if (markerHeadingEl) {
+    markerHeadingEl.style.transform = `rotate(${bearing}deg)`;
   }
 
-  // カメラを追従
   map.panTo(position);
 }
 
@@ -162,56 +166,40 @@ export function updateWaypointMarkers(waypoints: LatLng[]): void {
 }
 
 /**
- * Routes API (computeRoutes) でルートを検索し、ポリライン座標を返す。
- * 旧 DirectionsService の代替。
+ * DirectionsService でルートを検索し、ポリライン座標を返す。
  */
 export async function findRoute(waypoints: LatLng[]): Promise<LatLng[]> {
   if (waypoints.length < 2) return [];
 
   const origin = waypoints[0];
   const destination = waypoints[waypoints.length - 1];
-  const intermediates = waypoints.slice(1, -1).map((wp) => ({
-    location: { lat: wp.lat, lng: wp.lng },
+  const vias = waypoints.slice(1, -1).map((wp) => ({
+    location: new google.maps.LatLng(wp.lat, wp.lng),
+    stopover: true,
   }));
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const Route = (google.maps as any).routes.Route;
-  const response = await Route.computeRoutes({
-    origin: { lat: origin.lat, lng: origin.lng },
-    destination: { lat: destination.lat, lng: destination.lng },
-    intermediates,
-    travelMode: "DRIVE",
+  const result = await directionsService.route({
+    origin: new google.maps.LatLng(origin.lat, origin.lng),
+    destination: new google.maps.LatLng(destination.lat, destination.lng),
+    waypoints: vias,
+    travelMode: google.maps.TravelMode.DRIVING,
   });
 
-  const routes = response.routes;
-  if (!routes || routes.length === 0) return [];
+  directionsRenderer.setDirections(result);
 
-  const route = routes[0];
-
-  // 旧ルートを削除して新ルートを描画
-  clearRoutePolylines();
-  const polylines = route.createPolylines({
-    strokeColor: "#4285f4",
-    strokeWeight: 5,
-    strokeOpacity: 0.8,
-  });
-  for (const polyline of polylines) {
-    polyline.setMap(map);
-    routePolylines.push(polyline);
-  }
-
-  // ルートの座標を抽出
+  // polyline 座標を抽出
   const path: LatLng[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const point of route.path as any[]) {
-    if (typeof point.lat === "function") {
-      path.push({ lat: point.lat(), lng: point.lng() });
-    } else {
-      path.push({ lat: point.lat, lng: point.lng });
+  const legs = result.routes[0]?.legs ?? [];
+  for (const leg of legs) {
+    for (const step of leg.steps ?? []) {
+      const decodedPath = step.path ?? [];
+      for (const point of decodedPath) {
+        path.push({ lat: point.lat(), lng: point.lng() });
+      }
     }
   }
 
-  // ルート全体が見えるようにカメラを調整
+  // ルート全体をフィット
   if (path.length > 0) {
     const bounds = new google.maps.LatLngBounds();
     for (const point of path) {
@@ -227,15 +215,10 @@ export async function findRoute(waypoints: LatLng[]): Promise<LatLng[]> {
  * ルート表示をクリアする。
  */
 export function clearRoute(): void {
-  clearRoutePolylines();
+  directionsRenderer?.setDirections({
+    routes: [],
+  } as unknown as google.maps.DirectionsResult);
   clearGpxPolyline();
-}
-
-function clearRoutePolylines(): void {
-  for (const polyline of routePolylines) {
-    polyline.setMap(null);
-  }
-  routePolylines = [];
 }
 
 function clearGpxPolyline(): void {
