@@ -36,13 +36,13 @@ import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineViewOptions
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
-import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
 import me.matsumo.onenavi.feature.home.map.components.HomeMapRouteCallout
 import me.matsumo.onenavi.feature.home.map.components.HomeMapWaypointPin
 import me.matsumo.onenavi.feature.home.map.components.RouteCalloutStyle
+import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 import me.matsumo.onenavi.feature.home.map.util.CalloutSize
 import me.matsumo.onenavi.feature.home.map.util.MapCalloutPositioner
 
@@ -60,12 +60,9 @@ internal fun HomeMapsMapEffectContent(
     viewportState: MapViewportState,
     standardStyleState: StandardStyleState,
     sheetVisibleHeight: Dp,
-    searchResults: ImmutableList<SearchResultItem>,
-    selectedResult: SearchResultItem?,
+    screenState: HomeMapScreenState,
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
-    waypoints: ImmutableList<RouteWaypoint>,
-    isNavigating: Boolean,
     routeManager: RouteManager,
     cameraManager: CameraManager,
     onMapViewChanged: (MapView) -> Unit,
@@ -108,6 +105,8 @@ internal fun HomeMapsMapEffectContent(
             routeLineView.cancel()
         }
     }
+
+    val isNavigating = screenState is HomeMapScreenState.Navigating || screenState is HomeMapScreenState.Arrived
 
     MapboxMap(
         modifier = modifier.fillMaxSize(),
@@ -216,7 +215,7 @@ internal fun HomeMapsMapEffectContent(
         }
 
         // ルート吹き出し: ナビ中は非表示、プレビュー時のみ表示
-        if (routeResults.isNotEmpty() && !isNavigating) {
+        if (screenState is HomeMapScreenState.RoutePreview) {
             routeResults.forEachIndexed { index, result ->
                 if (index != selectedRouteIndex) {
                     calloutPoints.getOrNull(index)?.let { point ->
@@ -242,48 +241,50 @@ internal fun HomeMapsMapEffectContent(
             }
         }
 
-        if (isNavigating) {
-            // ナビ中はマーカー非表示
-        } else if (searchResults.isNotEmpty()) {
-            searchResults.forEachIndexed { index, result ->
-                HomeMapNumberedPin(
-                    point = Point.fromLngLat(result.longitude, result.latitude),
-                    number = index + 1,
-                )
-            }
-        } else if (waypoints.isNotEmpty()) {
-            waypoints.lastOrNull()?.let { waypoint ->
-                Marker(
-                    point = Point.fromLngLat(waypoint.longitude, waypoint.latitude),
-                    color = Color.Red,
-                    innerColor = Color.White,
-                    stroke = Color.White,
-                )
-            }
-        } else {
-            selectedResult?.let { result ->
-                Marker(
-                    point = Point.fromLngLat(result.longitude, result.latitude),
-                    color = Color.Red,
-                    innerColor = Color.White,
-                    stroke = Color.White,
-                )
-            }
-        }
-
-        if (waypoints.size > 2 && !isNavigating) {
-            val intermediateWaypoints = waypoints.drop(1).dropLast(1)
-
-            intermediateWaypoints.forEachIndexed { index, waypoint ->
-                val point = when (waypoint) {
-                    is RouteWaypoint.CurrentLocation -> Point.fromLngLat(waypoint.longitude, waypoint.latitude)
-                    is RouteWaypoint.Place -> Point.fromLngLat(waypoint.longitude, waypoint.latitude)
+        // マーカー表示: screenState ベース
+        when (val state = screenState) {
+            is HomeMapScreenState.Browsing -> { /* マーカーなし */ }
+            is HomeMapScreenState.SearchResultsList -> {
+                state.results.forEachIndexed { index, result ->
+                    HomeMapNumberedPin(
+                        point = Point.fromLngLat(result.longitude, result.latitude),
+                        number = index + 1,
+                    )
                 }
-                HomeMapWaypointPin(
-                    point = point,
-                    label = "K${index + 1}",
+            }
+            is HomeMapScreenState.PlaceDetails -> {
+                Marker(
+                    point = Point.fromLngLat(state.place.longitude, state.place.latitude),
+                    color = Color.Red,
+                    innerColor = Color.White,
+                    stroke = Color.White,
                 )
             }
+            is HomeMapScreenState.RoutePreview -> {
+                state.waypoints.lastOrNull()?.let { waypoint ->
+                    Marker(
+                        point = Point.fromLngLat(waypoint.longitude, waypoint.latitude),
+                        color = Color.Red,
+                        innerColor = Color.White,
+                        stroke = Color.White,
+                    )
+                }
+                if (state.waypoints.size > 2) {
+                    state.waypoints.drop(1).dropLast(1).forEachIndexed { index, waypoint ->
+                        val point = when (waypoint) {
+                            is RouteWaypoint.CurrentLocation -> Point.fromLngLat(waypoint.longitude, waypoint.latitude)
+                            is RouteWaypoint.Place -> Point.fromLngLat(waypoint.longitude, waypoint.latitude)
+                        }
+                        HomeMapWaypointPin(
+                            point = point,
+                            label = "K${index + 1}",
+                        )
+                    }
+                }
+            }
+            is HomeMapScreenState.Navigating,
+            is HomeMapScreenState.Arrived,
+            -> { /* ナビ中はマーカー非表示 */ }
         }
     }
 }
