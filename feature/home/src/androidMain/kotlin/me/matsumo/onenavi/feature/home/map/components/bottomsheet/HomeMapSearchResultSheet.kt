@@ -14,13 +14,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.SearchResultItem
-import me.matsumo.onenavi.feature.home.map.HomeMapViewEvent
 import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPinContent
 
 @Composable
 internal fun HomeMapSearchResultSheet(
     searchResults: ImmutableList<SearchResultItem>,
-    onViewEvent: (HomeMapViewEvent) -> Unit,
+    onSearchResultSelected: (SearchResultItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier) {
@@ -28,7 +27,7 @@ internal fun HomeMapSearchResultSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onViewEvent(HomeMapViewEvent.OnSearchResultSelected(result)) }
+                    .clickable { onSearchResultSelected(result) }
                     .padding(16.dp, 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),

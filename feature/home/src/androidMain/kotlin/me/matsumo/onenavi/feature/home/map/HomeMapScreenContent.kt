@@ -1,9 +1,10 @@
 package me.matsumo.onenavi.feature.home.map
 
-import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -15,50 +16,40 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.mapbox.geojson.Point.fromLngLat
-import com.mapbox.maps.CameraOptions
-import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.MapboxExperimental
+import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
 import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
 import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
-import com.mapbox.maps.plugin.animation.MapAnimationOptions
-import com.mapbox.maps.plugin.locationcomponent.location
-import com.mapbox.maps.plugin.viewport.ViewportStatus
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
-import me.matsumo.onenavi.core.model.NavigationState
+import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
+import me.matsumo.onenavi.core.model.SearchHistory
+import me.matsumo.onenavi.core.model.SearchResultItem
+import me.matsumo.onenavi.core.model.SearchSuggestionItem
+import me.matsumo.onenavi.core.navigation.CameraManager
+import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
 import me.matsumo.onenavi.feature.home.map.components.navi.HomeMapNaviContent
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapRouteTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapWaypointSearchScreen
-
-private const val FOLLOW_PUCK_ZOOM = 16.0
-private const val CAMERA_PADDING = 100.0
-private const val CAMERA_PADDING_TOP = 200.0
-private const val CAMERA_PADDING_BOTTOM = 400.0
-private const val ROUTE_CAMERA_MARGIN_VERTICAL = 150.0
-private const val ROUTE_CAMERA_MARGIN_HORIZONTAL = 100.0
-private const val ROUTE_CAMERA_MARGIN_TOP = 300.0
-private const val ROUTE_CAMERA_MARGIN_END = 250.0
+import me.matsumo.onenavi.feature.home.map.state.HomeMapOverlayState
+import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
 
@@ -72,19 +63,17 @@ internal fun HomeMapScreenContent(
     val density = LocalDensity.current
     val activity = LocalActivity.current
 
+    val screenState by viewModel.screenState.collectAsStateWithLifecycle()
+    val overlayState by viewModel.overlayState.collectAsStateWithLifecycle()
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val histories by viewModel.histories.collectAsStateWithLifecycle()
+
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val selectedResult by viewModel.selectedResult.collectAsStateWithLifecycle()
     val routeResults by viewModel.routeResults.collectAsStateWithLifecycle()
     val selectedRouteIndex by viewModel.selectedRouteIndex.collectAsStateWithLifecycle()
     val waypoints by viewModel.waypoints.collectAsStateWithLifecycle()
-    val editingWaypointIndex by viewModel.editingWaypointIndex.collectAsStateWithLifecycle()
     val waypointEditResult by viewModel.waypointEditResult.collectAsStateWithLifecycle()
-    val navigationState by viewModel.navigationState.collectAsStateWithLifecycle()
-
-    val isNavigating = navigationState is NavigationState.ActiveGuidance
-    val isArrived = navigationState is NavigationState.Arrival
 
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
@@ -98,29 +87,27 @@ internal fun HomeMapScreenContent(
             val name = runCatching { poiFeature.name }.getOrNull()
             val point = context.coordinateInfo.coordinate
 
-            viewModel.onViewEvent(
-                HomeMapViewEvent.OnMapLandmarkSelected(
-                    name = name,
-                    latitude = point.latitude(),
-                    longitude = point.longitude(),
-                ),
+            viewModel.onMapLandmarkSelected(
+                name = name,
+                latitude = point.latitude(),
+                longitude = point.longitude(),
             )
             true
         }
         interactionsState.onMapLongClicked { context ->
             val point = context.coordinateInfo.coordinate
 
-            viewModel.onViewEvent(
-                HomeMapViewEvent.OnMapLandmarkSelected(
-                    name = null,
-                    latitude = point.latitude(),
-                    longitude = point.longitude(),
-                ),
+            viewModel.onMapLandmarkSelected(
+                name = null,
+                latitude = point.latitude(),
+                longitude = point.longitude(),
             )
             true
         }
     }
 
+    // 設計書では allowSheetHide 廃止としたが、BottomSheetState.hide() が confirmValueChange を経由するため
+    // プログラムからの hide を許可するフラグとして残す必要がある
     var allowSheetHide by remember { mutableStateOf(false) }
 
     val scaffoldState = rememberBottomSheetScaffoldState(
@@ -144,136 +131,49 @@ internal fun HomeMapScreenContent(
         }
     }
 
-    LaunchedEffect(viewportState) {
-        snapshotFlow { viewportState.mapViewportStatus }
-            .distinctUntilChanged()
-            .collect { status ->
-                if (status is ViewportStatus.Idle) {
-                    trackingMode = null
-                }
-            }
+    val shouldShowSheet = screenState is HomeMapScreenState.SearchResultsList ||
+        screenState is HomeMapScreenState.PlaceDetails ||
+        screenState is HomeMapScreenState.RoutePreview
+
+    // ── 副作用 ──
+
+    HomeMapScreenSheetEffect(
+        shouldShowSheet = shouldShowSheet,
+        scaffoldState = scaffoldState,
+        onSheetShowing = {
+            sheetPeekHeight = SHEET_PEEK_HEIGHT_DEFAULT
+        },
+        onAllowSheetHide = { allowSheetHide = it },
+    )
+
+    HomeMapScreenViewportTrackingEffect(
+        viewportState = viewportState,
+        onTrackingModeCleared = { trackingMode = null },
+    )
+
+    HomeMapScreenThemeEffect(
+        isDarkTheme = isDarkTheme,
+        standardStyleState = standardStyleState,
+    )
+
+    HomeMapScreenCameraEffect(
+        screenStateProvider = { viewModel.screenState.value },
+        effects = viewModel.effects,
+        routeManager = viewModel.routeManager,
+        cameraManager = viewModel.cameraManager,
+        mapView = mapView,
+        viewportState = viewportState,
+        sheetPeekHeightPx = with(density) { sheetPeekHeight.toPx() }.toDouble(),
+        topAppBarHeightPx = topAppBarHeightPx,
+        activity = activity,
+        onTrackingModeChanged = { trackingMode = it },
+    )
+
+    BackHandler(enabled = screenState !is HomeMapScreenState.Browsing) {
+        viewModel.onBackPressed()
     }
 
-    LaunchedEffect(isDarkTheme) {
-        standardStyleState.configurationsState.lightPreset =
-            if (isDarkTheme) LightPresetValue.NIGHT else LightPresetValue.DAY
-    }
-
-    LaunchedEffect(searchResults, mapView) {
-        if (searchResults.isEmpty()) {
-            if (selectedResult == null) {
-                allowSheetHide = true
-                scaffoldState.bottomSheetState.hide()
-                allowSheetHide = false
-            }
-            return@LaunchedEffect
-        }
-        val currentMapView = mapView ?: return@LaunchedEffect
-
-        trackingMode = null
-        sheetPeekHeight = SHEET_PEEK_HEIGHT_DEFAULT
-        scaffoldState.bottomSheetState.partialExpand()
-
-        val points = searchResults.map { fromLngLat(it.longitude, it.latitude) }
-        val padding = EdgeInsets(CAMERA_PADDING_TOP, CAMERA_PADDING, CAMERA_PADDING_BOTTOM, CAMERA_PADDING)
-
-        val cameraOptions = currentMapView.mapboxMap.cameraForCoordinates(
-            coordinates = points,
-            coordinatesPadding = padding,
-            bearing = 0.0,
-            pitch = 0.0,
-        )
-
-        viewportState.flyTo(
-            cameraOptions = cameraOptions,
-            animationOptions = MapAnimationOptions.Builder()
-                .duration(1500)
-                .build(),
-        )
-    }
-
-    LaunchedEffect(selectedResult) {
-        val result = selectedResult ?: run {
-            if (searchResults.isEmpty()) {
-                allowSheetHide = true
-                scaffoldState.bottomSheetState.hide()
-                allowSheetHide = false
-            }
-            return@LaunchedEffect
-        }
-
-        sheetPeekHeight = SHEET_PEEK_HEIGHT_DEFAULT
-        trackingMode = null
-        scaffoldState.bottomSheetState.partialExpand()
-
-        viewportState.easeTo(
-            cameraOptions = CameraOptions.Builder()
-                .center(fromLngLat(result.longitude, result.latitude))
-                .zoom(FOLLOW_PUCK_ZOOM)
-                .pitch(0.0)
-                .bearing(0.0)
-                .build(),
-            animationOptions = MapAnimationOptions.Builder()
-                .duration(1500)
-                .build(),
-        )
-    }
-
-    LaunchedEffect(isNavigating) {
-        if (isNavigating) {
-            allowSheetHide = true
-            scaffoldState.bottomSheetState.hide()
-            allowSheetHide = false
-
-            activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            mapView?.location?.setLocationProvider(viewModel.cameraManager.navigationLocationProvider)
-        } else {
-            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            mapView?.location?.enabled = true
-
-            // ルートプレビューに復元: ルートが残っていればシートを再表示
-            if (routeResults.isNotEmpty()) {
-                sheetPeekHeight = SHEET_PEEK_HEIGHT_DEFAULT
-                scaffoldState.bottomSheetState.partialExpand()
-            }
-        }
-    }
-
-    LaunchedEffect(routeResults) {
-        if (routeResults.isEmpty()) {
-            val result = selectedResult ?: return@LaunchedEffect
-            trackingMode = null
-            viewportState.easeTo(
-                cameraOptions = CameraOptions.Builder()
-                    .center(fromLngLat(result.longitude, result.latitude))
-                    .zoom(FOLLOW_PUCK_ZOOM)
-                    .pitch(0.0)
-                    .bearing(0.0)
-                    .build(),
-                animationOptions = MapAnimationOptions.Builder()
-                    .duration(1500)
-                    .build(),
-            )
-            return@LaunchedEffect
-        }
-
-        // NavigationCamera の Overview モードでルート全体を表示
-        // RoutesObserver 経由で viewportDataSource にルートデータが渡されるのを待ってからカメラを移動
-        trackingMode = null
-
-        val sheetPeekPx = with(density) { sheetPeekHeight.toPx() }.toDouble()
-        val topPadding = topAppBarHeightPx.toDouble() + ROUTE_CAMERA_MARGIN_TOP
-        val bottomPadding = sheetPeekPx + ROUTE_CAMERA_MARGIN_VERTICAL
-        val padding = EdgeInsets(topPadding, ROUTE_CAMERA_MARGIN_HORIZONTAL, bottomPadding, ROUTE_CAMERA_MARGIN_END)
-
-        viewModel.routeManager.routes.first { it.isNotEmpty() }
-
-        viewModel.cameraManager.applyNavigationPadding(
-            followingPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0),
-            overviewPadding = padding,
-        )
-        viewModel.cameraManager.requestCameraOverview()
-    }
+    // ── UI ──
 
     BottomSheetScaffold(
         modifier = modifier,
@@ -281,11 +181,15 @@ internal fun HomeMapScreenContent(
         sheetPeekHeight = sheetPeekHeight,
         sheetContent = {
             HomeMapSheetContent(
+                screenState = screenState,
                 searchResults = searchResults,
                 selectedResult = selectedResult,
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
-                onViewEvent = viewModel::onViewEvent,
+                onNavigationStarted = viewModel::onNavigationStarted,
+                onRouteSelected = viewModel::onRouteSelected,
+                onSearchResultSelected = viewModel::onSearchResultSelected,
+                onRouteSearchClicked = viewModel::onRouteSearch,
                 onPeekHeightChanged = { sheetPeekHeight = it },
             )
         },
@@ -299,88 +203,205 @@ internal fun HomeMapScreenContent(
                 viewportState = viewportState,
                 standardStyleState = standardStyleState,
                 sheetVisibleHeight = sheetVisibleHeight,
-                searchResults = searchResults,
-                selectedResult = selectedResult,
+                screenState = screenState,
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
-                waypoints = waypoints,
-                isNavigating = isNavigating || isArrived,
                 routeManager = viewModel.routeManager,
                 cameraManager = viewModel.cameraManager,
                 onMapViewChanged = { mapView = it },
                 onUserLocationUpdated = viewModel::onUserLocationUpdated,
-                onRouteSelected = { viewModel.onViewEvent(HomeMapViewEvent.OnRouteSelected(it)) },
+                onRouteSelected = viewModel::onRouteSelected,
                 onBearingChanged = { deviceBearing = it },
             )
 
-            if (isNavigating) {
-                HomeMapNaviContent(
-                    modifier = Modifier.fillMaxSize(),
-                    viewModel = viewModel,
-                )
-            } else {
-                HomeMapControls(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(
-                            bottom = 16.dp,
-                            end = 16.dp,
-                        )
-                        .offset(y = -sheetVisibleHeight),
-                    cameraBearing = viewportState.cameraState?.bearing ?: 0.0,
-                    deviceBearing = deviceBearing,
-                    trackingMode = trackingMode,
-                    viewportState = viewportState,
-                    onTrackingModeChanged = { trackingMode = it },
-                )
-            }
+            HomeMapScreenContentControls(
+                screenState = screenState,
+                sheetVisibleHeight = sheetVisibleHeight,
+                viewportState = viewportState,
+                guidanceSessionManager = viewModel.guidanceSessionManager,
+                cameraManager = viewModel.cameraManager,
+                onNavigationStopped = viewModel::onNavigationStopped,
+                deviceBearing = deviceBearing,
+                trackingMode = trackingMode,
+                onTrackingModeChanged = { trackingMode = it },
+            )
 
-            if (!isNavigating && !isArrived && routeResults.isNotEmpty() && waypoints.isNotEmpty()) {
-                HomeMapRouteTopAppBar(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .statusBarsPadding()
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .onGloballyPositioned { topAppBarHeightPx = it.size.height.toFloat() },
-                    waypoints = waypoints,
-                    waypointEditResult = waypointEditResult,
-                    onWaypointEditResultConsumed = viewModel::consumeWaypointEditResult,
-                    onViewEvent = viewModel::onViewEvent,
-                )
-            } else if (!isNavigating && !isArrived) {
-                HomeMapTopAppBar(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .statusBarsPadding()
-                        .fillMaxWidth()
-                        .onGloballyPositioned { topAppBarHeightPx = it.size.height.toFloat() },
-                    suggestions = suggestions,
-                    histories = histories,
-                    selectedResult = selectedResult,
-                    viewportState = viewportState,
-                    onViewEvent = viewModel::onViewEvent,
-                )
-            }
-
-            val editingWaypoint = editingWaypointIndex?.let { waypoints.getOrNull(it) }
-            val initialQuery = when (editingWaypoint) {
-                is RouteWaypoint.Place -> editingWaypoint.name
-                else -> null
-            }
-
-            HomeMapWaypointSearchScreen(
-                modifier = Modifier.fillMaxSize(),
-                isVisible = editingWaypointIndex != null,
-                initialQuery = initialQuery,
+            HomeMapScreenContentTopAppBar(
+                screenState = screenState,
                 suggestions = suggestions,
                 histories = histories,
-                onSuggestionSelected = viewModel::onWaypointSuggestionSelected,
-                onHistorySelected = viewModel::onWaypointHistorySelected,
-                onRemoveHistory = { viewModel.onViewEvent(HomeMapViewEvent.OnRemoveHistory(it)) },
-                onQueryChanged = { viewModel.onViewEvent(HomeMapViewEvent.OnQueryChanged(it)) },
-                onDismiss = viewModel::onWaypointSearchDismissed,
+                selectedResult = selectedResult,
+                waypoints = waypoints,
+                waypointEditResult = waypointEditResult,
+                viewportState = viewportState,
+                onQueryChanged = viewModel::onQueryChanged,
+                onSearch = viewModel::onSearch,
+                onSuggestionSelected = viewModel::onSuggestionSelected,
+                onHistorySelected = viewModel::onHistorySelected,
+                onRemoveHistory = viewModel::onRemoveHistory,
+                onDismissSearchResult = viewModel::onDismissSearchResults,
+                onWaypointEditResultConsumed = viewModel::consumeWaypointEditResult,
+                onDismissRoutes = viewModel::onDismissRoutes,
+                onSwapOriginDestination = viewModel::onSwapOriginDestination,
+                onRouteWaypointsConfirmed = viewModel::onRouteWaypointsConfirmed,
+                onWaypointClicked = viewModel::onWaypointClicked,
+                onTopAppBarHeightChanged = { topAppBarHeightPx = it },
+            )
+
+            HomeMapScreenContentOverlay(
+                overlayState = overlayState,
+                suggestions = suggestions,
+                histories = histories,
+                onWaypointSuggestionSelected = viewModel::onWaypointSuggestionSelected,
+                onWaypointHistorySelected = viewModel::onWaypointHistorySelected,
+                onRemoveHistory = viewModel::onRemoveHistory,
+                onQueryChanged = viewModel::onQueryChanged,
+                onWaypointSearchDismissed = viewModel::onWaypointSearchDismissed,
             )
         }
+    }
+}
+
+/**
+ * ナビ中は HomeMapNaviContent、それ以外は地図コントロールを表示する。
+ */
+@Composable
+private fun BoxScope.HomeMapScreenContentControls(
+    screenState: HomeMapScreenState,
+    sheetVisibleHeight: Dp,
+    viewportState: MapViewportState,
+    guidanceSessionManager: GuidanceSessionManager,
+    cameraManager: CameraManager,
+    onNavigationStopped: () -> Unit,
+    deviceBearing: Double,
+    trackingMode: LocationTrackingMode?,
+    onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
+) {
+    when (screenState) {
+        is HomeMapScreenState.Navigating -> {
+            HomeMapNaviContent(
+                modifier = Modifier.fillMaxSize(),
+                guidanceSessionManager = guidanceSessionManager,
+                cameraManager = cameraManager,
+                onNavigationStopped = onNavigationStopped,
+            )
+        }
+        else -> {
+            HomeMapControls(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(
+                        bottom = 16.dp,
+                        end = 16.dp,
+                    )
+                    .offset(y = -sheetVisibleHeight),
+                cameraBearing = viewportState.cameraState?.bearing ?: 0.0,
+                deviceBearing = deviceBearing,
+                trackingMode = trackingMode,
+                viewportState = viewportState,
+                onTrackingModeChanged = onTrackingModeChanged,
+            )
+        }
+    }
+}
+
+/**
+ * screenState に応じた TopAppBar を表示する。
+ */
+@Composable
+private fun BoxScope.HomeMapScreenContentTopAppBar(
+    screenState: HomeMapScreenState,
+    suggestions: ImmutableList<SearchSuggestionItem>,
+    histories: ImmutableList<SearchHistory>,
+    selectedResult: SearchResultItem?,
+    waypoints: ImmutableList<RouteWaypoint>,
+    waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
+    viewportState: MapViewportState,
+    onQueryChanged: (String) -> Unit,
+    onSearch: (String, Double?, Double?) -> Unit,
+    onSuggestionSelected: (SearchSuggestionItem) -> Unit,
+    onHistorySelected: (SearchHistory) -> Unit,
+    onRemoveHistory: (String) -> Unit,
+    onDismissSearchResult: () -> Unit,
+    onWaypointEditResultConsumed: () -> Unit,
+    onDismissRoutes: () -> Unit,
+    onSwapOriginDestination: () -> Unit,
+    onRouteWaypointsConfirmed: (ImmutableList<RouteWaypoint>) -> Unit,
+    onWaypointClicked: (Int) -> Unit,
+    onTopAppBarHeightChanged: (Float) -> Unit,
+) {
+    when (screenState) {
+        is HomeMapScreenState.Browsing,
+        is HomeMapScreenState.SearchResultsList,
+        is HomeMapScreenState.PlaceDetails,
+        -> {
+            HomeMapTopAppBar(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .fillMaxWidth()
+                    .onGloballyPositioned { onTopAppBarHeightChanged(it.size.height.toFloat()) },
+                suggestions = suggestions,
+                histories = histories,
+                selectedResult = selectedResult,
+                viewportState = viewportState,
+                onQueryChanged = onQueryChanged,
+                onSearch = onSearch,
+                onSuggestionSelected = onSuggestionSelected,
+                onHistorySelected = onHistorySelected,
+                onRemoveHistory = onRemoveHistory,
+                onDismissSearchResult = onDismissSearchResult,
+            )
+        }
+        is HomeMapScreenState.RoutePreview -> {
+            HomeMapRouteTopAppBar(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .onGloballyPositioned { onTopAppBarHeightChanged(it.size.height.toFloat()) },
+                waypoints = waypoints,
+                waypointEditResult = waypointEditResult,
+                onWaypointEditResultConsumed = onWaypointEditResultConsumed,
+                onDismissRoutes = onDismissRoutes,
+                onSwapOriginDestination = onSwapOriginDestination,
+                onRouteWaypointsConfirmed = onRouteWaypointsConfirmed,
+                onWaypointClicked = onWaypointClicked,
+            )
+        }
+        is HomeMapScreenState.Navigating,
+        is HomeMapScreenState.Arrived,
+        -> { /* TopAppBar なし */ }
+    }
+}
+
+/**
+ * Overlay（WaypointSearch）を表示する。
+ */
+@Composable
+private fun HomeMapScreenContentOverlay(
+    overlayState: HomeMapOverlayState,
+    suggestions: ImmutableList<SearchSuggestionItem>,
+    histories: ImmutableList<SearchHistory>,
+    onWaypointSuggestionSelected: (SearchSuggestionItem) -> Unit,
+    onWaypointHistorySelected: (SearchHistory) -> Unit,
+    onRemoveHistory: (String) -> Unit,
+    onQueryChanged: (String) -> Unit,
+    onWaypointSearchDismissed: () -> Unit,
+) {
+    if (overlayState is HomeMapOverlayState.WaypointSearch) {
+        HomeMapWaypointSearchScreen(
+            modifier = Modifier.fillMaxSize(),
+            isVisible = true,
+            initialQuery = overlayState.initialQuery,
+            suggestions = suggestions,
+            histories = histories,
+            onSuggestionSelected = onWaypointSuggestionSelected,
+            onHistorySelected = onWaypointHistorySelected,
+            onRemoveHistory = onRemoveHistory,
+            onQueryChanged = onQueryChanged,
+            onDismiss = onWaypointSearchDismissed,
+        )
     }
 }
