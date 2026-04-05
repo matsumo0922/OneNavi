@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.feature.home.map.state
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 
 /**
  * HomeMap 画面上のオーバーレイ状態。
@@ -10,6 +11,7 @@ import androidx.compose.runtime.Immutable
 sealed interface HomeMapOverlayState {
 
     /** オーバーレイなし */
+    @Stable
     data object None : HomeMapOverlayState
 
     /** waypoint 検索画面を表示中 */

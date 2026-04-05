@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.feature.home.map
 
 import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -117,6 +118,8 @@ internal fun HomeMapScreenContent(
         }
     }
 
+    // 設計書では allowSheetHide 廃止としたが、BottomSheetState.hide() が confirmValueChange を経由するため
+    // プログラムからの hide を許可するフラグとして残す必要がある
     var allowSheetHide by remember { mutableStateOf(false) }
 
     val scaffoldState = rememberBottomSheetScaffoldState(
@@ -273,6 +276,10 @@ internal fun HomeMapScreenContent(
                 }
             }
         }
+    }
+
+    BackHandler(enabled = screenState !is HomeMapScreenState.Browsing) {
+        viewModel.onBackPressed()
     }
 
     BottomSheetScaffold(
