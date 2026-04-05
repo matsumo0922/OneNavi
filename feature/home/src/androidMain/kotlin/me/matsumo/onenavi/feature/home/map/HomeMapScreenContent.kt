@@ -117,13 +117,15 @@ internal fun HomeMapScreenContent(
         }
     }
 
+    var allowSheetHide by remember { mutableStateOf(false) }
+
     val scaffoldState = rememberBottomSheetScaffoldState(
         bottomSheetState = rememberStandardBottomSheetState(
             initialValue = SheetValue.Hidden,
             skipHiddenState = false,
             confirmValueChange = { newValue ->
-                // ユーザーは swipe で Sheet を閉じられない
-                newValue != SheetValue.Hidden
+                // ユーザーは swipe で Sheet を閉じられない。プログラムからの hide() のみ許可
+                if (newValue == SheetValue.Hidden) allowSheetHide else true
             },
         ),
     )
@@ -149,7 +151,9 @@ internal fun HomeMapScreenContent(
             sheetPeekHeight = SHEET_PEEK_HEIGHT_DEFAULT
             scaffoldState.bottomSheetState.partialExpand()
         } else {
+            allowSheetHide = true
             scaffoldState.bottomSheetState.hide()
+            allowSheetHide = false
         }
     }
 
