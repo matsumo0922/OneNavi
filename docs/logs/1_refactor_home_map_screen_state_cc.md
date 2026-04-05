@@ -1,7 +1,7 @@
 # HomeMapScreen 状態管理リファクタリング計画
 
 **作成日**: 2026-04-05  
-**最終更新**: 2026-04-05 (Codex レビュー反映)  
+**最終更新**: 2026-04-05 (Codex レビュー反映 + 仕様深掘り完了)  
 **対象**: `feature/home` モジュール — HomeMap 関連ファイル群  
 **ステータス**: 計画中
 
@@ -147,9 +147,65 @@ if (isNavigating) {
 
 ---
 
-## 3. 改善案
+## 3. 仕様決定事項
 
-### 3.1 3 層アーキテクチャ: Screen State + Overlay State + Effect Stream
+本リファクタリングの実装に先立ち、以下の UX / 設計仕様を確定した。
+
+### 3.1 BottomSheet のユーザー操作
+
+- **BottomSheet はユーザーが swipe で閉じる（Hidden にする）ことはできない**
+- Sheet の表示/非表示は screenState から完全に導出される
+- `allowSheetHide` フラグは廃止。`confirmValueChange` で `SheetValue.Hidden` を拒否する
+
+| screenState | Sheet |
+|---|---|
+| `Browsing` | Hidden |
+| `SearchResultsList` | PartiallyExpanded |
+| `PlaceDetails` | PartiallyExpanded |
+| `RoutePreview` | PartiallyExpanded |
+| `Navigating` | Hidden |
+| `Arrived` | Hidden（将来変更可能） |
+
+### 3.2 Android 戻るボタン（BackHandler）
+
+固定の戻り先。遷移元を記憶するスタックは不要。
+
+| 現在の state | Back の遷移先 | 補足 |
+|---|---|---|
+| `SearchResultsList` | `Browsing` | 検索結果をクリア |
+| `PlaceDetails` | `Browsing` | 選択地点をクリア |
+| `RoutePreview` | `PlaceDetails` | 目的地情報（`selectedResult`）は維持 |
+| `Navigating` | `RoutePreview` | **確認ダイアログなし**。ルート再検索で復帰 |
+| `Arrived` | `Browsing` | 全リセット |
+| Overlay 表示中 | Overlay を閉じるだけ | screenState は変えない |
+
+### 3.3 Arrived（到着）画面
+
+- sealed interface に `Arrived` 状態を**定義する**
+- **UI は今回実装しない**。到着時はナビ停止と同じ扱いで RoutePreview に戻す
+- 将来の Phase で到着サマリー UI を追加可能な設計にしておく
+
+### 3.4 ナビ停止時のルート情報
+
+- ナビ停止時は **waypoints を保持したままルートを再検索する**
+- reroute で変わった可能性があるため、旧 routeResults / selectedRouteIndex は使わない
+- `Navigating` state には `selectedRouteIndex` を**持たせない**（stale になるため）
+
+### 3.5 Loading 表示
+
+- 各 screenState に `isLoading: Boolean` フィールドを持たせる
+- BottomSheet 内で loading を表現する（ボタンの loading 状態、progress indicator 等）
+- reduce 関数に `_isRouteSearching` 等の loading flag を入力として渡す
+
+### 3.6 エラー表示
+
+- 今回のリファクタリングのスコープ外。現状のログ出力のみの挙動を維持する
+
+---
+
+## 4. 改善案
+
+### 4.1 3 層アーキテクチャ: combine 導出 + Overlay State + Effect Stream
 
 状態管理を以下の 3 層に分離する。
 
