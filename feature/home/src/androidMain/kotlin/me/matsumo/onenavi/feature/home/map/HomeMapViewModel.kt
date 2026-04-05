@@ -179,9 +179,11 @@ class HomeMapViewModel(
                     }
                     is HomeMapScreenState.RoutePreview -> {
                         _routeResults.value = persistentListOf()
+                        _selectedRouteIndex.value = 0
                         _waypoints.value = persistentListOf()
                         _topBarMode.value = RoutePreviewTopBarMode.Viewing
                         routeManager.clearRoutes()
+                        guidanceSessionManager.setNavigationState(NavigationState.Browsing)
                         // selectedResult は維持 → reduce が PlaceDetails を返す
                         val place = _selectedResult.value
                         if (place != null) {
@@ -234,6 +236,7 @@ class HomeMapViewModel(
                 .onSuccess { result ->
                     _selectedResult.value = result
                     searchRepository.addHistory(result)
+                    _effects.trySend(HomeMapEffect.MoveCameraToPlace(result))
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to select suggestion. id: ${suggestion.id}" }
@@ -247,6 +250,7 @@ class HomeMapViewModel(
                 .onSuccess { result ->
                     _selectedResult.value = result
                     searchRepository.addHistory(result)
+                    _effects.trySend(HomeMapEffect.MoveCameraToPlace(result))
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to retrieve history. id: ${history.id}" }
@@ -536,6 +540,12 @@ class HomeMapViewModel(
 
         routeManager.clearRoutes()
         guidanceSessionManager.setNavigationState(NavigationState.Browsing)
+
+        // selectedResult は維持 → reduce が PlaceDetails を返す → カメラを地点に戻す
+        val place = _selectedResult.value
+        if (place != null) {
+            _effects.trySend(HomeMapEffect.MoveCameraToPlace(place))
+        }
     }
 
     fun onDismissSearchResults() {
