@@ -132,8 +132,8 @@ class HomeMapViewModel(
 
     private fun onNavigationStopped() {
         guidanceSessionManager.stopSession()
-        guidanceSessionManager.returnToBrowsing()
-        cameraManager.clearNavigationPadding()
+        guidanceSessionManager.setNavigationState(NavigationState.RoutePreview)
+        cameraManager.requestCameraOverview()
     }
 
     private fun onQueryChanged(query: String) {

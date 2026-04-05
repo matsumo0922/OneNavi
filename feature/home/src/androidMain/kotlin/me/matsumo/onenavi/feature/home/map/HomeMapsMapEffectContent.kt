@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mapbox.geojson.Point
 import com.mapbox.maps.MapView
 import com.mapbox.maps.MapboxExperimental
@@ -78,6 +79,8 @@ internal fun HomeMapsMapEffectContent(
     val currentRouteResults = rememberUpdatedState(routeResults)
     val currentSelectedRouteIndex = rememberUpdatedState(selectedRouteIndex)
     val currentOnRouteSelected = rememberUpdatedState(onRouteSelected)
+
+    val navigationRoutes by routeManager.routes.collectAsStateWithLifecycle()
 
     var calloutPoints by remember { mutableStateOf<List<Point?>>(emptyList()) }
 
@@ -189,10 +192,9 @@ internal fun HomeMapsMapEffectContent(
             }
         }
 
-        // ルートライン描画: 選択ルートを先頭にした並び順で描画
-        MapEffect(routeResults, selectedRouteIndex) { mapView ->
+        // ルートライン描画: routeManager.routes（SDK の RoutesObserver 経由）を source of truth とする
+        MapEffect(navigationRoutes, selectedRouteIndex) { mapView ->
             val style = mapView.mapboxMap.style ?: return@MapEffect
-            val navigationRoutes = routeManager.routes.value
 
             if (navigationRoutes.isEmpty()) {
                 routeLineApi.clearRouteLine { expected ->
