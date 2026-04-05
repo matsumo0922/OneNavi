@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.feature.home.map.state
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
 
@@ -13,6 +14,7 @@ import me.matsumo.onenavi.core.model.RouteWaypoint
 sealed interface RoutePreviewTopBarMode {
 
     /** 確定済みルートの閲覧モード */
+    @Stable
     data object Viewing : RoutePreviewTopBarMode
 
     /** waypoint 編集中モード */

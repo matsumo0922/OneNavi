@@ -207,7 +207,6 @@ class HomeMapViewModel(
 
     internal fun onNavigationStarted() {
         guidanceSessionManager.startSession()
-        cameraManager.requestCameraFollowing(pitch3D = true)
         _effects.trySend(HomeMapEffect.EnterGuidanceFollowing)
         _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = true))
         _effects.trySend(HomeMapEffect.UseNavigationLocationProvider(enabled = true))
@@ -216,9 +215,10 @@ class HomeMapViewModel(
     fun onNavigationStopped() {
         guidanceSessionManager.stopSession()
         guidanceSessionManager.setNavigationState(NavigationState.Browsing)
+        _isRouteSearching.value = true
         _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = false))
         _effects.trySend(HomeMapEffect.UseNavigationLocationProvider(enabled = false))
-        // waypoints を保持してルート再検索
+        // waypoints を保持してルート再検索（旧ルートは表示し続け、再検索完了で差し替え）
         searchRoutesFromWaypoints(_waypoints.value)
     }
 
