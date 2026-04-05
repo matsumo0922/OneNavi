@@ -523,22 +523,33 @@ data class ArrivalInfo(
 - ナビ中のトリップカードの「停止」ボタン
 - 到着画面の「閉じる」ボタン（10 秒で自動消去）
 
-### 7.2 ViewModel での処理
+### 7.2 状態遷移の方針
+
+ナビゲーション停止時は **ルート選択画面（`RoutePreview`）に復帰** する。ルートやウェイポイントはクリアせず、ユーザーが別のルートを選んだり再度ナビを開始したりできるようにする。ルートを完全に破棄したい場合は、ルート選択画面の「戻る」操作（`OnDismissRoutes`）で行う。
+
+```
+ActiveGuidance / Arrival → (OnNavigationStopped) → RoutePreview
+RoutePreview → (OnDismissRoutes) → Browsing（ルート・ウェイポイント全クリア）
+```
+
+### 7.3 ViewModel での処理
 
 ```kotlin
-// HomeMapViewModel.kt:133-141
+// HomeMapViewModel.kt
 private fun onNavigationStopped() {
-    guidanceSessionManager.stopSession()           // ① セッション停止
-    guidanceSessionManager.returnToBrowsing()      // ② Browsing 状態に復帰
-    routeManager.clearRoutes()                     // ③ ルートクリア
-    cameraManager.clearNavigationPadding()         // ④ カメラパディングリセット
-    _routeResults.value = persistentListOf()       // ⑤ ルート検索結果クリア
-    _selectedRouteIndex.value = 0                  // ⑥ 選択インデックスリセット
-    _waypoints.value = persistentListOf()          // ⑦ ウェイポイントクリア
+    guidanceSessionManager.stopSession()                              // ① セッション停止
+    guidanceSessionManager.setNavigationState(NavigationState.RoutePreview)  // ② RoutePreview に復帰
+    cameraManager.requestCameraOverview()                             // ③ ルート全体を表示するカメラに切替
 }
 ```
 
-### 7.3 `GuidanceSessionManager.stopSession()` の詳細
+**ポイント:**
+
+- ルート（`routeManager`）・ウェイポイント（`_waypoints`）・検索結果（`_routeResults`）はクリアしない
+- `NavigationState.RoutePreview` への遷移により、UI 層で BottomSheet がルート選択画面として復元される
+- カメラは Overview モードに切り替え、ルート全体を見渡せるようにする
+
+### 7.4 `GuidanceSessionManager.stopSession()` の詳細
 
 ```kotlin
 // GuidanceSessionManager.kt:189-206

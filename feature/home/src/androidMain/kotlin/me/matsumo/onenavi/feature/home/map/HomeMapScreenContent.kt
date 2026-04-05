@@ -231,7 +231,11 @@ internal fun HomeMapScreenContent(
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             mapView?.location?.enabled = true
 
-            viewModel.cameraManager.clearNavigationPadding()
+            // ルートプレビューに復元: ルートが残っていればシートを再表示
+            if (routeResults.isNotEmpty()) {
+                sheetPeekHeight = SHEET_PEEK_HEIGHT_DEFAULT
+                scaffoldState.bottomSheetState.partialExpand()
+            }
         }
     }
 
