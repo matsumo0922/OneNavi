@@ -177,6 +177,7 @@ internal fun HomeMapScreenContent(
                 if (currentMapView != null) {
                     val points = state.results.map { fromLngLat(it.longitude, it.latitude) }
                     val padding = EdgeInsets(CAMERA_PADDING_TOP, CAMERA_PADDING, CAMERA_PADDING_BOTTOM, CAMERA_PADDING)
+
                     @Suppress("DEPRECATION")
                     val cameraOptions = currentMapView.mapboxMap.cameraForCoordinates(points, padding, 0.0, 0.0)
                     viewportState.flyTo(cameraOptions)
@@ -209,6 +210,7 @@ internal fun HomeMapScreenContent(
                     val currentMapView = mapView ?: return@collect
                     val points = effect.results.map { fromLngLat(it.longitude, it.latitude) }
                     val padding = EdgeInsets(CAMERA_PADDING_TOP, CAMERA_PADDING, CAMERA_PADDING_BOTTOM, CAMERA_PADDING)
+
                     @Suppress("DEPRECATION")
                     val opts = currentMapView.mapboxMap.cameraForCoordinates(points, padding, 0.0, 0.0)
                     viewportState.flyTo(
@@ -234,7 +236,8 @@ internal fun HomeMapScreenContent(
                     val sheetPeekPx = with(density) { sheetPeekHeight.toPx() }.toDouble()
                     val topPadding = topAppBarHeightPx.toDouble() + ROUTE_CAMERA_MARGIN_TOP
                     val bottomPadding = sheetPeekPx + ROUTE_CAMERA_MARGIN_VERTICAL
-                    val padding = EdgeInsets(topPadding, ROUTE_CAMERA_MARGIN_HORIZONTAL, bottomPadding, ROUTE_CAMERA_MARGIN_END)
+                    val padding =
+                        EdgeInsets(topPadding, ROUTE_CAMERA_MARGIN_HORIZONTAL, bottomPadding, ROUTE_CAMERA_MARGIN_END)
 
                     viewModel.routeManager.routes.first { it.isNotEmpty() }
 

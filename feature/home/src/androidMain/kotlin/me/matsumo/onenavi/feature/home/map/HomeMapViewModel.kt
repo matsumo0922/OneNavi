@@ -119,20 +119,15 @@ class HomeMapViewModel(
     private val _effects = Channel<HomeMapEffect>(Channel.BUFFERED)
     val effects: Flow<HomeMapEffect> = _effects.receiveAsFlow()
 
-    // ── 旧 public state（Phase 2 以降で段階的に private 化）──
+    // ── raw state 公開（screenState で導出できないデータを Composable に渡すため）──
 
     val searchResults: StateFlow<ImmutableList<SearchResultItem>> = _searchResults.asStateFlow()
     val selectedResult: StateFlow<SearchResultItem?> = _selectedResult.asStateFlow()
     val routeResults: StateFlow<ImmutableList<RouteResult>> = _routeResults.asStateFlow()
     val selectedRouteIndex: StateFlow<Int> = _selectedRouteIndex.asStateFlow()
     val waypoints: StateFlow<ImmutableList<RouteWaypoint>> = _waypoints.asStateFlow()
-    val editingWaypointIndex: StateFlow<Int?> = _overlayState.map { overlay ->
-        (overlay as? HomeMapOverlayState.WaypointSearch)?.index
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     private val _waypointEditResultInternal = MutableStateFlow<Pair<Int, RouteWaypoint.Place>?>(null)
     val waypointEditResult: StateFlow<Pair<Int, RouteWaypoint.Place>?> = _waypointEditResultInternal.asStateFlow()
-
-    val navigationState: StateFlow<NavigationState> = guidanceSessionManager.navigationState
 
     private var searchJob: Job? = null
 
