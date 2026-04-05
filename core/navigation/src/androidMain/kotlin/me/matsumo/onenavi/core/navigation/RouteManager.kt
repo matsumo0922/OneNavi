@@ -119,6 +119,8 @@ class RouteManager {
     fun clearRoutes() {
         _selectedRouteIndex.value = 0
         lastRouteIds = emptyList()
+        _routes.value = emptyList()
+        _alternativesMetadata.value = emptyList()
         mapboxNavigation?.setNavigationRoutes(emptyList())
     }
 }

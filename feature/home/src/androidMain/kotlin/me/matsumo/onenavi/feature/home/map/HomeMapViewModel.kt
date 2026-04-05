@@ -8,15 +8,19 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.NavigationState
@@ -29,6 +33,11 @@ import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
 import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.core.repository.RouteRepository
 import me.matsumo.onenavi.core.repository.SearchRepository
+import me.matsumo.onenavi.feature.home.map.state.HomeMapEffect
+import me.matsumo.onenavi.feature.home.map.state.HomeMapOverlayState
+import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
+import me.matsumo.onenavi.feature.home.map.state.RoutePreviewTopBarMode
+import me.matsumo.onenavi.feature.home.map.state.reduceScreenState
 import kotlin.time.Duration.Companion.milliseconds
 
 class HomeMapViewModel(
@@ -39,16 +48,16 @@ class HomeMapViewModel(
     internal val guidanceSessionManager: GuidanceSessionManager,
 ) : ViewModel() {
 
+    // ── 既存 raw state ──
+
     private val _query = MutableStateFlow("")
 
     private val _suggestions = MutableStateFlow<ImmutableList<SearchSuggestionItem>>(persistentListOf())
     val suggestions: StateFlow<ImmutableList<SearchSuggestionItem>> = _suggestions.asStateFlow()
 
     private val _searchResults = MutableStateFlow<ImmutableList<SearchResultItem>>(persistentListOf())
-    val searchResults: StateFlow<ImmutableList<SearchResultItem>> = _searchResults.asStateFlow()
 
     private val _selectedResult = MutableStateFlow<SearchResultItem?>(null)
-    val selectedResult: StateFlow<SearchResultItem?> = _selectedResult.asStateFlow()
 
     val histories: StateFlow<ImmutableList<SearchHistory>> = searchRepository.histories
         .map { it.toImmutableList() }
@@ -62,21 +71,63 @@ class HomeMapViewModel(
     private val _userLongitude = MutableStateFlow<Double?>(null)
 
     private val _routeResults = MutableStateFlow<ImmutableList<RouteResult>>(persistentListOf())
-    val routeResults: StateFlow<ImmutableList<RouteResult>> = _routeResults.asStateFlow()
 
     private val _selectedRouteIndex = MutableStateFlow(0)
-    val selectedRouteIndex: StateFlow<Int> = _selectedRouteIndex.asStateFlow()
 
     private val _waypoints = MutableStateFlow<ImmutableList<RouteWaypoint>>(persistentListOf())
+
+    // ── 新規追加 raw state ──
+
+    private val _topBarMode = MutableStateFlow<RoutePreviewTopBarMode>(RoutePreviewTopBarMode.Viewing)
+    private val _isRouteSearching = MutableStateFlow(false)
+    private val _lastSearchQuery = MutableStateFlow("")
+
+    // ── 導出: screenState（Array 版 combine を使用）──
+
+    @Suppress("UNCHECKED_CAST")
+    val screenState: StateFlow<HomeMapScreenState> = combine(
+        _searchResults,
+        _selectedResult,
+        _routeResults,
+        _waypoints,
+        _selectedRouteIndex,
+        _topBarMode,
+        _lastSearchQuery,
+        guidanceSessionManager.navigationState,
+        _isRouteSearching,
+    ) { values ->
+        reduceScreenState(
+            searchResults = values[0] as ImmutableList<SearchResultItem>,
+            selectedResult = values[1] as SearchResultItem?,
+            routeResults = values[2] as ImmutableList<RouteResult>,
+            waypoints = values[3] as ImmutableList<RouteWaypoint>,
+            selectedRouteIndex = values[4] as Int,
+            topBarMode = values[5] as RoutePreviewTopBarMode,
+            lastSearchQuery = values[6] as String,
+            navigationState = values[7] as NavigationState,
+            isRouteSearching = values[8] as Boolean,
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeMapScreenState.Browsing)
+
+    // ── Overlay State ──
+
+    private val _overlayState = MutableStateFlow<HomeMapOverlayState>(HomeMapOverlayState.None)
+    val overlayState: StateFlow<HomeMapOverlayState> = _overlayState.asStateFlow()
+
+    // ── Effect Stream ──
+
+    private val _effects = Channel<HomeMapEffect>(Channel.BUFFERED)
+    val effects: Flow<HomeMapEffect> = _effects.receiveAsFlow()
+
+    // ── raw state 公開（screenState で導出できないデータを Composable に渡すため）──
+
+    val searchResults: StateFlow<ImmutableList<SearchResultItem>> = _searchResults.asStateFlow()
+    val selectedResult: StateFlow<SearchResultItem?> = _selectedResult.asStateFlow()
+    val routeResults: StateFlow<ImmutableList<RouteResult>> = _routeResults.asStateFlow()
+    val selectedRouteIndex: StateFlow<Int> = _selectedRouteIndex.asStateFlow()
     val waypoints: StateFlow<ImmutableList<RouteWaypoint>> = _waypoints.asStateFlow()
-
-    private val _editingWaypointIndex = MutableStateFlow<Int?>(null)
-    val editingWaypointIndex: StateFlow<Int?> = _editingWaypointIndex.asStateFlow()
-
-    private val _waypointEditResult = MutableStateFlow<Pair<Int, RouteWaypoint.Place>?>(null)
-    val waypointEditResult: StateFlow<Pair<Int, RouteWaypoint.Place>?> = _waypointEditResult.asStateFlow()
-
-    val navigationState: StateFlow<NavigationState> = guidanceSessionManager.navigationState
+    private val _waypointEditResultInternal = MutableStateFlow<Pair<Int, RouteWaypoint.Place>?>(null)
+    val waypointEditResult: StateFlow<Pair<Int, RouteWaypoint.Place>?> = _waypointEditResultInternal.asStateFlow()
 
     private var searchJob: Job? = null
 
@@ -95,6 +146,15 @@ class HomeMapViewModel(
             .distinctUntilChanged()
             .onEach { query -> performSearch(query) }
             .launchIn(viewModelScope)
+
+        // Arrival 検知 → 即ナビ停止扱い（将来 Arrived UI 実装時はこの監視を外す）
+        guidanceSessionManager.navigationState
+            .onEach { navState ->
+                if (navState is NavigationState.Arrival) {
+                    onNavigationStopped()
+                }
+            }
+            .launchIn(viewModelScope)
     }
 
     override fun onCleared() {
@@ -104,39 +164,65 @@ class HomeMapViewModel(
         guidanceSessionManager.unregister()
     }
 
-    fun onViewEvent(event: HomeMapViewEvent) {
-        when (event) {
-            is HomeMapViewEvent.OnQueryChanged -> onQueryChanged(event.query)
-            is HomeMapViewEvent.OnSearch -> onSearch(event.query, event.latitude, event.longitude)
-            is HomeMapViewEvent.OnSearchResultSelected -> onSearchResultSelected(event.result)
-            is HomeMapViewEvent.OnSuggestionSelected -> onSuggestionSelected(event.suggestion)
-            is HomeMapViewEvent.OnHistorySelected -> onHistorySelected(event.history)
-            is HomeMapViewEvent.OnRemoveHistory -> onRemoveHistory(event.historyId)
-            HomeMapViewEvent.OnRouteSearch -> onRouteSearch()
-            is HomeMapViewEvent.OnRouteSelected -> onRouteSelected(event.index)
-            HomeMapViewEvent.OnDismissRoutes -> onDismissRoutes()
-            HomeMapViewEvent.OnDismissSearchResult -> onDismissSearchResults()
-            HomeMapViewEvent.OnSwapOriginDestination -> onSwapOriginDestination()
-            is HomeMapViewEvent.OnRouteWaypointsConfirmed -> onRouteWaypointsConfirmed(event.waypoints)
-            is HomeMapViewEvent.OnWaypointClicked -> onWaypointClicked(event.index)
-            is HomeMapViewEvent.OnMapLandmarkSelected -> onMapLandmarkSelected(event.name, event.latitude, event.longitude)
-            HomeMapViewEvent.OnNavigationStarted -> onNavigationStarted()
-            HomeMapViewEvent.OnNavigationStopped -> onNavigationStopped()
+    fun onBackPressed() {
+        when (val overlay = _overlayState.value) {
+            is HomeMapOverlayState.WaypointSearch -> {
+                _overlayState.value = HomeMapOverlayState.None
+            }
+            HomeMapOverlayState.None -> {
+                when (screenState.value) {
+                    is HomeMapScreenState.SearchResultsList -> {
+                        _searchResults.value = persistentListOf()
+                    }
+                    is HomeMapScreenState.PlaceDetails -> {
+                        _selectedResult.value = null
+                    }
+                    is HomeMapScreenState.RoutePreview -> {
+                        _routeResults.value = persistentListOf()
+                        _selectedRouteIndex.value = 0
+                        _waypoints.value = persistentListOf()
+                        _topBarMode.value = RoutePreviewTopBarMode.Viewing
+                        routeManager.clearRoutes()
+                        guidanceSessionManager.setNavigationState(NavigationState.Browsing)
+                        // selectedResult は維持 → reduce が PlaceDetails を返す
+                        val place = _selectedResult.value
+                        if (place != null) {
+                            _effects.trySend(HomeMapEffect.MoveCameraToPlace(place))
+                        }
+                    }
+                    is HomeMapScreenState.Navigating -> {
+                        onNavigationStopped()
+                    }
+                    is HomeMapScreenState.Arrived -> {
+                        _routeResults.value = persistentListOf()
+                        _waypoints.value = persistentListOf()
+                        _selectedResult.value = null
+                        routeManager.clearRoutes()
+                    }
+                    else -> { /* Browsing: 何もしない */ }
+                }
+            }
         }
     }
 
-    private fun onNavigationStarted() {
+    internal fun onNavigationStarted() {
         guidanceSessionManager.startSession()
-        cameraManager.requestCameraFollowing(pitch3D = true)
+        _effects.trySend(HomeMapEffect.EnterGuidanceFollowing)
+        _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = true))
+        _effects.trySend(HomeMapEffect.UseNavigationLocationProvider(enabled = true))
     }
 
-    private fun onNavigationStopped() {
+    fun onNavigationStopped() {
         guidanceSessionManager.stopSession()
-        guidanceSessionManager.setNavigationState(NavigationState.RoutePreview)
-        cameraManager.requestCameraOverview()
+        guidanceSessionManager.setNavigationState(NavigationState.Browsing)
+        _isRouteSearching.value = true
+        _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = false))
+        _effects.trySend(HomeMapEffect.UseNavigationLocationProvider(enabled = false))
+        // waypoints を保持してルート再検索（旧ルートは表示し続け、再検索完了で差し替え）
+        searchRoutesFromWaypoints(_waypoints.value)
     }
 
-    private fun onQueryChanged(query: String) {
+    internal fun onQueryChanged(query: String) {
         _query.value = query
 
         if (query.isBlank()) {
@@ -144,12 +230,13 @@ class HomeMapViewModel(
         }
     }
 
-    private fun onSuggestionSelected(suggestion: SearchSuggestionItem) {
+    internal fun onSuggestionSelected(suggestion: SearchSuggestionItem) {
         viewModelScope.launch {
             searchRepository.select(suggestion.id)
                 .onSuccess { result ->
                     _selectedResult.value = result
                     searchRepository.addHistory(result)
+                    _effects.trySend(HomeMapEffect.MoveCameraToPlace(result))
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to select suggestion. id: ${suggestion.id}" }
@@ -157,12 +244,13 @@ class HomeMapViewModel(
         }
     }
 
-    private fun onHistorySelected(history: SearchHistory) {
+    internal fun onHistorySelected(history: SearchHistory) {
         viewModelScope.launch {
             searchRepository.retrieve(history.id)
                 .onSuccess { result ->
                     _selectedResult.value = result
                     searchRepository.addHistory(result)
+                    _effects.trySend(HomeMapEffect.MoveCameraToPlace(result))
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to retrieve history. id: ${history.id}" }
@@ -170,21 +258,25 @@ class HomeMapViewModel(
         }
     }
 
-    private fun onRemoveHistory(historyId: String) {
+    internal fun onRemoveHistory(historyId: String) {
         viewModelScope.launch {
             searchRepository.removeHistory(historyId)
         }
     }
 
-    private fun onSearch(query: String, latitude: Double?, longitude: Double?) {
+    internal fun onSearch(query: String, latitude: Double?, longitude: Double?) {
         searchJob?.cancel()
         if (query.isBlank()) return
 
+        _lastSearchQuery.value = query
+        _selectedResult.value = null
+
         searchJob = viewModelScope.launch {
-            _selectedResult.value = null
             searchRepository.searchMultiple(query, latitude, longitude)
                 .onSuccess { results ->
-                    _searchResults.value = results.toImmutableList()
+                    val immutableResults = results.toImmutableList()
+                    _searchResults.value = immutableResults
+                    _effects.trySend(HomeMapEffect.MoveCameraToSearchResults(immutableResults))
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to search multiple. query: $query" }
@@ -193,9 +285,11 @@ class HomeMapViewModel(
         }
     }
 
-    private fun onSearchResultSelected(result: SearchResultItem) {
+    internal fun onSearchResultSelected(result: SearchResultItem) {
         _searchResults.value = persistentListOf()
         _selectedResult.value = result
+
+        _effects.trySend(HomeMapEffect.MoveCameraToPlace(result))
 
         viewModelScope.launch {
             searchRepository.addHistory(result)
@@ -207,7 +301,7 @@ class HomeMapViewModel(
         _userLongitude.value = longitude
     }
 
-    private fun onRouteSearch() {
+    internal fun onRouteSearch() {
         val destination = _selectedResult.value ?: return
         val originLat = _userLatitude.value ?: return
         val originLng = _userLongitude.value ?: return
@@ -225,24 +319,32 @@ class HomeMapViewModel(
         )
 
         _waypoints.value = newWaypoints
+        _routeResults.value = persistentListOf() // 旧ルートをクリアしてから検索
+        _isRouteSearching.value = true
         searchRoutesFromWaypoints(newWaypoints)
     }
 
     fun onRouteSelected(index: Int) {
         _selectedRouteIndex.value = index
         routeManager.selectRoute(index)
+        _effects.trySend(HomeMapEffect.MoveCameraToRouteOverview)
     }
 
-    private fun onSwapOriginDestination() {
+    internal fun onSwapOriginDestination() {
         val current = _waypoints.value
         if (current.size != 2) return
         val swapped = persistentListOf(current[1], current[0])
         _waypoints.value = swapped
+        _routeResults.value = persistentListOf()
+        _isRouteSearching.value = true
         searchRoutesFromWaypoints(swapped)
     }
 
-    private fun onRouteWaypointsConfirmed(newWaypoints: ImmutableList<RouteWaypoint>) {
+    internal fun onRouteWaypointsConfirmed(newWaypoints: ImmutableList<RouteWaypoint>) {
         _waypoints.value = newWaypoints
+        _topBarMode.value = RoutePreviewTopBarMode.Viewing
+        _routeResults.value = persistentListOf()
+        _isRouteSearching.value = true
         searchRoutesFromWaypoints(newWaypoints)
     }
 
@@ -290,23 +392,29 @@ class HomeMapViewModel(
                 .onSuccess { coreResults ->
                     val featureResults = coreResults.mapNotNull { it.toFeatureRouteResult() }
                     _selectedRouteIndex.value = 0
+                    _topBarMode.value = RoutePreviewTopBarMode.Viewing
 
                     routeManager.setRoutes(featureResults.map { it.navigationRoute })
                     guidanceSessionManager.setNavigationState(NavigationState.RoutePreview)
                     _routeResults.value = featureResults.toImmutableList()
+                    _isRouteSearching.value = false
+                    _effects.trySend(HomeMapEffect.MoveCameraToRouteOverview)
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to search routes." }
                     _routeResults.value = persistentListOf()
+                    _isRouteSearching.value = false
                 }
         }
     }
 
-    private fun onMapLandmarkSelected(name: String?, latitude: Double, longitude: Double) {
+    internal fun onMapLandmarkSelected(name: String?, latitude: Double, longitude: Double) {
         _searchResults.value = persistentListOf()
 
         if (name.isNullOrBlank()) {
-            _selectedResult.value = createCoordinateOnlyResult(latitude, longitude)
+            val result = createCoordinateOnlyResult(latitude, longitude)
+            _selectedResult.value = result
+            _effects.trySend(HomeMapEffect.MoveCameraToPlace(result))
             return
         }
 
@@ -322,13 +430,18 @@ class HomeMapViewModel(
                     if (closest != null) {
                         _selectedResult.value = closest
                         searchRepository.addHistory(closest)
+                        _effects.trySend(HomeMapEffect.MoveCameraToPlace(closest))
                     } else {
-                        _selectedResult.value = createCoordinateOnlyResult(latitude, longitude, name)
+                        val fallback = createCoordinateOnlyResult(latitude, longitude, name)
+                        _selectedResult.value = fallback
+                        _effects.trySend(HomeMapEffect.MoveCameraToPlace(fallback))
                     }
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to search landmark. name: $name" }
-                    _selectedResult.value = createCoordinateOnlyResult(latitude, longitude, name)
+                    val fallback = createCoordinateOnlyResult(latitude, longitude, name)
+                    _selectedResult.value = fallback
+                    _effects.trySend(HomeMapEffect.MoveCameraToPlace(fallback))
                 }
         }
     }
@@ -368,23 +481,31 @@ class HomeMapViewModel(
         )
     }
 
-    private fun onWaypointClicked(index: Int) {
-        _editingWaypointIndex.value = index
+    internal fun onWaypointClicked(index: Int) {
+        val waypoint = _waypoints.value.getOrNull(index)
+        val initialQuery = when (waypoint) {
+            is RouteWaypoint.Place -> waypoint.name
+            else -> null
+        }
+        _overlayState.value = HomeMapOverlayState.WaypointSearch(
+            index = index,
+            initialQuery = initialQuery,
+        )
     }
 
     fun onWaypointSuggestionSelected(suggestion: SearchSuggestionItem) {
-        val index = _editingWaypointIndex.value ?: return
+        val overlay = _overlayState.value as? HomeMapOverlayState.WaypointSearch ?: return
 
         viewModelScope.launch {
             searchRepository.select(suggestion.id)
                 .onSuccess { result ->
                     searchRepository.addHistory(result)
-                    _waypointEditResult.value = index to RouteWaypoint.Place(
+                    _waypointEditResultInternal.value = overlay.index to RouteWaypoint.Place(
                         name = result.name,
                         latitude = result.latitude,
                         longitude = result.longitude,
                     )
-                    _editingWaypointIndex.value = null
+                    _overlayState.value = HomeMapOverlayState.None
                 }
                 .onFailure {
                     Napier.e(it) { "Failed to select waypoint suggestion. id: ${suggestion.id}" }
@@ -393,31 +514,38 @@ class HomeMapViewModel(
     }
 
     fun onWaypointHistorySelected(history: SearchHistory) {
-        val index = _editingWaypointIndex.value ?: return
+        val overlay = _overlayState.value as? HomeMapOverlayState.WaypointSearch ?: return
 
-        _waypointEditResult.value = index to RouteWaypoint.Place(
+        _waypointEditResultInternal.value = overlay.index to RouteWaypoint.Place(
             name = history.name,
             latitude = history.latitude,
             longitude = history.longitude,
         )
-        _editingWaypointIndex.value = null
+        _overlayState.value = HomeMapOverlayState.None
     }
 
     fun onWaypointSearchDismissed() {
-        _editingWaypointIndex.value = null
+        _overlayState.value = HomeMapOverlayState.None
     }
 
     fun consumeWaypointEditResult() {
-        _waypointEditResult.value = null
+        _waypointEditResultInternal.value = null
     }
 
     fun onDismissRoutes() {
         _routeResults.value = persistentListOf()
         _selectedRouteIndex.value = 0
         _waypoints.value = persistentListOf()
+        _topBarMode.value = RoutePreviewTopBarMode.Viewing
 
         routeManager.clearRoutes()
         guidanceSessionManager.setNavigationState(NavigationState.Browsing)
+
+        // selectedResult は維持 → reduce が PlaceDetails を返す → カメラを地点に戻す
+        val place = _selectedResult.value
+        if (place != null) {
+            _effects.trySend(HomeMapEffect.MoveCameraToPlace(place))
+        }
     }
 
     fun onDismissSearchResults() {

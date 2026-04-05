@@ -16,15 +16,17 @@ import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
-import me.matsumo.onenavi.feature.home.map.HomeMapViewEvent
 
 @Composable
 internal fun HomeMapRouteTopAppBar(
     waypoints: ImmutableList<RouteWaypoint>,
     waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
     onWaypointEditResultConsumed: () -> Unit,
+    onDismissRoutes: () -> Unit,
+    onSwapOriginDestination: () -> Unit,
+    onRouteWaypointsConfirmed: (ImmutableList<RouteWaypoint>) -> Unit,
+    onWaypointClicked: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    onViewEvent: (HomeMapViewEvent) -> Unit,
 ) {
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     var isEditing by remember { mutableStateOf(false) }
@@ -33,7 +35,7 @@ internal fun HomeMapRouteTopAppBar(
         if (isEditing) {
             isEditing = false
         } else {
-            onViewEvent(HomeMapViewEvent.OnDismissRoutes)
+            onDismissRoutes()
         }
     }
 
@@ -53,12 +55,10 @@ internal fun HomeMapRouteTopAppBar(
                 waypointEditResult = waypointEditResult,
                 onWaypointEditResultConsumed = onWaypointEditResultConsumed,
                 onConfirmed = { confirmed ->
-                    onViewEvent(HomeMapViewEvent.OnRouteWaypointsConfirmed(confirmed))
+                    onRouteWaypointsConfirmed(confirmed)
                     isEditing = false
                 },
-                onWaypointClicked = { index ->
-                    onViewEvent(HomeMapViewEvent.OnWaypointClicked(index))
-                },
+                onWaypointClicked = onWaypointClicked,
                 onBackClicked = { isEditing = false },
             )
         } else {
@@ -67,16 +67,10 @@ internal fun HomeMapRouteTopAppBar(
                 waypointEditResult = waypointEditResult,
                 onWaypointEditResultConsumed = onWaypointEditResultConsumed,
                 onEditClicked = { isEditing = true },
-                onSwapClicked = {
-                    onViewEvent(HomeMapViewEvent.OnSwapOriginDestination)
-                },
-                onWaypointClicked = { index ->
-                    onViewEvent(HomeMapViewEvent.OnWaypointClicked(index))
-                },
-                onBackClicked = {
-                    onViewEvent(HomeMapViewEvent.OnDismissRoutes)
-                },
-                onViewEvent = onViewEvent,
+                onSwapClicked = onSwapOriginDestination,
+                onWaypointClicked = onWaypointClicked,
+                onBackClicked = onDismissRoutes,
+                onRouteWaypointsConfirmed = onRouteWaypointsConfirmed,
             )
         }
     }
