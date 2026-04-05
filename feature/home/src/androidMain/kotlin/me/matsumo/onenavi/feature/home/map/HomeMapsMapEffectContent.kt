@@ -106,8 +106,6 @@ internal fun HomeMapsMapEffectContent(
         }
     }
 
-    val isNavigating = screenState is HomeMapScreenState.Navigating || screenState is HomeMapScreenState.Arrived
-
     MapboxMap(
         modifier = modifier.fillMaxSize(),
         mapViewportState = viewportState,

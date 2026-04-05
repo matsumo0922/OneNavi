@@ -48,8 +48,10 @@ internal fun HomeMapNaviContent(
         val topPadding = maneuverPanelHeightPx.toDouble() + NAVIGATION_PADDING_EXTRA
         val bottomPadding = tripCardY.toDouble() + NAVIGATION_PADDING_EXTRA
 
-        val followingPadding = EdgeInsets(topPadding, NAVIGATION_PADDING_HORIZONTAL, bottomPadding, NAVIGATION_PADDING_HORIZONTAL)
-        val overviewPadding = EdgeInsets(topPadding, NAVIGATION_PADDING_HORIZONTAL, bottomPadding, NAVIGATION_PADDING_HORIZONTAL)
+        val followingPadding =
+            EdgeInsets(topPadding, NAVIGATION_PADDING_HORIZONTAL, bottomPadding, NAVIGATION_PADDING_HORIZONTAL)
+        val overviewPadding =
+            EdgeInsets(topPadding, NAVIGATION_PADDING_HORIZONTAL, bottomPadding, NAVIGATION_PADDING_HORIZONTAL)
 
         cameraManager.applyNavigationPadding(followingPadding, overviewPadding)
     }
