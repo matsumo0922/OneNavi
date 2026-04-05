@@ -78,7 +78,7 @@ internal fun HomeMapScreenContent(
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val histories by viewModel.histories.collectAsStateWithLifecycle()
 
-    // 旧互換用（Phase 3 のマーカー整理で削除予定）
+    // 旧互換用（Phase 6 のクリーンアップで削除予定）
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val selectedResult by viewModel.selectedResult.collectAsStateWithLifecycle()
     val routeResults by viewModel.routeResults.collectAsStateWithLifecycle()
@@ -98,24 +98,20 @@ internal fun HomeMapScreenContent(
             val name = runCatching { poiFeature.name }.getOrNull()
             val point = context.coordinateInfo.coordinate
 
-            viewModel.onViewEvent(
-                HomeMapViewEvent.OnMapLandmarkSelected(
-                    name = name,
-                    latitude = point.latitude(),
-                    longitude = point.longitude(),
-                ),
+            viewModel.onMapLandmarkSelected(
+                name = name,
+                latitude = point.latitude(),
+                longitude = point.longitude(),
             )
             true
         }
         interactionsState.onMapLongClicked { context ->
             val point = context.coordinateInfo.coordinate
 
-            viewModel.onViewEvent(
-                HomeMapViewEvent.OnMapLandmarkSelected(
-                    name = null,
-                    latitude = point.latitude(),
-                    longitude = point.longitude(),
-                ),
+            viewModel.onMapLandmarkSelected(
+                name = null,
+                latitude = point.latitude(),
+                longitude = point.longitude(),
             )
             true
         }
@@ -283,7 +279,10 @@ internal fun HomeMapScreenContent(
                 selectedResult = selectedResult,
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
-                onViewEvent = viewModel::onViewEvent,
+                onNavigationStarted = viewModel::onNavigationStarted,
+                onRouteSelected = viewModel::onRouteSelected,
+                onSearchResultSelected = viewModel::onSearchResultSelected,
+                onRouteSearchClicked = viewModel::onRouteSearch,
                 onPeekHeightChanged = { sheetPeekHeight = it },
             )
         },
@@ -304,7 +303,7 @@ internal fun HomeMapScreenContent(
                 cameraManager = viewModel.cameraManager,
                 onMapViewChanged = { mapView = it },
                 onUserLocationUpdated = viewModel::onUserLocationUpdated,
-                onRouteSelected = { viewModel.onViewEvent(HomeMapViewEvent.OnRouteSelected(it)) },
+                onRouteSelected = viewModel::onRouteSelected,
                 onBearingChanged = { deviceBearing = it },
             )
 
@@ -315,7 +314,7 @@ internal fun HomeMapScreenContent(
                         modifier = Modifier.fillMaxSize(),
                         guidanceSessionManager = viewModel.guidanceSessionManager,
                         cameraManager = viewModel.cameraManager,
-                        onNavigationStopped = { viewModel.onViewEvent(HomeMapViewEvent.OnNavigationStopped) },
+                        onNavigationStopped = viewModel::onNavigationStopped,
                     )
                 }
                 else -> {
@@ -352,7 +351,12 @@ internal fun HomeMapScreenContent(
                         histories = histories,
                         selectedResult = selectedResult,
                         viewportState = viewportState,
-                        onViewEvent = viewModel::onViewEvent,
+                        onQueryChanged = viewModel::onQueryChanged,
+                        onSearch = viewModel::onSearch,
+                        onSuggestionSelected = viewModel::onSuggestionSelected,
+                        onHistorySelected = viewModel::onHistorySelected,
+                        onRemoveHistory = viewModel::onRemoveHistory,
+                        onDismissSearchResult = viewModel::onDismissSearchResults,
                     )
                 }
                 is HomeMapScreenState.RoutePreview -> {
@@ -366,7 +370,10 @@ internal fun HomeMapScreenContent(
                         waypoints = waypoints,
                         waypointEditResult = waypointEditResult,
                         onWaypointEditResultConsumed = viewModel::consumeWaypointEditResult,
-                        onViewEvent = viewModel::onViewEvent,
+                        onDismissRoutes = viewModel::onDismissRoutes,
+                        onSwapOriginDestination = viewModel::onSwapOriginDestination,
+                        onRouteWaypointsConfirmed = viewModel::onRouteWaypointsConfirmed,
+                        onWaypointClicked = viewModel::onWaypointClicked,
                     )
                 }
                 is HomeMapScreenState.Navigating,
@@ -385,8 +392,8 @@ internal fun HomeMapScreenContent(
                     histories = histories,
                     onSuggestionSelected = viewModel::onWaypointSuggestionSelected,
                     onHistorySelected = viewModel::onWaypointHistorySelected,
-                    onRemoveHistory = { viewModel.onViewEvent(HomeMapViewEvent.OnRemoveHistory(it)) },
-                    onQueryChanged = { viewModel.onViewEvent(HomeMapViewEvent.OnQueryChanged(it)) },
+                    onRemoveHistory = viewModel::onRemoveHistory,
+                    onQueryChanged = viewModel::onQueryChanged,
                     onDismiss = viewModel::onWaypointSearchDismissed,
                 )
             }
