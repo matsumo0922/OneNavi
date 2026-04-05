@@ -5,7 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.matsumo.onenavi.core.model.NavigationState
+import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 import org.koin.compose.viewmodel.koinViewModel
 
 @Suppress("ViewModelForwarding")
@@ -15,11 +15,11 @@ internal actual fun HomeMapScreen(
     modifier: Modifier,
 ) {
     val viewModel: HomeMapViewModel = koinViewModel()
-    val navigationState by viewModel.navigationState.collectAsStateWithLifecycle()
+    val screenState by viewModel.screenState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(navigationState) {
-        val isNavigating = navigationState is NavigationState.ActiveGuidance ||
-            navigationState is NavigationState.Arrival
+    LaunchedEffect(screenState) {
+        val isNavigating = screenState is HomeMapScreenState.Navigating ||
+            screenState is HomeMapScreenState.Arrived
         onNavigatingChanged(isNavigating)
     }
 
