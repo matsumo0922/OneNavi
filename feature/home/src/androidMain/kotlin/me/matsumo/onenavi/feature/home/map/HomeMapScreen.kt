@@ -18,9 +18,10 @@ internal actual fun HomeMapScreen(
     val screenState by viewModel.screenState.collectAsStateWithLifecycle()
 
     LaunchedEffect(screenState) {
-        val isNavigating = screenState is HomeMapScreenState.Navigating ||
-            screenState is HomeMapScreenState.Arrived
-        onNavigatingChanged(isNavigating)
+        val isNavigating = screenState is HomeMapScreenState.Navigating
+        val isArrived = screenState is HomeMapScreenState.Arrived
+
+        onNavigatingChanged(isNavigating || isArrived)
     }
 
     HomeMapScreenContent(
