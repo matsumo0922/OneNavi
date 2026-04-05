@@ -313,7 +313,9 @@ internal fun HomeMapScreenContent(
                 is HomeMapScreenState.Navigating -> {
                     HomeMapNaviContent(
                         modifier = Modifier.fillMaxSize(),
-                        viewModel = viewModel,
+                        guidanceSessionManager = viewModel.guidanceSessionManager,
+                        cameraManager = viewModel.cameraManager,
+                        onNavigationStopped = { viewModel.onViewEvent(HomeMapViewEvent.OnNavigationStopped) },
                     )
                 }
                 else -> {
