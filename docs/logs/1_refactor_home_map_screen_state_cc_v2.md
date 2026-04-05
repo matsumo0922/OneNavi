@@ -2,7 +2,7 @@
 
 **作成日**: 2026-04-05  
 **対象**: `feature/home` モジュール — HomeMap 関連ファイル群  
-**ステータス**: 計画確定  
+**ステータス**: 計画確定（セルフレビュー反映済み）  
 **経緯**: v1 は CC 初案 → Codex レビュー 2 回 → 仕様深掘りを経て本 v2 に統合
 
 ---
@@ -237,6 +237,10 @@ sealed interface RoutePreviewTopBarMode {
 
 ### 4.3 `reduceScreenState()` — pure function
 
+**注意**: Kotlin の `combine` overload は最大 5 引数。8 個以上の Flow を合成する場合は
+`combine(flows: Iterable<Flow<*>>) { values: Array<*> -> }` を使用する（型安全性が落ちるため、
+reduce 内のキャスト箇所にコメントを残すこと）。
+
 ```kotlin
 internal fun reduceScreenState(
     searchResults: ImmutableList<SearchResultItem>,
@@ -245,14 +249,12 @@ internal fun reduceScreenState(
     waypoints: ImmutableList<RouteWaypoint>,
     selectedRouteIndex: Int,
     topBarMode: RoutePreviewTopBarMode,
+    lastSearchQuery: String,
     navigationState: NavigationState,
     isRouteSearching: Boolean,
 ): HomeMapScreenState = when {
-    navigationState is NavigationState.Arrival -> {
-        val dest = waypoints.lastOrNull()
-        if (dest != null) HomeMapScreenState.Arrived(destination = dest)
-        else HomeMapScreenState.Browsing
-    }
+    // TODO: 将来 Arrived UI を実装する際はこの分岐を有効化する
+    // navigationState is NavigationState.Arrival -> { ... }
     navigationState is NavigationState.ActiveGuidance -> {
         HomeMapScreenState.Navigating
     }
@@ -267,7 +269,7 @@ internal fun reduceScreenState(
     }
     searchResults.isNotEmpty() -> {
         HomeMapScreenState.SearchResultsList(
-            query = "",
+            query = lastSearchQuery,
             results = searchResults,
         )
     }
@@ -304,24 +306,39 @@ class HomeMapViewModel(
     // ── 新規追加 ──
     private val _topBarMode = MutableStateFlow<RoutePreviewTopBarMode>(RoutePreviewTopBarMode.Viewing)
     private val _isRouteSearching = MutableStateFlow(false)
+    private val _lastSearchQuery = MutableStateFlow("")
 
-    // ── 導出: screenState ──
+    // ── 導出: screenState（Array 版 combine を使用）──
     val screenState: StateFlow<HomeMapScreenState> = combine(
-        _searchResults,
-        _selectedResult,
-        _routeResults,
-        _waypoints,
-        _selectedRouteIndex,
-        _topBarMode,
-        guidanceSessionManager.navigationState,
-        _isRouteSearching,
-    ) { searchResults, selectedResult, routeResults, waypoints,
-        selectedRouteIndex, topBarMode, navState, isRouteSearching ->
+        _searchResults, _selectedResult, _routeResults, _waypoints,
+        _selectedRouteIndex, _topBarMode, _lastSearchQuery,
+        guidanceSessionManager.navigationState, _isRouteSearching,
+    ) { values ->
+        @Suppress("UNCHECKED_CAST")
         reduceScreenState(
-            searchResults, selectedResult, routeResults, waypoints,
-            selectedRouteIndex, topBarMode, navState, isRouteSearching,
+            searchResults = values[0] as ImmutableList<SearchResultItem>,
+            selectedResult = values[1] as SearchResultItem?,
+            routeResults = values[2] as ImmutableList<RouteResult>,
+            waypoints = values[3] as ImmutableList<RouteWaypoint>,
+            selectedRouteIndex = values[4] as Int,
+            topBarMode = values[5] as RoutePreviewTopBarMode,
+            lastSearchQuery = values[6] as String,
+            navigationState = values[7] as NavigationState,
+            isRouteSearching = values[8] as Boolean,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeMapScreenState.Browsing)
+
+    init {
+        // Arrival 検知 → 即ナビ停止扱い
+        // TODO: 将来 Arrived UI を実装する際はこの監視を外し、reduceScreenState の Arrival 分岐を有効化する
+        guidanceSessionManager.navigationState
+            .onEach { navState ->
+                if (navState is NavigationState.Arrival) {
+                    onNavigationStopped()
+                }
+            }
+            .launchIn(viewModelScope)
+    }
 
     // ── Overlay State ──
     private val _overlayState = MutableStateFlow<HomeMapOverlayState>(HomeMapOverlayState.None)
@@ -336,6 +353,25 @@ class HomeMapViewModel(
     val histories: StateFlow<ImmutableList<SearchHistory>> = ...
 
     // ── メソッド例 ──
+
+    private fun onSearch(query: String, latitude: Double?, longitude: Double?) {
+        _lastSearchQuery.value = query  // 検索実行時にクエリを保存（キーストロークごとではない）
+        _selectedResult.value = null
+        viewModelScope.launch {
+            searchRepository.searchMultiple(query, latitude, longitude)
+                .onSuccess { results -> _searchResults.value = results.toImmutableList() }
+                .onFailure { _searchResults.value = persistentListOf() }
+        }
+        _effects.trySend(HomeMapEffect.MoveCameraToSearchResults(...))
+    }
+
+    private fun onNavigationStarted() {
+        guidanceSessionManager.startSession()
+        cameraManager.requestCameraFollowing(pitch3D = true)
+        _effects.trySend(HomeMapEffect.EnterGuidanceFollowing)
+        _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = true))
+        _effects.trySend(HomeMapEffect.UseNavigationLocationProvider(enabled = true))
+    }
 
     private fun onRouteSearch() {
         val destination = _selectedResult.value ?: return
@@ -355,7 +391,9 @@ class HomeMapViewModel(
                 .onSuccess { results ->
                     val featureResults = results.mapNotNull { it.toFeatureRouteResult() }
                     _selectedRouteIndex.value = 0
+                    _topBarMode.value = RoutePreviewTopBarMode.Viewing  // リセット
                     routeManager.setRoutes(featureResults.map { it.navigationRoute })
+                    guidanceSessionManager.setNavigationState(NavigationState.RoutePreview)
                     _routeResults.value = featureResults.toImmutableList()
                     _isRouteSearching.value = false
                     _effects.trySend(HomeMapEffect.MoveCameraToRouteOverview)
@@ -499,19 +537,51 @@ LaunchedEffect(Unit) {
     // 以降は Effect を collect して遷移時カメラ移動を処理
     viewModel.effects.collect { effect ->
         when (effect) {
-            is HomeMapEffect.MoveCameraToSearchResults -> { ... }
-            is HomeMapEffect.MoveCameraToPlace -> { ... }
+            is HomeMapEffect.MoveCameraToSearchResults -> {
+                trackingMode = null
+                val points = effect.results.map { fromLngLat(it.longitude, it.latitude) }
+                val padding = EdgeInsets(CAMERA_PADDING_TOP, CAMERA_PADDING, CAMERA_PADDING_BOTTOM, CAMERA_PADDING)
+                val opts = mapView?.mapboxMap?.cameraForCoordinates(points, padding, 0.0, 0.0)
+                opts?.let { viewportState.flyTo(it, MapAnimationOptions.Builder().duration(1500).build()) }
+            }
+            is HomeMapEffect.MoveCameraToPlace -> {
+                trackingMode = null
+                viewportState.easeTo(
+                    cameraOptions = CameraOptions.Builder()
+                        .center(fromLngLat(effect.place.longitude, effect.place.latitude))
+                        .zoom(FOLLOW_PUCK_ZOOM).pitch(0.0).bearing(0.0).build(),
+                    animationOptions = MapAnimationOptions.Builder().duration(1500).build(),
+                )
+            }
             is HomeMapEffect.MoveCameraToRouteOverview -> {
-                routeManager.routes.first { it.isNotEmpty() }
-                cameraManager.applyNavigationPadding(...)
+                trackingMode = null
+                viewModel.routeManager.routes.first { it.isNotEmpty() }
+                cameraManager.applyNavigationPadding(
+                    followingPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0),
+                    overviewPadding = EdgeInsets(topPadding, horizontal, bottomPadding, endPadding),
+                )
                 cameraManager.requestCameraOverview()
             }
             is HomeMapEffect.EnterGuidanceFollowing -> {
                 cameraManager.requestCameraFollowing(pitch3D = true)
             }
-            is HomeMapEffect.RestoreTracking -> { ... }
-            is HomeMapEffect.SetKeepScreenOn -> { ... }
-            is HomeMapEffect.UseNavigationLocationProvider -> { ... }
+            is HomeMapEffect.RestoreTracking -> {
+                trackingMode = LocationTrackingMode.TiltedHeading
+            }
+            is HomeMapEffect.SetKeepScreenOn -> {
+                if (effect.enabled) {
+                    activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+            is HomeMapEffect.UseNavigationLocationProvider -> {
+                if (effect.enabled) {
+                    mapView?.location?.setLocationProvider(cameraManager.navigationLocationProvider)
+                } else {
+                    mapView?.location?.enabled = true
+                }
+            }
         }
     }
 }
@@ -667,7 +737,7 @@ if (overlayState is HomeMapOverlayState.WaypointSearch) {
 
 ### Phase 2: Compose 切り替え + Effect 導入
 
-**変更**: `HomeMapScreenContent.kt`, `HomeMapSheetContent.kt`
+**変更**: `HomeMapScreenContent.kt`, `HomeMapSheetContent.kt`, `HomeMapNaviContent.kt`, `HomeMapScreen.kt`
 
 1. `screenState`, `overlayState` を collect
 2. 旧 4 つの `LaunchedEffect` を削除
@@ -675,6 +745,8 @@ if (overlayState is HomeMapOverlayState.WaypointSearch) {
 4. カメラ: `LaunchedEffect(Unit) { 初期復元 + effects.collect }` で制御
 5. UI 分岐を `when(screenState)` に書き換え
 6. BackHandler 追加
+7. `HomeMapNaviContent` の引数から `viewModel: HomeMapViewModel` を削除し、必要なデータを個別引数で渡す
+8. `HomeMapScreen.kt` (actual) の `onNavigatingChanged` を `screenState is Navigating` から導出する
 
 ### Phase 3: マーカー表示整理
 
@@ -747,6 +819,8 @@ Phase 1〜3 は独立。各 Phase でビルド確認してコミットする。
 
 ## 9. 変更ファイル一覧
 
+ベースパス: `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/`
+
 | ファイル | 変更種別 | Phase |
 |---------|---------|-------|
 | `map/state/HomeMapScreenState.kt` | 新規 | 1 |
@@ -767,7 +841,8 @@ Phase 1〜3 は独立。各 Phase でビルド確認してコミットする。
 | `map/components/bottomsheet/HomeMapRouteResultSheet.kt` | 引数変更 | 2 |
 | `map/components/bottomsheet/HomeMapSearchResultSheet.kt` | 引数変更 | 2 |
 | `map/components/bottomsheet/HomeMapSelectedResultSheet.kt` | 引数変更 | 2 |
-| `map/components/navi/HomeMapNaviContent.kt` | 中規模 | 2 |
+| `map/components/navi/HomeMapNaviContent.kt` | 中規模（ViewModel 直参照を解消） | 2 |
+| `map/HomeMapScreen.kt` (androidMain actual) | 中規模（`onNavigatingChanged` を screenState から導出） | 2 |
 
 ---
 
