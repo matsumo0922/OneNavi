@@ -1,4 +1,4 @@
-package me.matsumo.onenavi.feature.home.map.components.guidance
+package me.matsumo.onenavi.feature.home.map.components.navi
 
 import androidx.compose.ui.graphics.Color
 
