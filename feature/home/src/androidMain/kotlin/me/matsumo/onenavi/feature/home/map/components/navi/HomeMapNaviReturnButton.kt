@@ -1,4 +1,4 @@
-package me.matsumo.onenavi.feature.home.map.components.guidance
+package me.matsumo.onenavi.feature.home.map.components.navi
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
