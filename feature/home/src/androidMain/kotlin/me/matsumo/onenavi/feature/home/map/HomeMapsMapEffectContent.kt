@@ -228,6 +228,7 @@ internal fun HomeMapsMapEffectContent(
                     }
                 }
             }
+
             calloutPoints.getOrNull(selectedRouteIndex)?.let { point ->
                 HomeMapRouteCallout(
                     point = point,
@@ -270,6 +271,7 @@ internal fun HomeMapsMapEffectContent(
 
         if (waypoints.size > 2 && !isNavigating) {
             val intermediateWaypoints = waypoints.drop(1).dropLast(1)
+
             intermediateWaypoints.forEachIndexed { index, waypoint ->
                 val point = when (waypoint) {
                     is RouteWaypoint.CurrentLocation -> Point.fromLngLat(waypoint.longitude, waypoint.latitude)

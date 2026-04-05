@@ -3,6 +3,7 @@ package me.matsumo.onenavi.core.navigation
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.core.MapboxNavigation
+import com.mapbox.navigation.core.directions.session.RoutesObserver
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationObserver
 import com.mapbox.navigation.core.routealternatives.AlternativeRouteMetadata
@@ -40,18 +41,16 @@ class RouteManager {
 
     private var lastRouteIds: List<String> = emptyList()
 
-    private val routesObserver = object : com.mapbox.navigation.core.directions.session.RoutesObserver {
-        override fun onRoutesChanged(result: com.mapbox.navigation.core.directions.session.RoutesUpdatedResult) {
-            val newRoutes = result.navigationRoutes
-            val newIds = newRoutes.map { it.id }
+    private val routesObserver = RoutesObserver { result ->
+        val newRoutes = result.navigationRoutes
+        val newIds = newRoutes.map { it.id }
 
-            if (newIds != lastRouteIds) {
-                lastRouteIds = newIds
-                _routes.value = newRoutes
-                _alternativesMetadata.value = mapboxNavigation
-                    ?.getAlternativeMetadataFor(newRoutes)
-                    .orEmpty()
-            }
+        if (newIds != lastRouteIds) {
+            lastRouteIds = newIds
+            _routes.value = newRoutes
+            _alternativesMetadata.value = mapboxNavigation
+                ?.getAlternativeMetadataFor(newRoutes)
+                .orEmpty()
         }
     }
 
@@ -91,7 +90,9 @@ class RouteManager {
     fun reorderedRoutes(): List<NavigationRoute> {
         val current = _routes.value
         val primaryIndex = _selectedRouteIndex.value
+
         if (primaryIndex !in current.indices) return current
+
         return buildList {
             add(current[primaryIndex])
             current.forEachIndexed { index, route ->
@@ -105,7 +106,9 @@ class RouteManager {
      */
     fun selectRoute(index: Int) {
         val current = _routes.value
+
         if (index !in current.indices) return
+
         _selectedRouteIndex.value = index
         mapboxNavigation?.setNavigationRoutes(reorderedRoutes())
     }

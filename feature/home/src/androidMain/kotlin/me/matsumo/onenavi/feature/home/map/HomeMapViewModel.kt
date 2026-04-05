@@ -133,15 +133,12 @@ class HomeMapViewModel(
     private fun onNavigationStopped() {
         guidanceSessionManager.stopSession()
         guidanceSessionManager.returnToBrowsing()
-        routeManager.clearRoutes()
         cameraManager.clearNavigationPadding()
-        _routeResults.value = persistentListOf()
-        _selectedRouteIndex.value = 0
-        _waypoints.value = persistentListOf()
     }
 
     private fun onQueryChanged(query: String) {
         _query.value = query
+
         if (query.isBlank()) {
             _suggestions.value = persistentListOf()
         }
@@ -418,6 +415,7 @@ class HomeMapViewModel(
         _routeResults.value = persistentListOf()
         _selectedRouteIndex.value = 0
         _waypoints.value = persistentListOf()
+
         routeManager.clearRoutes()
         guidanceSessionManager.setNavigationState(NavigationState.Browsing)
     }
