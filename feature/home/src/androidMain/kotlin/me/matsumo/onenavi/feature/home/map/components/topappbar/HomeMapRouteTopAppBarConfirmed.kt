@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
-import me.matsumo.onenavi.feature.home.map.HomeMapViewEvent
 
 @Composable
 internal fun HomeMapRouteTopAppBarConfirmed(
@@ -32,7 +31,7 @@ internal fun HomeMapRouteTopAppBarConfirmed(
     onEditClicked: () -> Unit,
     onSwapClicked: () -> Unit,
     onWaypointClicked: (Int) -> Unit,
-    onViewEvent: (HomeMapViewEvent) -> Unit,
+    onRouteWaypointsConfirmed: (ImmutableList<RouteWaypoint>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(waypointEditResult) {
@@ -40,7 +39,7 @@ internal fun HomeMapRouteTopAppBarConfirmed(
         if (index !in waypoints.indices) return@LaunchedEffect
 
         val updated = waypoints.toMutableList().apply { set(index, place) }.toImmutableList()
-        onViewEvent(HomeMapViewEvent.OnRouteWaypointsConfirmed(updated))
+        onRouteWaypointsConfirmed(updated)
         onWaypointEditResultConsumed()
     }
 

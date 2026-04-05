@@ -59,7 +59,6 @@ import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_search_bar_placeholder
-import me.matsumo.onenavi.feature.home.map.HomeMapViewEvent
 import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -69,7 +68,12 @@ internal fun HomeMapTopAppBar(
     histories: ImmutableList<SearchHistory>,
     selectedResult: SearchResultItem?,
     viewportState: MapViewportState,
-    onViewEvent: (HomeMapViewEvent) -> Unit,
+    onQueryChanged: (String) -> Unit,
+    onSearch: (query: String, latitude: Double?, longitude: Double?) -> Unit,
+    onSuggestionSelected: (SearchSuggestionItem) -> Unit,
+    onHistorySelected: (SearchHistory) -> Unit,
+    onRemoveHistory: (String) -> Unit,
+    onDismissSearchResult: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
@@ -80,13 +84,12 @@ internal fun HomeMapTopAppBar(
     var showSearchResult by rememberSaveable { mutableStateOf(false) }
     var canFocus by remember { mutableStateOf(false) }
 
-    fun onSearch(query: String) {
+    fun onSearchAction(query: String) {
         val center = viewportState.cameraState?.center
 
         textFieldState.setTextAndPlaceCursorAtEnd(query)
-
-        onViewEvent(HomeMapViewEvent.OnQueryChanged(query))
-        onViewEvent(HomeMapViewEvent.OnSearch(query, center?.latitude(), center?.longitude()))
+        onQueryChanged(query)
+        onSearch(query, center?.latitude(), center?.longitude())
 
         scope.launch {
             showSearchResult = true
@@ -96,7 +99,7 @@ internal fun HomeMapTopAppBar(
 
     fun onBackClicked() {
         showSearchResult = false
-        onViewEvent(HomeMapViewEvent.OnDismissSearchResult)
+        onDismissSearchResult()
     }
 
     NavigationEventHandler(navigationState, isBackEnabled = showSearchResult) {
@@ -119,7 +122,7 @@ internal fun HomeMapTopAppBar(
         snapshotFlow { textFieldState.text.toString() }
             .distinctUntilChanged()
             .collect { query ->
-                onViewEvent(HomeMapViewEvent.OnQueryChanged(query))
+                onQueryChanged(query)
             }
     }
 
@@ -139,7 +142,7 @@ internal fun HomeMapTopAppBar(
                     searchBarState = searchBarState,
                     textFieldState = textFieldState,
                     showSearchResult = showSearchResult,
-                    onSearch = ::onSearch,
+                    onSearch = ::onSearchAction,
                     onBackClicked = ::onBackClicked,
                 )
             },
@@ -158,7 +161,7 @@ internal fun HomeMapTopAppBar(
                     searchBarState = searchBarState,
                     textFieldState = textFieldState,
                     showSearchResult = showSearchResult,
-                    onSearch = ::onSearch,
+                    onSearch = ::onSearchAction,
                     onBackClicked = ::onBackClicked,
                 )
             },
@@ -171,23 +174,21 @@ internal fun HomeMapTopAppBar(
                     histories = histories,
                     onHistorySelected = { history ->
                         textFieldState.setTextAndPlaceCursorAtEnd(history.name)
-                        onViewEvent(HomeMapViewEvent.OnHistorySelected(history))
+                        onHistorySelected(history)
 
                         scope.launch {
                             showSearchResult = true
                             searchBarState.animateToCollapsed()
                         }
                     },
-                    onRemoveHistory = {
-                        onViewEvent(HomeMapViewEvent.OnRemoveHistory(it))
-                    },
+                    onRemoveHistory = onRemoveHistory,
                 )
             } else {
                 HomeMapSearchSuggestionList(
                     suggestions = suggestions,
                     onSuggestionSelected = { suggestion ->
                         textFieldState.setTextAndPlaceCursorAtEnd(suggestion.name)
-                        onViewEvent(HomeMapViewEvent.OnSuggestionSelected(suggestion))
+                        onSuggestionSelected(suggestion)
 
                         scope.launch {
                             showSearchResult = true

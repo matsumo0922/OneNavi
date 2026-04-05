@@ -21,7 +21,10 @@ internal fun HomeMapSheetContent(
     selectedResult: SearchResultItem?,
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
-    onViewEvent: (HomeMapViewEvent) -> Unit,
+    onNavigationStarted: () -> Unit,
+    onRouteSelected: (Int) -> Unit,
+    onSearchResultSelected: (SearchResultItem) -> Unit,
+    onRouteSearchClicked: () -> Unit,
     modifier: Modifier = Modifier,
     onPeekHeightChanged: (Dp) -> Unit,
 ) {
@@ -33,15 +36,15 @@ internal fun HomeMapSheetContent(
                 modifier = modifier,
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
-                onNavigationClicked = { onViewEvent(HomeMapViewEvent.OnNavigationStarted) },
-                onRouteResultSelected = { onViewEvent(HomeMapViewEvent.OnRouteSelected(it)) },
+                onNavigationClicked = { onNavigationStarted() },
+                onRouteResultSelected = onRouteSelected,
             )
         }
         is HomeMapScreenState.SearchResultsList -> {
             HomeMapSearchResultSheet(
                 modifier = modifier,
                 searchResults = searchResults,
-                onViewEvent = onViewEvent,
+                onSearchResultSelected = onSearchResultSelected,
             )
         }
         is HomeMapScreenState.PlaceDetails -> {
@@ -49,7 +52,7 @@ internal fun HomeMapSheetContent(
                 HomeMapSelectedResultSheet(
                     modifier = modifier,
                     selectedResult = result,
-                    onViewEvent = onViewEvent,
+                    onRouteSearchClicked = onRouteSearchClicked,
                     onPeekHeightMeasured = { heightPx ->
                         val measuredHeight = with(density) { heightPx.toDp() } + SHEET_DRAG_HANDLE_HEIGHT + 16.dp
                         onPeekHeightChanged(measuredHeight)

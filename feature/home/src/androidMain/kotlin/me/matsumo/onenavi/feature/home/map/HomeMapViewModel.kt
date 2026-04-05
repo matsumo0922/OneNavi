@@ -169,27 +169,6 @@ class HomeMapViewModel(
         guidanceSessionManager.unregister()
     }
 
-    fun onViewEvent(event: HomeMapViewEvent) {
-        when (event) {
-            is HomeMapViewEvent.OnQueryChanged -> onQueryChanged(event.query)
-            is HomeMapViewEvent.OnSearch -> onSearch(event.query, event.latitude, event.longitude)
-            is HomeMapViewEvent.OnSearchResultSelected -> onSearchResultSelected(event.result)
-            is HomeMapViewEvent.OnSuggestionSelected -> onSuggestionSelected(event.suggestion)
-            is HomeMapViewEvent.OnHistorySelected -> onHistorySelected(event.history)
-            is HomeMapViewEvent.OnRemoveHistory -> onRemoveHistory(event.historyId)
-            HomeMapViewEvent.OnRouteSearch -> onRouteSearch()
-            is HomeMapViewEvent.OnRouteSelected -> onRouteSelected(event.index)
-            HomeMapViewEvent.OnDismissRoutes -> onDismissRoutes()
-            HomeMapViewEvent.OnDismissSearchResult -> onDismissSearchResults()
-            HomeMapViewEvent.OnSwapOriginDestination -> onSwapOriginDestination()
-            is HomeMapViewEvent.OnRouteWaypointsConfirmed -> onRouteWaypointsConfirmed(event.waypoints)
-            is HomeMapViewEvent.OnWaypointClicked -> onWaypointClicked(event.index)
-            is HomeMapViewEvent.OnMapLandmarkSelected -> onMapLandmarkSelected(event.name, event.latitude, event.longitude)
-            HomeMapViewEvent.OnNavigationStarted -> onNavigationStarted()
-            HomeMapViewEvent.OnNavigationStopped -> onNavigationStopped()
-        }
-    }
-
     fun onBackPressed() {
         when (val overlay = _overlayState.value) {
             is HomeMapOverlayState.WaypointSearch -> {
@@ -229,7 +208,7 @@ class HomeMapViewModel(
         }
     }
 
-    private fun onNavigationStarted() {
+    internal fun onNavigationStarted() {
         guidanceSessionManager.startSession()
         cameraManager.requestCameraFollowing(pitch3D = true)
         _effects.trySend(HomeMapEffect.EnterGuidanceFollowing)
@@ -246,7 +225,7 @@ class HomeMapViewModel(
         searchRoutesFromWaypoints(_waypoints.value)
     }
 
-    private fun onQueryChanged(query: String) {
+    internal fun onQueryChanged(query: String) {
         _query.value = query
 
         if (query.isBlank()) {
@@ -254,7 +233,7 @@ class HomeMapViewModel(
         }
     }
 
-    private fun onSuggestionSelected(suggestion: SearchSuggestionItem) {
+    internal fun onSuggestionSelected(suggestion: SearchSuggestionItem) {
         viewModelScope.launch {
             searchRepository.select(suggestion.id)
                 .onSuccess { result ->
@@ -267,7 +246,7 @@ class HomeMapViewModel(
         }
     }
 
-    private fun onHistorySelected(history: SearchHistory) {
+    internal fun onHistorySelected(history: SearchHistory) {
         viewModelScope.launch {
             searchRepository.retrieve(history.id)
                 .onSuccess { result ->
@@ -280,13 +259,13 @@ class HomeMapViewModel(
         }
     }
 
-    private fun onRemoveHistory(historyId: String) {
+    internal fun onRemoveHistory(historyId: String) {
         viewModelScope.launch {
             searchRepository.removeHistory(historyId)
         }
     }
 
-    private fun onSearch(query: String, latitude: Double?, longitude: Double?) {
+    internal fun onSearch(query: String, latitude: Double?, longitude: Double?) {
         searchJob?.cancel()
         if (query.isBlank()) return
 
@@ -307,7 +286,7 @@ class HomeMapViewModel(
         }
     }
 
-    private fun onSearchResultSelected(result: SearchResultItem) {
+    internal fun onSearchResultSelected(result: SearchResultItem) {
         _searchResults.value = persistentListOf()
         _selectedResult.value = result
 
@@ -323,7 +302,7 @@ class HomeMapViewModel(
         _userLongitude.value = longitude
     }
 
-    private fun onRouteSearch() {
+    internal fun onRouteSearch() {
         val destination = _selectedResult.value ?: return
         val originLat = _userLatitude.value ?: return
         val originLng = _userLongitude.value ?: return
@@ -352,7 +331,7 @@ class HomeMapViewModel(
         _effects.trySend(HomeMapEffect.MoveCameraToRouteOverview)
     }
 
-    private fun onSwapOriginDestination() {
+    internal fun onSwapOriginDestination() {
         val current = _waypoints.value
         if (current.size != 2) return
         val swapped = persistentListOf(current[1], current[0])
@@ -362,7 +341,7 @@ class HomeMapViewModel(
         searchRoutesFromWaypoints(swapped)
     }
 
-    private fun onRouteWaypointsConfirmed(newWaypoints: ImmutableList<RouteWaypoint>) {
+    internal fun onRouteWaypointsConfirmed(newWaypoints: ImmutableList<RouteWaypoint>) {
         _waypoints.value = newWaypoints
         _topBarMode.value = RoutePreviewTopBarMode.Viewing
         _routeResults.value = persistentListOf()
@@ -430,7 +409,7 @@ class HomeMapViewModel(
         }
     }
 
-    private fun onMapLandmarkSelected(name: String?, latitude: Double, longitude: Double) {
+    internal fun onMapLandmarkSelected(name: String?, latitude: Double, longitude: Double) {
         _searchResults.value = persistentListOf()
 
         if (name.isNullOrBlank()) {
@@ -503,7 +482,7 @@ class HomeMapViewModel(
         )
     }
 
-    private fun onWaypointClicked(index: Int) {
+    internal fun onWaypointClicked(index: Int) {
         val waypoint = _waypoints.value.getOrNull(index)
         val initialQuery = when (waypoint) {
             is RouteWaypoint.Place -> waypoint.name
