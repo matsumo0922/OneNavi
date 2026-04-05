@@ -768,6 +768,48 @@ LaunchedEffect(Unit) {
 - 最初の段階では loading state を導入せず、成功時のみ `RoutePreview` に遷移してもよい
 - ただし将来的には `SearchingRoute` / `SearchingPlaces` のような transient state を持てる設計にしておくと拡張しやすい
 
+### 状態遷移図
+
+```text
+Browsing
+  ├─[検索実行]──────────────────────────────► SearchResultsList
+  │                                             │
+  │                                             ├─[検索結果選択]──────► PlaceDetails
+  │                                             └─[戻る/閉じる]──────► Browsing
+  │
+  ├─[地図 POI タップ / 長押し]────────────────► PlaceDetails
+  │                                             │
+  │                                             ├─[ルート検索成功]────► RoutePreview.Viewing
+  │                                             └─[戻る/閉じる]──────► Browsing
+  │
+  └─────────────────────────────────────────────────────────────────────┐
+                                                                        │
+RoutePreview.Viewing                                                     │
+  ├─[ルート選択変更]──────────────► RoutePreview.Viewing                 │
+  ├─[編集開始]───────────────────► RoutePreview.Editing                 │
+  ├─[ナビ開始]───────────────────► Guidance                            │
+  └─[戻る/閉じる]───────────────► Browsing or PlaceDetails             │
+                                     前画面保持ポリシー次第             │
+
+RoutePreview.Editing
+  ├─[waypoint タップ]────────────► Overlay.WaypointSearch(index)
+  ├─[完了してルート再検索成功]────► RoutePreview.Viewing
+  └─[キャンセル]────────────────► RoutePreview.Viewing
+
+Overlay.WaypointSearch(index)
+  ├─[候補選択]──────────────────► RoutePreview.Editing
+  └─[閉じる]────────────────────► RoutePreview.Editing
+
+Guidance
+  ├─[ナビ停止]──────────────────► RoutePreview.Viewing
+  └─[到着]──────────────────────► Arrival
+
+Arrival
+  ├─[閉じる/戻る]───────────────► Browsing or RoutePreview.Viewing
+  │                               UX ポリシー次第
+  └─[再案内/再確認]─────────────► RoutePreview.Viewing
+```
+
 ---
 
 ## 実装方針
@@ -797,6 +839,54 @@ private fun reduceScreenState(
 
 この時点では source of truth はまだ二重化しているが、UI の分岐を集約することで効果を先に得られる。
 
+重要なのは、この段階では `_screenState` を手で更新しないこと。
+早い段階で `_screenState` を mutable に持つと、`guidanceSessionManager.navigationState` と feature 側 event handler の両方が
+`screenState` を書く二重管理になりやすい。
+
+初期段階では次のように「導出 state」として扱うのが安全である。
+
+```kotlin
+val screenState: StateFlow<HomeMapScreenState> = combine(
+    searchResults,
+    selectedResult,
+    routeResults,
+    selectedRouteIndex,
+    waypoints,
+    routeTopBarState,
+    overlayState,
+    guidanceSessionManager.navigationState,
+    guidanceSessionManager.arrivalInfo,
+) { searchResults,
+    selectedResult,
+    routeResults,
+    selectedRouteIndex,
+    waypoints,
+    routeTopBarState,
+    overlayState,
+    guidanceState,
+    arrivalInfo,
+    ->
+    reduceScreenState(
+        searchResults = searchResults,
+        selectedResult = selectedResult,
+        routeResults = routeResults,
+        selectedRouteIndex = selectedRouteIndex,
+        waypoints = waypoints,
+        routeTopBarState = routeTopBarState,
+        overlayState = overlayState,
+        guidanceState = guidanceState,
+        arrivalInfo = arrivalInfo,
+    )
+}.stateIn(
+    scope = viewModelScope,
+    started = SharingStarted.WhileSubscribed(5000),
+    initialValue = HomeMapScreenState.Browsing,
+)
+```
+
+この方式なら、`NavigationState` との二重書き込みは発生しない。
+`screenState` はあくまで adapter 層の derived state であり、Cross-module な service state を rename する前でも安全に移行できる。
+
 ### ステップ 2
 
 `HomeMapScreenContent`, `HomeMapSheetContent`, `HomeMapsMapEffectContent`, TopAppBar を `screenState` ベースに切り替える。
@@ -811,6 +901,17 @@ UI 分岐が安定したら、ViewModel の raw field 群を `_screenState`, `_o
 
 ## 実装計画
 
+## Phase Summary
+
+| Phase | 主目的 | 主要ファイル | 完了条件 |
+|---|---|---|---|
+| 1 | `screenState` / `overlayState` / `topBarState` 型の導入 | `HomeMapViewModel.kt`, `state/*.kt` | 既存 raw state から `screenState` を導出できる |
+| 2 | Compose 分岐を `screenState` 中心に変更 | `HomeMapScreenContent.kt`, `HomeMapSheetContent.kt`, topappbar 群 | TopBar/Sheet/Overlay 分岐が raw flag 依存を脱する |
+| 3 | `effect` 導入とカメラ/Sheet 制御の一元化 | `HomeMapViewModel.kt`, `HomeMapScreenContent.kt`, `HomeMapNaviContent.kt` | カメラ命令と sheet 命令が単一 collector に集約される |
+| 4 | route preview 編集 state の reducer 化 | `HomeMapViewModel.kt`, `HomeMapViewEvent.kt`, route top bar 群 | `editingWaypointIndex` / `waypointEditResult` を削除できる |
+| 5 | service 境界と `NavigationState` の整理 | `GuidanceSessionManager.kt`, `NavigationState.kt`, `RouteManager.kt`, `CameraManager.kt` | guidance 系 state と feature state の責務が分離される |
+| 6 | cleanup と不要 API 削除 | `feature/home/map/*` | 不要な raw state 公開と暫定 adapter が除去される |
+
 ## Phase 1. 型の導入と現状分岐の吸い上げ
 
 ### 目的
@@ -824,18 +925,22 @@ UI 分岐が安定したら、ViewModel の raw field 群を `_screenState`, `_o
 - `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/state/HomeMapOverlayState.kt`
 - `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/state/RoutePreviewTopBarState.kt`
 - `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/state/HomeMapStateMapper.kt`
+- `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/state/HomeMapSceneState.kt`
 
 ### 変更候補ファイル
 
 - `HomeMapViewModel.kt`
+- `HomeMapViewEvent.kt`
 
 ### やること
 
 1. `HomeMapScreenState` を定義する
 2. `HomeMapOverlayState` を定義する
-3. 既存 raw state から `screenState` を導出する pure 関数を作る
-4. `val screenState: StateFlow<HomeMapScreenState>` を生やす
-5. `val overlayState: StateFlow<HomeMapOverlayState>` を生やす
+3. `RoutePreviewTopBarState` を定義する
+4. 既存 raw state から `screenState` を導出する pure 関数を作る
+5. `screenState` はまず `combine(...).stateIn(...)` の derived state として公開する
+6. `overlayState` と `routeTopBarState` は raw state か暫定 local state から導出する
+7. `HomeMapViewEvent` はこの時点では残し、内部で新旧 state を両対応させる
 
 ### この段階ではまだやらないこと
 
@@ -859,15 +964,18 @@ UI 分岐が安定したら、ViewModel の raw field 群を `_screenState`, `_o
 - `HomeMapsMapEffectContent.kt`
 - `components/topappbar/HomeMapTopAppBar.kt`
 - `components/topappbar/HomeMapRouteTopAppBar.kt`
+- `components/topappbar/HomeMapRouteTopAppBarConfirmed.kt`
+- `components/topappbar/HomeMapRouteTopAppBarEditing.kt`
+- `components/topappbar/HomeMapWaypointSearchScreen.kt`
 
 ### やること
 
 1. `HomeMapScreenContent` で raw state 個別 collect を最小化し、`screenState` を中心に UI を組み立てる
-2. TopAppBar を `screenState` から切り替える
-3. BottomSheet を `screenState` から切り替える
-4. `HomeMapsMapEffectContent` の引数を raw flags 群から `sceneState` へ寄せる
-5. `HomeMapTopAppBar.showSearchResult` を screen state から導く
-6. `HomeMapRouteTopAppBar.isEditing` を local state から外す準備をする
+2. `HomeMapSheetContent` の `routeResults/searchResults/selectedResult` 分岐を `when(screenState)` へ置き換える
+3. `HomeMapTopAppBar.showSearchResult` を screen state から導く
+4. `HomeMapRouteTopAppBar.isEditing` はまだ残してよいが、state mapper から見えるように段階準備する
+5. `HomeMapWaypointSearchScreen` の表示条件を `overlayState` に置き換える
+6. RoutePreview / Guidance / Arrival の TopBar / Controls 切り替え条件を `when(screenState)` に統一する
 
 ### 期待効果
 
@@ -893,15 +1001,18 @@ UI 分岐が安定したら、ViewModel の raw field 群を `_screenState`, `_o
 - `HomeMapViewModel.kt`
 - `HomeMapScreenContent.kt`
 - `HomeMapNaviContent.kt`
+- `HomeMapsMapEffectContent.kt`
+- `core/navigation/src/androidMain/kotlin/me/matsumo/onenavi/core/navigation/CameraManager.kt`
 
 ### やること
 
 1. ViewModel に effect channel を追加する
-2. 検索結果表示、地点詳細表示、ルートプレビュー遷移、guidance 開始・停止のたびに effect を emit する
+2. 検索結果表示、地点詳細表示、ルートプレビュー遷移、route 選択変更、guidance 開始・停止、arrival 遷移ごとに effect を emit する
 3. `HomeMapScreenContent` に 1 本の effect collector を置く
 4. 現在の 4 つの `LaunchedEffect` を削除する
 5. `HomeMapNaviContent` から `CameraManager.applyNavigationPadding()` の直叩きを外す
 6. guidance layout に応じた padding は親で一元管理する
+7. `HomeMapsMapEffectContent` は camera 命令を出さず render-only に寄せる
 
 ### 期待効果
 
@@ -926,6 +1037,7 @@ UI 分岐が安定したら、ViewModel の raw field 群を `_screenState`, `_o
 - `components/topappbar/HomeMapRouteTopAppBarConfirmed.kt`
 - `components/topappbar/HomeMapRouteTopAppBarEditing.kt`
 - `components/topappbar/HomeMapWaypointSearchScreen.kt`
+- `HomeMapScreenContent.kt`
 
 ### やること
 
@@ -975,6 +1087,15 @@ UI 分岐が安定したら、ViewModel の raw field 群を `_screenState`, `_o
 
 これは影響範囲が大きいので、Phase 5 として後ろに置くのがよい。
 まずは feature 内 refactor で安定化してからでも遅くない。
+
+ただし、「後ろに置く」は rename や service API 再編の話であり、二重管理を放置する意味ではない。
+Phase 1 から次の運用ルールを守る。
+
+1. `screenState` は当面 derived state とし、feature と guidance が二重に write しない
+2. `Guidance` / `Arrival` 判定は `guidanceSessionManager.navigationState` から導出する
+3. `Browsing` / `SearchResultsList` / `PlaceDetails` / `RoutePreview` は feature raw state から導出する
+
+このルールにより、Cross-module な rename を後回しにしても実害のある drift は発生しない。
 
 ---
 
