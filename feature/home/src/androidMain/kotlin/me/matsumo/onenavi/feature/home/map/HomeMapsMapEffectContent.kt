@@ -161,7 +161,7 @@ internal fun HomeMapsMapEffectContent(
                 routeLineApi.findClosestRoute(point, view.mapboxMap, ROUTE_CLICK_PADDING) { result ->
                     result.onValue { closestRoute ->
                         val clickedRoute = closestRoute.navigationRoute
-                        val index = results.indexOfFirst { it.navigationRoute === clickedRoute }
+                        val index = results.indexOfFirst { it.navigationRoute.id == clickedRoute.id }
                         if (index >= 0 && index != currentSelectedRouteIndex.value) {
                             currentOnRouteSelected.value(index)
                         }
@@ -201,7 +201,7 @@ internal fun HomeMapsMapEffectContent(
                 return@MapEffect
             }
 
-            routeLineApi.setNavigationRoutes(routeManager.reorderedRoutes()) { expected ->
+            routeLineApi.setNavigationRoutes(navigationRoutes) { expected ->
                 routeLineView.renderRouteDrawData(style, expected)
             }
 

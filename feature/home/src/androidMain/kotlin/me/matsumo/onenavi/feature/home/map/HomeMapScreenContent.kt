@@ -161,6 +161,7 @@ internal fun HomeMapScreenContent(
         effects = viewModel.effects,
         routeManager = viewModel.routeManager,
         cameraManager = viewModel.cameraManager,
+        routeResultsProvider = { viewModel.routeResults.value },
         mapView = mapView,
         viewportState = viewportState,
         sheetPeekHeightPx = with(density) { sheetPeekHeight.toPx() }.toDouble(),
