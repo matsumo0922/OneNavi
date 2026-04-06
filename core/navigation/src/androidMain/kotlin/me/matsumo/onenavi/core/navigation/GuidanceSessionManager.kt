@@ -20,13 +20,17 @@ import com.mapbox.navigation.core.trip.session.OffRouteObserver
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.core.trip.session.VoiceInstructionsObserver
 import io.github.aakira.napier.Napier
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.GuidanceUiState
+import me.matsumo.onenavi.core.model.HighwayInfo
+import me.matsumo.onenavi.core.model.HighwayPointType
 import me.matsumo.onenavi.core.model.ManeuverInfo
 import me.matsumo.onenavi.core.model.NavigationState
+import me.matsumo.onenavi.core.model.RouteStepInfo
 import me.matsumo.onenavi.core.model.TripProgressInfo
 import java.util.*
 
@@ -202,6 +206,7 @@ class GuidanceSessionManager(
         _guidanceUiState.value = GuidanceUiState.Initial
         _arrivalInfo.value = null
         lastRouteProgress = null
+        lastLoggedStepIndex = -1
         onRouteProgressForRouteLine = null
     }
 
@@ -297,6 +302,9 @@ class GuidanceSessionManager(
 
     // --- RouteProgress → GuidanceUiState ---
 
+    /** 前回ログ出力した stepIndex（同じステップで繰り返しログを出さないための制御用）。 */
+    private var lastLoggedStepIndex: Int = -1
+
     private fun updateGuidanceUiState(routeProgress: RouteProgress) {
         val currentLegProgress = routeProgress.currentLegProgress
         val currentStepProgress = currentLegProgress?.currentStepProgress
@@ -321,6 +329,8 @@ class GuidanceSessionManager(
             )
         }
 
+        val upcomingSteps = extractUpcomingSteps(routeProgress)
+
         val tripProgress = TripProgressInfo(
             distanceRemainingMeters = routeProgress.distanceRemaining.toDouble(),
             durationRemainingSeconds = routeProgress.durationRemaining,
@@ -329,13 +339,215 @@ class GuidanceSessionManager(
 
         val currentRoadName = currentStep?.name()?.takeIf { it.isNotBlank() }
 
+        // ステップが進んだ時だけログ出力（毎秒出すと多すぎるので）
+        val currentStepIndex = currentStepProgress?.stepIndex ?: -1
+        if (currentStepIndex != lastLoggedStepIndex) {
+            lastLoggedStepIndex = currentStepIndex
+            logUpcomingSteps(upcomingSteps)
+        }
+
         _guidanceUiState.value = _guidanceUiState.value.copy(
             currentManeuver = currentManeuver,
             nextManeuver = nextManeuver,
+            upcomingSteps = upcomingSteps.toImmutableList(),
             tripProgress = tripProgress,
             currentRoadName = currentRoadName,
             isLocationStale = routeProgress.stale,
         )
+    }
+
+    /**
+     * RouteProgress から現在位置以降の全ステップを抽出する。
+     * 現在の leg の残りステップ ＋ 以降の leg の全ステップを連結し、
+     * 現在位置からの累積距離を計算する。
+     */
+    private fun extractUpcomingSteps(routeProgress: RouteProgress): List<RouteStepInfo> {
+        val legs = routeProgress.navigationRoute.directionsRoute.legs().orEmpty()
+        val currentLegIndex = routeProgress.currentLegProgress?.legIndex ?: 0
+        val currentStepIndex = routeProgress.currentLegProgress?.currentStepProgress?.stepIndex ?: 0
+        val currentStepDistanceRemaining = routeProgress.currentLegProgress
+            ?.currentStepProgress?.distanceRemaining?.toDouble() ?: 0.0
+
+        val result = mutableListOf<RouteStepInfo>()
+        var cumulativeDistance = 0.0
+
+        for (legIndex in currentLegIndex until legs.size) {
+            val leg = legs[legIndex]
+            val steps = leg.steps().orEmpty()
+            val startStepIndex = if (legIndex == currentLegIndex) currentStepIndex + 1 else 0
+
+            // 現在ステップの残り距離を累積距離の初期値にする（最初の leg のみ）
+            if (legIndex == currentLegIndex) {
+                cumulativeDistance = currentStepDistanceRemaining
+            }
+
+            for (stepIndex in startStepIndex until steps.size) {
+                val step = steps[stepIndex]
+                val maneuver = step.maneuver() ?: continue
+                val maneuverType = maneuver.type().orEmpty()
+
+                // depart / arrive(最終) 以外の意味のあるステップのみ抽出
+                if (maneuverType == "depart") continue
+
+                val stepDistance = step.distance()
+                if (stepIndex > startStepIndex || legIndex > currentLegIndex) {
+                    cumulativeDistance += stepDistance
+                }
+
+                val highwayInfo = detectHighwayInfo(
+                    maneuverType = maneuverType,
+                    instruction = maneuver.instruction().orEmpty(),
+                    step = step,
+                )
+
+                result.add(
+                    RouteStepInfo(
+                        maneuverType = maneuverType,
+                        modifier = maneuver.modifier(),
+                        distanceFromPreviousMeters = stepDistance,
+                        cumulativeDistanceMeters = cumulativeDistance,
+                        instruction = maneuver.instruction().orEmpty(),
+                        roadName = step.name().orEmpty(),
+                        roadRef = step.ref(),
+                        highwayInfo = highwayInfo,
+                    ),
+                )
+            }
+        }
+
+        return result
+    }
+
+    /**
+     * ステップの情報から高速道路関連ポイント（IC / JCT / 料金所）を検出する。
+     */
+    private fun detectHighwayInfo(
+        maneuverType: String,
+        instruction: String,
+        step: com.mapbox.api.directions.v5.models.LegStep,
+    ): HighwayInfo? {
+        // 料金所の検出: intersection に tollCollection がある場合
+        val hasTollGate = step.intersections().orEmpty().any { intersection ->
+            intersection.tollCollection() != null
+        }
+        if (hasTollGate) {
+            return HighwayInfo(
+                type = HighwayPointType.TOLL_GATE,
+                name = instruction,
+            )
+        }
+
+        // IC / JCT / ランプの検出: maneuver type から判定
+        return when (maneuverType) {
+            "on ramp", "off ramp" -> {
+                val type = classifyRampType(instruction)
+                HighwayInfo(
+                    type = type,
+                    name = instruction,
+                )
+            }
+
+            "fork" -> {
+                // fork は JCT の可能性がある
+                val isHighwayContext = step.intersections().orEmpty().any { intersection ->
+                    intersection.classes().orEmpty().any { roadClass ->
+                        roadClass in HIGHWAY_CLASSES
+                    }
+                }
+                if (isHighwayContext) {
+                    HighwayInfo(
+                        type = HighwayPointType.JUNCTION,
+                        name = instruction,
+                    )
+                } else {
+                    null
+                }
+            }
+
+            else -> null
+        }
+    }
+
+    /**
+     * ランプの案内テキストから IC か JCT かを推定する。
+     * テキストに「JCT」「ジャンクション」が含まれれば JCT、
+     * 「IC」「インター」が含まれれば IC、それ以外は RAMP とする。
+     */
+    private fun classifyRampType(instruction: String): HighwayPointType {
+        val upper = instruction.uppercase()
+        return when {
+            "JCT" in upper || "ジャンクション" in instruction -> HighwayPointType.JUNCTION
+            "IC" in upper || "インター" in instruction -> HighwayPointType.INTERCHANGE
+            else -> HighwayPointType.RAMP
+        }
+    }
+
+    private fun logUpcomingSteps(steps: List<RouteStepInfo>) {
+        if (steps.isEmpty()) return
+
+        val logLines = buildString {
+            appendLine("=== Upcoming Route Steps (${steps.size} steps) ===")
+            steps.forEachIndexed { index, step ->
+                val distanceLabel = formatDistanceForLog(step.cumulativeDistanceMeters)
+                val typeLabel = formatManeuverTypeForLog(step.maneuverType, step.modifier)
+                val highwayLabel = step.highwayInfo?.let { info ->
+                    val typeTag = when (info.type) {
+                        HighwayPointType.INTERCHANGE -> "[IC]"
+                        HighwayPointType.JUNCTION -> "[JCT]"
+                        HighwayPointType.TOLL_GATE -> "[TOLL]"
+                        HighwayPointType.RAMP -> "[RAMP]"
+                    }
+                    " $typeTag"
+                }.orEmpty()
+
+                val roadInfo = buildString {
+                    if (step.roadName.isNotBlank()) append(step.roadName)
+                    if (!step.roadRef.isNullOrBlank()) append(" (${step.roadRef})")
+                }
+
+                appendLine("  #${index + 1} | $distanceLabel | $typeLabel$highwayLabel | ${step.instruction} | $roadInfo")
+            }
+            append("=== End of Route Steps ===")
+        }
+
+        Napier.d(tag = TAG) { logLines }
+    }
+
+    private fun formatDistanceForLog(meters: Double): String {
+        return if (meters >= 1000) {
+            "%.1fkm".format(meters / 1000)
+        } else {
+            "%.0fm".format(meters)
+        }
+    }
+
+    private fun formatManeuverTypeForLog(type: String, modifier: String?): String {
+        val base = when (type) {
+            "turn" -> "曲がる"
+            "new name" -> "道なり"
+            "merge" -> "合流"
+            "on ramp" -> "ランプ進入"
+            "off ramp" -> "ランプ退出"
+            "fork" -> "分岐"
+            "end of road" -> "突き当たり"
+            "continue" -> "直進"
+            "roundabout" -> "ロータリー"
+            "arrive" -> "到着"
+            "notification" -> "通知"
+            else -> type
+        }
+        val direction = when (modifier) {
+            "left" -> "左"
+            "right" -> "右"
+            "slight left" -> "やや左"
+            "slight right" -> "やや右"
+            "sharp left" -> "鋭角左"
+            "sharp right" -> "鋭角右"
+            "straight" -> "直進"
+            "uturn" -> "Uターン"
+            else -> ""
+        }
+        return if (direction.isNotEmpty()) "$base($direction)" else base
     }
 
     private fun updateManeuverFromBanner(bannerInstructions: BannerInstructions) {
@@ -353,5 +565,8 @@ class GuidanceSessionManager(
     companion object {
         private const val TAG = "GuidanceSessionManager"
         private const val START_ANNOUNCEMENT = "音声案内を開始します。実際の交通規制に従って、走行してください。"
+
+        /** 高速道路・有料道路を示す road class 一覧。 */
+        private val HIGHWAY_CLASSES = setOf("motorway", "trunk")
     }
 }
