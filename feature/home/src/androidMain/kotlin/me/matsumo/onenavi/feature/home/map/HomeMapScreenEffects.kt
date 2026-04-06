@@ -6,6 +6,7 @@ import androidx.compose.material3.BottomSheetScaffoldState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import com.mapbox.geojson.Point.fromLngLat
 import com.mapbox.maps.CameraOptions
@@ -17,6 +18,7 @@ import com.mapbox.maps.extension.compose.style.standard.StandardStyleState
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.ViewportStatus
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -102,6 +104,7 @@ internal fun HomeMapScreenCameraEffect(
     effects: Flow<HomeMapEffect>,
     routeManager: RouteManager,
     cameraManager: CameraManager,
+    routeResultsProvider: () -> ImmutableList<RouteResult>,
     mapView: MapView?,
     viewportState: MapViewportState,
     sheetPeekHeightPx: Double,
@@ -109,11 +112,18 @@ internal fun HomeMapScreenCameraEffect(
     activity: Activity?,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
 ) {
+    // LaunchedEffect(Unit) のクロージャは初回コンポジション時にキャプチャされるため、
+    // 後から変わりうる値は rememberUpdatedState で最新値を参照できるようにする
+    val currentMapView = rememberUpdatedState(mapView)
+    val currentActivity = rememberUpdatedState(activity)
+    val currentSheetPeekHeightPx = rememberUpdatedState(sheetPeekHeightPx)
+    val currentTopAppBarHeightPx = rememberUpdatedState(topAppBarHeightPx)
+
     LaunchedEffect(Unit) {
         restoreCamera(
             screenState = screenStateProvider(),
             cameraManager = cameraManager,
-            mapView = mapView,
+            mapView = currentMapView.value,
             viewportState = viewportState,
         )
 
@@ -122,11 +132,12 @@ internal fun HomeMapScreenCameraEffect(
                 effect = effect,
                 routeManager = routeManager,
                 cameraManager = cameraManager,
-                mapView = mapView,
+                routeResults = routeResultsProvider(),
+                mapView = currentMapView.value,
                 viewportState = viewportState,
-                sheetPeekHeightPx = sheetPeekHeightPx,
-                topAppBarHeightPx = topAppBarHeightPx,
-                activity = activity,
+                sheetPeekHeightPx = currentSheetPeekHeightPx.value,
+                topAppBarHeightPx = currentTopAppBarHeightPx.value,
+                activity = currentActivity.value,
                 onTrackingModeChanged = onTrackingModeChanged,
             )
         }
@@ -177,8 +188,9 @@ private fun restoreCamera(
  */
 private suspend fun handleEffect(
     effect: HomeMapEffect,
-    routeManager: me.matsumo.onenavi.core.navigation.RouteManager,
+    routeManager: RouteManager,
     cameraManager: CameraManager,
+    routeResults: ImmutableList<RouteResult>,
     mapView: MapView?,
     viewportState: MapViewportState,
     sheetPeekHeightPx: Double,
@@ -214,6 +226,7 @@ private suspend fun handleEffect(
         }
         is HomeMapEffect.MoveCameraToRouteOverview -> {
             onTrackingModeChanged(null)
+            val currentMapView = mapView ?: return
 
             val topPadding = topAppBarHeightPx.toDouble() + ROUTE_CAMERA_MARGIN_TOP
             val bottomPadding = sheetPeekHeightPx + ROUTE_CAMERA_MARGIN_VERTICAL
@@ -222,11 +235,38 @@ private suspend fun handleEffect(
 
             routeManager.routes.first { it.isNotEmpty() }
 
-            cameraManager.applyNavigationPadding(
-                followingPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0),
-                overviewPadding = padding,
-            )
-            cameraManager.requestCameraOverview()
+            // NavigationCamera が Following/Overview モードの場合、手動 flyTo が上書きされるため Idle に遷移
+            cameraManager.requestCameraIdle()
+
+            // 全ルート（alternative 含む）の座標から bounding box を計算
+            val allPoints = routeResults.flatMap { result ->
+                result.item.geometry.map { point ->
+                    fromLngLat(point.longitude, point.latitude)
+                }
+            }
+
+            if (allPoints.isNotEmpty()) {
+                @Suppress("DEPRECATION")
+                val cameraOptions = currentMapView.mapboxMap.cameraForCoordinates(
+                    allPoints,
+                    padding,
+                    0.0,
+                    0.0,
+                )
+                viewportState.flyTo(
+                    cameraOptions = cameraOptions,
+                    animationOptions = MapAnimationOptions.Builder()
+                        .duration(CAMERA_ANIMATION_DURATION)
+                        .build(),
+                )
+            } else {
+                // フォールバック: routeResults がまだ空の場合は NavigationCamera の overview を使用
+                cameraManager.applyNavigationPadding(
+                    followingPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0),
+                    overviewPadding = padding,
+                )
+                cameraManager.requestCameraOverview()
+            }
         }
         is HomeMapEffect.EnterGuidanceFollowing -> {
             cameraManager.requestCameraFollowing(pitch3D = true)

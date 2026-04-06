@@ -9,6 +9,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -130,6 +131,7 @@ class HomeMapViewModel(
     val waypointEditResult: StateFlow<Pair<Int, RouteWaypoint.Place>?> = _waypointEditResultInternal.asStateFlow()
 
     private var searchJob: Job? = null
+    private var routeSearchJob: Job? = null
 
     init {
         routeManager.register()
@@ -178,10 +180,12 @@ class HomeMapViewModel(
                         _selectedResult.value = null
                     }
                     is HomeMapScreenState.RoutePreview -> {
+                        routeSearchJob?.cancel()
                         _routeResults.value = persistentListOf()
                         _selectedRouteIndex.value = 0
                         _waypoints.value = persistentListOf()
                         _topBarMode.value = RoutePreviewTopBarMode.Viewing
+                        _isRouteSearching.value = false
                         routeManager.clearRoutes()
                         guidanceSessionManager.setNavigationState(NavigationState.Browsing)
                         // selectedResult は維持 → reduce が PlaceDetails を返す
@@ -218,6 +222,7 @@ class HomeMapViewModel(
         _isRouteSearching.value = true
         _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = false))
         _effects.trySend(HomeMapEffect.UseNavigationLocationProvider(enabled = false))
+        _effects.trySend(HomeMapEffect.MoveCameraToRouteOverview)
         // waypoints を保持してルート再検索（旧ルートは表示し続け、再検索完了で差し替え）
         searchRoutesFromWaypoints(_waypoints.value)
     }
@@ -381,14 +386,20 @@ class HomeMapViewModel(
                 }
             }
 
-        viewModelScope.launch {
-            routeRepository.searchRoutes(
+        routeSearchJob?.cancel()
+        routeSearchJob = viewModelScope.launch {
+            val result = routeRepository.searchRoutes(
                 originLatitude = originLat,
                 originLongitude = originLng,
                 destinationLatitude = destLat,
                 destinationLongitude = destLng,
                 intermediateWaypoints = intermediateWaypoints,
             )
+
+            // キャンセル済みのジョブが結果を適用しないようにする
+            ensureActive()
+
+            result
                 .onSuccess { coreResults ->
                     val featureResults = coreResults.mapNotNull { it.toFeatureRouteResult() }
                     _selectedRouteIndex.value = 0
@@ -533,10 +544,12 @@ class HomeMapViewModel(
     }
 
     fun onDismissRoutes() {
+        routeSearchJob?.cancel()
         _routeResults.value = persistentListOf()
         _selectedRouteIndex.value = 0
         _waypoints.value = persistentListOf()
         _topBarMode.value = RoutePreviewTopBarMode.Viewing
+        _isRouteSearching.value = false
 
         routeManager.clearRoutes()
         guidanceSessionManager.setNavigationState(NavigationState.Browsing)
