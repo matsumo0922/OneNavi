@@ -3,6 +3,7 @@ package me.matsumo.onenavi.core.datasource
 import android.content.Context
 import com.mapbox.api.directions.v5.DirectionsCriteria
 import com.mapbox.api.directions.v5.models.DirectionsRoute
+import com.mapbox.api.directions.v5.models.LegStep
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
@@ -147,16 +148,14 @@ class MapboxNavigationRouteDataSource(
     }
 
     companion object {
-        private const val MAX_ROAD_NAMES = 3
+        private const val MAX_ROAD_NAMES = 2
         private const val POLYLINE_PRECISION = 6
 
         /**
          * steps から主要道路名を抽出する。
          * 各 step の道路名を距離で重み付けし、距離が長い順に最大3件を返す。
          */
-        private fun extractMainRoadNames(
-            steps: List<com.mapbox.api.directions.v5.models.LegStep>,
-        ): List<String> {
+        private fun extractMainRoadNames(steps: List<LegStep>): List<String> {
             return steps
                 .filter { !it.name().isNullOrBlank() }
                 .groupBy { it.name().orEmpty() }
@@ -172,13 +171,11 @@ class MapboxNavigationRouteDataSource(
         /**
          * steps 内の intersection を走査して有料道路区間の有無を判定する。
          */
-        private fun detectTolls(
-            steps: List<com.mapbox.api.directions.v5.models.LegStep>,
-        ): Boolean {
+        private fun detectTolls(steps: List<LegStep>): Boolean {
             return steps.any { step ->
                 step.intersections().orEmpty().any { intersection ->
                     intersection.tollCollection() != null ||
-                        intersection.classes().orEmpty().contains("toll")
+                            intersection.classes().orEmpty().contains("toll")
                 }
             }
         }

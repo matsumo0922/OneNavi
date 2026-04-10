@@ -30,14 +30,7 @@ class RouteManager {
     val routes: StateFlow<List<NavigationRoute>> = _routes.asStateFlow()
 
     private val _selectedRouteIndex = MutableStateFlow(0)
-
-    /** 現在選択中のルートインデックス。 */
-    val selectedRouteIndex: StateFlow<Int> = _selectedRouteIndex.asStateFlow()
-
     private val _alternativesMetadata = MutableStateFlow<List<AlternativeRouteMetadata>>(emptyList())
-
-    /** 代替ルートのメタデータ（重複部分の非表示等に使用）。 */
-    val alternativesMetadata: StateFlow<List<AlternativeRouteMetadata>> = _alternativesMetadata.asStateFlow()
 
     private var lastRouteIds: List<String> = emptyList()
 
