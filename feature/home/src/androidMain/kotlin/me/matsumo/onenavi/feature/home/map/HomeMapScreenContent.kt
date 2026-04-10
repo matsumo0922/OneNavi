@@ -166,7 +166,9 @@ internal fun HomeMapScreenContent(
         routeResultsProvider = { viewModel.routeResults.value },
         mapView = mapView,
         viewportState = viewportState,
-        sheetPeekHeightPx = with(density) { sheetPeekHeight.toPx() }.toDouble(),
+        sheetPeekHeightPx = with(density) {
+            if (shouldShowSheet) sheetPeekHeight.toPx() else 0f
+        }.toDouble(),
         topOverlayBottomPx = topOverlayBottomPx,
         activity = activity,
         onTrackingModeChanged = { trackingMode = it },

@@ -235,47 +235,17 @@ private suspend fun handleEffect(
         }
         is HomeMapEffect.MoveCameraToRouteOverview -> {
             onTrackingModeChanged(null)
-            val currentMapView = mapView ?: return
-
             val padding = buildOverlayPadding(
                 topOverlayBottomPx = topOverlayBottomPx,
                 bottomSheetPeekHeightPx = sheetPeekHeightPx,
             )
 
             routeManager.routes.first { it.isNotEmpty() }
-
-            // NavigationCamera が Following/Overview モードの場合、手動 flyTo が上書きされるため Idle に遷移
-            cameraManager.requestCameraIdle()
-
-            // 全ルート（alternative 含む）の座標から bounding box を計算
-            val allPoints = routeResults.flatMap { result ->
-                result.item.geometry.map { point ->
-                    fromLngLat(point.longitude, point.latitude)
-                }
-            }
-
-            if (allPoints.isNotEmpty()) {
-                @Suppress("DEPRECATION")
-                val cameraOptions = currentMapView.mapboxMap.cameraForCoordinates(
-                    allPoints,
-                    padding,
-                    0.0,
-                    0.0,
-                )
-                viewportState.flyTo(
-                    cameraOptions = cameraOptions,
-                    animationOptions = MapAnimationOptions.Builder()
-                        .duration(CAMERA_ANIMATION_DURATION)
-                        .build(),
-                )
-            } else {
-                // フォールバック: routeResults がまだ空の場合は NavigationCamera の overview を使用
-                cameraManager.applyNavigationPadding(
-                    followingPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0),
-                    overviewPadding = padding,
-                )
-                cameraManager.requestCameraOverview()
-            }
+            cameraManager.applyNavigationPadding(
+                followingPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0),
+                overviewPadding = padding,
+            )
+            cameraManager.requestCameraOverview()
         }
         is HomeMapEffect.EnterGuidanceFollowing -> {
             cameraManager.requestCameraFollowing(pitch3D = true)
