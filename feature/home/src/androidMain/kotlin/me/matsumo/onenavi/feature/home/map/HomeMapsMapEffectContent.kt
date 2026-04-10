@@ -25,8 +25,11 @@ import com.mapbox.maps.extension.compose.annotation.Marker
 import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
 import com.mapbox.maps.extension.compose.style.standard.StandardStyleState
 import com.mapbox.maps.plugin.PuckBearing
+import com.mapbox.maps.plugin.gestures.OnMapClickListener
 import com.mapbox.maps.plugin.gestures.addOnMapClickListener
 import com.mapbox.maps.plugin.gestures.removeOnMapClickListener
+import com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListener
+import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
@@ -141,20 +144,15 @@ internal fun HomeMapsMapEffectContent(
             view.location.puckBearing = PuckBearing.HEADING
             view.location.puckBearingEnabled = true
 
-            val positionListener = com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener { point ->
-                onUserLocationUpdated(
-                    point.latitude(),
-                    point.longitude(),
-                )
+            val positionListener = OnIndicatorPositionChangedListener { point ->
+                onUserLocationUpdated(point.latitude(), point.longitude())
             }
-            view.location.addOnIndicatorPositionChangedListener(positionListener)
 
-            val bearingListener = com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListener { bearing ->
+            val bearingListener = OnIndicatorBearingChangedListener { bearing ->
                 onBearingChanged(bearing)
             }
-            view.location.addOnIndicatorBearingChangedListener(bearingListener)
 
-            val mapClickListener = com.mapbox.maps.plugin.gestures.OnMapClickListener { point ->
+            val mapClickListener = OnMapClickListener { point ->
                 val results = currentRouteResults.value
                 if (results.isEmpty()) return@OnMapClickListener false
 
@@ -162,13 +160,18 @@ internal fun HomeMapsMapEffectContent(
                     result.onValue { closestRoute ->
                         val clickedRoute = closestRoute.navigationRoute
                         val index = results.indexOfFirst { it.navigationRoute.id == clickedRoute.id }
+
                         if (index >= 0 && index != currentSelectedRouteIndex.value) {
                             currentOnRouteSelected.value(index)
                         }
                     }
                 }
+
                 false
             }
+
+            view.location.addOnIndicatorPositionChangedListener(positionListener)
+            view.location.addOnIndicatorBearingChangedListener(bearingListener)
             view.mapboxMap.addOnMapClickListener(mapClickListener)
 
             // カメラ変更のたびに吹き出し位置をリアルタイム再計算

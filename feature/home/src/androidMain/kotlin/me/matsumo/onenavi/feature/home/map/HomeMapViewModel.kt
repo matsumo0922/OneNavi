@@ -108,7 +108,11 @@ class HomeMapViewModel(
             navigationState = values[7] as NavigationState,
             isRouteSearching = values[8] as Boolean,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeMapScreenState.Browsing)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = HomeMapScreenState.Browsing,
+    )
 
     // ── Overlay State ──
 
@@ -127,6 +131,7 @@ class HomeMapViewModel(
     val routeResults: StateFlow<ImmutableList<RouteResult>> = _routeResults.asStateFlow()
     val selectedRouteIndex: StateFlow<Int> = _selectedRouteIndex.asStateFlow()
     val waypoints: StateFlow<ImmutableList<RouteWaypoint>> = _waypoints.asStateFlow()
+
     private val _waypointEditResultInternal = MutableStateFlow<Pair<Int, RouteWaypoint.Place>?>(null)
     val waypointEditResult: StateFlow<Pair<Int, RouteWaypoint.Place>?> = _waypointEditResultInternal.asStateFlow()
 
@@ -220,9 +225,11 @@ class HomeMapViewModel(
         guidanceSessionManager.stopSession()
         guidanceSessionManager.setNavigationState(NavigationState.Browsing)
         _isRouteSearching.value = true
+
         _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = false))
         _effects.trySend(HomeMapEffect.UseNavigationLocationProvider(enabled = false))
         _effects.trySend(HomeMapEffect.MoveCameraToRouteOverview)
+
         // waypoints を保持してルート再検索（旧ルートは表示し続け、再検索完了で差し替え）
         searchRoutesFromWaypoints(_waypoints.value)
     }
@@ -338,10 +345,13 @@ class HomeMapViewModel(
     internal fun onSwapOriginDestination() {
         val current = _waypoints.value
         if (current.size != 2) return
+
         val swapped = persistentListOf(current[1], current[0])
+
         _waypoints.value = swapped
         _routeResults.value = persistentListOf()
         _isRouteSearching.value = true
+
         searchRoutesFromWaypoints(swapped)
     }
 
@@ -350,6 +360,7 @@ class HomeMapViewModel(
         _topBarMode.value = RoutePreviewTopBarMode.Viewing
         _routeResults.value = persistentListOf()
         _isRouteSearching.value = true
+
         searchRoutesFromWaypoints(newWaypoints)
     }
 
@@ -493,11 +504,11 @@ class HomeMapViewModel(
     }
 
     internal fun onWaypointClicked(index: Int) {
-        val waypoint = _waypoints.value.getOrNull(index)
-        val initialQuery = when (waypoint) {
+        val initialQuery = when (val waypoint = _waypoints.value.getOrNull(index)) {
             is RouteWaypoint.Place -> waypoint.name
             else -> null
         }
+
         _overlayState.value = HomeMapOverlayState.WaypointSearch(
             index = index,
             initialQuery = initialQuery,
