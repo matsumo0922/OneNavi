@@ -32,10 +32,6 @@ private const val FOLLOW_PUCK_ZOOM = 16.0
 private const val CAMERA_PADDING = 100.0
 private const val CAMERA_PADDING_TOP = 200.0
 private const val CAMERA_PADDING_BOTTOM = 400.0
-private const val ROUTE_CAMERA_MARGIN_VERTICAL = 150.0
-private const val ROUTE_CAMERA_MARGIN_HORIZONTAL = 100.0
-private const val ROUTE_CAMERA_MARGIN_TOP = 300.0
-private const val ROUTE_CAMERA_MARGIN_END = 250.0
 
 private const val CAMERA_ANIMATION_DURATION = 1500L
 
@@ -108,7 +104,7 @@ internal fun HomeMapScreenCameraEffect(
     mapView: MapView?,
     viewportState: MapViewportState,
     sheetPeekHeightPx: Double,
-    topAppBarHeightPx: Float,
+    topOverlayBottomPx: Float,
     activity: Activity?,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
 ) {
@@ -117,7 +113,7 @@ internal fun HomeMapScreenCameraEffect(
     val currentMapView = rememberUpdatedState(mapView)
     val currentActivity = rememberUpdatedState(activity)
     val currentSheetPeekHeightPx = rememberUpdatedState(sheetPeekHeightPx)
-    val currentTopAppBarHeightPx = rememberUpdatedState(topAppBarHeightPx)
+    val currentTopOverlayBottomPx = rememberUpdatedState(topOverlayBottomPx)
 
     LaunchedEffect(Unit) {
         restoreCamera(
@@ -136,7 +132,7 @@ internal fun HomeMapScreenCameraEffect(
                 mapView = currentMapView.value,
                 viewportState = viewportState,
                 sheetPeekHeightPx = currentSheetPeekHeightPx.value,
-                topAppBarHeightPx = currentTopAppBarHeightPx.value,
+                topOverlayBottomPx = currentTopOverlayBottomPx.value,
                 activity = currentActivity.value,
                 onTrackingModeChanged = onTrackingModeChanged,
             )
@@ -194,7 +190,7 @@ private suspend fun handleEffect(
     mapView: MapView?,
     viewportState: MapViewportState,
     sheetPeekHeightPx: Double,
-    topAppBarHeightPx: Float,
+    topOverlayBottomPx: Float,
     activity: Activity?,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
 ) {
@@ -228,10 +224,7 @@ private suspend fun handleEffect(
             onTrackingModeChanged(null)
             val currentMapView = mapView ?: return
 
-            val topPadding = topAppBarHeightPx.toDouble() + ROUTE_CAMERA_MARGIN_TOP
-            val bottomPadding = sheetPeekHeightPx + ROUTE_CAMERA_MARGIN_VERTICAL
-            val padding =
-                EdgeInsets(topPadding, ROUTE_CAMERA_MARGIN_HORIZONTAL, bottomPadding, ROUTE_CAMERA_MARGIN_END)
+            val padding = EdgeInsets(topOverlayBottomPx.toDouble(), 0.0, sheetPeekHeightPx, 0.0)
 
             routeManager.routes.first { it.isNotEmpty() }
 

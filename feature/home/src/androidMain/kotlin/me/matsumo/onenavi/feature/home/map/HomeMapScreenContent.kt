@@ -16,6 +16,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -25,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -121,7 +123,7 @@ internal fun HomeMapScreenContent(
     )
 
     var contentHeight by remember { mutableFloatStateOf(0f) }
-    var topAppBarHeightPx by remember { mutableFloatStateOf(0f) }
+    var topOverlayBottomPx by remember { mutableFloatStateOf(0f) }
     var sheetPeekHeight by remember { mutableStateOf(SHEET_PEEK_HEIGHT_DEFAULT) }
 
     val sheetVisibleHeight by remember {
@@ -165,7 +167,7 @@ internal fun HomeMapScreenContent(
         mapView = mapView,
         viewportState = viewportState,
         sheetPeekHeightPx = with(density) { sheetPeekHeight.toPx() }.toDouble(),
-        topAppBarHeightPx = topAppBarHeightPx,
+        topOverlayBottomPx = topOverlayBottomPx,
         activity = activity,
         onTrackingModeChanged = { trackingMode = it },
     )
@@ -221,6 +223,9 @@ internal fun HomeMapScreenContent(
                 viewportState = viewportState,
                 guidanceSessionManager = viewModel.guidanceSessionManager,
                 cameraManager = viewModel.cameraManager,
+                bottomSheetPeekHeightPx = with(density) {
+                    if (shouldShowSheet) sheetPeekHeight.toPx() else 0f
+                },
                 onNavigationStopped = viewModel::onNavigationStopped,
                 deviceBearing = deviceBearing,
                 trackingMode = trackingMode,
@@ -246,7 +251,7 @@ internal fun HomeMapScreenContent(
                 onSwapOriginDestination = viewModel::onSwapOriginDestination,
                 onRouteWaypointsConfirmed = viewModel::onRouteWaypointsConfirmed,
                 onWaypointClicked = viewModel::onWaypointClicked,
-                onTopAppBarHeightChanged = { topAppBarHeightPx = it },
+                onTopOverlayBottomChanged = { topOverlayBottomPx = it },
             )
 
             HomeMapScreenContentOverlay(
@@ -273,6 +278,7 @@ private fun BoxScope.HomeMapScreenContentControls(
     viewportState: MapViewportState,
     guidanceSessionManager: GuidanceSessionManager,
     cameraManager: CameraManager,
+    bottomSheetPeekHeightPx: Float,
     onNavigationStopped: () -> Unit,
     deviceBearing: Double,
     trackingMode: LocationTrackingMode?,
@@ -284,6 +290,7 @@ private fun BoxScope.HomeMapScreenContentControls(
                 modifier = Modifier.fillMaxSize(),
                 guidanceSessionManager = guidanceSessionManager,
                 cameraManager = cameraManager,
+                bottomSheetPeekHeightPx = bottomSheetPeekHeightPx,
                 onNavigationStopped = onNavigationStopped,
             )
         }
@@ -329,7 +336,7 @@ private fun BoxScope.HomeMapScreenContentTopAppBar(
     onSwapOriginDestination: () -> Unit,
     onRouteWaypointsConfirmed: (ImmutableList<RouteWaypoint>) -> Unit,
     onWaypointClicked: (Int) -> Unit,
-    onTopAppBarHeightChanged: (Float) -> Unit,
+    onTopOverlayBottomChanged: (Float) -> Unit,
 ) {
     when (screenState) {
         is HomeMapScreenState.Browsing,
@@ -341,7 +348,11 @@ private fun BoxScope.HomeMapScreenContentTopAppBar(
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
                     .fillMaxWidth()
-                    .onGloballyPositioned { onTopAppBarHeightChanged(it.size.height.toFloat()) },
+                    .onGloballyPositioned { coordinates ->
+                        onTopOverlayBottomChanged(
+                            coordinates.positionInParent().y + coordinates.size.height.toFloat(),
+                        )
+                    },
                 suggestions = suggestions,
                 histories = histories,
                 selectedResult = selectedResult,
@@ -361,7 +372,11 @@ private fun BoxScope.HomeMapScreenContentTopAppBar(
                     .statusBarsPadding()
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .onGloballyPositioned { onTopAppBarHeightChanged(it.size.height.toFloat()) },
+                    .onGloballyPositioned { coordinates ->
+                        onTopOverlayBottomChanged(
+                            coordinates.positionInParent().y + coordinates.size.height.toFloat(),
+                        )
+                    },
                 waypoints = waypoints,
                 waypointEditResult = waypointEditResult,
                 onWaypointEditResultConsumed = onWaypointEditResultConsumed,
@@ -373,7 +388,11 @@ private fun BoxScope.HomeMapScreenContentTopAppBar(
         }
         is HomeMapScreenState.Navigating,
         is HomeMapScreenState.Arrived,
-        -> { /* TopAppBar なし */ }
+        -> {
+            SideEffect {
+                onTopOverlayBottomChanged(0f)
+            }
+        }
     }
 }
 
