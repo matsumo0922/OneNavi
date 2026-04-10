@@ -235,17 +235,49 @@ private suspend fun handleEffect(
         }
         is HomeMapEffect.MoveCameraToRouteOverview -> {
             onTrackingModeChanged(null)
+            val currentMapView = mapView ?: return
             val padding = buildOverlayPadding(
                 topOverlayBottomPx = topOverlayBottomPx,
                 bottomSheetPeekHeightPx = sheetPeekHeightPx,
             )
 
             routeManager.routes.first { it.isNotEmpty() }
-            cameraManager.applyNavigationPadding(
-                followingPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0),
-                overviewPadding = padding,
-            )
-            cameraManager.requestCameraOverview()
+            cameraManager.requestCameraIdle()
+
+            val overviewPoints = routeResults.flatMap { result ->
+                result.item.geometry.map { point ->
+                    fromLngLat(point.longitude, point.latitude)
+                }
+            }
+
+            if (overviewPoints.isNotEmpty()) {
+                @Suppress("DEPRECATION")
+                val fittedCamera = currentMapView.mapboxMap.cameraForCoordinates(
+                    overviewPoints,
+                    EdgeInsets(0.0, 0.0, 0.0, 0.0),
+                    0.0,
+                    0.0,
+                )
+                val cameraOptions = CameraOptions.Builder()
+                    .center(fittedCamera.center)
+                    .zoom(fittedCamera.zoom)
+                    .bearing(fittedCamera.bearing)
+                    .pitch(fittedCamera.pitch)
+                    .padding(padding)
+                    .build()
+                viewportState.flyTo(
+                    cameraOptions = cameraOptions,
+                    animationOptions = MapAnimationOptions.Builder()
+                        .duration(CAMERA_ANIMATION_DURATION)
+                        .build(),
+                )
+            } else {
+                cameraManager.applyNavigationPadding(
+                    followingPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0),
+                    overviewPadding = padding,
+                )
+                cameraManager.requestCameraOverview()
+            }
         }
         is HomeMapEffect.EnterGuidanceFollowing -> {
             cameraManager.requestCameraFollowing(pitch3D = true)
