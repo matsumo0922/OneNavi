@@ -22,6 +22,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
@@ -29,9 +30,6 @@ import me.matsumo.onenavi.feature.home.map.state.HomeMapEffect
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 
 private const val FOLLOW_PUCK_ZOOM = 16.0
-private const val CAMERA_PADDING = 100.0
-private const val CAMERA_PADDING_TOP = 200.0
-private const val CAMERA_PADDING_BOTTOM = 400.0
 
 private const val CAMERA_ANIMATION_DURATION = 1500L
 
@@ -121,6 +119,8 @@ internal fun HomeMapScreenCameraEffect(
             cameraManager = cameraManager,
             mapView = currentMapView.value,
             viewportState = viewportState,
+            sheetPeekHeightPx = currentSheetPeekHeightPx.value,
+            topOverlayBottomPx = currentTopOverlayBottomPx.value,
         )
 
         effects.collect { effect ->
@@ -148,28 +148,36 @@ private fun restoreCamera(
     cameraManager: CameraManager,
     mapView: MapView?,
     viewportState: MapViewportState,
+    sheetPeekHeightPx: Double,
+    topOverlayBottomPx: Float,
 ) {
+    val overlayPadding = buildOverlayPadding(
+        topOverlayBottomPx = topOverlayBottomPx,
+        bottomSheetPeekHeightPx = sheetPeekHeightPx,
+    )
+
     when (val state = screenState) {
         is HomeMapScreenState.SearchResultsList -> {
             val currentMapView = mapView ?: return
             val points = state.results.map { fromLngLat(it.longitude, it.latitude) }
-            val padding = EdgeInsets(CAMERA_PADDING_TOP, CAMERA_PADDING, CAMERA_PADDING_BOTTOM, CAMERA_PADDING)
 
             @Suppress("DEPRECATION")
-            val cameraOptions = currentMapView.mapboxMap.cameraForCoordinates(points, padding, 0.0, 0.0)
+            val cameraOptions = currentMapView.mapboxMap.cameraForCoordinates(points, overlayPadding, 0.0, 0.0)
             viewportState.flyTo(cameraOptions)
         }
         is HomeMapScreenState.PlaceDetails -> {
             viewportState.easeTo(
-                cameraOptions = CameraOptions.Builder()
-                    .center(fromLngLat(state.place.longitude, state.place.latitude))
-                    .zoom(FOLLOW_PUCK_ZOOM)
-                    .pitch(0.0)
-                    .bearing(0.0)
-                    .build(),
+                cameraOptions = buildPlaceCameraOptions(
+                    place = state.place,
+                    padding = overlayPadding,
+                ),
             )
         }
         is HomeMapScreenState.RoutePreview -> {
+            cameraManager.applyNavigationPadding(
+                followingPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0),
+                overviewPadding = overlayPadding,
+            )
             cameraManager.requestCameraOverview()
         }
         is HomeMapScreenState.Navigating -> {
@@ -199,7 +207,10 @@ private suspend fun handleEffect(
             onTrackingModeChanged(null)
             val currentMapView = mapView ?: return
             val points = effect.results.map { fromLngLat(it.longitude, it.latitude) }
-            val padding = EdgeInsets(CAMERA_PADDING_TOP, CAMERA_PADDING, CAMERA_PADDING_BOTTOM, CAMERA_PADDING)
+            val padding = buildOverlayPadding(
+                topOverlayBottomPx = topOverlayBottomPx,
+                bottomSheetPeekHeightPx = sheetPeekHeightPx,
+            )
 
             @Suppress("DEPRECATION")
             val opts = currentMapView.mapboxMap.cameraForCoordinates(points, padding, 0.0, 0.0)
@@ -210,13 +221,15 @@ private suspend fun handleEffect(
         }
         is HomeMapEffect.MoveCameraToPlace -> {
             onTrackingModeChanged(null)
+            val padding = buildOverlayPadding(
+                topOverlayBottomPx = topOverlayBottomPx,
+                bottomSheetPeekHeightPx = sheetPeekHeightPx,
+            )
             viewportState.easeTo(
-                cameraOptions = CameraOptions.Builder()
-                    .center(fromLngLat(effect.place.longitude, effect.place.latitude))
-                    .zoom(FOLLOW_PUCK_ZOOM)
-                    .pitch(0.0)
-                    .bearing(0.0)
-                    .build(),
+                cameraOptions = buildPlaceCameraOptions(
+                    place = effect.place,
+                    padding = padding,
+                ),
                 animationOptions = MapAnimationOptions.Builder().duration(CAMERA_ANIMATION_DURATION).build(),
             )
         }
@@ -224,7 +237,10 @@ private suspend fun handleEffect(
             onTrackingModeChanged(null)
             val currentMapView = mapView ?: return
 
-            val padding = EdgeInsets(topOverlayBottomPx.toDouble(), 0.0, sheetPeekHeightPx, 0.0)
+            val padding = buildOverlayPadding(
+                topOverlayBottomPx = topOverlayBottomPx,
+                bottomSheetPeekHeightPx = sheetPeekHeightPx,
+            )
 
             routeManager.routes.first { it.isNotEmpty() }
 
@@ -282,4 +298,24 @@ private suspend fun handleEffect(
             }
         }
     }
+}
+
+private fun buildOverlayPadding(
+    topOverlayBottomPx: Float,
+    bottomSheetPeekHeightPx: Double,
+): EdgeInsets {
+    return EdgeInsets(topOverlayBottomPx.toDouble(), 0.0, bottomSheetPeekHeightPx, 0.0)
+}
+
+private fun buildPlaceCameraOptions(
+    place: SearchResultItem,
+    padding: EdgeInsets,
+): CameraOptions {
+    return CameraOptions.Builder()
+        .center(fromLngLat(place.longitude, place.latitude))
+        .zoom(FOLLOW_PUCK_ZOOM)
+        .pitch(0.0)
+        .bearing(0.0)
+        .padding(padding)
+        .build()
 }
