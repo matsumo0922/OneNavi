@@ -29,7 +29,6 @@ class RouteManager {
     /** 現在のルート一覧（プライマリ + 代替ルート）。 */
     val routes: StateFlow<List<NavigationRoute>> = _routes.asStateFlow()
 
-    private val _selectedRouteIndex = MutableStateFlow(0)
     private val _alternativesMetadata = MutableStateFlow<List<AlternativeRouteMetadata>>(emptyList())
 
     private var lastRouteIds: List<String> = emptyList()
@@ -72,24 +71,21 @@ class RouteManager {
      * RoutesObserver 経由で StateFlow が自動更新される。
      */
     fun setRoutes(navigationRoutes: List<NavigationRoute>) {
-        _selectedRouteIndex.value = 0
         mapboxNavigation?.setNavigationRoutes(navigationRoutes)
     }
 
     /**
-     * 選択ルートを先頭にした並び順を返す。
+     * 指定ルートを先頭にした並び順を返す。
      * Mapbox Navigation SDK は先頭のルートをプライマリとして描画する。
      */
-    fun reorderedRoutes(): List<NavigationRoute> {
+    private fun reorderedRoutes(primaryRouteId: String): List<NavigationRoute>? {
         val current = _routes.value
-        val primaryIndex = _selectedRouteIndex.value
-
-        if (primaryIndex !in current.indices) return current
+        val primaryRoute = current.firstOrNull { it.id == primaryRouteId } ?: return null
 
         return buildList {
-            add(current[primaryIndex])
-            current.forEachIndexed { index, route ->
-                if (index != primaryIndex) add(route)
+            add(primaryRoute)
+            current.forEach { route ->
+                if (route.id != primaryRouteId) add(route)
             }
         }
     }
@@ -97,20 +93,18 @@ class RouteManager {
     /**
      * 選択ルートを切り替える。
      */
-    fun selectRoute(index: Int) {
-        val current = _routes.value
+    fun selectRoute(routeId: String) {
+        if (_routes.value.firstOrNull()?.id == routeId) return
 
-        if (index !in current.indices) return
-
-        _selectedRouteIndex.value = index
-        mapboxNavigation?.setNavigationRoutes(reorderedRoutes())
+        reorderedRoutes(routeId)?.let { routes ->
+            mapboxNavigation?.setNavigationRoutes(routes)
+        }
     }
 
     /**
      * ルートをクリアする。
      */
     fun clearRoutes() {
-        _selectedRouteIndex.value = 0
         lastRouteIds = emptyList()
         _routes.value = emptyList()
         _alternativesMetadata.value = emptyList()

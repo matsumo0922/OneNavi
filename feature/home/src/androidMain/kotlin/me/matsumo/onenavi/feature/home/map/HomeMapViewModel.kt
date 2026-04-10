@@ -73,8 +73,6 @@ class HomeMapViewModel(
 
     private val _routeResults = MutableStateFlow<ImmutableList<RouteResult>>(persistentListOf())
 
-    private val _selectedRouteIndex = MutableStateFlow(0)
-
     private val _waypoints = MutableStateFlow<ImmutableList<RouteWaypoint>>(persistentListOf())
 
     // ── 新規追加 raw state ──
@@ -82,6 +80,18 @@ class HomeMapViewModel(
     private val _topBarMode = MutableStateFlow<RoutePreviewTopBarMode>(RoutePreviewTopBarMode.Viewing)
     private val _isRouteSearching = MutableStateFlow(false)
     private val _lastSearchQuery = MutableStateFlow("")
+
+    val selectedRouteIndex: StateFlow<Int> = combine(
+        _routeResults,
+        routeManager.routes,
+    ) { routeResults, navigationRoutes ->
+        val primaryRouteId = navigationRoutes.firstOrNull()?.id
+        routeResults.indexOfFirst { it.navigationRoute.id == primaryRouteId }.takeIf { it >= 0 } ?: 0
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0,
+    )
 
     // ── 導出: screenState（Array 版 combine を使用）──
 
@@ -91,7 +101,7 @@ class HomeMapViewModel(
         _selectedResult,
         _routeResults,
         _waypoints,
-        _selectedRouteIndex,
+        selectedRouteIndex,
         _topBarMode,
         _lastSearchQuery,
         guidanceSessionManager.navigationState,
@@ -129,7 +139,6 @@ class HomeMapViewModel(
     val searchResults: StateFlow<ImmutableList<SearchResultItem>> = _searchResults.asStateFlow()
     val selectedResult: StateFlow<SearchResultItem?> = _selectedResult.asStateFlow()
     val routeResults: StateFlow<ImmutableList<RouteResult>> = _routeResults.asStateFlow()
-    val selectedRouteIndex: StateFlow<Int> = _selectedRouteIndex.asStateFlow()
     val waypoints: StateFlow<ImmutableList<RouteWaypoint>> = _waypoints.asStateFlow()
 
     private val _waypointEditResultInternal = MutableStateFlow<Pair<Int, RouteWaypoint.Place>?>(null)
@@ -187,7 +196,6 @@ class HomeMapViewModel(
                     is HomeMapScreenState.RoutePreview -> {
                         routeSearchJob?.cancel()
                         _routeResults.value = persistentListOf()
-                        _selectedRouteIndex.value = 0
                         _waypoints.value = persistentListOf()
                         _topBarMode.value = RoutePreviewTopBarMode.Viewing
                         _isRouteSearching.value = false
@@ -337,8 +345,8 @@ class HomeMapViewModel(
     }
 
     fun onRouteSelected(index: Int) {
-        _selectedRouteIndex.value = index
-        routeManager.selectRoute(index)
+        val routeId = _routeResults.value.getOrNull(index)?.navigationRoute?.id ?: return
+        routeManager.selectRoute(routeId)
         _effects.trySend(HomeMapEffect.MoveCameraToRouteOverview)
     }
 
@@ -413,7 +421,6 @@ class HomeMapViewModel(
             result
                 .onSuccess { coreResults ->
                     val featureResults = coreResults.mapNotNull { it.toFeatureRouteResult() }
-                    _selectedRouteIndex.value = 0
                     _topBarMode.value = RoutePreviewTopBarMode.Viewing
 
                     routeManager.setRoutes(featureResults.map { it.navigationRoute })
@@ -557,7 +564,6 @@ class HomeMapViewModel(
     fun onDismissRoutes() {
         routeSearchJob?.cancel()
         _routeResults.value = persistentListOf()
-        _selectedRouteIndex.value = 0
         _waypoints.value = persistentListOf()
         _topBarMode.value = RoutePreviewTopBarMode.Viewing
         _isRouteSearching.value = false
