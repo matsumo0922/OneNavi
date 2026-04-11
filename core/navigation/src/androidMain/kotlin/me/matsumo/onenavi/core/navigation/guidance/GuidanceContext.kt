@@ -44,4 +44,3 @@ data class GuidanceSessionState(
     val startedAtMillis: Long,
     val muted: Boolean,
 )
-

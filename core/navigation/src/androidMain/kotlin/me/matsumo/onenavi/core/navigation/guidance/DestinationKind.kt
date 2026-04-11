@@ -10,4 +10,3 @@ enum class DestinationKind(
     FERRY("フェリー乗り場付近です"),
     WAYPOINT("経由地付近です"),
 }
-

@@ -10,4 +10,3 @@ enum class GuideCategory {
     WAYPOINT,
     SESSION,
 }
-

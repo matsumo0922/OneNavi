@@ -127,4 +127,3 @@ data class SessionGuideEvent(
     override val distanceMeters: Double? = null,
     val kind: SessionGuideKind,
 ) : GuidanceEvent
-

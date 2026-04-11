@@ -175,7 +175,7 @@ class MapboxNavigationRouteDataSource(
             return steps.any { step ->
                 step.intersections().orEmpty().any { intersection ->
                     intersection.tollCollection() != null ||
-                            intersection.classes().orEmpty().contains("toll")
+                        intersection.classes().orEmpty().contains("toll")
                 }
             }
         }

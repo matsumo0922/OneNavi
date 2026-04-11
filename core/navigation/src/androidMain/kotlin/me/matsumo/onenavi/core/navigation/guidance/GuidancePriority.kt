@@ -6,4 +6,3 @@ enum class GuidancePriority {
     NORMAL,
     LOW,
 }
-

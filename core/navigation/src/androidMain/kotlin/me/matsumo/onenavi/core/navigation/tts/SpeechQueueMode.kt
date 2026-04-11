@@ -4,4 +4,3 @@ enum class SpeechQueueMode {
     FLUSH,
     ADD,
 }
-

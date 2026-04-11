@@ -173,5 +173,4 @@ class GuidanceAnnouncementManager(
         private const val SESSION_TIMEOUT_MILLIS = 4 * 60 * 60 * 1000L
         private const val SESSION_TIMEOUT_WARNING_MILLIS = SESSION_TIMEOUT_MILLIS - 5 * 60 * 1000L
     }
-
 }
