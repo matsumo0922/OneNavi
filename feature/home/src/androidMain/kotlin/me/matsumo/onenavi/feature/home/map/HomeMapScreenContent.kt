@@ -16,6 +16,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -136,6 +137,12 @@ internal fun HomeMapScreenContent(
     val shouldShowSheet = screenState is HomeMapScreenState.SearchResultsList ||
         screenState is HomeMapScreenState.PlaceDetails ||
         screenState is HomeMapScreenState.RoutePreview
+
+    LaunchedEffect(screenState) {
+        if (screenState !is HomeMapScreenState.Browsing) {
+            trackingMode = null
+        }
+    }
 
     // ── 副作用 ──
 
@@ -309,6 +316,7 @@ private fun BoxScope.HomeMapScreenContentControls(
                 deviceBearing = deviceBearing,
                 trackingMode = trackingMode,
                 viewportState = viewportState,
+                autoFollowOnStart = screenState is HomeMapScreenState.Browsing,
                 onTrackingModeChanged = onTrackingModeChanged,
             )
         }

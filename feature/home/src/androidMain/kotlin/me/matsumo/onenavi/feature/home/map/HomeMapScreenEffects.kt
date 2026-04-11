@@ -106,18 +106,19 @@ internal fun HomeMapScreenCameraEffect(
     activity: Activity?,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
 ) {
-    // LaunchedEffect(Unit) のクロージャは初回コンポジション時にキャプチャされるため、
+    // LaunchedEffect のクロージャは初回コンポジション時にキャプチャされるため、
     // 後から変わりうる値は rememberUpdatedState で最新値を参照できるようにする
-    val currentMapView = rememberUpdatedState(mapView)
     val currentActivity = rememberUpdatedState(activity)
     val currentSheetPeekHeightPx = rememberUpdatedState(sheetPeekHeightPx)
     val currentTopOverlayBottomPx = rememberUpdatedState(topOverlayBottomPx)
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(mapView) {
+        val currentMapView = mapView ?: return@LaunchedEffect
+
         restoreCamera(
             screenState = screenStateProvider(),
             cameraManager = cameraManager,
-            mapView = currentMapView.value,
+            mapView = currentMapView,
             viewportState = viewportState,
             sheetPeekHeightPx = currentSheetPeekHeightPx.value,
             topOverlayBottomPx = currentTopOverlayBottomPx.value,
@@ -129,7 +130,7 @@ internal fun HomeMapScreenCameraEffect(
                 routeManager = routeManager,
                 cameraManager = cameraManager,
                 routeResults = routeResultsProvider(),
-                mapView = currentMapView.value,
+                mapView = currentMapView,
                 viewportState = viewportState,
                 sheetPeekHeightPx = currentSheetPeekHeightPx.value,
                 topOverlayBottomPx = currentTopOverlayBottomPx.value,
