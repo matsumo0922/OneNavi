@@ -31,6 +31,13 @@ enum class DistanceBucket(
             "${meters / 1_000}キロ"
         }
 
+    val aheadLabel: String
+        get() = if (meters < 1_000) {
+            "およそ${meters}m先"
+        } else {
+            "およそ${meters / 1_000}km先"
+        }
+
     /**
      * 距離から最も近い読み上げ単位を選ぶ。
      */

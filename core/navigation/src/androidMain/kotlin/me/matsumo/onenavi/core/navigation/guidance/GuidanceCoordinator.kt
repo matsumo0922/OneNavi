@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
 import androidx.compose.runtime.Stable
+import com.mapbox.api.directions.v5.models.BannerComponents
 import com.mapbox.api.directions.v5.models.LegStep
 import com.mapbox.navigation.base.trip.model.RouteProgress
 
@@ -139,7 +140,8 @@ class GuidanceCoordinator(
         val distance = stepContext.distanceFromCurrentMeters
         val bucket = triggerBucketForTurn(distance, context.currentRoadKind) ?: return emptyList()
         val direction = step.direction()
-        val linkedEvent = buildLinkedTurnEvent(context, stepContext, direction, bucket)
+        val targetPhrase = context.turnTargetPhrase(stepContext, bucket)
+        val linkedEvent = buildLinkedTurnEvent(context, stepContext, direction, bucket, targetPhrase)
         if (linkedEvent != null) {
             return listOf(linkedEvent)
         }
@@ -157,7 +159,8 @@ class GuidanceCoordinator(
                 distanceMeters = distance,
                 direction = direction,
                 timing = timingFor(bucket),
-                roadName = step.name(),
+                targetPhrase = targetPhrase,
+                roadName = step.roadDisplayName(context),
             ),
         )
     }
@@ -167,6 +170,7 @@ class GuidanceCoordinator(
         currentStepContext: UpcomingStepContext,
         currentDirection: Direction,
         bucket: DistanceBucket,
+        currentTargetPhrase: String?,
     ): LinkedTurnGuideEvent? {
         if (bucket != DistanceBucket.M50 && bucket != DistanceBucket.M100) return null
 
@@ -178,6 +182,7 @@ class GuidanceCoordinator(
         val nextManeuverType = nextStepContext.step.maneuver().type().orEmpty()
         if (nextManeuverType in IGNORED_MANEUVER_TYPES) return null
 
+        val nextTargetPhrase = context.turnTargetPhrase(nextStepContext, null)
         return LinkedTurnGuideEvent(
             id = context.eventId(
                 category = GuideCategory.TURN,
@@ -189,7 +194,10 @@ class GuidanceCoordinator(
             priority = GuidancePriority.HIGH,
             distanceMeters = currentStepContext.distanceFromCurrentMeters,
             firstDirection = currentDirection,
+            firstTargetPhrase = currentTargetPhrase,
             nextDirection = nextStepContext.step.direction(),
+            nextManeuverType = nextManeuverType,
+            nextTargetPhrase = nextTargetPhrase,
         )
     }
 
@@ -214,7 +222,7 @@ class GuidanceCoordinator(
                     distanceMeters = distance,
                     kind = HighwayGuideKind.ENTER,
                     direction = step.direction(),
-                    name = step.destinationOrName(),
+                    name = step.highwayDisplayName(context, stepContext),
                 )
                 "off ramp" -> HighwayGuideEvent(
                     id = context.eventId(
@@ -228,7 +236,7 @@ class GuidanceCoordinator(
                     distanceMeters = distance,
                     kind = HighwayGuideKind.EXIT,
                     direction = step.direction(),
-                    name = step.destinationOrName(),
+                    name = step.highwayDisplayName(context, stepContext),
                 )
                 "fork" -> HighwayGuideEvent(
                     id = context.eventId(
@@ -242,7 +250,7 @@ class GuidanceCoordinator(
                     distanceMeters = distance,
                     kind = HighwayGuideKind.FORK,
                     direction = step.direction(),
-                    name = step.destinationOrName(),
+                    name = step.highwayDisplayName(context, stepContext),
                 )
                 "merge" -> HighwayGuideEvent(
                     id = context.eventId(
@@ -256,7 +264,7 @@ class GuidanceCoordinator(
                     distanceMeters = distance,
                     kind = HighwayGuideKind.MERGE,
                     direction = step.direction(),
-                    name = step.destinationOrName(),
+                    name = step.highwayDisplayName(context, stepContext),
                 )
                 else -> null
             }
@@ -460,6 +468,87 @@ class GuidanceCoordinator(
             legIndex == other.legIndex && stepIndex > other.stepIndex
     }
 
+    private fun GuidanceContext.turnTargetPhrase(
+        stepContext: UpcomingStepContext,
+        bucket: DistanceBucket?,
+    ): String? {
+        val trafficSignals = upcomingIntersections
+            .filter { intersectionContext ->
+                intersectionContext.distanceFromCurrentMeters <= stepContext.distanceFromCurrentMeters + INTERSECTION_DISTANCE_TOLERANCE_METERS &&
+                    intersectionContext.intersection.trafficSignal() == true
+            }
+        if (trafficSignals.isNotEmpty()) {
+            return when (trafficSignals.size.coerceAtMost(3)) {
+                1 -> if (bucket == DistanceBucket.M50) "次の信号を" else "この信号を"
+                2 -> "2つ目の信号を"
+                else -> "3つ目の信号を"
+            }
+        }
+
+        return stepContext.step.maneuverTargetName(this)
+            ?.let { "${it}を" }
+    }
+
+    private fun LegStep.maneuverTargetName(context: GuidanceContext): String? {
+        return context.bannerDisplayName()
+            ?: roadDisplayName(context)
+    }
+
+    private fun LegStep.roadDisplayName(context: GuidanceContext): String? {
+        return listOfNotNull(
+            name(),
+            ref(),
+            destinations(),
+            context.lastBannerInstruction?.secondary()?.text(),
+        ).firstNotNullOfOrNull { it.cleanGuideName() }
+    }
+
+    private fun LegStep.highwayDisplayName(
+        context: GuidanceContext,
+        stepContext: UpcomingStepContext,
+    ): String? {
+        return context.upcomingIntersections
+            .asSequence()
+            .filter { it.legIndex == stepContext.legIndex && it.stepIndex == stepContext.stepIndex }
+            .mapNotNull { intersectionContext ->
+                intersectionContext.intersection.junction()?.name()
+                    ?: intersectionContext.intersection.interchange()?.name()
+            }
+            .firstNotNullOfOrNull { it.cleanGuideName() }
+            ?: context.bannerFacilityName()
+            ?: destinations().cleanGuideName()
+            ?: name().cleanGuideName()
+            ?: maneuver().instruction().cleanGuideName()
+    }
+
+    private fun GuidanceContext.bannerDisplayName(): String? {
+        return sequenceOf(
+            lastBannerInstruction?.primary(),
+            lastBannerInstruction?.secondary(),
+            lastBannerInstruction?.sub(),
+        ).flatMap { bannerText ->
+            bannerText?.components().orEmpty().asSequence()
+        }.filter { component ->
+            component.type() in NAME_COMPONENT_TYPES
+        }.mapNotNull { component ->
+            component.text().cleanGuideName()
+        }.firstOrNull()
+    }
+
+    private fun GuidanceContext.bannerFacilityName(): String? {
+        return sequenceOf(
+            lastBannerInstruction?.primary(),
+            lastBannerInstruction?.secondary(),
+            lastBannerInstruction?.sub(),
+        ).flatMap { bannerText ->
+            bannerText?.components().orEmpty().asSequence()
+        }.filter { component ->
+            component.type() in FACILITY_COMPONENT_TYPES
+        }.mapNotNull { component ->
+            component.text().cleanGuideName()
+        }.firstOrNull()
+    }
+
     private fun LegStep.direction(): Direction {
         return when (maneuver().modifier()) {
             "left" -> Direction.LEFT
@@ -474,13 +563,24 @@ class GuidanceCoordinator(
         }
     }
 
-    private fun LegStep.destinationOrName(): String? {
-        return destinations()
+    private fun String?.cleanGuideName(): String? {
+        val value = this
+            ?.replace("、", " ")
+            ?.replace("。", " ")
+            ?.trim()
             ?.takeIf { it.isNotBlank() }
-            ?: maneuver().instruction()
-                ?.takeIf { it.isNotBlank() }
-            ?: name()
-                ?.takeIf { it.isNotBlank() }
+            ?: return null
+
+        if (value.any { it in 'ぁ'..'ん' || it in 'ァ'..'ン' || it in '一'..'龯' || it.isLetterOrDigit() }) {
+            if (value.isInstructionLike()) return null
+            return value
+        }
+
+        return null
+    }
+
+    private fun String.isInstructionLike(): Boolean {
+        return INSTRUCTION_WORDS.any { it in this }
     }
 
     /**
@@ -532,7 +632,33 @@ class GuidanceCoordinator(
             "rotary",
             "arrive",
         )
+        private val FACILITY_COMPONENT_TYPES = setOf(
+            BannerComponents.EXPRESSWAY_ENTRANCE,
+            BannerComponents.EXPRESSWAY_EXIT,
+            BannerComponents.JCT,
+            BannerComponents.SAPA,
+            BannerComponents.TOLLBRANCH,
+            BannerComponents.SIGNBOARD,
+            BannerComponents.EXIT,
+            BannerComponents.EXIT_NUMBER,
+        )
+        private val NAME_COMPONENT_TYPES = FACILITY_COMPONENT_TYPES + setOf(
+            BannerComponents.TEXT,
+            BannerComponents.CITYREAL,
+        )
+        private val INSTRUCTION_WORDS = setOf(
+            "方向です",
+            "直進です",
+            "右折",
+            "左折",
+            "進みます",
+            "進んで",
+            "曲が",
+            "まもなく",
+            "およそ",
+        )
         private const val LINKED_TURN_MAX_DISTANCE_METERS = 300.0
+        private const val INTERSECTION_DISTANCE_TOLERANCE_METERS = 40.0
         private const val LANE_GUIDE_MAX_DISTANCE_METERS = 500.0
         private const val SAFETY_GUIDE_MAX_DISTANCE_METERS = 400.0
         private const val TOLL_GUIDE_MAX_DISTANCE_METERS = 500.0

@@ -59,6 +59,7 @@ data class TurnGuideEvent(
     override val distanceMeters: Double,
     val direction: Direction,
     val timing: TurnTiming,
+    val targetPhrase: String?,
     val roadName: String?,
 ) : GuidanceEvent
 
@@ -71,7 +72,10 @@ data class LinkedTurnGuideEvent(
     override val priority: GuidancePriority,
     override val distanceMeters: Double,
     val firstDirection: Direction,
+    val firstTargetPhrase: String?,
     val nextDirection: Direction,
+    val nextManeuverType: String,
+    val nextTargetPhrase: String?,
 ) : GuidanceEvent
 
 /**
