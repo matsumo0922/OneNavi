@@ -199,10 +199,11 @@ class GuidanceCoordinator(
             ?.currentStepProgress
             ?.distanceRemaining
             ?.toDouble()
+        val maneuverBucket = distance?.let { triggerBucketForTurn(it, RoadKind.HIGHWAY) }
 
-        val highwayEvent = when (maneuverType) {
+        val highwayEvent = if (maneuverBucket == null) null else when (maneuverType) {
             "on ramp" -> HighwayGuideEvent(
-                id = context.eventId(GuideCategory.HIGHWAY, distance?.let(DistanceBucket::fromMeters), "enter"),
+                id = context.eventId(GuideCategory.HIGHWAY, maneuverBucket, "enter"),
                 priority = GuidancePriority.NORMAL,
                 distanceMeters = distance,
                 kind = HighwayGuideKind.ENTER,
@@ -210,23 +211,23 @@ class GuidanceCoordinator(
                 name = step.destinationOrName(),
             )
             "off ramp" -> HighwayGuideEvent(
-                id = context.eventId(GuideCategory.HIGHWAY, distance?.let(DistanceBucket::fromMeters), "exit"),
-                priority = if (distance != null && distance <= 300.0) GuidancePriority.HIGH else GuidancePriority.NORMAL,
+                id = context.eventId(GuideCategory.HIGHWAY, maneuverBucket, "exit"),
+                priority = if (distance <= 300.0) GuidancePriority.HIGH else GuidancePriority.NORMAL,
                 distanceMeters = distance,
                 kind = HighwayGuideKind.EXIT,
                 direction = step.direction(),
                 name = step.destinationOrName(),
             )
             "fork" -> HighwayGuideEvent(
-                id = context.eventId(GuideCategory.HIGHWAY, distance?.let(DistanceBucket::fromMeters), "fork"),
-                priority = if (distance != null && distance <= 300.0) GuidancePriority.HIGH else GuidancePriority.NORMAL,
+                id = context.eventId(GuideCategory.HIGHWAY, maneuverBucket, "fork"),
+                priority = if (distance <= 300.0) GuidancePriority.HIGH else GuidancePriority.NORMAL,
                 distanceMeters = distance,
                 kind = HighwayGuideKind.FORK,
                 direction = step.direction(),
                 name = step.destinationOrName(),
             )
             "merge" -> HighwayGuideEvent(
-                id = context.eventId(GuideCategory.HIGHWAY, distance?.let(DistanceBucket::fromMeters), "merge"),
+                id = context.eventId(GuideCategory.HIGHWAY, maneuverBucket, "merge"),
                 priority = GuidancePriority.NORMAL,
                 distanceMeters = distance,
                 kind = HighwayGuideKind.MERGE,
@@ -281,7 +282,7 @@ class GuidanceCoordinator(
             LaneGuideEvent(
                 id = context.eventId(
                     category = GuideCategory.LANE,
-                    bucket = DistanceBucket.fromMeters(intersectionContext.distanceFromCurrentMeters),
+                    bucket = null,
                     variant = "lane-${intersectionContext.geometryIndex ?: intersectionContext.intersectionIndex}",
                     geometryIndex = intersectionContext.geometryIndex,
                     stepIndex = intersectionContext.stepIndex,
@@ -308,7 +309,7 @@ class GuidanceCoordinator(
                 SafetyGuideEvent(
                     id = context.eventId(
                         category = GuideCategory.SAFETY,
-                        bucket = DistanceBucket.fromMeters(intersectionContext.distanceFromCurrentMeters),
+                        bucket = null,
                         variant = kind.name,
                         geometryIndex = intersectionContext.geometryIndex,
                         stepIndex = intersectionContext.stepIndex,
@@ -441,7 +442,7 @@ class GuidanceCoordinator(
                     legIndex = intersectionContext.legIndex,
                     stepIndex = intersectionContext.stepIndex,
                     geometryIndex = intersectionContext.geometryIndex,
-                    distanceBucket = DistanceBucket.fromMeters(intersectionContext.distanceFromCurrentMeters),
+                    distanceBucket = null,
                     variant = "toll-gate",
                 ),
                 priority = GuidancePriority.NORMAL,
@@ -468,4 +469,3 @@ class GuidanceCoordinator(
         private const val ALONG_ROAD_MIN_DISTANCE_METERS = 2_000.0
     }
 }
-
