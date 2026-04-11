@@ -1,5 +1,8 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
+/**
+ * 構造化案内イベントを日本語 TTS 文言へ変換するクラス。
+ */
 class JapaneseGuidancePhraseComposer {
 
     fun compose(event: GuidanceEvent): String {

@@ -4,12 +4,14 @@ import android.content.Context
 import com.mapbox.api.directions.v5.models.BannerInstructions
 import com.mapbox.api.directions.v5.models.VoiceInstructions
 import com.mapbox.navigation.base.trip.model.RouteProgress
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import me.matsumo.onenavi.core.navigation.tts.AndroidTtsEngine
 import me.matsumo.onenavi.core.navigation.tts.AudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.SpeechOrchestrator
 
+/**
+ * Mapbox Navigation の進行イベントを構造化案内イベントに変換し、TTS へ渡す管理クラス。
+ */
 class GuidanceAnnouncementManager(
     context: Context,
 ) {
@@ -36,7 +38,6 @@ class GuidanceAnnouncementManager(
     private var lastBannerInstruction: BannerInstructions? = null
     private var waypointKinds: List<DestinationKind> = emptyList()
 
-    val events: SharedFlow<GuidanceEvent> = coordinator.events
     val isReady: StateFlow<Boolean> = ttsEngine.isReady
 
     var onEvent: ((GuidanceEvent) -> Unit)? = null
@@ -63,8 +64,13 @@ class GuidanceAnnouncementManager(
     }
 
     fun stop(routeId: String) {
-        speak(coordinator.onSessionEvent(routeId, SessionGuideKind.STOP))
-        shutdown()
+        val spoken = speak(
+            event = coordinator.onSessionEvent(routeId, SessionGuideKind.STOP),
+            onComplete = ::shutdown,
+        )
+        if (!spoken) {
+            shutdown()
+        }
     }
 
     fun setWaypointKinds(waypointKinds: List<DestinationKind>) {
@@ -161,14 +167,21 @@ class GuidanceAnnouncementManager(
         }
     }
 
-    private fun speak(event: GuidanceEvent) {
+    private fun speak(
+        event: GuidanceEvent,
+        onComplete: (() -> Unit)? = null,
+    ): Boolean {
         onEvent?.invoke(event)
-        speechOrchestrator.enqueue(
+        return speechOrchestrator.enqueue(
             event = event,
             text = phraseComposer.compose(event),
+            onComplete = onComplete,
         )
     }
 
+    /**
+     * セッション制御で使う時間定数。
+     */
     private companion object {
         private const val SESSION_TIMEOUT_MILLIS = 4 * 60 * 60 * 1000L
         private const val SESSION_TIMEOUT_WARNING_MILLIS = SESSION_TIMEOUT_MILLIS - 5 * 60 * 1000L

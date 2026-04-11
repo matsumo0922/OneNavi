@@ -1,5 +1,8 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
+/**
+ * ルート単位で発話済みイベントを記録し、重複発話を防ぐクラス。
+ */
 class GuidanceSpeechHistory {
 
     private var currentRouteId: String? = null

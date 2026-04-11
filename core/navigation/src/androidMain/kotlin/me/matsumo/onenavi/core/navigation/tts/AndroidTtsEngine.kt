@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
 
+/**
+ * Android 標準 TextToSpeech を利用する TTS エンジン実装。
+ */
 class AndroidTtsEngine(
     context: Context,
     private val audioFocusManager: AudioFocusManager,
@@ -16,15 +19,20 @@ class AndroidTtsEngine(
 
     private var textToSpeech: TextToSpeech? = null
     private val _isReady = MutableStateFlow(false)
+    private var isShutdown = false
 
     override val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
+    override var onUtteranceCompleted: ((String) -> Unit)? = null
 
     var onReadyChanged: ((Boolean) -> Unit)? = null
 
     init {
         textToSpeech = TextToSpeech(context) { status ->
+            val tts = textToSpeech?.takeUnless { isShutdown } ?: return@TextToSpeech
             if (status == TextToSpeech.SUCCESS) {
-                val languageResult = textToSpeech?.setLanguage(Locale.JAPAN)
+                tts.setOnUtteranceProgressListener(createUtteranceProgressListener())
+
+                val languageResult = tts.setLanguage(Locale.JAPAN)
                 val ready = languageResult != TextToSpeech.LANG_MISSING_DATA &&
                     languageResult != TextToSpeech.LANG_NOT_SUPPORTED
                 _isReady.value = ready
@@ -36,30 +44,17 @@ class AndroidTtsEngine(
                 Napier.w(tag = TAG) { "TTS initialization failed: status=$status" }
             }
         }
-
-        textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = Unit
-
-            override fun onDone(utteranceId: String?) {
-                audioFocusManager.abandon()
-            }
-
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                audioFocusManager.abandon()
-            }
-        })
     }
 
     override fun speak(
         text: String,
         utteranceId: String,
         queueMode: SpeechQueueMode,
-    ) {
-        if (!isReady.value) return
+    ): Boolean {
+        if (!isReady.value) return false
 
         audioFocusManager.request()
-        textToSpeech?.speak(
+        val result = textToSpeech?.speak(
             text,
             when (queueMode) {
                 SpeechQueueMode.FLUSH -> TextToSpeech.QUEUE_FLUSH
@@ -67,7 +62,13 @@ class AndroidTtsEngine(
             },
             null,
             utteranceId,
-        )
+        ) ?: TextToSpeech.ERROR
+
+        val spoken = result == TextToSpeech.SUCCESS
+        if (!spoken) {
+            audioFocusManager.abandon()
+        }
+        return spoken
     }
 
     override fun stop() {
@@ -76,6 +77,7 @@ class AndroidTtsEngine(
     }
 
     override fun shutdown() {
+        isShutdown = true
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
@@ -83,6 +85,26 @@ class AndroidTtsEngine(
         audioFocusManager.abandon()
     }
 
+    private fun createUtteranceProgressListener(): UtteranceProgressListener {
+        return object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) = Unit
+
+            override fun onDone(utteranceId: String?) {
+                audioFocusManager.abandon()
+                utteranceId?.let { onUtteranceCompleted?.invoke(it) }
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                audioFocusManager.abandon()
+                utteranceId?.let { onUtteranceCompleted?.invoke(it) }
+            }
+        }
+    }
+
+    /**
+     * ログ出力用の定数。
+     */
     private companion object {
         private const val TAG = "AndroidTtsEngine"
     }

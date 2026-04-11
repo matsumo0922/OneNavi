@@ -1,5 +1,8 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
+/**
+ * TTS で読み上げる距離の丸め単位。
+ */
 enum class DistanceBucket(
     val meters: Int,
 ) {
@@ -28,6 +31,9 @@ enum class DistanceBucket(
             "${meters / 1_000}キロ"
         }
 
+    /**
+     * 距離から最も近い読み上げ単位を選ぶ。
+     */
     companion object {
         fun fromMeters(distanceMeters: Double): DistanceBucket {
             return entries.firstOrNull { distanceMeters <= it.meters } ?: KM10

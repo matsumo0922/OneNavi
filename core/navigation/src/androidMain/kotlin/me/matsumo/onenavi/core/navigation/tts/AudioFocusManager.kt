@@ -5,6 +5,9 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 
+/**
+ * ナビゲーション音声案内用の AudioFocus を取得、解放するクラス。
+ */
 class AudioFocusManager(
     context: Context,
 ) {
