@@ -17,6 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mapbox.geojson.Point
 import com.mapbox.maps.MapView
 import com.mapbox.maps.MapboxExperimental
+import com.mapbox.maps.Style
 import com.mapbox.maps.extension.compose.DisposableMapEffect
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
@@ -33,6 +34,7 @@ import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListen
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
+import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
@@ -81,6 +83,7 @@ internal fun HomeMapsMapEffectContent(
     val currentOnRouteSelected = rememberUpdatedState(onRouteSelected)
 
     val navigationRoutes by routeManager.routes.collectAsStateWithLifecycle()
+    val currentNavigationRoutes = rememberUpdatedState(navigationRoutes)
 
     var calloutPoints by remember { mutableStateOf<List<Point?>>(emptyList()) }
 
@@ -138,6 +141,7 @@ internal fun HomeMapsMapEffectContent(
             onMapViewChanged(view)
 
             cameraManager.setupCamera(view)
+            cameraManager.onRouteChanged(currentNavigationRoutes.value.firstOrNull())
 
             view.location.enabled = true
             view.location.locationPuck = createDefault2DPuck(withBearing = true)
@@ -182,37 +186,45 @@ internal fun HomeMapsMapEffectContent(
                     calloutSize = ROUTE_CALLOUT_SIZE,
                 )
             }
+            val styleLoadedCancelable = view.mapboxMap.subscribeStyleLoaded {
+                view.mapboxMap.style?.let { style ->
+                    renderRouteLine(
+                        style = style,
+                        mapView = view,
+                        navigationRoutes = currentNavigationRoutes.value,
+                        routeResults = currentRouteResults.value,
+                        routeLineApi = routeLineApi,
+                        routeLineView = routeLineView,
+                        onCalloutPointsChanged = { calloutPoints = it },
+                    )
+                }
+            }
 
             onDispose {
                 view.location.removeOnIndicatorPositionChangedListener(positionListener)
                 view.location.removeOnIndicatorBearingChangedListener(bearingListener)
                 view.mapboxMap.removeOnMapClickListener(mapClickListener)
                 cameraChangeCancelable.cancel()
+                styleLoadedCancelable.cancel()
                 cameraManager.teardownCamera()
             }
         }
 
         // ルートライン描画: routeManager.routes（SDK の RoutesObserver 経由）を source of truth とする
         MapEffect(navigationRoutes, selectedRouteIndex) { mapView ->
-            val style = mapView.mapboxMap.style ?: return@MapEffect
+            cameraManager.onRouteChanged(currentNavigationRoutes.value.firstOrNull())
 
-            if (navigationRoutes.isEmpty()) {
-                routeLineApi.clearRouteLine { expected ->
-                    routeLineView.renderClearRouteLineValue(style, expected)
-                }
-                calloutPoints = emptyList()
-                return@MapEffect
+            mapView.mapboxMap.getStyle { style ->
+                renderRouteLine(
+                    style = style,
+                    mapView = mapView,
+                    navigationRoutes = currentNavigationRoutes.value,
+                    routeResults = currentRouteResults.value,
+                    routeLineApi = routeLineApi,
+                    routeLineView = routeLineView,
+                    onCalloutPointsChanged = { calloutPoints = it },
+                )
             }
-
-            routeLineApi.setNavigationRoutes(navigationRoutes) { expected ->
-                routeLineView.renderRouteDrawData(style, expected)
-            }
-
-            calloutPoints = MapCalloutPositioner.computePositions(
-                mapboxMap = mapView.mapboxMap,
-                geometries = routeResults.map { it.item.geometry },
-                calloutSize = ROUTE_CALLOUT_SIZE,
-            )
         }
 
         // ルート吹き出し: ナビ中は非表示、プレビュー時のみ表示
@@ -288,4 +300,34 @@ internal fun HomeMapsMapEffectContent(
             -> { /* ナビ中はマーカー非表示 */ }
         }
     }
+}
+
+private fun renderRouteLine(
+    style: Style,
+    mapView: MapView,
+    navigationRoutes: List<NavigationRoute>,
+    routeResults: ImmutableList<RouteResult>,
+    routeLineApi: MapboxRouteLineApi,
+    routeLineView: MapboxRouteLineView,
+    onCalloutPointsChanged: (List<Point?>) -> Unit,
+) {
+    if (navigationRoutes.isEmpty()) {
+        routeLineApi.clearRouteLine { expected ->
+            routeLineView.renderClearRouteLineValue(style, expected)
+        }
+        onCalloutPointsChanged(emptyList())
+        return
+    }
+
+    routeLineApi.setNavigationRoutes(navigationRoutes) { expected ->
+        routeLineView.renderRouteDrawData(style, expected)
+    }
+
+    onCalloutPointsChanged(
+        MapCalloutPositioner.computePositions(
+            mapboxMap = mapView.mapboxMap,
+            geometries = routeResults.map { it.item.geometry },
+            calloutSize = ROUTE_CALLOUT_SIZE,
+        ),
+    )
 }

@@ -66,6 +66,7 @@ internal fun HomeMapControls(
     deviceBearing: Double,
     trackingMode: LocationTrackingMode?,
     viewportState: MapViewportState,
+    autoFollowOnStart: Boolean,
     modifier: Modifier = Modifier,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
 ) {
@@ -78,11 +79,13 @@ internal fun HomeMapControls(
             .build()
     }
 
-    LaunchedEffect(Unit) {
-        viewportState.transitionToFollowPuckState(
-            followPuckViewportStateOptions = buildFollowPuckOptions(LocationTrackingMode.TiltedHeading),
-            defaultTransitionOptions = transitionOptions,
-        )
+    LaunchedEffect(autoFollowOnStart) {
+        if (autoFollowOnStart) {
+            viewportState.transitionToFollowPuckState(
+                followPuckViewportStateOptions = buildFollowPuckOptions(LocationTrackingMode.TiltedHeading),
+                defaultTransitionOptions = transitionOptions,
+            )
+        }
     }
 
     fun setZoom(zoom: Double) {
