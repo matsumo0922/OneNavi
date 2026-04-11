@@ -59,7 +59,7 @@ class GuidanceContextBuilder {
             ?.toDouble() ?: 0.0
 
         val result = mutableListOf<UpcomingStepContext>()
-        var cumulativeDistance = 0.0
+        var cumulativeDistance = currentStepDistanceRemaining
 
         for (legIndex in currentLegIndex until legs.size) {
             val steps = legs[legIndex].steps().orEmpty()
@@ -67,10 +67,11 @@ class GuidanceContextBuilder {
 
             for (stepIndex in startStepIndex until steps.size) {
                 val step = steps[stepIndex]
-                val distanceFromCurrent = if (legIndex == currentLegIndex && stepIndex == currentStepIndex) {
+                val isCurrentStep = legIndex == currentLegIndex && stepIndex == currentStepIndex
+                val distanceFromCurrent = if (isCurrentStep) {
                     currentStepDistanceRemaining
                 } else {
-                    cumulativeDistance + step.distance()
+                    cumulativeDistance
                 }
 
                 result.add(
@@ -82,7 +83,9 @@ class GuidanceContextBuilder {
                     ),
                 )
 
-                cumulativeDistance = distanceFromCurrent
+                if (!isCurrentStep) {
+                    cumulativeDistance += step.distance()
+                }
             }
         }
 
@@ -123,4 +126,3 @@ class GuidanceContextBuilder {
         private val HIGHWAY_CLASSES = setOf("motorway", "trunk")
     }
 }
-

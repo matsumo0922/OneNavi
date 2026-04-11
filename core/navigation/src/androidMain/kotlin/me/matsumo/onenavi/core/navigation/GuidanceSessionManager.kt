@@ -16,8 +16,11 @@ import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.core.trip.session.VoiceInstructionsObserver
 import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.GuidanceUiState
@@ -27,6 +30,7 @@ import me.matsumo.onenavi.core.model.ManeuverInfo
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.RouteStepInfo
 import me.matsumo.onenavi.core.model.TripProgressInfo
+import me.matsumo.onenavi.core.navigation.guidance.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.guidance.GuidanceAnnouncementManager
 
 /**
@@ -55,6 +59,11 @@ class GuidanceSessionManager(
 
     /** 到着時の集計情報。 */
     val arrivalInfo: StateFlow<ArrivalInfo?> = _arrivalInfo.asStateFlow()
+
+    private val _guidanceEvents = MutableSharedFlow<GuidanceEvent>(extraBufferCapacity = 32)
+
+    /** UI / ログが購読できる構造化案内イベント。 */
+    val guidanceEvents: SharedFlow<GuidanceEvent> = _guidanceEvents.asSharedFlow()
 
     // --- TTS / Guidance events ---
 
@@ -183,6 +192,7 @@ class GuidanceSessionManager(
         navigation.startTripSession(withForegroundService = true)
 
         guidanceAnnouncementManager = GuidanceAnnouncementManager(context).also { manager ->
+            manager.onEvent = _guidanceEvents::tryEmit
             manager.start(lastPrimaryRouteId.orEmpty())
         }
 
