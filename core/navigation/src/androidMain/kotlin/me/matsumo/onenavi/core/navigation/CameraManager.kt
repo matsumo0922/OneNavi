@@ -101,6 +101,13 @@ class CameraManager {
     fun setupCamera(mapView: MapView) {
         val mapboxMap = mapView.mapboxMap
         val dataSource = MapboxNavigationViewportDataSource(mapboxMap)
+
+        dataSource.options.followingFrameOptions.apply {
+            bearingSmoothing.enabled = false
+            frameGeometryAfterManeuver.enabled = false
+            pitchNearManeuvers.enabled = false
+        }
+
         viewportDataSource = dataSource
 
         val camera = NavigationCamera(

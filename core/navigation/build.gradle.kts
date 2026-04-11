@@ -18,6 +18,7 @@ kotlin {
         }
 
         androidMain.dependencies {
+            implementation(libs.compose.runtime)
             implementation(libs.bundles.mapbox)
         }
     }
