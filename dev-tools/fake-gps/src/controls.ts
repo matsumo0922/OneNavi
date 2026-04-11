@@ -1,24 +1,21 @@
-import type { SimulationEngine, SimulationState } from "./simulation";
-import type { LatLng } from "./geo-utils";
-import { parseGpx } from "./gpx-parser";
-import { getStatus } from "./connection";
-import {
-  findRoute,
-  clearRoute,
-  updateCurrentPosition,
-  updateWaypointMarkers,
-  onMapClick,
-  showGpxPath,
-} from "./map";
+import type {SimulationEngine, SimulationState} from "./simulation";
+import type {LatLng} from "./geo-utils";
+import {parseGpx} from "./gpx-parser";
+import {getStatus} from "./connection";
+import {clearRoute, findRoute, onMapClick, showGpxPath, updateCurrentPosition, updateWaypointMarkers,} from "./map";
 
 /**
  * UI コントロールのバインディングとイベントハンドリングを行う。
  */
+const WAYPOINTS_STORAGE_KEY = "onenavi-dev-waypoints";
+
 export class ControlsManager {
   private waypoints: LatLng[] = [];
   private statusPollHandle: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private readonly engine: SimulationEngine) {}
+  constructor(private readonly engine: SimulationEngine) {
+    this.loadWaypoints();
+  }
 
   /**
    * ポーリングを停止する。
@@ -43,6 +40,12 @@ export class ControlsManager {
 
     this.engine.onStateChange((state) => this.updateUI(state));
     this.updateUI(this.engine.getState());
+
+    // 保存済み waypoints があれば復元表示
+    if (this.waypoints.length > 0) {
+      this.renderWaypointList();
+      updateWaypointMarkers(this.waypoints);
+    }
   }
 
   private bindPlaybackButtons(): void {
@@ -64,6 +67,10 @@ export class ControlsManager {
     document.getElementById("btn-stop")!.addEventListener("click", () => {
       this.engine.stop();
       clearRoute();
+    });
+
+    document.getElementById("btn-restart")!.addEventListener("click", () => {
+      this.engine.restart();
     });
   }
 
@@ -92,6 +99,7 @@ export class ControlsManager {
 
     document.getElementById("btn-clear")!.addEventListener("click", () => {
       this.waypoints = [];
+      this.saveWaypoints();
       this.engine.stop();
       clearRoute();
       this.renderWaypointList();
@@ -134,6 +142,7 @@ export class ControlsManager {
   private bindMapClick(): void {
     onMapClick((latLng: LatLng) => {
       this.waypoints.push(latLng);
+      this.saveWaypoints();
       this.renderWaypointList();
       updateWaypointMarkers(this.waypoints);
     });
@@ -186,6 +195,7 @@ export class ControlsManager {
       const removeBtn = item.querySelector(".remove-btn")!;
       removeBtn.addEventListener("click", () => {
         this.waypoints.splice(index, 1);
+        this.saveWaypoints();
         this.renderWaypointList();
         updateWaypointMarkers(this.waypoints);
       });
@@ -206,6 +216,25 @@ export class ControlsManager {
         el.className = "disconnected";
       }
     }, 3000);
+  }
+
+  private saveWaypoints(): void {
+    try {
+      localStorage.setItem(WAYPOINTS_STORAGE_KEY, JSON.stringify(this.waypoints));
+    } catch {
+      // localStorage が使えない環境は無視
+    }
+  }
+
+  private loadWaypoints(): void {
+    try {
+      const stored = localStorage.getItem(WAYPOINTS_STORAGE_KEY);
+      if (stored) {
+        this.waypoints = JSON.parse(stored) as LatLng[];
+      }
+    } catch {
+      this.waypoints = [];
+    }
   }
 
   private updateUI(state: SimulationState): void {

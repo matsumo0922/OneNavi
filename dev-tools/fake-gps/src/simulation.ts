@@ -1,11 +1,6 @@
-import type { LatLng } from "./geo-utils";
-import {
-  bearingDeg,
-  interpolateAlongPath,
-  nearestPointOnPath,
-  pathTotalDistance,
-} from "./geo-utils";
-import { sendLocation } from "./connection";
+import type {LatLng} from "./geo-utils";
+import {bearingDeg, interpolateAlongPath, nearestPointOnPath, pathTotalDistance,} from "./geo-utils";
+import {sendLocation} from "./connection";
 
 export type SimulationMode = "idle" | "route" | "gpx" | "manual";
 export type PlaybackState = "stopped" | "playing" | "paused";
@@ -80,7 +75,9 @@ export class SimulationEngine {
     this.position = path[0];
     this.bearing = bearingDeg(path[0], path[1]);
 
-    this.play();
+    this.playback = "paused";
+    this.sendCurrentPosition();
+    this.notify();
   }
 
   /**
@@ -154,6 +151,22 @@ export class SimulationEngine {
     }
     this.mode = this.routePath.length > 0 ? "route" : "idle";
     this.play();
+  }
+
+  /**
+   * シミュレーションを先頭に戻して一時停止状態にする。
+   */
+  restart(): void {
+    if (this.routePath.length < 2) return;
+    this.stopTimer();
+
+    this.traveledDistance = 0;
+    this.position = this.routePath[0];
+    this.bearing = bearingDeg(this.routePath[0], this.routePath[1]);
+    this.playback = "paused";
+
+    this.sendCurrentPosition();
+    this.notify();
   }
 
   /** 現在の位置と bearing を返す。 */
