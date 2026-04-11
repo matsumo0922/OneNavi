@@ -226,7 +226,7 @@ class GuidanceSessionManager(
 
         navigation.stopTripSession()
 
-        guidanceAnnouncementManager?.shutdown()
+        guidanceAnnouncementManager?.stop(lastPrimaryRouteId.orEmpty())
         guidanceAnnouncementManager = null
 
         _guidanceUiState.value = GuidanceUiState.Initial

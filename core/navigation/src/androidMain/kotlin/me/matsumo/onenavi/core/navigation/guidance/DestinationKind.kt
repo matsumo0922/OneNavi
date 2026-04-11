@@ -1,5 +1,8 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
+/**
+ * 経由地または目的地の種類と到着時の読み上げ文言。
+ */
 enum class DestinationKind(
     val arrivalPhrase: String,
 ) {
