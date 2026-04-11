@@ -17,8 +17,8 @@ import com.mapbox.navigation.core.trip.session.VoiceInstructionsObserver
 import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,8 +30,8 @@ import me.matsumo.onenavi.core.model.ManeuverInfo
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.RouteStepInfo
 import me.matsumo.onenavi.core.model.TripProgressInfo
-import me.matsumo.onenavi.core.navigation.guidance.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.guidance.GuidanceAnnouncementManager
+import me.matsumo.onenavi.core.navigation.guidance.GuidanceEvent
 
 /**
  * ナビゲーションセッション全体のライフサイクルを管理するクラス。
@@ -74,6 +74,9 @@ class GuidanceSessionManager(
 
     private var sessionStartTimeMillis: Long = 0L
     private var lastRouteProgress: RouteProgress? = null
+
+    /** 前回ログ出力した stepIndex（同じステップで繰り返しログを出さないための制御用）。 */
+    private var lastLoggedStepIndex: Int = -1
 
     // --- Observers ---
 
@@ -246,9 +249,6 @@ class GuidanceSessionManager(
     }
 
     // --- RouteProgress → GuidanceUiState ---
-
-    /** 前回ログ出力した stepIndex（同じステップで繰り返しログを出さないための制御用）。 */
-    private var lastLoggedStepIndex: Int = -1
 
     private fun updateGuidanceUiState(routeProgress: RouteProgress) {
         val currentLegProgress = routeProgress.currentLegProgress

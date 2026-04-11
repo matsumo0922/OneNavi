@@ -28,4 +28,3 @@ class GuidanceSpeechHistory {
         spokenAtMillis.clear()
     }
 }
-

@@ -15,4 +15,3 @@ interface TtsEngine {
 
     fun shutdown()
 }
-

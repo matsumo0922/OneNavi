@@ -5,4 +5,3 @@ enum class RoadKind {
     HIGHWAY,
     TOLL,
 }
-

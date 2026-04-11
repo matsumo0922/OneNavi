@@ -18,7 +18,8 @@ enum class DistanceBucket(
     KM3(3_000),
     KM4(4_000),
     KM5(5_000),
-    KM10(10_000);
+    KM10(10_000),
+    ;
 
     val label: String
         get() = if (meters < 1_000) {
@@ -33,4 +34,3 @@ enum class DistanceBucket(
         }
     }
 }
-

@@ -201,44 +201,48 @@ class GuidanceCoordinator(
             ?.toDouble()
         val maneuverBucket = distance?.let { triggerBucketForTurn(it, RoadKind.HIGHWAY) }
 
-        val highwayEvent = if (maneuverBucket == null) null else when (maneuverType) {
-            "on ramp" -> HighwayGuideEvent(
-                id = context.eventId(GuideCategory.HIGHWAY, maneuverBucket, "enter"),
-                priority = GuidancePriority.NORMAL,
-                distanceMeters = distance,
-                kind = HighwayGuideKind.ENTER,
-                direction = step.direction(),
-                name = step.destinationOrName(),
-            )
-            "off ramp" -> HighwayGuideEvent(
-                id = context.eventId(GuideCategory.HIGHWAY, maneuverBucket, "exit"),
-                priority = if (distance <= 300.0) GuidancePriority.HIGH else GuidancePriority.NORMAL,
-                distanceMeters = distance,
-                kind = HighwayGuideKind.EXIT,
-                direction = step.direction(),
-                name = step.destinationOrName(),
-            )
-            "fork" -> HighwayGuideEvent(
-                id = context.eventId(GuideCategory.HIGHWAY, maneuverBucket, "fork"),
-                priority = if (distance <= 300.0) GuidancePriority.HIGH else GuidancePriority.NORMAL,
-                distanceMeters = distance,
-                kind = HighwayGuideKind.FORK,
-                direction = step.direction(),
-                name = step.destinationOrName(),
-            )
-            "merge" -> HighwayGuideEvent(
-                id = context.eventId(GuideCategory.HIGHWAY, maneuverBucket, "merge"),
-                priority = GuidancePriority.NORMAL,
-                distanceMeters = distance,
-                kind = HighwayGuideKind.MERGE,
-                direction = step.direction(),
-                name = step.destinationOrName(),
-            )
-            else -> null
+        val highwayEvent = maneuverBucket?.let { bucket ->
+            when (maneuverType) {
+                "on ramp" -> HighwayGuideEvent(
+                    id = context.eventId(GuideCategory.HIGHWAY, bucket, "enter"),
+                    priority = GuidancePriority.NORMAL,
+                    distanceMeters = distance,
+                    kind = HighwayGuideKind.ENTER,
+                    direction = step.direction(),
+                    name = step.destinationOrName(),
+                )
+                "off ramp" -> HighwayGuideEvent(
+                    id = context.eventId(GuideCategory.HIGHWAY, bucket, "exit"),
+                    priority = if (distance <= 300.0) GuidancePriority.HIGH else GuidancePriority.NORMAL,
+                    distanceMeters = distance,
+                    kind = HighwayGuideKind.EXIT,
+                    direction = step.direction(),
+                    name = step.destinationOrName(),
+                )
+                "fork" -> HighwayGuideEvent(
+                    id = context.eventId(GuideCategory.HIGHWAY, bucket, "fork"),
+                    priority = if (distance <= 300.0) GuidancePriority.HIGH else GuidancePriority.NORMAL,
+                    distanceMeters = distance,
+                    kind = HighwayGuideKind.FORK,
+                    direction = step.direction(),
+                    name = step.destinationOrName(),
+                )
+                "merge" -> HighwayGuideEvent(
+                    id = context.eventId(GuideCategory.HIGHWAY, bucket, "merge"),
+                    priority = GuidancePriority.NORMAL,
+                    distanceMeters = distance,
+                    kind = HighwayGuideKind.MERGE,
+                    direction = step.direction(),
+                    name = step.destinationOrName(),
+                )
+                else -> null
+            }
         }
 
         val tollEvent = context.upcomingIntersections
-            .firstOrNull { it.distanceFromCurrentMeters <= TOLL_GUIDE_MAX_DISTANCE_METERS && it.intersection.tollCollection() != null }
+            .firstOrNull {
+                it.distanceFromCurrentMeters <= TOLL_GUIDE_MAX_DISTANCE_METERS && it.intersection.tollCollection() != null
+            }
             ?.let { intersectionContext ->
                 SafetyOrHighwayEventFactory.tollGate(
                     context = context,
