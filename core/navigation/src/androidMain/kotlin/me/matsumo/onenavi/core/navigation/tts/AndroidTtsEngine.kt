@@ -19,6 +19,8 @@ class AndroidTtsEngine(
 
     override val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
 
+    var onReadyChanged: ((Boolean) -> Unit)? = null
+
     init {
         textToSpeech = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -26,9 +28,11 @@ class AndroidTtsEngine(
                 val ready = languageResult != TextToSpeech.LANG_MISSING_DATA &&
                     languageResult != TextToSpeech.LANG_NOT_SUPPORTED
                 _isReady.value = ready
+                onReadyChanged?.invoke(ready)
                 Napier.d(tag = TAG) { "TTS initialized: ready=$ready" }
             } else {
                 _isReady.value = false
+                onReadyChanged?.invoke(false)
                 Napier.w(tag = TAG) { "TTS initialization failed: status=$status" }
             }
         }
@@ -83,4 +87,3 @@ class AndroidTtsEngine(
         private const val TAG = "AndroidTtsEngine"
     }
 }
-

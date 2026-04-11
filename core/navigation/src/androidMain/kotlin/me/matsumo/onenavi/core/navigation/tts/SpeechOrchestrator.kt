@@ -13,9 +13,12 @@ class SpeechOrchestrator(
     var muted: Boolean = false
         private set
 
-    fun setMuted(muted: Boolean) {
+    fun setMuted(
+        muted: Boolean,
+        stopCurrent: Boolean = true,
+    ) {
         this.muted = muted
-        if (muted) {
+        if (muted && stopCurrent) {
             ttsEngine.stop()
         }
     }
@@ -49,4 +52,3 @@ class SpeechOrchestrator(
         speechHistory.clear()
     }
 }
-

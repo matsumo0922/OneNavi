@@ -29,6 +29,9 @@ class GuidanceAnnouncementManager(
 
     private var startedAtMillis: Long = 0L
     private var currentRouteId: String = ""
+    private var pendingStartRouteId: String? = null
+    private var timeoutWarningSpoken = false
+    private var timedOut = false
     private var lastVoiceInstruction: VoiceInstructions? = null
     private var lastBannerInstruction: BannerInstructions? = null
     private var waypointKinds: List<DestinationKind> = emptyList()
@@ -36,11 +39,25 @@ class GuidanceAnnouncementManager(
     val events: SharedFlow<GuidanceEvent> = coordinator.events
     val isReady: StateFlow<Boolean> = ttsEngine.isReady
 
+    init {
+        ttsEngine.onReadyChanged = { ready ->
+            val routeId = pendingStartRouteId
+            if (ready && routeId != null) {
+                pendingStartRouteId = null
+                speak(coordinator.onSessionEvent(routeId, SessionGuideKind.START))
+            }
+        }
+    }
+
     fun start(routeId: String) {
         currentRouteId = routeId
         startedAtMillis = System.currentTimeMillis()
         speechHistory.resetForNewRoute(routeId)
-        speak(coordinator.onSessionEvent(routeId, SessionGuideKind.START))
+        if (ttsEngine.isReady.value) {
+            speak(coordinator.onSessionEvent(routeId, SessionGuideKind.START))
+        } else {
+            pendingStartRouteId = routeId
+        }
     }
 
     fun stop(routeId: String) {
@@ -74,6 +91,7 @@ class GuidanceAnnouncementManager(
             speechHistory = speechHistory,
         )
         coordinator.onRouteProgress(context).forEach(::speak)
+        checkSessionTimeout(context.routeId)
     }
 
     fun onVoiceInstructions(voiceInstructions: VoiceInstructions) {
@@ -120,7 +138,25 @@ class GuidanceAnnouncementManager(
         waypointKinds = emptyList()
         startedAtMillis = 0L
         currentRouteId = ""
+        pendingStartRouteId = null
+        timeoutWarningSpoken = false
+        timedOut = false
         speechOrchestrator.shutdown()
+    }
+
+    private fun checkSessionTimeout(routeId: String) {
+        if (startedAtMillis == 0L || timedOut) return
+
+        val elapsedMillis = System.currentTimeMillis() - startedAtMillis
+        if (!timeoutWarningSpoken && elapsedMillis >= SESSION_TIMEOUT_WARNING_MILLIS) {
+            timeoutWarningSpoken = true
+            speak(coordinator.onSessionEvent(routeId, SessionGuideKind.TIMEOUT_WARNING))
+        }
+        if (elapsedMillis >= SESSION_TIMEOUT_MILLIS) {
+            timedOut = true
+            speak(coordinator.onSessionEvent(routeId, SessionGuideKind.TIMEOUT))
+            speechOrchestrator.setMuted(muted = true, stopCurrent = false)
+        }
     }
 
     private fun speak(event: GuidanceEvent) {
@@ -128,6 +164,11 @@ class GuidanceAnnouncementManager(
             event = event,
             text = phraseComposer.compose(event),
         )
+    }
+
+    private companion object {
+        private const val SESSION_TIMEOUT_MILLIS = 4 * 60 * 60 * 1000L
+        private const val SESSION_TIMEOUT_WARNING_MILLIS = SESSION_TIMEOUT_MILLIS - 5 * 60 * 1000L
     }
 
 }
