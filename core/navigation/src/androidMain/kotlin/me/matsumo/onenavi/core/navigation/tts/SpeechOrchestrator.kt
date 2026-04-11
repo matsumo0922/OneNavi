@@ -28,6 +28,7 @@ class SpeechOrchestrator(
         text: String,
     ) {
         if (muted || text.isBlank()) return
+        if (!ttsEngine.isReady.value) return
         if (speechHistory.hasSpoken(event.id)) return
 
         val queueMode = when (event.priority) {

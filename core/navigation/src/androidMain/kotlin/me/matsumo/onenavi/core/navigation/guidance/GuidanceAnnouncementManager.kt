@@ -39,6 +39,8 @@ class GuidanceAnnouncementManager(
     val events: SharedFlow<GuidanceEvent> = coordinator.events
     val isReady: StateFlow<Boolean> = ttsEngine.isReady
 
+    var onEvent: ((GuidanceEvent) -> Unit)? = null
+
     init {
         ttsEngine.onReadyChanged = { ready ->
             val routeId = pendingStartRouteId
@@ -160,6 +162,7 @@ class GuidanceAnnouncementManager(
     }
 
     private fun speak(event: GuidanceEvent) {
+        onEvent?.invoke(event)
         speechOrchestrator.enqueue(
             event = event,
             text = phraseComposer.compose(event),
