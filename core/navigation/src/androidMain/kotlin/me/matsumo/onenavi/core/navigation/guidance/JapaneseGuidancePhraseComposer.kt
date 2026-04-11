@@ -43,8 +43,6 @@ class JapaneseGuidancePhraseComposer {
 
     private fun composeLane(event: LaneGuideEvent): String {
         val laneText = when {
-            event.validLaneIndices.isEmpty() -> "案内された車線"
-            event.validLaneIndices.size == event.laneCount -> "現在の車線"
             event.validLaneIndices.first() == 0 -> "左側の車線"
             event.validLaneIndices.last() == event.laneCount - 1 -> "右側の車線"
             else -> "左から${event.validLaneIndices.first() + 1}番目の車線"
