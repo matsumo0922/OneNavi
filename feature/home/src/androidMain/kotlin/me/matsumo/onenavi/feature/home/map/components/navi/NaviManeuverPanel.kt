@@ -2,7 +2,6 @@ package me.matsumo.onenavi.feature.home.map.components.navi
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,6 +50,19 @@ internal fun NaviManeuverPanel(
     val meterLabel = stringResource(Res.string.common_unit_meter)
     val kilometerLabel = stringResource(Res.string.common_unit_kilometer)
 
+    val hasLanes = currentManeuver.lanes.isNotEmpty()
+    val hasHint = !hasLanes && nextManeuver != null
+    val topShape = when {
+        hasLanes -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        hasHint -> RoundedCornerShape(
+            topStart = 16.dp,
+            topEnd = 16.dp,
+            bottomStart = 0.dp,
+            bottomEnd = 16.dp,
+        )
+        else -> RoundedCornerShape(16.dp)
+    }
+
     Column(modifier = modifier) {
         NaviManeuverTopSection(
             modifier = Modifier.fillMaxWidth(),
@@ -58,10 +70,10 @@ internal fun NaviManeuverPanel(
             meterLabel = meterLabel,
             kilometerLabel = kilometerLabel,
             turnIconsApi = turnIconsApi,
+            shape = topShape,
         )
 
         NaviManeuverBottomSection(
-            modifier = Modifier.fillMaxWidth(),
             currentManeuver = currentManeuver,
             nextManeuver = nextManeuver,
             turnIconsApi = turnIconsApi,
@@ -76,6 +88,7 @@ private fun NaviManeuverTopSection(
     meterLabel: String,
     kilometerLabel: String,
     turnIconsApi: MapboxTurnIconsApi,
+    shape: androidx.compose.ui.graphics.Shape,
     modifier: Modifier = Modifier,
 ) {
     val distanceText = remember(maneuver.distanceMeters, meterLabel, kilometerLabel) {
@@ -89,11 +102,8 @@ private fun NaviManeuverTopSection(
     Surface(
         modifier = modifier
             .zIndex(1f)
-            .shadow(
-                elevation = 8.dp,
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-            ),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            .shadow(elevation = 8.dp, shape = shape),
+        shape = shape,
         color = NavigationColors.maneuverBackground,
     ) {
         Row(
@@ -141,32 +151,37 @@ private fun NaviManeuverBottomSection(
     val hasLanes = currentManeuver.lanes.isNotEmpty()
     if (!hasLanes && nextManeuver == null) return
 
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
-        color = NavigationColors.maneuverSecondaryBackground,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+    if (hasLanes) {
+        Surface(
+            modifier = modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
+            color = NavigationColors.maneuverSecondaryBackground,
         ) {
-            if (hasLanes) {
-                NaviLaneRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    lanes = currentManeuver.lanes,
-                    drivingSide = currentManeuver.drivingSide,
-                    laneIconsApi = laneIconsApi,
-                )
-            } else if (nextManeuver != null) {
-                NaviNextManeuverHint(
-                    modifier = Modifier
-                        .wrapContentWidth(Alignment.Start)
-                        .align(Alignment.CenterStart),
-                    maneuver = nextManeuver,
-                    turnIconsApi = turnIconsApi,
-                )
-            }
+            NaviLaneRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                lanes = currentManeuver.lanes,
+                drivingSide = currentManeuver.drivingSide,
+                laneIconsApi = laneIconsApi,
+            )
+        }
+    } else if (nextManeuver != null) {
+        Surface(
+            modifier = modifier.wrapContentWidth(Alignment.Start),
+            shape = RoundedCornerShape(
+                topStart = 0.dp,
+                topEnd = 0.dp,
+                bottomStart = 16.dp,
+                bottomEnd = 12.dp,
+            ),
+            color = NavigationColors.maneuverSecondaryBackground,
+        ) {
+            NaviNextManeuverHint(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                maneuver = nextManeuver,
+                turnIconsApi = turnIconsApi,
+            )
         }
     }
 }
@@ -269,17 +284,13 @@ private fun NaviLaneIcon(
         laneIconsApi.getTurnLane(indicator)
     }
 
-    val tint = if (lane.isRecommended) {
-        NavigationColors.maneuverLaneActive
-    } else {
-        NavigationColors.maneuverLaneInactive
-    }
-
+    // Mapbox のレーン drawable は推奨方向を `?attr/maneuverTurnIconColor`、
+    // その他を `?attr/maneuverTurnIconShadowColor` で塗り分けているため、
+    // ColorFilter で一色に潰さず drawable の二色描画をそのまま使う。
     Image(
         modifier = modifier.graphicsLayer { scaleX = if (laneIcon.shouldFlip) -1f else 1f },
         painter = painterResource(laneIcon.drawableResId),
         contentDescription = null,
-        colorFilter = ColorFilter.tint(tint),
     )
 }
 

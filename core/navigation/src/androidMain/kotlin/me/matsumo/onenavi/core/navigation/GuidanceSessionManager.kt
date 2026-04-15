@@ -271,7 +271,23 @@ class GuidanceSessionManager(
             _guidanceUiState.value.currentManeuver?.lanes ?: persistentListOf()
         }
 
-        val currentManeuver = currentStep?.maneuver()?.let { maneuver ->
+        // 表示したい "次のマニューバ" は step の開始地点にあるため、
+        // 現在位置から見て直前に迎える upcomingStep のマニューバを使用する。
+        // currentStep.maneuver() は「このステップに入った時の turn」=既に通過済みのため使わない。
+        val upcomingStep = currentLegProgress?.upcomingStep
+        val currentManeuver = upcomingStep?.maneuver()?.let { maneuver ->
+            ManeuverInfo(
+                type = maneuver.type().orEmpty(),
+                modifier = maneuver.modifier(),
+                drivingSide = upcomingStep.drivingSide(),
+                distanceMeters = currentStepProgress?.distanceRemaining?.toDouble() ?: 0.0,
+                instruction = upcomingStep.name().orEmpty(),
+                roadName = upcomingStep.name()?.takeIf { it.isNotBlank() },
+                destinations = upcomingStep.destinations()?.takeIf { it.isNotBlank() },
+                lanes = existingLanes,
+            )
+        } ?: currentStep?.maneuver()?.let { maneuver ->
+            // upcomingStep が無い最終ステップでは currentStep のマニューバ（arrive 等）を利用する。
             ManeuverInfo(
                 type = maneuver.type().orEmpty(),
                 modifier = maneuver.modifier(),
@@ -284,16 +300,22 @@ class GuidanceSessionManager(
             )
         }
 
-        val nextStep = currentLegProgress?.upcomingStep
-        val nextManeuver = nextStep?.maneuver()?.let { maneuver ->
+        // その先に控える更に次のステップ（upcoming の次）を探す。
+        val legs = routeProgress.navigationRoute.directionsRoute.legs().orEmpty()
+        val curLegIndex = currentLegProgress?.legIndex ?: 0
+        val stepAfterUpcoming = legs.getOrNull(curLegIndex)
+            ?.steps()
+            ?.getOrNull(currentStepIndex + 2)
+
+        val nextManeuver = stepAfterUpcoming?.maneuver()?.let { maneuver ->
             ManeuverInfo(
                 type = maneuver.type().orEmpty(),
                 modifier = maneuver.modifier(),
-                drivingSide = nextStep.drivingSide(),
-                distanceMeters = nextStep.distance(),
-                instruction = nextStep.name().orEmpty(),
-                roadName = nextStep.name()?.takeIf { it.isNotBlank() },
-                destinations = nextStep.destinations()?.takeIf { it.isNotBlank() },
+                drivingSide = stepAfterUpcoming.drivingSide(),
+                distanceMeters = upcomingStep?.distance() ?: stepAfterUpcoming.distance(),
+                instruction = stepAfterUpcoming.name().orEmpty(),
+                roadName = stepAfterUpcoming.name()?.takeIf { it.isNotBlank() },
+                destinations = stepAfterUpcoming.destinations()?.takeIf { it.isNotBlank() },
             )
         }
 
