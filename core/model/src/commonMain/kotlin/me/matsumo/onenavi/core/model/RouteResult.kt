@@ -4,7 +4,7 @@ import androidx.compose.runtime.Immutable
 
 /**
  * ルート検索結果。UI 用の [RouteItem] とプラットフォーム固有のルートオブジェクトを保持する。
- * Android では [platformRoute] に Mapbox の NavigationRoute が入る。
+ * Android では [platformRoute] に [GoogleRoute] が入る。
  *
  * @param item UI 表示用のルート情報
  * @param platformRoute プラットフォーム固有のルートオブジェクト（Android: NavigationRoute）

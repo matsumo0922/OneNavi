@@ -17,8 +17,8 @@ kotlin {
             implementation(libs.androidx.datastore)
             implementation(libs.androidx.datastore.proto)
             implementation(libs.ktor.okhttp)
+            implementation(libs.google.navigation)
             implementation(libs.google.places)
-            implementation(libs.mapbox.android)
         }
 
         iosMain.dependencies {
@@ -56,4 +56,8 @@ dependencies {
     listOf("kspAndroid", "kspIosX64", "kspIosArm64", "kspIosSimulatorArm64").forEach { target ->
         add(target, libs.androidx.room.compiler)
     }
+}
+
+configurations.configureEach {
+    exclude(group = "com.google.android.gms", module = "play-services-maps")
 }

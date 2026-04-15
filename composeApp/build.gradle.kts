@@ -84,6 +84,7 @@ android {
             it.manifestPlaceholders.apply {
                 put("ADMOB_ANDROID_APP_ID", localProperties.getProperty("ADMOB_ANDROID_APP_ID") ?: admobTestAppId)
                 put("ADMOB_IOS_APP_ID", localProperties.getProperty("ADMOB_IOS_APP_ID") ?: admobTestAppId)
+                put("GOOGLE_API_KEY", localProperties.getProperty("GOOGLE_API_KEY") ?: System.getenv("GOOGLE_API_KEY").orEmpty())
             }
 
             if (appName != null) {
@@ -123,8 +124,8 @@ kotlin {
             implementation(libs.koin.androidx.startup)
             implementation(libs.accompanist.permissions)
             implementation(libs.androidx.car.app)
-            implementation(libs.mapbox.androidauto)
-            implementation(libs.bundles.mapbox)
+            implementation(libs.google.navigation)
+            implementation(libs.play.services.location)
         }
     }
 }
@@ -144,7 +145,6 @@ buildkonfig {
         setField("VERSION_CODE", libs.versions.versionCode.get())
 
         setField("DEVELOPER_PIN", "1234")
-        setField("MAPBOX_TOKEN")
         setField("GOOGLE_API_KEY")
         setField("PURCHASE_ANDROID_API_KEY")
         setField("PURCHASE_IOS_API_KEY")

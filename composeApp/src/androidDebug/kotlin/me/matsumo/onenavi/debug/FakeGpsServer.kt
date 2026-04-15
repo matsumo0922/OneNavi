@@ -35,7 +35,7 @@ import kotlinx.serialization.json.Json
  * デバッグ用 Fake GPS サーバー。
  *
  * 2 つの経路で mock 位置を同時注入する:
- * 1. FusedLocationProviderClient.setMockLocation() — Mapbox 等 FusedLocation 利用アプリ向け
+ * 1. FusedLocationProviderClient.setMockLocation() — Google Maps / Navigation SDK 向け
  * 2. LocationManager.setTestProviderLocation() — GPS/Network プロバイダー直接利用アプリ向け
  *
  * 永続ループで 100ms ごとに最新位置を再注入し、実 GPS との競合に勝つ。

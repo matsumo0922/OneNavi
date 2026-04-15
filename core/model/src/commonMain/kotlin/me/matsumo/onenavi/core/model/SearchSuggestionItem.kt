@@ -4,7 +4,7 @@ import androidx.compose.runtime.Immutable
 
 /**
  * 検索候補の表示用データ。
- * Mapbox SearchSuggestion から変換して UI に渡す。
+ * Google Places の候補から変換して UI に渡す。
  */
 @Immutable
 data class SearchSuggestionItem(

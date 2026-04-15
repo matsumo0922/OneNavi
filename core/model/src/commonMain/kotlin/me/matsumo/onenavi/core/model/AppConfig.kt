@@ -8,7 +8,6 @@ data class AppConfig(
     val versionName: String,
     val versionCode: Int,
     val developerPin: String,
-    val mapBoxToken: String,
     val googleApiKey: String,
     val adMobAppId: String,
     val adMobInterstitialAdUnitId: String,
