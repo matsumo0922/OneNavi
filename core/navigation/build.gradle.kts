@@ -19,7 +19,7 @@ kotlin {
 
         androidMain.dependencies {
             implementation(libs.compose.runtime)
-            implementation(libs.google.navigation)
+            implementation(libs.play.services.maps)
             implementation(libs.play.services.location)
         }
     }
