@@ -11,7 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun HomeMapGuidanceReturnButton(
+internal fun NaviReturnButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {

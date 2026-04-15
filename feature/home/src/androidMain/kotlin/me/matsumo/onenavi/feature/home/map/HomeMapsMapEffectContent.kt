@@ -259,10 +259,10 @@ internal fun HomeMapsMapEffectContent(
         }
 
         // マーカー表示: screenState ベース
-        when (val state = screenState) {
+        when (screenState) {
             is HomeMapScreenState.Browsing -> { /* マーカーなし */ }
             is HomeMapScreenState.SearchResultsList -> {
-                state.results.forEachIndexed { index, result ->
+                screenState.results.forEachIndexed { index, result ->
                     HomeMapNumberedPin(
                         point = Point.fromLngLat(result.longitude, result.latitude),
                         number = index + 1,
@@ -271,14 +271,14 @@ internal fun HomeMapsMapEffectContent(
             }
             is HomeMapScreenState.PlaceDetails -> {
                 Marker(
-                    point = Point.fromLngLat(state.place.longitude, state.place.latitude),
+                    point = Point.fromLngLat(screenState.place.longitude, screenState.place.latitude),
                     color = Color.Red,
                     innerColor = Color.White,
                     stroke = Color.White,
                 )
             }
             is HomeMapScreenState.RoutePreview -> {
-                state.waypoints.lastOrNull()?.let { waypoint ->
+                screenState.waypoints.lastOrNull()?.let { waypoint ->
                     Marker(
                         point = Point.fromLngLat(waypoint.longitude, waypoint.latitude),
                         color = Color.Red,
@@ -286,8 +286,8 @@ internal fun HomeMapsMapEffectContent(
                         stroke = Color.White,
                     )
                 }
-                if (state.waypoints.size > 2) {
-                    state.waypoints.drop(1).dropLast(1).forEachIndexed { index, waypoint ->
+                if (screenState.waypoints.size > 2) {
+                    screenState.waypoints.drop(1).dropLast(1).forEachIndexed { index, waypoint ->
                         val point = when (waypoint) {
                             is RouteWaypoint.CurrentLocation -> Point.fromLngLat(waypoint.longitude, waypoint.latitude)
                             is RouteWaypoint.Place -> Point.fromLngLat(waypoint.longitude, waypoint.latitude)
