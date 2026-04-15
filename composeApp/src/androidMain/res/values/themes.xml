@@ -10,7 +10,13 @@
     </style>
 
     <!-- The final theme we use -->
-    <style name="Theme.Matsumo" parent="PlatformAdjusted.Theme.Matsumo" />
+    <style name="Theme.Matsumo" parent="PlatformAdjusted.Theme.Matsumo">
+        <!-- Mapbox turn icon drawables (mapbox_ic_*) reference these theme attributes.
+             Without them, fillColor resolves to transparent and the arrows are invisible.
+             The value here is only a base fill; Compose ColorFilter.tint overrides it at render time. -->
+        <item name="maneuverTurnIconColor">@android:color/white</item>
+        <item name="maneuverTurnIconShadowColor">@android:color/transparent</item>
+    </style>
 
     <style name="NightAdjusted.Theme.Splash" parent="Theme.SplashScreen">
         <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>

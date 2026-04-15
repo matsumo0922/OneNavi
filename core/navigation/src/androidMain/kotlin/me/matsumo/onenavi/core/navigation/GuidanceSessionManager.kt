@@ -15,6 +15,7 @@ import com.mapbox.navigation.core.trip.session.OffRouteObserver
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.core.trip.session.VoiceInstructionsObserver
 import io.github.aakira.napier.Napier
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,7 @@ import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.GuidanceUiState
 import me.matsumo.onenavi.core.model.HighwayInfo
 import me.matsumo.onenavi.core.model.HighwayPointType
+import me.matsumo.onenavi.core.model.LaneInfo
 import me.matsumo.onenavi.core.model.ManeuverInfo
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.RouteStepInfo
@@ -77,6 +79,9 @@ class GuidanceSessionManager(
 
     /** 前回ログ出力した stepIndex（同じステップで繰り返しログを出さないための制御用）。 */
     private var lastLoggedStepIndex: Int = -1
+
+    /** 前回レーン情報を保持していた stepIndex。ステップ遷移時にレーンをクリアするために使用。 */
+    private var lastManeuverStepIndex: Int = -1
 
     // --- Observers ---
 
@@ -235,6 +240,7 @@ class GuidanceSessionManager(
         _arrivalInfo.value = null
         lastRouteProgress = null
         lastLoggedStepIndex = -1
+        lastManeuverStepIndex = -1
         lastPrimaryRouteId = null
         onRouteProgressForRouteLine = null
     }
@@ -257,12 +263,24 @@ class GuidanceSessionManager(
         val currentStepProgress = currentLegProgress?.currentStepProgress
         val currentStep = currentStepProgress?.step
 
+        val currentStepIndex = currentStepProgress?.stepIndex ?: -1
+        val existingLanes = if (currentStepIndex != lastManeuverStepIndex) {
+            lastManeuverStepIndex = currentStepIndex
+            persistentListOf()
+        } else {
+            _guidanceUiState.value.currentManeuver?.lanes ?: persistentListOf()
+        }
+
         val currentManeuver = currentStep?.maneuver()?.let { maneuver ->
             ManeuverInfo(
                 type = maneuver.type().orEmpty(),
                 modifier = maneuver.modifier(),
+                drivingSide = currentStep.drivingSide(),
                 distanceMeters = currentStepProgress.distanceRemaining.toDouble(),
                 instruction = currentStep.name().orEmpty(),
+                roadName = currentStep.name()?.takeIf { it.isNotBlank() },
+                destinations = currentStep.destinations()?.takeIf { it.isNotBlank() },
+                lanes = existingLanes,
             )
         }
 
@@ -271,8 +289,11 @@ class GuidanceSessionManager(
             ManeuverInfo(
                 type = maneuver.type().orEmpty(),
                 modifier = maneuver.modifier(),
+                drivingSide = nextStep.drivingSide(),
                 distanceMeters = nextStep.distance(),
                 instruction = nextStep.name().orEmpty(),
+                roadName = nextStep.name()?.takeIf { it.isNotBlank() },
+                destinations = nextStep.destinations()?.takeIf { it.isNotBlank() },
             )
         }
 
@@ -287,7 +308,6 @@ class GuidanceSessionManager(
         val currentRoadName = currentStep?.name()?.takeIf { it.isNotBlank() }
 
         // ステップが進んだ時だけログ出力（毎秒出すと多すぎるので）
-        val currentStepIndex = currentStepProgress?.stepIndex ?: -1
         if (currentStepIndex != lastLoggedStepIndex) {
             lastLoggedStepIndex = currentStepIndex
             logUpcomingSteps(upcomingSteps)
@@ -502,12 +522,28 @@ class GuidanceSessionManager(
         val primary = bannerInstructions.primary()
         val instruction = primary.text()
 
-        val currentManeuver = _guidanceUiState.value.currentManeuver
-        if (currentManeuver != null && instruction.isNotEmpty()) {
-            _guidanceUiState.value = _guidanceUiState.value.copy(
-                currentManeuver = currentManeuver.copy(instruction = instruction),
-            )
-        }
+        val lanes = bannerInstructions.sub()
+            ?.components()
+            .orEmpty()
+            .filter { it.type() == "lane" }
+            .map { component ->
+                LaneInfo(
+                    directions = component.directions().orEmpty().toImmutableList(),
+                    activeDirection = component.activeDirection(),
+                    isRecommended = component.active() == true,
+                )
+            }
+            .toImmutableList()
+
+        val currentManeuver = _guidanceUiState.value.currentManeuver ?: return
+        val nextInstruction = if (instruction.isNotEmpty()) instruction else currentManeuver.instruction
+
+        _guidanceUiState.value = _guidanceUiState.value.copy(
+            currentManeuver = currentManeuver.copy(
+                instruction = nextInstruction,
+                lanes = lanes,
+            ),
+        )
     }
 
     private fun dumpAllStepsForDebug(navigation: MapboxNavigation) {

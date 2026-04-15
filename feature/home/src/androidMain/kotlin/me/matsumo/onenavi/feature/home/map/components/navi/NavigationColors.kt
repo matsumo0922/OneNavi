@@ -7,9 +7,13 @@ import androidx.compose.ui.graphics.Color
  * Google Maps Android Auto 版を参考にした暫定値。後で一括変更可能。
  */
 object NavigationColors {
-    val maneuverBackground = Color(0xFF1B5E20)
+    val maneuverBackground = Color(0xFF2E63E0)
+    val maneuverSecondaryBackground = Color(0xFF1E4BB8)
     val maneuverText = Color.White
     val maneuverDistance = Color.White
+    val maneuverSecondaryText = Color(0xFFD6DEF5)
+    val maneuverLaneActive = Color.White
+    val maneuverLaneInactive = Color.White.copy(alpha = 0.35f)
 
     val tripCardBackground = Color(0xFF2C2C2C)
     val tripCardText = Color.White
