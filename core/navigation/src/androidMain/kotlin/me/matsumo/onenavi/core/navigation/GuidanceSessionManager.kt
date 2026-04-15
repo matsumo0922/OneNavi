@@ -206,6 +206,8 @@ class GuidanceSessionManager(
         navigation.registerArrivalObserver(arrivalObserver)
         navigation.registerRoutesObserver(routesObserver)
 
+        dumpAllStepsForDebug(navigation)
+
         _navigationState.value = NavigationState.ActiveGuidance
         _guidanceUiState.value = GuidanceUiState.Initial.copy(isTtsAvailable = false)
     }
@@ -506,6 +508,88 @@ class GuidanceSessionManager(
                 currentManeuver = currentManeuver.copy(instruction = instruction),
             )
         }
+    }
+
+    private fun dumpAllStepsForDebug(navigation: MapboxNavigation) {
+        val route = navigation.getNavigationRoutes().firstOrNull() ?: return
+        val directions = route.directionsRoute
+        val legs = directions.legs().orEmpty()
+
+        Napier.d(tag = TAG) {
+            "=== Route: ${directions.distance().toInt()}m / ${directions.duration().toInt()}s / legs=${legs.size} ==="
+        }
+
+        legs.forEachIndexed { legIndex, leg ->
+            val steps = leg.steps().orEmpty()
+            Napier.d(tag = TAG) { "--- Leg $legIndex (steps=${steps.size}): ${leg.summary().orEmpty()} ---" }
+
+            steps.forEachIndexed { stepIndex, step ->
+                val maneuver = step.maneuver()
+                val fields = buildList {
+                    add("${maneuver.type()}${maneuver.modifier()?.let { "/$it" }.orEmpty()}")
+                    add("${step.distance().toInt()}m")
+                    maneuver.instruction()?.takeIf { it.isNotEmpty() }?.let { add("\"$it\"") }
+                    step.name()?.takeIf { it.isNotEmpty() }?.let { add("name=$it") }
+                    step.ref()?.takeIf { it.isNotEmpty() }?.let { add("ref=$it") }
+                    step.destinations()?.takeIf { it.isNotEmpty() }?.let { add("dest=$it") }
+                    step.exits()?.takeIf { it.isNotEmpty() }?.let { add("exitSign=$it") }
+                    maneuver.exit()?.let { add("exitNo=$it") }
+                }
+                Napier.d(tag = TAG) { "[L$legIndex S$stepIndex] ${fields.joinToString(" | ")}" }
+
+                step.intersections().orEmpty().forEach { intersection ->
+                    val parts = buildList {
+                        intersection.classes()?.takeIf { it.isNotEmpty() }?.let { add("classes=$it") }
+                        intersection.tollCollection()?.let {
+                            add("toll=${it.type().orEmpty()}${it.name()?.let { name -> "($name)" }.orEmpty()}")
+                        }
+                        intersection.restStop()?.let {
+                            add("rest=${it.type().orEmpty()}${it.name()?.let { name -> "($name)" }.orEmpty()}")
+                        }
+                        intersection.tunnelName()?.takeIf { it.isNotEmpty() }?.let { add("tunnel=$it") }
+                        if (intersection.railwayCrossing() == true) add("railwayCrossing")
+                        intersection.lanes()?.takeIf { it.isNotEmpty() }?.let { lanes ->
+                            val summary = lanes.joinToString(",") { lane ->
+                                val indications = lane.indications().orEmpty().joinToString("+")
+                                if (lane.active() == true) "[$indications]" else indications
+                            }
+                            add("lanes=$summary")
+                        }
+                    }
+                    if (parts.isNotEmpty()) {
+                        Napier.d(tag = TAG) { "    int: ${parts.joinToString(" | ")}" }
+                    }
+                }
+
+                step.bannerInstructions().orEmpty().forEach { banner ->
+                    val parts = buildList {
+                        add("@${banner.distanceAlongGeometry().toInt()}m")
+                        add("\"${banner.primary().text()}\"")
+                        banner.secondary()?.text()?.takeIf { it.isNotEmpty() }?.let { add("sub1=\"$it\"") }
+                        banner.sub()?.let { sub ->
+                            sub.text().takeIf { it.isNotEmpty() }?.let { add("sub2=\"$it\"") }
+                            val laneComponents = sub.components().orEmpty().filter { it.type() == "lane" }
+                            if (laneComponents.isNotEmpty()) {
+                                val lanes = laneComponents.joinToString(",") { component ->
+                                    val directions = component.directions().orEmpty().joinToString("+")
+                                    if (component.active() == true) "[$directions]" else directions
+                                }
+                                add("lanes=$lanes")
+                            }
+                        }
+                    }
+                    Napier.d(tag = TAG) { "    banner: ${parts.joinToString(" | ")}" }
+                }
+
+                step.voiceInstructions().orEmpty().forEach { voice ->
+                    Napier.d(tag = TAG) {
+                        "    voice: @${voice.distanceAlongGeometry()?.toInt()}m \"${voice.announcement().orEmpty()}\""
+                    }
+                }
+            }
+        }
+
+        Napier.d(tag = TAG) { "=== Route dump end ===" }
     }
 
     companion object {
