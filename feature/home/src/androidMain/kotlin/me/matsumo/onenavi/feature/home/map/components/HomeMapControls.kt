@@ -57,8 +57,9 @@ internal fun HomeMapControls(
     trackingMode: LocationTrackingMode?,
     viewportState: HomeMapViewportState,
     autoFollowOnStart: Boolean,
-    modifier: Modifier = Modifier,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
+    modifier: Modifier = Modifier,
+    onTrackingZoomChanged: (Float) -> Unit,
 ) {
     var lastTrackingMode by remember { mutableStateOf(LocationTrackingMode.TiltedHeading) }
 
@@ -69,7 +70,11 @@ internal fun HomeMapControls(
     }
 
     fun setZoom(zoom: Double) {
+        val nextZoom = (viewportState.cameraState.zoom + zoom.toFloat()).coerceIn(2f, 21f)
         viewportState.zoomBy(zoom.toFloat())
+        if (trackingMode != null) {
+            onTrackingZoomChanged(nextZoom)
+        }
     }
 
     Column(
