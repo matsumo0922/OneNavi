@@ -49,7 +49,7 @@ import me.matsumo.onenavi.feature.home.map.state.HomeMapOverlayState
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
-private const val TRACKING_ZOOM = 16f
+private const val DEFAULT_TRACKING_ZOOM = 17f
 private const val TRACKING_TILT_3D = 45f
 
 @Suppress("ParamsComparedByRef")
@@ -77,6 +77,7 @@ internal fun HomeMapScreenContent(
     val currentBearing by viewModel.cameraManager.currentBearing.collectAsStateWithLifecycle()
 
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
+    var trackingZoom by remember { mutableFloatStateOf(DEFAULT_TRACKING_ZOOM) }
 
     val viewportState = remember { HomeMapViewportState() }
 
@@ -129,7 +130,7 @@ internal fun HomeMapScreenContent(
             LocationTrackingMode.TiltedHeading -> {
                 viewportState.moveTo(
                     point = point,
-                    zoom = TRACKING_ZOOM,
+                    zoom = trackingZoom,
                     tilt = TRACKING_TILT_3D,
                     bearing = currentBearing,
                 )
@@ -138,7 +139,7 @@ internal fun HomeMapScreenContent(
             LocationTrackingMode.TopDownHeading -> {
                 viewportState.moveTo(
                     point = point,
-                    zoom = TRACKING_ZOOM,
+                    zoom = trackingZoom,
                     tilt = 0f,
                     bearing = currentBearing,
                 )
@@ -147,7 +148,7 @@ internal fun HomeMapScreenContent(
             LocationTrackingMode.TopDownNorth -> {
                 viewportState.moveTo(
                     point = point,
-                    zoom = TRACKING_ZOOM,
+                    zoom = trackingZoom,
                     tilt = 0f,
                     bearing = 0f,
                 )
@@ -242,6 +243,7 @@ internal fun HomeMapScreenContent(
                 onNavigationStopped = viewModel::onNavigationStopped,
                 trackingMode = trackingMode,
                 onTrackingModeChanged = { trackingMode = it },
+                onTrackingZoomChanged = { trackingZoom = it },
             )
 
             HomeMapScreenContentTopAppBar(
@@ -294,6 +296,7 @@ private fun BoxScope.HomeMapScreenContentControls(
     onNavigationStopped: () -> Unit,
     trackingMode: LocationTrackingMode?,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
+    onTrackingZoomChanged: (Float) -> Unit,
 ) {
     when (screenState) {
         is HomeMapScreenState.Navigating -> {
@@ -319,6 +322,7 @@ private fun BoxScope.HomeMapScreenContentControls(
                 viewportState = viewportState,
                 autoFollowOnStart = screenState is HomeMapScreenState.Browsing,
                 onTrackingModeChanged = onTrackingModeChanged,
+                onTrackingZoomChanged = onTrackingZoomChanged,
             )
         }
     }
