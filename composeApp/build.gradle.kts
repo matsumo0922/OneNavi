@@ -124,7 +124,6 @@ kotlin {
             implementation(libs.koin.androidx.startup)
             implementation(libs.accompanist.permissions)
             implementation(libs.androidx.car.app)
-            implementation(libs.google.navigation)
             implementation(libs.play.services.location)
         }
     }
