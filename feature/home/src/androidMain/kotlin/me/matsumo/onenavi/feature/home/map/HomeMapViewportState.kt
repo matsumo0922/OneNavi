@@ -28,7 +28,14 @@ class HomeMapViewportState {
         map.setOnCameraMoveStartedListener { reason ->
             isGestureInProgress = reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE
         }
+        map.setOnCameraMoveListener {
+            updateCameraState(map.cameraPosition)
+        }
         map.setOnCameraIdleListener {
+            updateCameraState(map.cameraPosition)
+            isGestureInProgress = false
+        }
+        map.setOnCameraMoveCanceledListener {
             updateCameraState(map.cameraPosition)
             isGestureInProgress = false
         }
