@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mapbox.geojson.Point
+import com.mapbox.maps.ImageHolder
 import com.mapbox.maps.MapView
 import com.mapbox.maps.MapboxExperimental
 import com.mapbox.maps.Style
@@ -25,13 +26,13 @@ import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
 import com.mapbox.maps.extension.compose.annotation.Marker
 import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
 import com.mapbox.maps.extension.compose.style.standard.StandardStyleState
+import com.mapbox.maps.plugin.LocationPuck2D
 import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.plugin.gestures.OnMapClickListener
 import com.mapbox.maps.plugin.gestures.addOnMapClickListener
 import com.mapbox.maps.plugin.gestures.removeOnMapClickListener
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListener
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
-import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.base.route.NavigationRoute
@@ -43,6 +44,7 @@ import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.RouteManager
+import me.matsumo.onenavi.feature.home.R
 import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
 import me.matsumo.onenavi.feature.home.map.components.HomeMapRouteCallout
 import me.matsumo.onenavi.feature.home.map.components.HomeMapWaypointPin
@@ -144,7 +146,9 @@ internal fun HomeMapsMapEffectContent(
             cameraManager.onRouteChanged(currentNavigationRoutes.value.firstOrNull())
 
             view.location.enabled = true
-            view.location.locationPuck = createDefault2DPuck(withBearing = true)
+            view.location.locationPuck = LocationPuck2D(
+                bearingImage = ImageHolder.from(R.drawable.ic_vehicle_puck),
+            )
             view.location.puckBearing = PuckBearing.HEADING
             view.location.puckBearingEnabled = true
 
