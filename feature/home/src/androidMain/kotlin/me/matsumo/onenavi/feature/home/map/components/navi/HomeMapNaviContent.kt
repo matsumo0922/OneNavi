@@ -61,7 +61,7 @@ internal fun HomeMapNaviContent(
 
     Box(modifier) {
         if (currentManeuver != null) {
-            HomeMapGuidanceManeuverPanel(
+            NaviManeuverPanel(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .statusBarsPadding()
@@ -79,7 +79,7 @@ internal fun HomeMapNaviContent(
         }
 
         if (cameraState == NavigationCameraState.IDLE) {
-            HomeMapGuidanceReturnButton(
+            NaviReturnButton(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 130.dp),

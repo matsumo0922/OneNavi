@@ -24,7 +24,7 @@ import me.matsumo.onenavi.core.resource.common_unit_meter
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun HomeMapGuidanceManeuverPanel(
+internal fun NaviManeuverPanel(
     currentManeuver: ManeuverInfo,
     nextManeuver: ManeuverInfo?,
     modifier: Modifier = Modifier,
