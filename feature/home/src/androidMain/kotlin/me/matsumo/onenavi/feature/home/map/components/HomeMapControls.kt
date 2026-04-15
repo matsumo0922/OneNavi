@@ -85,6 +85,7 @@ internal fun HomeMapControls(
         HomeMapCompass(
             bearing = cameraBearing,
             onClicked = {
+                onTrackingZoomChanged(viewportState.cameraState.zoom)
                 val nextMode = when (trackingMode) {
                     LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
                     LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
@@ -113,6 +114,7 @@ internal fun HomeMapControls(
         FloatingActionButton(
             onClick = {
                 val mode = trackingMode ?: lastTrackingMode
+                onTrackingZoomChanged(viewportState.cameraState.zoom)
                 onTrackingModeChanged(mode)
             },
         ) {
