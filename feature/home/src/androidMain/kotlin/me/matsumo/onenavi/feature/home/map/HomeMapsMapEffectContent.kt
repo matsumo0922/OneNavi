@@ -2,6 +2,9 @@ package me.matsumo.onenavi.feature.home.map
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -17,12 +20,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapEffect
-import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
@@ -34,6 +37,7 @@ import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.RouteManager
+import me.matsumo.onenavi.feature.home.R
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 
 private const val TAG = "HomeMapsMap"
@@ -48,6 +52,8 @@ internal fun HomeMapsMapEffectContent(
     screenState: HomeMapScreenState,
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
+    currentLocation: RoutePoint?,
+    currentBearing: Float,
     routeManager: RouteManager,
     cameraManager: CameraManager,
     onMapReady: (GoogleMap) -> Unit,
@@ -66,6 +72,9 @@ internal fun HomeMapsMapEffectContent(
     val currentOnMapReady = rememberUpdatedState(onMapReady)
     val currentOnRouteSelected = rememberUpdatedState(onRouteSelected)
     val currentOnMapLandmarkSelected = rememberUpdatedState(onMapLandmarkSelected)
+    val vehiclePuckIcon = remember(context) {
+        context.createBitmapDescriptor(R.drawable.ic_vehicle_puck)
+    }
 
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
     val cameraPositionState = rememberCameraPositionState {
@@ -81,9 +90,6 @@ internal fun HomeMapsMapEffectContent(
     GoogleMap(
         modifier = modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
-        properties = MapProperties(
-            isMyLocationEnabled = hasLocationPermission,
-        ),
         uiSettings = MapUiSettings(
             compassEnabled = false,
             mapToolbarEnabled = false,
@@ -115,6 +121,17 @@ internal fun HomeMapsMapEffectContent(
                         currentOnRouteSelected.value(index)
                     }
                 },
+            )
+        }
+
+        currentLocation?.let { location ->
+            Marker(
+                state = MarkerState(position = location.toLatLng()),
+                icon = vehiclePuckIcon,
+                flat = true,
+                anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),
+                rotation = currentBearing,
+                zIndex = 4f,
             )
         }
 
@@ -162,6 +179,7 @@ internal fun HomeMapsMapEffectContent(
             googleMap = map
             map.mapType = GoogleMap.MAP_TYPE_NORMAL
             map.isBuildingsEnabled = true
+            map.isMyLocationEnabled = false
             map.setOnMapLoadedCallback {
                 val camera = map.cameraPosition
                 Napier.d(tag = TAG) {
@@ -210,4 +228,15 @@ private fun RouteWaypoint.toRoutePoint(): RoutePoint {
         is RouteWaypoint.CurrentLocation -> RoutePoint(latitude, longitude)
         is RouteWaypoint.Place -> RoutePoint(latitude, longitude)
     }
+}
+
+private fun android.content.Context.createBitmapDescriptor(drawableRes: Int): BitmapDescriptor? {
+    val drawable = AppCompatResources.getDrawable(this, drawableRes) ?: return null
+    val width = drawable.intrinsicWidth.coerceAtLeast(1)
+    val height = drawable.intrinsicHeight.coerceAtLeast(1)
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    drawable.setBounds(0, 0, canvas.width, canvas.height)
+    drawable.draw(canvas)
+    return BitmapDescriptorFactory.fromBitmap(bitmap)
 }

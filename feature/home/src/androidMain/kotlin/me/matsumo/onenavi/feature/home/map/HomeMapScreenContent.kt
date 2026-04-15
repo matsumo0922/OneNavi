@@ -224,6 +224,8 @@ internal fun HomeMapScreenContent(
                 screenState = screenState,
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
+                currentLocation = currentLocation,
+                currentBearing = currentBearing,
                 routeManager = viewModel.routeManager,
                 cameraManager = viewModel.cameraManager,
                 onMapReady = { /* no-op */ },
