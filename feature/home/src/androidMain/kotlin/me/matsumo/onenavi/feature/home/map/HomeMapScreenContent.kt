@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
+import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -48,6 +49,8 @@ import me.matsumo.onenavi.feature.home.map.state.HomeMapOverlayState
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
+private const val TRACKING_ZOOM = 16f
+private const val TRACKING_TILT_3D = 45f
 
 @Suppress("ParamsComparedByRef")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,6 +74,7 @@ internal fun HomeMapScreenContent(
     val waypoints by viewModel.waypoints.collectAsStateWithLifecycle()
     val waypointEditResult by viewModel.waypointEditResult.collectAsStateWithLifecycle()
     val currentLocation by viewModel.cameraManager.currentLocation.collectAsStateWithLifecycle()
+    val currentBearing by viewModel.cameraManager.currentBearing.collectAsStateWithLifecycle()
 
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
 
@@ -114,6 +118,42 @@ internal fun HomeMapScreenContent(
     LaunchedEffect(currentLocation) {
         currentLocation?.let { location ->
             viewModel.onUserLocationUpdated(location.latitude, location.longitude)
+        }
+    }
+
+    LaunchedEffect(trackingMode, currentLocation, currentBearing) {
+        val location = currentLocation ?: return@LaunchedEffect
+        val point = RoutePoint(location.latitude, location.longitude)
+
+        when (trackingMode) {
+            LocationTrackingMode.TiltedHeading -> {
+                viewportState.moveTo(
+                    point = point,
+                    zoom = TRACKING_ZOOM,
+                    tilt = TRACKING_TILT_3D,
+                    bearing = currentBearing,
+                )
+            }
+
+            LocationTrackingMode.TopDownHeading -> {
+                viewportState.moveTo(
+                    point = point,
+                    zoom = TRACKING_ZOOM,
+                    tilt = 0f,
+                    bearing = currentBearing,
+                )
+            }
+
+            LocationTrackingMode.TopDownNorth -> {
+                viewportState.moveTo(
+                    point = point,
+                    zoom = TRACKING_ZOOM,
+                    tilt = 0f,
+                    bearing = 0f,
+                )
+            }
+
+            null -> Unit
         }
     }
 

@@ -64,6 +64,11 @@ class CameraManager(
     /** 最新の端末位置。 */
     val currentLocation: StateFlow<RoutePoint?> = _currentLocation.asStateFlow()
 
+    private val _currentBearing = MutableStateFlow(0f)
+
+    /** 最新の進行方向。 */
+    val currentBearing: StateFlow<Float> = _currentBearing.asStateFlow()
+
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             result.lastLocation?.let(::onLocationUpdated)
@@ -143,6 +148,7 @@ class CameraManager(
 
     private fun onLocationUpdated(location: Location) {
         lastBearing = location.bearing
+        _currentBearing.value = location.bearing
         _currentLocation.value = RoutePoint(
             latitude = location.latitude,
             longitude = location.longitude,
