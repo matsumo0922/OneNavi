@@ -2,11 +2,8 @@ package me.matsumo.onenavi.feature.home.map
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.ComponentCallbacks2
-import android.content.Context
-import android.content.ContextWrapper
 import android.content.pm.PackageManager
-import android.content.res.Configuration
+import android.os.Bundle
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -21,16 +18,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.savedstate.SavedStateRegistryOwner
 import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.PolylineOptions
-import com.google.android.libraries.navigation.NavigationView
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
@@ -38,7 +33,6 @@ import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 
-private const val NAVIGATION_VIEW_SAVED_STATE_KEY = "home_navigation_view_state"
 private const val PRIMARY_ROUTE_WIDTH = 14f
 private const val SECONDARY_ROUTE_WIDTH = 9f
 private const val GOOGLE_BLUE = 0xFF1A73E8.toInt()
@@ -59,38 +53,23 @@ internal fun HomeMapsMapEffectContent(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val savedStateRegistryOwner = remember(context) { context.findSavedStateRegistryOwner() }
-    val restoredNavigationState = remember(savedStateRegistryOwner) {
-        savedStateRegistryOwner?.savedStateRegistry?.consumeRestoredStateForKey(NAVIGATION_VIEW_SAVED_STATE_KEY)
-    }
     val currentRouteResults = rememberUpdatedState(routeResults)
-    val currentScreenState = rememberUpdatedState(screenState)
     val currentSelectedRouteIndex = rememberUpdatedState(selectedRouteIndex)
     val currentOnRouteSelected = rememberUpdatedState(onRouteSelected)
     val currentOnMapLandmarkSelected = rememberUpdatedState(onMapLandmarkSelected)
-    val currentOnMapReady = rememberUpdatedState(onMapReady)
 
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
-    var navigationViewLifecycleDelegate by remember { mutableStateOf<NavigationViewLifecycleDelegate?>(null) }
+    val mapView = rememberMapViewWithLifecycle(lifecycleOwner)
 
     AndroidView(
         modifier = modifier.fillMaxSize(),
-        factory = { viewContext ->
-            NavigationView(viewContext).apply {
-                navigationViewLifecycleDelegate = NavigationViewLifecycleDelegate(
-                    navigationView = this,
-                    initialSavedState = restoredNavigationState,
-                ).also { delegate ->
-                    viewContext.applicationContext.registerComponentCallbacks(delegate)
-                    delegate.moveTo(lifecycleOwner.lifecycle.currentState)
-                }
-
-                setNavigationUiEnabled(false)
+        factory = {
+            mapView.apply {
                 getMapAsync { map ->
                     googleMap = map
                     viewportState.attachMap(map)
                     cameraManager.setupCamera(map)
-                    currentOnMapReady.value(map)
+                    onMapReady(map)
                     configureMap(
                         map = map,
                         hasLocationPermission = ContextCompat.checkSelfPermission(
@@ -108,15 +87,14 @@ internal fun HomeMapsMapEffectContent(
                     )
                     renderMapState(
                         map = map,
-                        screenState = currentScreenState.value,
+                        screenState = screenState,
                         routeResults = currentRouteResults.value,
                         selectedRouteIndex = currentSelectedRouteIndex.value,
                     )
                 }
             }
         },
-        update = { navigationView ->
-            navigationView.setNavigationUiEnabled(false)
+        update = {
             googleMap?.let { map ->
                 renderMapState(
                     map = map,
@@ -133,57 +111,11 @@ internal fun HomeMapsMapEffectContent(
         cameraManager.onRouteChanged(routeResults.firstOrNull()?.googleRoute)
     }
 
-    DisposableEffect(lifecycleOwner, navigationViewLifecycleDelegate) {
-        val delegate = navigationViewLifecycleDelegate ?: return@DisposableEffect onDispose {}
-        val observer = object : DefaultLifecycleObserver {
-            override fun onStart(owner: LifecycleOwner) {
-                delegate.onStart()
-            }
-
-            override fun onResume(owner: LifecycleOwner) {
-                delegate.onResume()
-            }
-
-            override fun onPause(owner: LifecycleOwner) {
-                delegate.onPause()
-            }
-
-            override fun onStop(owner: LifecycleOwner) {
-                delegate.onStop()
-            }
-
-            override fun onDestroy(owner: LifecycleOwner) {
-                delegate.onDestroy()
-            }
-        }
-
-        lifecycleOwner.lifecycle.addObserver(observer)
+    DisposableEffect(Unit) {
         onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    DisposableEffect(savedStateRegistryOwner, navigationViewLifecycleDelegate) {
-        val owner = savedStateRegistryOwner ?: return@DisposableEffect onDispose {}
-        val delegate = navigationViewLifecycleDelegate ?: return@DisposableEffect onDispose {}
-        owner.savedStateRegistry.unregisterSavedStateProvider(NAVIGATION_VIEW_SAVED_STATE_KEY)
-        owner.savedStateRegistry.registerSavedStateProvider(NAVIGATION_VIEW_SAVED_STATE_KEY) {
-            delegate.saveState()
-        }
-        onDispose {
-            owner.savedStateRegistry.unregisterSavedStateProvider(NAVIGATION_VIEW_SAVED_STATE_KEY)
-        }
-    }
-
-    DisposableEffect(context, navigationViewLifecycleDelegate) {
-        val delegate = navigationViewLifecycleDelegate ?: return@DisposableEffect onDispose {}
-        onDispose {
-            context.applicationContext.unregisterComponentCallbacks(delegate)
             googleMap = null
             viewportState.detachMap()
             cameraManager.teardownCamera()
-            delegate.onDestroy()
-            navigationViewLifecycleDelegate = null
         }
     }
 }
@@ -303,101 +235,30 @@ private fun renderMarkers(
     }
 }
 
-private tailrec fun Context.findSavedStateRegistryOwner(): SavedStateRegistryOwner? {
-    return when (this) {
-        is SavedStateRegistryOwner -> this
-        is ContextWrapper -> baseContext.findSavedStateRegistryOwner()
-        else -> null
-    }
-}
-
-private class NavigationViewLifecycleDelegate(
-    private val navigationView: NavigationView,
-    initialSavedState: android.os.Bundle?,
-) : ComponentCallbacks2 {
-    private var isStarted = false
-    private var isResumed = false
-    private var isDestroyed = false
-
-    init {
-        navigationView.onCreate(initialSavedState)
-    }
-
-    fun moveTo(state: Lifecycle.State) {
-        if (isDestroyed) return
-        when {
-            state == Lifecycle.State.DESTROYED -> onDestroy()
-            state.isAtLeast(Lifecycle.State.RESUMED) -> {
-                onStart()
-                onResume()
-            }
-            state.isAtLeast(Lifecycle.State.STARTED) -> {
-                onStart()
-                onPause()
-            }
-            else -> {
-                onPause()
-                onStop()
-            }
+@Composable
+private fun rememberMapViewWithLifecycle(lifecycleOwner: LifecycleOwner): MapView {
+    val context = LocalContext.current
+    val mapView = remember {
+        MapView(context).apply {
+            onCreate(Bundle())
         }
     }
 
-    fun onStart() {
-        if (isDestroyed || isStarted) return
-        navigationView.onStart()
-        isStarted = true
-    }
-
-    fun onResume() {
-        if (isDestroyed || isResumed) return
-        if (!isStarted) {
-            onStart()
+    DisposableEffect(lifecycleOwner, mapView) {
+        val observer = object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) = mapView.onStart()
+            override fun onResume(owner: LifecycleOwner) = mapView.onResume()
+            override fun onPause(owner: LifecycleOwner) = mapView.onPause()
+            override fun onStop(owner: LifecycleOwner) = mapView.onStop()
+            override fun onDestroy(owner: LifecycleOwner) = mapView.onDestroy()
         }
-        navigationView.onResume()
-        isResumed = true
-    }
-
-    fun onPause() {
-        if (isDestroyed || !isResumed) return
-        navigationView.onPause()
-        isResumed = false
-    }
-
-    fun onStop() {
-        if (isDestroyed || !isStarted) return
-        onPause()
-        navigationView.onStop()
-        isStarted = false
-    }
-
-    fun onDestroy() {
-        if (isDestroyed) return
-        onStop()
-        navigationView.onDestroy()
-        isDestroyed = true
-    }
-
-    fun saveState(): android.os.Bundle {
-        return android.os.Bundle().also(navigationView::onSaveInstanceState)
-    }
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        if (!isDestroyed) {
-            navigationView.onConfigurationChanged(newConfig)
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
-    override fun onTrimMemory(level: Int) {
-        if (!isDestroyed) {
-            navigationView.onTrimMemory(level)
-        }
-    }
-
-    @Deprecated("Deprecated in Android")
-    @Suppress("DEPRECATION")
-    override fun onLowMemory() {
-        onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
-    }
+    return mapView
 }
 
 private fun RoutePoint.toLatLng(): LatLng {
