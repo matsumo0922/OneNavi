@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.feature.home.map
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -72,11 +73,12 @@ internal fun HomeMapsMapEffectContent(
     val currentOnMapReady = rememberUpdatedState(onMapReady)
     val currentOnRouteSelected = rememberUpdatedState(onRouteSelected)
     val currentOnMapLandmarkSelected = rememberUpdatedState(onMapLandmarkSelected)
-    val vehiclePuckIcon = remember(context) {
-        context.createBitmapDescriptor(R.drawable.ic_vehicle_puck)
+    val vehiclePuckBitmap = remember(context) {
+        context.createBitmap(R.drawable.ic_vehicle_puck)
     }
 
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
+    var vehiclePuckIcon by remember { mutableStateOf<BitmapDescriptor?>(null) }
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(
             LatLng(
@@ -125,14 +127,16 @@ internal fun HomeMapsMapEffectContent(
         }
 
         currentLocation?.let { location ->
-            Marker(
-                state = MarkerState(position = location.toLatLng()),
-                icon = vehiclePuckIcon,
-                flat = true,
-                anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),
-                rotation = currentBearing,
-                zIndex = 4f,
-            )
+            vehiclePuckIcon?.let { icon ->
+                Marker(
+                    state = MarkerState(position = location.toLatLng()),
+                    icon = icon,
+                    flat = true,
+                    anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),
+                    rotation = currentBearing,
+                    zIndex = 4f,
+                )
+            }
         }
 
         when (screenState) {
@@ -177,6 +181,9 @@ internal fun HomeMapsMapEffectContent(
 
         MapEffect(hasLocationPermission) { map ->
             googleMap = map
+            if (vehiclePuckIcon == null) {
+                vehiclePuckIcon = BitmapDescriptorFactory.fromBitmap(vehiclePuckBitmap)
+            }
             map.mapType = GoogleMap.MAP_TYPE_NORMAL
             map.isBuildingsEnabled = true
             map.isMyLocationEnabled = false
@@ -230,13 +237,13 @@ private fun RouteWaypoint.toRoutePoint(): RoutePoint {
     }
 }
 
-private fun android.content.Context.createBitmapDescriptor(drawableRes: Int): BitmapDescriptor? {
-    val drawable = AppCompatResources.getDrawable(this, drawableRes) ?: return null
+private fun Context.createBitmap(drawableRes: Int): Bitmap {
+    val drawable = checkNotNull(AppCompatResources.getDrawable(this, drawableRes))
     val width = drawable.intrinsicWidth.coerceAtLeast(1)
     val height = drawable.intrinsicHeight.coerceAtLeast(1)
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     drawable.setBounds(0, 0, canvas.width, canvas.height)
     drawable.draw(canvas)
-    return BitmapDescriptorFactory.fromBitmap(bitmap)
+    return bitmap
 }
