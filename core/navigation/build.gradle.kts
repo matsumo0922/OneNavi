@@ -19,7 +19,8 @@ kotlin {
 
         androidMain.dependencies {
             implementation(libs.compose.runtime)
-            implementation(libs.bundles.mapbox)
+            implementation(libs.google.navigation)
+            implementation(libs.play.services.location)
         }
     }
 }
