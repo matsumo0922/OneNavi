@@ -1,0 +1,12 @@
+OneNavi
+Copyright (c) matsumo0922
+
+This product includes software developed by third parties.
+
+---
+
+Maneuver icons under
+core/resource/src/commonMain/composeResources/drawable/direction_*.xml
+are derived from mapbox/directions-icons
+(https://github.com/mapbox/directions-icons) and are dedicated to the
+public domain under CC0-1.0.
