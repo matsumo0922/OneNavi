@@ -1,20 +1,25 @@
 package me.matsumo.onenavi.core.datasource
 
+import android.content.Context
+import android.content.pm.PackageManager
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import me.matsumo.onenavi.core.model.GoogleRoute
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteResult
 import me.matsumo.onenavi.core.model.RouteStepInfo
+import java.security.MessageDigest
 
 /**
  * Google Routes API を使用したルート検索データソース。
@@ -22,6 +27,7 @@ import me.matsumo.onenavi.core.model.RouteStepInfo
  * Navigation SDK には、Routes API の `routeToken` を渡して同一ルートで案内を開始する。
  */
 class GoogleRoutesDataSource(
+    private val context: Context,
     private val httpClient: HttpClient,
     private val googleApiKey: String,
 ) : RouteDataSource {
@@ -93,10 +99,17 @@ class GoogleRoutesDataSource(
             contentType(ContentType.Application.Json)
             header("X-Goog-Api-Key", googleApiKey)
             header("X-Goog-FieldMask", ROUTES_FIELD_MASK)
+            header("X-Android-Package", context.packageName)
+            header("X-Android-Cert", context.signingCertificateSha1())
             setBody(request)
-        }.body<ComputeRoutesResponse>()
+        }
+        val responseBody = response.bodyAsText()
+        check(response.status.isSuccess()) {
+            "Routes API request failed. status=${response.status.value}, body=$responseBody"
+        }
+        val decodedResponse = json.decodeFromString<ComputeRoutesResponse>(responseBody)
 
-        return response.routes.orEmpty().mapIndexed { index, route ->
+        return decodedResponse.routes.orEmpty().mapIndexed { index, route ->
             val geometry = route.polyline?.encodedPolyline
                 ?.decodePolyline()
                 .orEmpty()
@@ -214,6 +227,10 @@ class GoogleRoutesDataSource(
     companion object {
         private const val ROUTES_ENDPOINT = "https://routes.googleapis.com/directions/v2:computeRoutes"
         private const val MAX_ROAD_NAMES = 2
+        private val json = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
 
         private const val ROUTES_FIELD_MASK =
             "routes.routeToken," +
@@ -225,6 +242,17 @@ class GoogleRoutesDataSource(
                 "routes.legs.steps.distanceMeters," +
                 "routes.legs.steps.navigationInstruction"
     }
+}
+
+private fun Context.signingCertificateSha1(): String {
+    val packageInfo = packageManager.getPackageInfo(
+        packageName,
+        PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong()),
+    )
+    val signature = packageInfo.signingInfo?.apkContentsSigners?.firstOrNull()
+        ?: error("No signing certificate found for package $packageName")
+    val digest = MessageDigest.getInstance("SHA-1").digest(signature.toByteArray())
+    return digest.joinToString(separator = "") { byte -> "%02X".format(byte) }
 }
 
 private fun String.decodePolyline(): List<RoutePoint> {

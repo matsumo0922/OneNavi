@@ -30,6 +30,7 @@ internal actual val dataSourcePlatformModule: Module = module {
     single<RouteDataSource> {
         val appConfig: AppConfig = get()
         GoogleRoutesDataSource(
+            context = get(),
             httpClient = get<HttpClient>(),
             googleApiKey = appConfig.googleApiKey,
         )
