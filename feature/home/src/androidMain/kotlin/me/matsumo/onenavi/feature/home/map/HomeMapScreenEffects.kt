@@ -177,7 +177,7 @@ private suspend fun handleEffect(
             }
         }
         is HomeMapEffect.UseNavigationLocationProvider -> {
-            // Google Maps の現在地レイヤーと FusedLocationProvider を使うため切替不要。
+            cameraManager.setNavigationLocationProviderEnabled(effect.enabled)
         }
     }
 }

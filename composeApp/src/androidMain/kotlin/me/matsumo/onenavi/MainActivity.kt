@@ -26,17 +26,23 @@ import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.dialogs.init
 import me.matsumo.onenavi.components.PermissionScreen
 import me.matsumo.onenavi.core.model.Theme
+import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
 import me.matsumo.onenavi.core.ui.theme.shouldUseDarkTheme
+import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel by viewModel<MainViewModel>()
+    private val navigationSdkManager by inject<NavigationSdkManager>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        if (hasRequiredPermissions()) {
+            navigationSdkManager.initialize(this)
+        }
         enableEdgeToEdge()
         setContent {
             val userData by viewModel.setting.collectAsStateWithLifecycle(null)
@@ -84,6 +90,13 @@ class MainActivity : ComponentActivity() {
 
         FileKit.init(this)
         initAdsSdk()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (hasRequiredPermissions()) {
+            navigationSdkManager.initialize(this)
+        }
     }
 
     private fun initAdsSdk() {

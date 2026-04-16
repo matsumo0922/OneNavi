@@ -17,9 +17,14 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import me.matsumo.onenavi.core.model.RoutePoint
 
 enum class CameraState {
@@ -40,14 +45,17 @@ data class MapPadding(
  */
 class CameraManager(
     private val context: Context,
+    private val navigationSdkManager: NavigationSdkManager,
 ) {
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val fusedLocationClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
 
     private var googleMap: GoogleMap? = null
     private var lastBearing: Float = 0f
     private var currentPadding = MapPadding()
+    private var useNavigationLocationProvider = false
 
     private val _cameraState = MutableStateFlow(CameraState.IDLE)
 
@@ -71,8 +79,19 @@ class CameraManager(
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
+            if (useNavigationLocationProvider) return
             result.lastLocation?.let(::onLocationUpdated)
         }
+    }
+
+    init {
+        navigationSdkManager.roadSnappedLocation
+            .onEach { location ->
+                if (useNavigationLocationProvider && location != null) {
+                    onLocationUpdated(location)
+                }
+            }
+            .launchIn(scope)
     }
 
     fun register() {
@@ -131,6 +150,13 @@ class CameraManager(
 
     fun toggleCompass() {
         requestCameraFollowing(pitch3D = !_isFollowing3D.value)
+    }
+
+    fun setNavigationLocationProviderEnabled(enabled: Boolean) {
+        useNavigationLocationProvider = enabled
+        if (enabled) {
+            navigationSdkManager.roadSnappedLocation.value?.let(::onLocationUpdated)
+        }
     }
 
     fun applyNavigationPadding(
