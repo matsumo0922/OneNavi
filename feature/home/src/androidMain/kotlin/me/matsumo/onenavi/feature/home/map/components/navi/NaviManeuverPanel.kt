@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
@@ -27,6 +26,7 @@ import me.matsumo.onenavi.core.model.ManeuverInfo
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_kilometer
 import me.matsumo.onenavi.core.resource.common_unit_meter
+import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.floor
 
@@ -144,7 +144,6 @@ private fun NaviManeuverBottomSection(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 lanes = currentManeuver.lanes,
-                drivingSide = currentManeuver.drivingSide,
             )
         }
     } else if (nextManeuver != null) {
@@ -169,7 +168,6 @@ private fun NaviManeuverBottomSection(
 @Composable
 private fun NaviLaneRow(
     lanes: ImmutableList<LaneInfo>,
-    drivingSide: String?,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -181,7 +179,6 @@ private fun NaviLaneRow(
             NaviLaneIcon(
                 modifier = Modifier.size(36.dp),
                 lane = lane,
-                drivingSide = drivingSide,
             )
         }
     }
@@ -215,52 +212,28 @@ private fun ManeuverTurnIcon(
     maneuver: ManeuverInfo,
     modifier: Modifier = Modifier,
 ) {
-    Text(
+    ManeuverIcon(
         modifier = modifier,
-        text = remember(maneuver.type, maneuver.modifier) {
-            maneuverArrow(maneuver.type, maneuver.modifier)
-        },
-        color = NavigationColors.maneuverText,
-        fontSize = 34.sp,
-        fontWeight = FontWeight.Bold,
+        type = maneuver.type,
+        maneuverModifier = maneuver.modifier,
+        contentDescription = null,
+        tint = NavigationColors.maneuverText,
     )
 }
 
 @Composable
 private fun NaviLaneIcon(
     lane: LaneInfo,
-    drivingSide: String?,
     modifier: Modifier = Modifier,
 ) {
-    val arrow = remember(lane, drivingSide) {
-        val direction = lane.activeDirection ?: lane.directions.firstOrNull()
-        maneuverArrow(type = "turn", modifier = direction)
-    }
-
-    Text(
+    val direction = lane.activeDirection ?: lane.directions.firstOrNull()
+    ManeuverIcon(
         modifier = modifier,
-        text = arrow,
-        color = if (lane.isRecommended) NavigationColors.maneuverText else NavigationColors.maneuverSecondaryText,
-        fontSize = 26.sp,
-        fontWeight = FontWeight.Bold,
+        type = "turn",
+        maneuverModifier = direction,
+        contentDescription = null,
+        tint = if (lane.isRecommended) NavigationColors.maneuverText else NavigationColors.maneuverSecondaryText,
     )
-}
-
-private fun maneuverArrow(type: String, modifier: String?): String {
-    return when {
-        type == "arrive" -> "◎"
-        type == "merge" -> "⇥"
-        type == "fork" && modifier?.contains("left") == true -> "↖"
-        type == "fork" && modifier?.contains("right") == true -> "↗"
-        modifier == "left" -> "←"
-        modifier == "right" -> "→"
-        modifier == "slight left" -> "↖"
-        modifier == "slight right" -> "↗"
-        modifier == "sharp left" -> "↙"
-        modifier == "sharp right" -> "↘"
-        modifier == "uturn" -> "↶"
-        else -> "↑"
-    }
 }
 
 /**
