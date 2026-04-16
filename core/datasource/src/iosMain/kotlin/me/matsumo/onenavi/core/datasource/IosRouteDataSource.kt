@@ -12,6 +12,7 @@ class IosRouteDataSource : RouteDataSource {
         originLongitude: Double,
         destinationLatitude: Double,
         destinationLongitude: Double,
+        intermediateWaypoints: List<Pair<Double, Double>>,
     ): Result<List<RouteResult>> {
         return Result.failure(UnsupportedOperationException("Route search is not available on iOS yet"))
     }

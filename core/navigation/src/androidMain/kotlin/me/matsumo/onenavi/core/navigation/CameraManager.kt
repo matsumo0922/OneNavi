@@ -1,218 +1,158 @@
 package me.matsumo.onenavi.core.navigation
 
-import com.mapbox.geojson.Point
-import com.mapbox.maps.EdgeInsets
-import com.mapbox.maps.MapView
-import com.mapbox.maps.plugin.animation.camera
-import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
-import com.mapbox.navigation.base.route.NavigationRoute
-import com.mapbox.navigation.core.MapboxNavigation
-import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
-import com.mapbox.navigation.core.lifecycle.MapboxNavigationObserver
-import com.mapbox.navigation.core.trip.session.LocationMatcherResult
-import com.mapbox.navigation.core.trip.session.LocationObserver
-import com.mapbox.navigation.ui.maps.camera.NavigationCamera
-import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
-import com.mapbox.navigation.ui.maps.camera.lifecycle.NavigationBasicGesturesHandler
-import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraState
-import com.mapbox.navigation.ui.maps.camera.transition.NavigationCameraTransitionOptions
-import com.mapbox.navigation.ui.maps.location.NavigationLocationProvider
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.os.Looper
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import me.matsumo.onenavi.core.model.RoutePoint
 
-/**
- * カメラ制御と位置情報管理を担当するクラス。
- * NavigationCamera / ViewportDataSource / NavigationLocationProvider のライフサイクルを管理し、
- * Following / Overview / Idle モードの切り替えを提供する。
- */
-@OptIn(ExperimentalPreviewMapboxNavigationAPI::class)
-class CameraManager {
+enum class CameraState {
+    IDLE,
+    FOLLOWING,
+    OVERVIEW,
+}
 
-    private var mapboxNavigation: MapboxNavigation? = null
+data class MapPadding(
+    val top: Int = 0,
+    val left: Int = 0,
+    val bottom: Int = 0,
+    val right: Int = 0,
+)
 
-    var navigationCamera: NavigationCamera? = null
-        private set
+class CameraManager(
+    private val context: Context,
+) {
 
-    var viewportDataSource: MapboxNavigationViewportDataSource? = null
-        private set
+    private val fusedLocationClient: FusedLocationProviderClient =
+        LocationServices.getFusedLocationProviderClient(context)
 
-    val navigationLocationProvider = NavigationLocationProvider()
+    private var lastBearing: Float = 0f
+    private var followingPadding = MapPadding()
+    private var overviewPadding = MapPadding()
 
-    private val _cameraState = MutableStateFlow(NavigationCameraState.IDLE)
-
-    /** 現在のカメラ状態。 */
-    val cameraState: StateFlow<NavigationCameraState> = _cameraState.asStateFlow()
+    private val _cameraState = MutableStateFlow(CameraState.IDLE)
+    val cameraState: StateFlow<CameraState> = _cameraState.asStateFlow()
 
     private val _isFollowing3D = MutableStateFlow(true)
-
-    /** Following 3D モードかどうか。false なら Following 2D（北固定）。 */
     val isFollowing3D: StateFlow<Boolean> = _isFollowing3D.asStateFlow()
 
-    private val _currentLocation = MutableStateFlow<Point?>(null)
+    private val _currentLocation = MutableStateFlow<RoutePoint?>(null)
+    val currentLocation: StateFlow<RoutePoint?> = _currentLocation.asStateFlow()
 
-    /** 最新の enhanced location。 */
-    val currentLocation: StateFlow<Point?> = _currentLocation.asStateFlow()
+    private val _currentBearing = MutableStateFlow(0f)
+    val currentBearing: StateFlow<Float> = _currentBearing.asStateFlow()
 
-    private val locationObserver = object : LocationObserver {
-        override fun onNewRawLocation(rawLocation: com.mapbox.common.location.Location) {
-            // raw location は使わない、enhanced location を優先
-        }
+    private val _mapPadding = MutableStateFlow(MapPadding())
+    val mapPadding: StateFlow<MapPadding> = _mapPadding.asStateFlow()
 
-        override fun onNewLocationMatcherResult(locationMatcherResult: LocationMatcherResult) {
-            val enhancedLocation = locationMatcherResult.enhancedLocation
-            navigationLocationProvider.changePosition(
-                location = enhancedLocation,
-                keyPoints = locationMatcherResult.keyPoints,
-            )
-            viewportDataSource?.onLocationChanged(enhancedLocation)
-            viewportDataSource?.evaluate()
-
-            _currentLocation.value = Point.fromLngLat(
-                enhancedLocation.longitude,
-                enhancedLocation.latitude,
-            )
-        }
-    }
-
-    private val navigationObserver = object : MapboxNavigationObserver {
-        override fun onAttached(mapboxNavigation: MapboxNavigation) {
-            this@CameraManager.mapboxNavigation = mapboxNavigation
-            mapboxNavigation.registerLocationObserver(locationObserver)
-        }
-
-        override fun onDetached(mapboxNavigation: MapboxNavigation) {
-            mapboxNavigation.unregisterLocationObserver(locationObserver)
-            this@CameraManager.mapboxNavigation = null
+    private val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(result: LocationResult) {
+            result.lastLocation?.let(::onLocationUpdated)
         }
     }
 
     fun register() {
-        MapboxNavigationApp.registerObserver(navigationObserver)
+        startLocationUpdates()
     }
 
     fun unregister() {
-        MapboxNavigationApp.unregisterObserver(navigationObserver)
+        fusedLocationClient.removeLocationUpdates(locationCallback)
     }
 
-    /**
-     * MapView が利用可能になった時点で Camera を初期化する。
-     */
-    fun setupCamera(mapView: MapView) {
-        val mapboxMap = mapView.mapboxMap
-        val dataSource = MapboxNavigationViewportDataSource(mapboxMap)
-
-        dataSource.options.followingFrameOptions.apply {
-            bearingSmoothing.enabled = false
-            frameGeometryAfterManeuver.enabled = false
-            pitchNearManeuvers.enabled = false
-        }
-
-        viewportDataSource = dataSource
-
-        val camera = NavigationCamera(
-            mapboxMap,
-            mapView.camera,
-            dataSource,
-        )
-        navigationCamera = camera
-
-        mapView.camera.addCameraAnimationsLifecycleListener(
-            NavigationBasicGesturesHandler(camera),
-        )
-
-        camera.registerNavigationCameraStateChangeObserver { state ->
-            _cameraState.value = state
+    fun onRouteChanged(route: Any?) {
+        if (route == null) {
+            _cameraState.value = CameraState.IDLE
+            _mapPadding.value = MapPadding()
         }
     }
 
-    /**
-     * Camera リソースを破棄する。
-     */
-    fun teardownCamera() {
-        navigationCamera = null
-        viewportDataSource = null
-    }
-
-    /**
-     * ルート変更時に ViewportDataSource を更新する。
-     */
-    fun onRouteChanged(route: NavigationRoute?) {
-        if (route != null) {
-            viewportDataSource?.onRouteChanged(route)
-        } else {
-            viewportDataSource?.clearRouteData()
-        }
-        viewportDataSource?.evaluate()
-    }
-
-    /**
-     * RouteProgress 変更時に ViewportDataSource を更新する。
-     */
-    fun onRouteProgressChanged(routeProgress: com.mapbox.navigation.base.trip.model.RouteProgress) {
-        viewportDataSource?.onRouteProgressChanged(routeProgress)
-        viewportDataSource?.evaluate()
-    }
-
-    /**
-     * カメラを Following モードに遷移する。
-     *
-     * @param pitch3D true なら 3D パースペクティブ（45°）、false なら 2D 俯瞰（0°、北固定）
-     */
     fun requestCameraFollowing(pitch3D: Boolean = _isFollowing3D.value) {
         _isFollowing3D.value = pitch3D
-        viewportDataSource?.followingPitchPropertyOverride(if (pitch3D) FOLLOWING_3D_PITCH else FOLLOWING_2D_PITCH)
-        viewportDataSource?.evaluate()
-        navigationCamera?.requestNavigationCameraToFollowing()
+        _cameraState.value = CameraState.FOLLOWING
+        updateCurrentPadding()
     }
 
-    /**
-     * カメラを Overview モードに遷移する（ルート全体表示）。
-     */
-    fun requestCameraOverview(maxDurationMs: Long = DEFAULT_OVERVIEW_DURATION_MS) {
-        val transitionOptions = NavigationCameraTransitionOptions.Builder()
-            .maxDuration(maxDurationMs)
-            .build()
-        navigationCamera?.requestNavigationCameraToOverview(transitionOptions)
+    fun requestCameraOverview() {
+        _cameraState.value = CameraState.OVERVIEW
+        updateCurrentPadding()
     }
 
-    /**
-     * カメラを Idle モードに遷移する。
-     */
     fun requestCameraIdle() {
-        navigationCamera?.requestNavigationCameraToIdle()
+        _cameraState.value = CameraState.IDLE
+        updateCurrentPadding()
     }
 
-    /**
-     * コンパスをトグルする（3D ↔ 2D）。
-     */
     fun toggleCompass() {
         requestCameraFollowing(pitch3D = !_isFollowing3D.value)
     }
 
-    /**
-     * ナビゲーション用の Following パディングを設定する。
-     * 自車位置を画面手前（下部）に配置するため、上方に大きめの余白を設定する。
-     */
-    fun applyNavigationPadding(followingPadding: EdgeInsets, overviewPadding: EdgeInsets) {
-        viewportDataSource?.followingPadding = followingPadding
-        viewportDataSource?.overviewPadding = overviewPadding
-        viewportDataSource?.evaluate()
+    fun applyNavigationPadding(
+        followingPadding: MapPadding,
+        overviewPadding: MapPadding,
+    ) {
+        this.followingPadding = followingPadding
+        this.overviewPadding = overviewPadding
+        updateCurrentPadding()
     }
 
-    /**
-     * パディングをデフォルトに戻す。
-     */
     fun clearNavigationPadding() {
-        viewportDataSource?.followingPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0)
-        viewportDataSource?.overviewPadding = EdgeInsets(0.0, 0.0, 0.0, 0.0)
-        viewportDataSource?.followingPitchPropertyOverride(null)
-        viewportDataSource?.evaluate()
+        followingPadding = MapPadding()
+        overviewPadding = MapPadding()
+        _mapPadding.value = MapPadding()
+    }
+
+    private fun updateCurrentPadding() {
+        _mapPadding.value = when (_cameraState.value) {
+            CameraState.FOLLOWING -> followingPadding
+            CameraState.OVERVIEW -> overviewPadding
+            CameraState.IDLE -> MapPadding()
+        }
+    }
+
+    private fun onLocationUpdated(location: Location) {
+        lastBearing = location.bearing
+        _currentBearing.value = lastBearing
+        _currentLocation.value = RoutePoint(
+            latitude = location.latitude,
+            longitude = location.longitude,
+        )
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startLocationUpdates() {
+        if (!hasLocationPermission()) return
+
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MS)
+            .setMinUpdateIntervalMillis(LOCATION_FASTEST_INTERVAL_MS)
+            .build()
+
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) {
+                onLocationUpdated(location)
+            }
+        }
+        fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+    }
+
+    private fun hasLocationPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
     }
 
     companion object {
-        private const val DEFAULT_OVERVIEW_DURATION_MS = 500L
-        private const val FOLLOWING_3D_PITCH = 45.0
-        private const val FOLLOWING_2D_PITCH = 0.0
+        private const val LOCATION_INTERVAL_MS = 1000L
+        private const val LOCATION_FASTEST_INTERVAL_MS = 500L
     }
 }

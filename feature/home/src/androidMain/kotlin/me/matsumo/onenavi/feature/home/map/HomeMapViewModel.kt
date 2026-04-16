@@ -86,7 +86,7 @@ class HomeMapViewModel(
         routeManager.routes,
     ) { routeResults, navigationRoutes ->
         val primaryRouteId = navigationRoutes.firstOrNull()?.id
-        routeResults.indexOfFirst { it.navigationRoute.id == primaryRouteId }.takeIf { it >= 0 } ?: 0
+        routeResults.indexOfFirst { it.googleRoute.id == primaryRouteId }.takeIf { it >= 0 } ?: 0
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -162,15 +162,6 @@ class HomeMapViewModel(
             .distinctUntilChanged()
             .onEach { query -> performSearch(query) }
             .launchIn(viewModelScope)
-
-        // Arrival 検知 → 即ナビ停止扱い（将来 Arrived UI 実装時はこの監視を外す）
-        guidanceSessionManager.navigationState
-            .onEach { navState ->
-                if (navState is NavigationState.Arrival) {
-                    onNavigationStopped()
-                }
-            }
-            .launchIn(viewModelScope)
     }
 
     override fun onCleared() {
@@ -211,10 +202,7 @@ class HomeMapViewModel(
                         onNavigationStopped()
                     }
                     is HomeMapScreenState.Arrived -> {
-                        _routeResults.value = persistentListOf()
-                        _waypoints.value = persistentListOf()
-                        _selectedResult.value = null
-                        routeManager.clearRoutes()
+                        onArrivalDismissed()
                     }
                     else -> { /* Browsing: 何もしない */ }
                 }
@@ -226,7 +214,6 @@ class HomeMapViewModel(
         guidanceSessionManager.startSession()
         _effects.trySend(HomeMapEffect.EnterGuidanceFollowing)
         _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = true))
-        _effects.trySend(HomeMapEffect.UseNavigationLocationProvider(enabled = true))
     }
 
     fun onNavigationStopped() {
@@ -234,12 +221,23 @@ class HomeMapViewModel(
         guidanceSessionManager.setNavigationState(NavigationState.Browsing)
         _isRouteSearching.value = true
 
-        _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = false))
-        _effects.trySend(HomeMapEffect.UseNavigationLocationProvider(enabled = false))
+        clearGuidanceEffects()
         _effects.trySend(HomeMapEffect.MoveCameraToRouteOverview)
 
         // waypoints を保持してルート再検索（旧ルートは表示し続け、再検索完了で差し替え）
         searchRoutesFromWaypoints(_waypoints.value)
+    }
+
+    internal fun onArrivalDismissed() {
+        guidanceSessionManager.stopSession()
+        guidanceSessionManager.setNavigationState(NavigationState.Browsing)
+        _routeResults.value = persistentListOf()
+        _waypoints.value = persistentListOf()
+        _selectedResult.value = null
+        _topBarMode.value = RoutePreviewTopBarMode.Viewing
+        _isRouteSearching.value = false
+        routeManager.clearRoutes()
+        clearGuidanceEffects()
     }
 
     internal fun onQueryChanged(query: String) {
@@ -345,7 +343,7 @@ class HomeMapViewModel(
     }
 
     fun onRouteSelected(index: Int) {
-        val routeId = _routeResults.value.getOrNull(index)?.navigationRoute?.id ?: return
+        val routeId = _routeResults.value.getOrNull(index)?.googleRoute?.id ?: return
         routeManager.selectRoute(routeId)
         _effects.trySend(HomeMapEffect.MoveCameraToRouteOverview)
     }
@@ -423,7 +421,7 @@ class HomeMapViewModel(
                     val featureResults = coreResults.mapNotNull { it.toFeatureRouteResult() }
                     _topBarMode.value = RoutePreviewTopBarMode.Viewing
 
-                    routeManager.setRoutes(featureResults.map { it.navigationRoute })
+                    routeManager.setRoutes(featureResults.map { it.googleRoute })
                     guidanceSessionManager.setNavigationState(NavigationState.RoutePreview)
                     _routeResults.value = featureResults.toImmutableList()
                     _isRouteSearching.value = false
@@ -576,6 +574,10 @@ class HomeMapViewModel(
         if (place != null) {
             _effects.trySend(HomeMapEffect.MoveCameraToPlace(place))
         }
+    }
+
+    private fun clearGuidanceEffects() {
+        _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = false))
     }
 
     fun onDismissSearchResults() {

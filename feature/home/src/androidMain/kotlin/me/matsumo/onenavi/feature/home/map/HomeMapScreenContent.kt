@@ -2,7 +2,6 @@ package me.matsumo.onenavi.feature.home.map
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,13 +31,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.mapbox.maps.MapView
-import com.mapbox.maps.MapboxExperimental
-import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
-import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
-import com.mapbox.maps.extension.compose.style.standard.LightPresetValue
-import com.mapbox.maps.extension.compose.style.standard.rememberStandardStyleState
 import kotlinx.collections.immutable.ImmutableList
+import me.matsumo.onenavi.core.model.ArrivalInfo
+import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -47,6 +42,7 @@ import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
+import me.matsumo.onenavi.feature.home.map.components.navi.HomeMapArrivalContent
 import me.matsumo.onenavi.feature.home.map.components.navi.HomeMapNaviContent
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapRouteTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapTopAppBar
@@ -55,9 +51,11 @@ import me.matsumo.onenavi.feature.home.map.state.HomeMapOverlayState
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 
 private val SHEET_PEEK_HEIGHT_DEFAULT = 200.dp
+private const val DEFAULT_TRACKING_ZOOM = 17f
+private const val TRACKING_TILT_3D = 45f
 
 @Suppress("ParamsComparedByRef")
-@OptIn(ExperimentalMaterial3Api::class, MapboxExperimental::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun HomeMapScreenContent(
     viewModel: HomeMapViewModel,
@@ -77,37 +75,16 @@ internal fun HomeMapScreenContent(
     val selectedRouteIndex by viewModel.selectedRouteIndex.collectAsStateWithLifecycle()
     val waypoints by viewModel.waypoints.collectAsStateWithLifecycle()
     val waypointEditResult by viewModel.waypointEditResult.collectAsStateWithLifecycle()
+    val currentLocation by viewModel.cameraManager.currentLocation.collectAsStateWithLifecycle()
+    val currentBearing by viewModel.cameraManager.currentBearing.collectAsStateWithLifecycle()
+    val navigationCameraState by viewModel.cameraManager.cameraState.collectAsStateWithLifecycle()
+    val isNavigationFollowing3D by viewModel.cameraManager.isFollowing3D.collectAsStateWithLifecycle()
+    val arrivalInfo by viewModel.guidanceSessionManager.arrivalInfo.collectAsStateWithLifecycle()
 
-    var mapView by remember { mutableStateOf<MapView?>(null) }
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
-    var deviceBearing by remember { mutableStateOf(0.0) }
+    var trackingZoom by remember { mutableFloatStateOf(DEFAULT_TRACKING_ZOOM) }
 
-    val isDarkTheme = isSystemInDarkTheme()
-    val viewportState = rememberMapViewportState()
-    val standardStyleState = rememberStandardStyleState {
-        configurationsState.lightPreset = if (isDarkTheme) LightPresetValue.NIGHT else LightPresetValue.DAY
-        interactionsState.onPoiClicked { poiFeature, context ->
-            val name = runCatching { poiFeature.name }.getOrNull()
-            val point = context.coordinateInfo.coordinate
-
-            viewModel.onMapLandmarkSelected(
-                name = name,
-                latitude = point.latitude(),
-                longitude = point.longitude(),
-            )
-            true
-        }
-        interactionsState.onMapLongClicked { context ->
-            val point = context.coordinateInfo.coordinate
-
-            viewModel.onMapLandmarkSelected(
-                name = null,
-                latitude = point.latitude(),
-                longitude = point.longitude(),
-            )
-            true
-        }
-    }
+    val viewportState = rememberHomeMapViewportState()
 
     // 設計書では allowSheetHide 廃止としたが、BottomSheetState.hide() が confirmValueChange を経由するため
     // プログラムからの hide を許可するフラグとして残す必要がある
@@ -144,6 +121,57 @@ internal fun HomeMapScreenContent(
         }
     }
 
+    LaunchedEffect(currentLocation) {
+        currentLocation?.let { location ->
+            viewModel.onUserLocationUpdated(location.latitude, location.longitude)
+        }
+    }
+
+    LaunchedEffect(trackingMode, currentLocation, currentBearing, screenState, navigationCameraState, isNavigationFollowing3D) {
+        val location = currentLocation ?: return@LaunchedEffect
+        val point = RoutePoint(location.latitude, location.longitude)
+
+        when {
+            screenState is HomeMapScreenState.Navigating && navigationCameraState == me.matsumo.onenavi.core.navigation.CameraState.FOLLOWING -> {
+                viewportState.moveTo(
+                    point = point,
+                    zoom = trackingZoom,
+                    tilt = if (isNavigationFollowing3D) TRACKING_TILT_3D else 0f,
+                    bearing = if (isNavigationFollowing3D) currentBearing else 0f,
+                )
+            }
+
+            trackingMode == LocationTrackingMode.TiltedHeading -> {
+                viewportState.moveTo(
+                    point = point,
+                    zoom = trackingZoom,
+                    tilt = TRACKING_TILT_3D,
+                    bearing = currentBearing,
+                )
+            }
+
+            trackingMode == LocationTrackingMode.TopDownHeading -> {
+                viewportState.moveTo(
+                    point = point,
+                    zoom = trackingZoom,
+                    tilt = 0f,
+                    bearing = currentBearing,
+                )
+            }
+
+            trackingMode == LocationTrackingMode.TopDownNorth -> {
+                viewportState.moveTo(
+                    point = point,
+                    zoom = trackingZoom,
+                    tilt = 0f,
+                    bearing = 0f,
+                )
+            }
+
+            else -> Unit
+        }
+    }
+
     // ── 副作用 ──
 
     HomeMapScreenSheetEffect(
@@ -160,18 +188,12 @@ internal fun HomeMapScreenContent(
         onTrackingModeCleared = { trackingMode = null },
     )
 
-    HomeMapScreenThemeEffect(
-        isDarkTheme = isDarkTheme,
-        standardStyleState = standardStyleState,
-    )
-
     HomeMapScreenCameraEffect(
-        screenStateProvider = { viewModel.screenState.value },
+        screenState = screenState,
         effects = viewModel.effects,
         routeManager = viewModel.routeManager,
         cameraManager = viewModel.cameraManager,
-        routeResultsProvider = { viewModel.routeResults.value },
-        mapView = mapView,
+        routeResults = routeResults,
         viewportState = viewportState,
         sheetPeekHeightPx = with(density) {
             if (shouldShowSheet) sheetPeekHeight.toPx() else 0f
@@ -213,17 +235,14 @@ internal fun HomeMapScreenContent(
         ) {
             HomeMapsMapEffectContent(
                 viewportState = viewportState,
-                standardStyleState = standardStyleState,
-                sheetVisibleHeight = sheetVisibleHeight,
                 screenState = screenState,
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
-                routeManager = viewModel.routeManager,
+                currentLocation = currentLocation,
+                currentBearing = currentBearing,
                 cameraManager = viewModel.cameraManager,
-                onMapViewChanged = { mapView = it },
-                onUserLocationUpdated = viewModel::onUserLocationUpdated,
+                onMapLandmarkSelected = viewModel::onMapLandmarkSelected,
                 onRouteSelected = viewModel::onRouteSelected,
-                onBearingChanged = { deviceBearing = it },
             )
 
             HomeMapScreenContentControls(
@@ -236,9 +255,11 @@ internal fun HomeMapScreenContent(
                     if (shouldShowSheet) sheetPeekHeight.toPx() else 0f
                 },
                 onNavigationStopped = viewModel::onNavigationStopped,
-                deviceBearing = deviceBearing,
+                onArrivalDismissed = viewModel::onArrivalDismissed,
+                arrivalInfo = arrivalInfo,
                 trackingMode = trackingMode,
                 onTrackingModeChanged = { trackingMode = it },
+                onTrackingZoomChanged = { trackingZoom = it },
             )
 
             HomeMapScreenContentTopAppBar(
@@ -284,14 +305,16 @@ internal fun HomeMapScreenContent(
 private fun BoxScope.HomeMapScreenContentControls(
     screenState: HomeMapScreenState,
     sheetVisibleHeight: Dp,
-    viewportState: MapViewportState,
+    viewportState: HomeMapViewportState,
     guidanceSessionManager: GuidanceSessionManager,
     cameraManager: CameraManager,
     bottomSheetPeekHeightPx: Float,
     onNavigationStopped: () -> Unit,
-    deviceBearing: Double,
+    onArrivalDismissed: () -> Unit,
+    arrivalInfo: ArrivalInfo?,
     trackingMode: LocationTrackingMode?,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
+    onTrackingZoomChanged: (Float) -> Unit,
 ) {
     when (screenState) {
         is HomeMapScreenState.Navigating -> {
@@ -303,6 +326,23 @@ private fun BoxScope.HomeMapScreenContentControls(
                 onNavigationStopped = onNavigationStopped,
             )
         }
+        is HomeMapScreenState.Arrived -> {
+            val destinationName = (screenState.destination as? RouteWaypoint.Place)?.name
+
+            HomeMapArrivalContent(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        bottom = 24.dp,
+                    ),
+                arrivalInfo = arrivalInfo,
+                destinationName = destinationName,
+                onFinishClicked = onArrivalDismissed,
+            )
+        }
         else -> {
             HomeMapControls(
                 modifier = Modifier
@@ -312,12 +352,12 @@ private fun BoxScope.HomeMapScreenContentControls(
                         end = 16.dp,
                     )
                     .offset(y = -sheetVisibleHeight),
-                cameraBearing = viewportState.cameraState?.bearing ?: 0.0,
-                deviceBearing = deviceBearing,
+                cameraBearing = viewportState.cameraState.bearing,
                 trackingMode = trackingMode,
                 viewportState = viewportState,
                 autoFollowOnStart = screenState is HomeMapScreenState.Browsing,
                 onTrackingModeChanged = onTrackingModeChanged,
+                onTrackingZoomChanged = onTrackingZoomChanged,
             )
         }
     }
@@ -334,7 +374,7 @@ private fun BoxScope.HomeMapScreenContentTopAppBar(
     selectedResult: SearchResultItem?,
     waypoints: ImmutableList<RouteWaypoint>,
     waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
-    viewportState: MapViewportState,
+    viewportState: HomeMapViewportState,
     onQueryChanged: (String) -> Unit,
     onSearch: (String, Double?, Double?) -> Unit,
     onSuggestionSelected: (SearchSuggestionItem) -> Unit,

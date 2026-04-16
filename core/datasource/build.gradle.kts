@@ -18,7 +18,6 @@ kotlin {
             implementation(libs.androidx.datastore.proto)
             implementation(libs.ktor.okhttp)
             implementation(libs.google.places)
-            implementation(libs.mapbox.android)
         }
 
         iosMain.dependencies {

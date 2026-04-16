@@ -1,27 +1,26 @@
 package me.matsumo.onenavi.feature.home.map.components
 
-import android.content.res.ColorStateList
-import android.util.TypedValue
-import android.view.LayoutInflater
-import android.view.View
-import android.widget.FrameLayout
-import android.widget.TextView
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.Immutable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.viewinterop.AndroidView
-import com.mapbox.geojson.Point
-import com.mapbox.maps.MapboxExperimental
-import com.mapbox.maps.ViewAnnotationAnchor
-import com.mapbox.maps.ViewAnnotationAnchorConfig
-import com.mapbox.maps.extension.compose.annotation.ViewAnnotation
-import com.mapbox.maps.viewannotation.OnViewAnnotationUpdatedListener
-import com.mapbox.maps.viewannotation.annotationAnchors
-import com.mapbox.maps.viewannotation.geometry
-import com.mapbox.maps.viewannotation.viewAnnotationOptions
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.MarkerComposable
+import com.google.maps.android.compose.MarkerState
 import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.common.formatYen
 import me.matsumo.onenavi.core.resource.Res
@@ -32,146 +31,120 @@ import me.matsumo.onenavi.core.resource.home_map_route_result_general_road
 import me.matsumo.onenavi.core.resource.home_map_route_result_toll_road
 import me.matsumo.onenavi.feature.home.map.RouteResult
 import org.jetbrains.compose.resources.stringResource
-import com.mapbox.navigation.ui.maps.R as NavR
 
-/**
- * ルート吹き出し。
- * Mapbox SDK の 9-patch drawable を流用し、ViewAnnotation composable で
- * 指定座標に配置する。アンカー位置の変更に応じて矢印の向きを自動切り替えする。
- */
-@Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
-@OptIn(MapboxExperimental::class)
 @Composable
 internal fun HomeMapRouteCallout(
-    point: Point,
+    position: LatLng,
     routeResult: RouteResult,
     isPrimary: Boolean,
-    style: RouteCalloutStyle,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var currentAnchor by remember { mutableStateOf(ViewAnnotationAnchor.BOTTOM_LEFT) }
+    val dayLabel = stringResource(Res.string.common_unit_day)
+    val hourLabel = stringResource(Res.string.common_unit_hour)
+    val minuteLabel = stringResource(Res.string.common_unit_minute)
+    val tollRoadLabel = stringResource(Res.string.home_map_route_result_toll_road)
+    val generalRoadLabel = stringResource(Res.string.home_map_route_result_general_road)
+    val style = RouteCalloutStyle.forRoute(isPrimary)
+    val tollFee = routeResult.item.tollFee
 
-    ViewAnnotation(
-        modifier = modifier,
-        options = viewAnnotationOptions {
-            geometry(point)
-            allowOverlap(true)
-            allowOverlapWithPuck(true)
-            ignoreCameraPadding(true)
-            priority(if (isPrimary) 0 else 1)
-            annotationAnchors(
-                { anchor(ViewAnnotationAnchor.BOTTOM_LEFT) },
-                { anchor(ViewAnnotationAnchor.BOTTOM_RIGHT) },
-                { anchor(ViewAnnotationAnchor.TOP_LEFT) },
-                { anchor(ViewAnnotationAnchor.TOP_RIGHT) },
-            )
-        },
-        onUpdatedListener = object : OnViewAnnotationUpdatedListener {
-            override fun onViewAnnotationAnchorUpdated(
-                view: View,
-                anchor: ViewAnnotationAnchorConfig,
-            ) {
-                currentAnchor = anchor.anchor
-            }
+    val durationText = formatDuration(
+        totalSeconds = routeResult.item.durationSeconds,
+        dayLabel = dayLabel,
+        hourLabel = hourLabel,
+        minuteLabel = minuteLabel,
+    )
+    val tollText = when {
+        tollFee != null -> formatYen(tollFee)
+        routeResult.item.hasTolls -> tollRoadLabel
+        else -> generalRoadLabel
+    }
+
+    MarkerComposable(
+        keys = arrayOf<Any>(
+            position,
+            routeResult.item.durationSeconds,
+            tollFee ?: -1,
+            routeResult.item.hasTolls,
+            isPrimary,
+        ),
+        state = MarkerState(position = position),
+        anchor = androidx.compose.ui.geometry.Offset(0.5f, 1f),
+        zIndex = if (isPrimary) 3f else 2f,
+        onClick = {
+            onClick()
+            true
         },
     ) {
-        HomeMapRouteCalloutContent(
-            routeResult = routeResult,
-            style = style,
-            anchor = currentAnchor,
-            onClick = onClick,
-        )
+        Column(
+            modifier = modifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = style.backgroundColor,
+                        shape = RoundedCornerShape(16.dp),
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = durationText,
+                        color = style.textColor,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = tollText,
+                        color = style.textColor.copy(alpha = if (isPrimary) 0.92f else 0.78f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+            Canvas(
+                modifier = Modifier.size(width = 18.dp, height = 10.dp),
+            ) {
+                val path = Path().apply {
+                    moveTo(size.width / 2f, size.height)
+                    lineTo(0f, 0f)
+                    lineTo(size.width, 0f)
+                    close()
+                }
+                drawPath(
+                    path = path,
+                    color = style.backgroundColor,
+                )
+            }
+        }
     }
 }
 
-@Composable
-private fun HomeMapRouteCalloutContent(
-    routeResult: RouteResult,
-    style: RouteCalloutStyle,
-    anchor: ViewAnnotationAnchor,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+/**
+ * ルートプレビュー用吹き出しの視覚スタイル。
+ *
+ * @param backgroundColor 吹き出し背景色
+ * @param textColor 吹き出し文字色
+ */
+@Immutable
+private data class RouteCalloutStyle(
+    val backgroundColor: Color,
+    val textColor: Color,
 ) {
-    val durationText = formatDuration(
-        totalSeconds = routeResult.item.durationSeconds,
-        dayLabel = stringResource(Res.string.common_unit_day),
-        hourLabel = stringResource(Res.string.common_unit_hour),
-        minuteLabel = stringResource(Res.string.common_unit_minute),
-    )
-    val tollLabel = buildTollLabel(
-        routeResult = routeResult,
-        tollRoadLabel = stringResource(Res.string.home_map_route_result_toll_road),
-        generalRoadLabel = stringResource(Res.string.home_map_route_result_general_road),
-    )
-    val displayText = "$durationText\n$tollLabel"
-
-    val bgRes = anchorToBgRes(anchor)
-    val shadowRes = anchorToShadowRes(anchor)
-
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx ->
-            val wrapper = FrameLayout(ctx).apply {
-                layoutParams = FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
+    companion object {
+        fun forRoute(isPrimary: Boolean): RouteCalloutStyle {
+            return if (isPrimary) {
+                RouteCalloutStyle(
+                    backgroundColor = Color(0xFF4285F4),
+                    textColor = Color.White,
+                )
+            } else {
+                RouteCalloutStyle(
+                    backgroundColor = Color.White,
+                    textColor = Color(0xFF202124),
                 )
             }
-
-            LayoutInflater.from(ctx).inflate(
-                NavR.layout.mapbox_navigation_route_callout,
-                wrapper,
-                true,
-            )
-
-            wrapper.setOnClickListener { onClick() }
-            wrapper
-        },
-        update = { wrapper ->
-            val shapeView = wrapper.findViewById<TextView>(NavR.id.shape)
-            val etaView = wrapper.findViewById<TextView>(NavR.id.eta)
-
-            shapeView.text = displayText
-            shapeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, style.textSizeSp)
-            shapeView.backgroundTintList = ColorStateList.valueOf(style.shadowColor)
-            shapeView.setBackgroundResource(shadowRes)
-
-            etaView.text = displayText
-            etaView.setTextSize(TypedValue.COMPLEX_UNIT_SP, style.textSizeSp)
-            etaView.setTextColor(style.textColor)
-            etaView.backgroundTintList = ColorStateList.valueOf(style.backgroundColor)
-            etaView.setBackgroundResource(bgRes)
-        },
-    )
-}
-
-private fun anchorToBgRes(anchor: ViewAnnotationAnchor): Int = when (anchor) {
-    ViewAnnotationAnchor.BOTTOM_LEFT -> NavR.drawable.mapbox_ic_route_callout_bottom_left
-    ViewAnnotationAnchor.BOTTOM_RIGHT -> NavR.drawable.mapbox_ic_route_callout_bottom_right
-    ViewAnnotationAnchor.TOP_LEFT -> NavR.drawable.mapbox_ic_route_callout_top_left
-    ViewAnnotationAnchor.TOP_RIGHT -> NavR.drawable.mapbox_ic_route_callout_top_right
-    else -> NavR.drawable.mapbox_ic_route_callout_bottom_left
-}
-
-private fun anchorToShadowRes(anchor: ViewAnnotationAnchor): Int = when (anchor) {
-    ViewAnnotationAnchor.BOTTOM_LEFT -> NavR.drawable.mapbox_ic_route_callout_bottom_left_shadow
-    ViewAnnotationAnchor.BOTTOM_RIGHT -> NavR.drawable.mapbox_ic_route_callout_bottom_right_shadow
-    ViewAnnotationAnchor.TOP_LEFT -> NavR.drawable.mapbox_ic_route_callout_top_left_shadow
-    ViewAnnotationAnchor.TOP_RIGHT -> NavR.drawable.mapbox_ic_route_callout_top_right_shadow
-    else -> NavR.drawable.mapbox_ic_route_callout_bottom_left_shadow
-}
-
-private fun buildTollLabel(
-    routeResult: RouteResult,
-    tollRoadLabel: String,
-    generalRoadLabel: String,
-): String {
-    val item = routeResult.item
-    val fee = item.tollFee
-    return when {
-        fee != null -> formatYen(fee)
-        item.hasTolls -> tollRoadLabel
-        else -> generalRoadLabel
+        }
     }
 }

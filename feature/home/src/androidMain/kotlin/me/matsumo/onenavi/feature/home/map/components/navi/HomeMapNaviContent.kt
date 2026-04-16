@@ -20,10 +20,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
-import com.mapbox.maps.EdgeInsets
-import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraState
 import me.matsumo.onenavi.core.navigation.CameraManager
+import me.matsumo.onenavi.core.navigation.CameraState
 import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
+import me.matsumo.onenavi.core.navigation.MapPadding
 
 @Composable
 internal fun HomeMapNaviContent(
@@ -53,8 +53,14 @@ internal fun HomeMapNaviContent(
     val topOverlayBottomPx = if (currentManeuver != null) maneuverPanelBottomPx else 0f
 
     LaunchedEffect(topOverlayBottomPx, bottomSheetPeekHeightPx) {
-        val followingPadding = EdgeInsets(topOverlayBottomPx.toDouble(), 0.0, bottomSheetPeekHeightPx.toDouble(), 0.0)
-        val overviewPadding = EdgeInsets(topOverlayBottomPx.toDouble(), 0.0, bottomSheetPeekHeightPx.toDouble(), 0.0)
+        val followingPadding = MapPadding(
+            top = topOverlayBottomPx.toInt(),
+            bottom = bottomSheetPeekHeightPx.toInt(),
+        )
+        val overviewPadding = MapPadding(
+            top = topOverlayBottomPx.toInt(),
+            bottom = bottomSheetPeekHeightPx.toInt(),
+        )
 
         cameraManager.applyNavigationPadding(followingPadding, overviewPadding)
     }
@@ -78,7 +84,7 @@ internal fun HomeMapNaviContent(
             )
         }
 
-        if (cameraState == NavigationCameraState.IDLE) {
+        if (cameraState == CameraState.IDLE) {
             NaviReturnButton(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)

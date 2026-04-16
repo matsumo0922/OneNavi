@@ -1,6 +1,5 @@
 package me.matsumo.onenavi.feature.home.map.components.navi
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,17 +16,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import com.mapbox.navigation.tripdata.maneuver.api.MapboxLaneIconsApi
-import com.mapbox.navigation.tripdata.maneuver.api.MapboxTurnIconsApi
-import com.mapbox.navigation.tripdata.maneuver.model.LaneIndicator
-import com.mapbox.navigation.tripdata.maneuver.model.TurnIconResources
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.model.LaneInfo
@@ -44,9 +36,6 @@ internal fun NaviManeuverPanel(
     nextManeuver: ManeuverInfo?,
     modifier: Modifier = Modifier,
 ) {
-    val turnIconsApi = remember { MapboxTurnIconsApi(TurnIconResources.defaultIconSet()) }
-    val laneIconsApi = remember { MapboxLaneIconsApi() }
-
     val meterLabel = stringResource(Res.string.common_unit_meter)
     val kilometerLabel = stringResource(Res.string.common_unit_kilometer)
 
@@ -69,15 +58,13 @@ internal fun NaviManeuverPanel(
             maneuver = currentManeuver,
             meterLabel = meterLabel,
             kilometerLabel = kilometerLabel,
-            turnIconsApi = turnIconsApi,
             shape = topShape,
         )
 
         NaviManeuverBottomSection(
             currentManeuver = currentManeuver,
             nextManeuver = nextManeuver,
-            turnIconsApi = turnIconsApi,
-            laneIconsApi = laneIconsApi,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -87,7 +74,6 @@ private fun NaviManeuverTopSection(
     maneuver: ManeuverInfo,
     meterLabel: String,
     kilometerLabel: String,
-    turnIconsApi: MapboxTurnIconsApi,
     shape: androidx.compose.ui.graphics.Shape,
     modifier: Modifier = Modifier,
 ) {
@@ -114,8 +100,6 @@ private fun NaviManeuverTopSection(
             ManeuverTurnIcon(
                 modifier = Modifier.size(48.dp),
                 maneuver = maneuver,
-                turnIconsApi = turnIconsApi,
-                tint = NavigationColors.maneuverText,
             )
 
             Column(
@@ -144,8 +128,6 @@ private fun NaviManeuverTopSection(
 private fun NaviManeuverBottomSection(
     currentManeuver: ManeuverInfo,
     nextManeuver: ManeuverInfo?,
-    turnIconsApi: MapboxTurnIconsApi,
-    laneIconsApi: MapboxLaneIconsApi,
     modifier: Modifier = Modifier,
 ) {
     val hasLanes = currentManeuver.lanes.isNotEmpty()
@@ -153,7 +135,7 @@ private fun NaviManeuverBottomSection(
 
     if (hasLanes) {
         Surface(
-            modifier = modifier.fillMaxWidth(),
+            modifier = modifier,
             shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
             color = NavigationColors.maneuverSecondaryBackground,
         ) {
@@ -163,7 +145,6 @@ private fun NaviManeuverBottomSection(
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 lanes = currentManeuver.lanes,
                 drivingSide = currentManeuver.drivingSide,
-                laneIconsApi = laneIconsApi,
             )
         }
     } else if (nextManeuver != null) {
@@ -180,7 +161,6 @@ private fun NaviManeuverBottomSection(
             NaviNextManeuverHint(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                 maneuver = nextManeuver,
-                turnIconsApi = turnIconsApi,
             )
         }
     }
@@ -190,7 +170,6 @@ private fun NaviManeuverBottomSection(
 private fun NaviLaneRow(
     lanes: ImmutableList<LaneInfo>,
     drivingSide: String?,
-    laneIconsApi: MapboxLaneIconsApi,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -203,7 +182,6 @@ private fun NaviLaneRow(
                 modifier = Modifier.size(36.dp),
                 lane = lane,
                 drivingSide = drivingSide,
-                laneIconsApi = laneIconsApi,
             )
         }
     }
@@ -212,7 +190,6 @@ private fun NaviLaneRow(
 @Composable
 private fun NaviNextManeuverHint(
     maneuver: ManeuverInfo,
-    turnIconsApi: MapboxTurnIconsApi,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -229,8 +206,6 @@ private fun NaviNextManeuverHint(
         ManeuverTurnIcon(
             modifier = Modifier.size(20.dp),
             maneuver = maneuver,
-            turnIconsApi = turnIconsApi,
-            tint = NavigationColors.maneuverSecondaryText,
         )
     }
 }
@@ -238,32 +213,16 @@ private fun NaviNextManeuverHint(
 @Composable
 private fun ManeuverTurnIcon(
     maneuver: ManeuverInfo,
-    turnIconsApi: MapboxTurnIconsApi,
-    tint: Color,
     modifier: Modifier = Modifier,
 ) {
-    val turnIcon = remember(
-        maneuver.type,
-        maneuver.modifier,
-        maneuver.degrees,
-        maneuver.drivingSide,
-    ) {
-        turnIconsApi.generateTurnIcon(
-            maneuver.type.takeIf { it.isNotBlank() },
-            maneuver.degrees?.toFloat(),
-            maneuver.modifier,
-            maneuver.drivingSide,
-        ).value
-    }
-
-    val iconResId = turnIcon?.icon ?: return
-    val shouldFlip = turnIcon.shouldFlipIcon
-
-    Image(
-        modifier = modifier.graphicsLayer { scaleX = if (shouldFlip) -1f else 1f },
-        painter = painterResource(iconResId),
-        contentDescription = null,
-        colorFilter = ColorFilter.tint(tint),
+    Text(
+        modifier = modifier,
+        text = remember(maneuver.type, maneuver.modifier) {
+            maneuverArrow(maneuver.type, maneuver.modifier)
+        },
+        color = NavigationColors.maneuverText,
+        fontSize = 34.sp,
+        fontWeight = FontWeight.Bold,
     )
 }
 
@@ -271,27 +230,37 @@ private fun ManeuverTurnIcon(
 private fun NaviLaneIcon(
     lane: LaneInfo,
     drivingSide: String?,
-    laneIconsApi: MapboxLaneIconsApi,
     modifier: Modifier = Modifier,
 ) {
-    val laneIcon = remember(lane, drivingSide) {
-        val indicator = LaneIndicator.Builder()
-            .isActive(lane.isRecommended)
-            .directions(lane.directions)
-            .activeDirection(lane.activeDirection)
-            .drivingSide(drivingSide ?: "right")
-            .build()
-        laneIconsApi.getTurnLane(indicator)
+    val arrow = remember(lane, drivingSide) {
+        val direction = lane.activeDirection ?: lane.directions.firstOrNull()
+        maneuverArrow(type = "turn", modifier = direction)
     }
 
-    // Mapbox のレーン drawable は推奨方向を `?attr/maneuverTurnIconColor`、
-    // その他を `?attr/maneuverTurnIconShadowColor` で塗り分けているため、
-    // ColorFilter で一色に潰さず drawable の二色描画をそのまま使う。
-    Image(
-        modifier = modifier.graphicsLayer { scaleX = if (laneIcon.shouldFlip) -1f else 1f },
-        painter = painterResource(laneIcon.drawableResId),
-        contentDescription = null,
+    Text(
+        modifier = modifier,
+        text = arrow,
+        color = if (lane.isRecommended) NavigationColors.maneuverText else NavigationColors.maneuverSecondaryText,
+        fontSize = 26.sp,
+        fontWeight = FontWeight.Bold,
     )
+}
+
+private fun maneuverArrow(type: String, modifier: String?): String {
+    return when {
+        type == "arrive" -> "◎"
+        type == "merge" -> "⇥"
+        type == "fork" && modifier?.contains("left") == true -> "↖"
+        type == "fork" && modifier?.contains("right") == true -> "↗"
+        modifier == "left" -> "←"
+        modifier == "right" -> "→"
+        modifier == "slight left" -> "↖"
+        modifier == "slight right" -> "↗"
+        modifier == "sharp left" -> "↙"
+        modifier == "sharp right" -> "↘"
+        modifier == "uturn" -> "↶"
+        else -> "↑"
+    }
 }
 
 /**

@@ -1,103 +1,48 @@
 package me.matsumo.onenavi.core.navigation
 
-import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
-import com.mapbox.navigation.base.route.NavigationRoute
-import com.mapbox.navigation.core.MapboxNavigation
-import com.mapbox.navigation.core.directions.session.RoutesObserver
-import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
-import com.mapbox.navigation.core.lifecycle.MapboxNavigationObserver
-import com.mapbox.navigation.core.routealternatives.AlternativeRouteMetadata
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import me.matsumo.onenavi.core.model.GoogleRoute
 
 /**
- * ルートの保持・選択・RoutesObserver による一元受信を管理するクラス。
- * RoutesObserver を source of truth とし、ルート変更（初回設定・リルート・トラフィックリフレッシュ・代替ルート探索）を
- * 全てこのクラス経由で受信する。
- *
- * RouteLineApi / RouteLineView は MapView の Style が必要なため、UI 層に残す。
- * このクラスはデータ管理のみを担当する。
+ * Google ルートの保持・選択を管理するクラス。
  */
-@OptIn(ExperimentalPreviewMapboxNavigationAPI::class)
 class RouteManager {
 
-    private var mapboxNavigation: MapboxNavigation? = null
-
-    private val _routes = MutableStateFlow<List<NavigationRoute>>(emptyList())
+    private val _routes = MutableStateFlow<List<GoogleRoute>>(emptyList())
 
     /** 現在のルート一覧（プライマリ + 代替ルート）。 */
-    val routes: StateFlow<List<NavigationRoute>> = _routes.asStateFlow()
-
-    private val _alternativesMetadata = MutableStateFlow<List<AlternativeRouteMetadata>>(emptyList())
-
-    private var lastRouteIds: List<String> = emptyList()
-
-    private val routesObserver = RoutesObserver { result ->
-        val newRoutes = result.navigationRoutes
-        val newIds = newRoutes.map { it.id }
-
-        if (newIds != lastRouteIds) {
-            lastRouteIds = newIds
-            _routes.value = newRoutes
-            _alternativesMetadata.value = mapboxNavigation
-                ?.getAlternativeMetadataFor(newRoutes)
-                .orEmpty()
-        }
-    }
-
-    private val navigationObserver = object : MapboxNavigationObserver {
-        override fun onAttached(mapboxNavigation: MapboxNavigation) {
-            this@RouteManager.mapboxNavigation = mapboxNavigation
-            mapboxNavigation.registerRoutesObserver(routesObserver)
-        }
-
-        override fun onDetached(mapboxNavigation: MapboxNavigation) {
-            mapboxNavigation.unregisterRoutesObserver(routesObserver)
-            this@RouteManager.mapboxNavigation = null
-        }
-    }
+    val routes: StateFlow<List<GoogleRoute>> = _routes.asStateFlow()
 
     fun register() {
-        MapboxNavigationApp.registerObserver(navigationObserver)
+        // no-op
     }
 
     fun unregister() {
-        MapboxNavigationApp.unregisterObserver(navigationObserver)
+        // no-op
     }
 
     /**
-     * ルートを Navigation SDK に登録する。
-     * RoutesObserver 経由で StateFlow が自動更新される。
+     * ルートを登録する。先頭がプライマリルート。
      */
-    fun setRoutes(navigationRoutes: List<NavigationRoute>) {
-        mapboxNavigation?.setNavigationRoutes(navigationRoutes)
+    fun setRoutes(routes: List<GoogleRoute>) {
+        _routes.value = routes
     }
 
     /**
-     * 指定ルートを先頭にした並び順を返す。
-     * Mapbox Navigation SDK は先頭のルートをプライマリとして描画する。
-     */
-    private fun reorderedRoutes(primaryRouteId: String): List<NavigationRoute>? {
-        val current = _routes.value
-        val primaryRoute = current.firstOrNull { it.id == primaryRouteId } ?: return null
-
-        return buildList {
-            add(primaryRoute)
-            current.forEach { route ->
-                if (route.id != primaryRouteId) add(route)
-            }
-        }
-    }
-
-    /**
-     * 選択ルートを切り替える。
+     * 選択ルートを先頭へ並べ替える。
      */
     fun selectRoute(routeId: String) {
-        if (_routes.value.firstOrNull()?.id == routeId) return
+        val current = _routes.value
+        if (current.firstOrNull()?.id == routeId) return
 
-        reorderedRoutes(routeId)?.let { routes ->
-            mapboxNavigation?.setNavigationRoutes(routes)
+        val primaryRoute = current.firstOrNull { it.id == routeId } ?: return
+        _routes.value = buildList {
+            add(primaryRoute)
+            current.forEach { route ->
+                if (route.id != routeId) add(route)
+            }
         }
     }
 
@@ -105,9 +50,6 @@ class RouteManager {
      * ルートをクリアする。
      */
     fun clearRoutes() {
-        lastRouteIds = emptyList()
         _routes.value = emptyList()
-        _alternativesMetadata.value = emptyList()
-        mapboxNavigation?.setNavigationRoutes(emptyList())
     }
 }

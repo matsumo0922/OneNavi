@@ -124,10 +124,12 @@ private fun HomeMapRouteResultItem(
                 style = MaterialTheme.typography.titleLarge,
             )
 
-            Text(
-                text = stringResource(Res.string.home_map_route_result_via, routeResult.item.viaRoadNames.joinToString(", ")),
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            if (routeResult.item.viaRoadNames.isNotEmpty()) {
+                Text(
+                    text = stringResource(Res.string.home_map_route_result_via, routeResult.item.viaRoadNames.joinToString(", ")),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
 
             Text(
                 text = if (routeResult.item.hasTolls) {
