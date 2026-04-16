@@ -27,9 +27,6 @@ kotlin {
 
         androidMain.dependencies {
             implementation(libs.google.navigation)
-            implementation("com.google.maps.android:maps-compose:${libs.versions.googleMapsCompose.get()}") {
-                exclude(group = "com.google.android.gms", module = "play-services-maps")
-            }
         }
     }
 }
