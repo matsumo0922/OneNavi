@@ -1,78 +1,34 @@
 package me.matsumo.onenavi.feature.home.map
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
+import com.google.android.gms.maps.CameraUpdate
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
-import com.google.maps.android.compose.CameraMoveStartedReason
-import com.google.maps.android.compose.CameraPositionState
-import com.google.maps.android.compose.rememberCameraPositionState
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.suspendCancellableCoroutine
 import me.matsumo.onenavi.core.model.RoutePoint
+import kotlin.coroutines.resume
 
 @Composable
 internal fun rememberHomeMapViewportState(): HomeMapViewportState {
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(
-            LatLng(DEFAULT_LATITUDE, DEFAULT_LONGITUDE),
-            DEFAULT_CAMERA_ZOOM,
-        )
-    }
-    val viewportState = remember(cameraPositionState) {
-        HomeMapViewportState(cameraPositionState)
-    }
-
-    LaunchedEffect(cameraPositionState) {
-        snapshotFlow {
-            ViewportSnapshot(
-                position = cameraPositionState.position,
-                isMoving = cameraPositionState.isMoving,
-                moveStartedReason = cameraPositionState.cameraMoveStartedReason,
-            )
-        }
-            .distinctUntilChanged()
-            .collect { snapshot ->
-                viewportState.updateFromSnapshot(snapshot)
-            }
-    }
-
-    LaunchedEffect(cameraPositionState) {
-        snapshotFlow { cameraPositionState.projection != null }
-            .map { projectionReady ->
-                projectionReady &&
-                    cameraPositionState.isMoving &&
-                    cameraPositionState.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE
-            }
-            .distinctUntilChanged()
-            .collect { isGestureInProgress ->
-                viewportState.setGestureInProgress(isGestureInProgress)
-            }
-    }
-
-    return viewportState
+    return remember { HomeMapViewportState() }
 }
 
 /**
  * Home 画面の地図カメラ状態とユーザー操作状態を管理する。
  *
- * Compose の `CameraPositionState` を監視しつつ、UI から扱いやすい
- * カメラ状態とジェスチャー中フラグを提供する。
- *
- * @property cameraPositionState Google Maps Compose が保持するカメラ状態
+ * Navigation SDK が同梱する GoogleMap を imperative に扱いながら、
+ * 既存 Compose UI が参照しやすい状態を提供する。
  */
 @Stable
-class HomeMapViewportState internal constructor(
-    val cameraPositionState: CameraPositionState,
-) {
+class HomeMapViewportState internal constructor() {
 
     var cameraState by mutableStateOf(HomeMapCameraState())
         private set
@@ -80,18 +36,21 @@ class HomeMapViewportState internal constructor(
     var isGestureInProgress by mutableStateOf(false)
         private set
 
+    internal var googleMap: GoogleMap? by mutableStateOf(null)
+        private set
+
+    private var pendingCameraAction: ((GoogleMap) -> Unit)? = null
+
     suspend fun moveTo(point: RoutePoint, zoom: Float = DEFAULT_CAMERA_ZOOM, tilt: Float = 0f, bearing: Float = 0f) {
-        cameraPositionState.animate(
-            CameraUpdateFactory.newCameraPosition(
-                CameraPosition.Builder()
-                    .target(LatLng(point.latitude, point.longitude))
-                    .zoom(zoom)
-                    .tilt(tilt)
-                    .bearing(bearing)
-                    .build(),
-            ),
-            CAMERA_ANIMATION_DURATION_MS,
+        val update = CameraUpdateFactory.newCameraPosition(
+            CameraPosition.Builder()
+                .target(LatLng(point.latitude, point.longitude))
+                .zoom(zoom)
+                .tilt(tilt)
+                .bearing(bearing)
+                .build(),
         )
+        animate(update)
     }
 
     suspend fun moveToBounds(points: List<RoutePoint>, paddingPx: Int) {
@@ -103,21 +62,29 @@ class HomeMapViewportState internal constructor(
             }
         }.build()
 
-        cameraPositionState.animate(
-            CameraUpdateFactory.newLatLngBounds(bounds, paddingPx),
-            CAMERA_ANIMATION_DURATION_MS,
-        )
+        animate(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
     }
 
     suspend fun zoomBy(delta: Float) {
-        cameraPositionState.animate(
-            CameraUpdateFactory.zoomBy(delta),
-            CAMERA_ANIMATION_DURATION_MS,
-        )
+        animate(CameraUpdateFactory.zoomBy(delta))
     }
 
-    internal fun updateFromSnapshot(snapshot: ViewportSnapshot) {
-        val position = snapshot.position
+    internal fun attachMap(googleMap: GoogleMap) {
+        this.googleMap = googleMap
+        updateCameraPosition(googleMap.cameraPosition)
+        pendingCameraAction?.let { action ->
+            pendingCameraAction = null
+            action(googleMap)
+        }
+    }
+
+    internal fun clearMap(googleMap: GoogleMap) {
+        if (this.googleMap == googleMap) {
+            this.googleMap = null
+        }
+    }
+
+    internal fun updateCameraPosition(position: CameraPosition) {
         cameraState = HomeMapCameraState(
             latitude = position.target.latitude,
             longitude = position.target.longitude,
@@ -129,6 +96,32 @@ class HomeMapViewportState internal constructor(
 
     internal fun setGestureInProgress(isGestureInProgress: Boolean) {
         this.isGestureInProgress = isGestureInProgress
+    }
+
+    private suspend fun animate(update: CameraUpdate) {
+        val map = googleMap
+        if (map == null) {
+            pendingCameraAction = { readyMap ->
+                readyMap.animateCamera(update)
+            }
+            return
+        }
+
+        suspendCancellableCoroutine { continuation ->
+            map.animateCamera(
+                update,
+                CAMERA_ANIMATION_DURATION_MS,
+                object : GoogleMap.CancelableCallback {
+                    override fun onFinish() {
+                        continuation.resume(Unit)
+                    }
+
+                    override fun onCancel() {
+                        continuation.resume(Unit)
+                    }
+                },
+            )
+        }
     }
 }
 
@@ -148,19 +141,6 @@ data class HomeMapCameraState(
     val zoom: Float = DEFAULT_CAMERA_ZOOM,
     val bearing: Double = 0.0,
     val tilt: Float = 0f,
-)
-
-/**
- * CameraPositionState から取得したスナップショット。
- *
- * @param position 現在のカメラ位置
- * @param isMoving カメラ移動中かどうか
- * @param moveStartedReason 移動開始理由
- */
-internal data class ViewportSnapshot(
-    val position: CameraPosition,
-    val isMoving: Boolean,
-    val moveStartedReason: CameraMoveStartedReason,
 )
 
 private const val DEFAULT_LATITUDE = 35.681236

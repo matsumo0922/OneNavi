@@ -2,9 +2,11 @@ package me.matsumo.onenavi.feature.home.map.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,11 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.MarkerComposable
-import com.google.maps.android.compose.MarkerState
 import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.common.formatYen
 import me.matsumo.onenavi.core.resource.Res
@@ -34,7 +34,7 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun HomeMapRouteCallout(
-    position: LatLng,
+    screenOffset: IntOffset,
     routeResult: RouteResult,
     isPrimary: Boolean,
     onClick: () -> Unit,
@@ -60,63 +60,48 @@ internal fun HomeMapRouteCallout(
         else -> generalRoadLabel
     }
 
-    MarkerComposable(
-        keys = arrayOf<Any>(
-            position,
-            routeResult.item.durationSeconds,
-            tollFee ?: -1,
-            routeResult.item.hasTolls,
-            isPrimary,
-        ),
-        state = MarkerState(position = position),
-        anchor = androidx.compose.ui.geometry.Offset(0.5f, 1f),
-        zIndex = if (isPrimary) 3f else 2f,
-        onClick = {
-            onClick()
-            true
-        },
+    Column(
+        modifier = modifier
+            .offset { screenOffset }
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(
-            modifier = modifier,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Box(
-                modifier = Modifier
-                    .background(
-                        color = style.backgroundColor,
-                        shape = RoundedCornerShape(16.dp),
-                    )
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = durationText,
-                        color = style.textColor,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = tollText,
-                        color = style.textColor.copy(alpha = if (isPrimary) 0.92f else 0.78f),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-            }
-            Canvas(
-                modifier = Modifier.size(width = 18.dp, height = 10.dp),
-            ) {
-                val path = Path().apply {
-                    moveTo(size.width / 2f, size.height)
-                    lineTo(0f, 0f)
-                    lineTo(size.width, 0f)
-                    close()
-                }
-                drawPath(
-                    path = path,
+        Box(
+            modifier = Modifier
+                .background(
                     color = style.backgroundColor,
+                    shape = RoundedCornerShape(16.dp),
+                )
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = durationText,
+                    color = style.textColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = tollText,
+                    color = style.textColor.copy(alpha = if (isPrimary) 0.92f else 0.78f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
                 )
             }
+        }
+        Canvas(
+            modifier = Modifier.size(width = 18.dp, height = 10.dp),
+        ) {
+            val path = Path().apply {
+                moveTo(size.width / 2f, size.height)
+                lineTo(0f, 0f)
+                lineTo(size.width, 0f)
+                close()
+            }
+            drawPath(
+                path = path,
+                color = style.backgroundColor,
+            )
         }
     }
 }

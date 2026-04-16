@@ -17,7 +17,10 @@ kotlin {
             implementation(libs.androidx.datastore)
             implementation(libs.androidx.datastore.proto)
             implementation(libs.ktor.okhttp)
-            implementation(libs.google.places)
+            implementation(libs.google.navigation)
+            implementation("com.google.android.libraries.places:places:${libs.versions.googlePlaces.get()}") {
+                exclude(group = "com.google.android.gms", module = "play-services-maps")
+            }
         }
 
         iosMain.dependencies {
