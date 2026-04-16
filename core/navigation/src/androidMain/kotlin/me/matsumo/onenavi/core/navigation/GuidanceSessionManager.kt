@@ -174,22 +174,31 @@ class GuidanceSessionManager(
             .takeIf { it >= 0 }
             ?: 0
         val currentStep = steps.getOrNull(currentStepIndex)
-        val nextStep = steps.getOrNull(currentStepIndex + 1)
-
-        val currentManeuver = currentStep?.toManeuverInfo(
-            distanceMeters = (
-                currentStep.cumulativeDistanceMeters +
-                    currentStep.distanceFromPreviousMeters -
-                    traveledDistance
-                ).coerceAtLeast(0.0),
-        )
-        val nextManeuver = nextStep?.toManeuverInfo(
-            distanceMeters = (
-                nextStep.cumulativeDistanceMeters +
-                    nextStep.distanceFromPreviousMeters -
-                    traveledDistance
-                ).coerceAtLeast(0.0),
-        )
+        val visibleUpcomingSteps = steps
+            .drop(currentStepIndex.coerceAtLeast(0))
+            .filter { it.isDisplayableManeuver() }
+        val currentManeuver = visibleUpcomingSteps
+            .getOrNull(0)
+            ?.let { step ->
+                step.toManeuverInfo(
+                    distanceMeters = (
+                        step.cumulativeDistanceMeters +
+                            step.distanceFromPreviousMeters -
+                            traveledDistance
+                        ).coerceAtLeast(0.0),
+                )
+            }
+        val nextManeuver = visibleUpcomingSteps
+            .getOrNull(1)
+            ?.let { step ->
+                step.toManeuverInfo(
+                    distanceMeters = (
+                        step.cumulativeDistanceMeters +
+                            step.distanceFromPreviousMeters -
+                            traveledDistance
+                        ).coerceAtLeast(0.0),
+                )
+            }
         val upcomingSteps = steps.drop(currentStepIndex.coerceAtLeast(0)).toImmutableList()
 
         _guidanceUiState.value = _guidanceUiState.value.copy(
@@ -264,6 +273,10 @@ class GuidanceSessionManager(
             destinations = null,
             lanes = persistentListOf(),
         )
+    }
+
+    private fun RouteStepInfo.isDisplayableManeuver(): Boolean {
+        return maneuverType != "depart"
     }
 
     private fun RouteStepInfo.toTurnEvent(
