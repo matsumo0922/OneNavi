@@ -14,7 +14,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.CameraManager
+import me.matsumo.onenavi.core.navigation.CameraState
 import me.matsumo.onenavi.core.navigation.MapPadding
 import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
@@ -66,26 +68,35 @@ internal fun HomeMapScreenCameraEffect(
     effects: Flow<HomeMapEffect>,
     routeManager: RouteManager,
     cameraManager: CameraManager,
-    routeResults: ImmutableList<RouteResult>,
     viewportState: HomeMapViewportState,
     sheetPeekHeightPx: Double,
     topOverlayBottomPx: Float,
+    navigationCameraState: CameraState,
+    mapPadding: MapPadding,
     activity: Activity?,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
 ) {
     val currentActivity = rememberUpdatedState(activity)
     val currentSheetPeekHeightPx = rememberUpdatedState(sheetPeekHeightPx)
     val currentTopOverlayBottomPx = rememberUpdatedState(topOverlayBottomPx)
-    val currentRouteResults = rememberUpdatedState(routeResults)
+    val currentScreenState = rememberUpdatedState(screenState)
 
-    LaunchedEffect(viewportState, screenState, routeResults, sheetPeekHeightPx, topOverlayBottomPx) {
+    LaunchedEffect(
+        viewportState,
+        screenState,
+        sheetPeekHeightPx,
+        topOverlayBottomPx,
+        navigationCameraState,
+        mapPadding,
+    ) {
         restoreCamera(
             screenState = screenState,
             cameraManager = cameraManager,
-            routeResults = routeResults,
             viewportState = viewportState,
             sheetPeekHeightPx = sheetPeekHeightPx,
             topOverlayBottomPx = topOverlayBottomPx,
+            navigationCameraState = navigationCameraState,
+            mapPadding = mapPadding,
         )
     }
 
@@ -95,10 +106,10 @@ internal fun HomeMapScreenCameraEffect(
                 effect = effect,
                 routeManager = routeManager,
                 cameraManager = cameraManager,
-                routeResults = currentRouteResults.value,
                 viewportState = viewportState,
                 sheetPeekHeightPx = currentSheetPeekHeightPx.value,
                 topOverlayBottomPx = currentTopOverlayBottomPx.value,
+                screenState = currentScreenState.value,
                 activity = currentActivity.value,
                 onTrackingModeChanged = onTrackingModeChanged,
             )
@@ -109,10 +120,11 @@ internal fun HomeMapScreenCameraEffect(
 private suspend fun restoreCamera(
     screenState: HomeMapScreenState,
     cameraManager: CameraManager,
-    routeResults: ImmutableList<RouteResult>,
     viewportState: HomeMapViewportState,
     sheetPeekHeightPx: Double,
     topOverlayBottomPx: Float,
+    navigationCameraState: CameraState,
+    mapPadding: MapPadding,
 ) {
     when (val state = screenState) {
         is HomeMapScreenState.SearchResultsList -> {
@@ -125,11 +137,20 @@ private suspend fun restoreCamera(
             viewportState.moveTo(RoutePoint(state.place.latitude, state.place.longitude), FOLLOW_PUCK_ZOOM)
         }
         is HomeMapScreenState.RoutePreview -> {
+            val overviewPadding = buildOverlayPadding(topOverlayBottomPx, sheetPeekHeightPx)
             cameraManager.applyNavigationPadding(
                 followingPadding = MapPadding(),
-                overviewPadding = buildOverlayPadding(topOverlayBottomPx, sheetPeekHeightPx),
+                overviewPadding = overviewPadding,
             )
-            moveToRouteOverview(viewportState, routeResults, topOverlayBottomPx, sheetPeekHeightPx)
+            if (navigationCameraState != CameraState.OVERVIEW || mapPadding != overviewPadding) {
+                cameraManager.requestCameraOverview()
+                return
+            }
+            moveToRouteOverview(
+                viewportState = viewportState,
+                routeResults = state.routes,
+                waypoints = state.waypoints.map { it.toRoutePoint() },
+            )
         }
         is HomeMapScreenState.Navigating -> {
             cameraManager.requestCameraFollowing(pitch3D = true)
@@ -142,10 +163,10 @@ private suspend fun handleEffect(
     effect: HomeMapEffect,
     routeManager: RouteManager,
     cameraManager: CameraManager,
-    routeResults: ImmutableList<RouteResult>,
     viewportState: HomeMapViewportState,
     sheetPeekHeightPx: Double,
     topOverlayBottomPx: Float,
+    screenState: HomeMapScreenState,
     activity: Activity?,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
 ) {
@@ -166,9 +187,12 @@ private suspend fun handleEffect(
             val hasRoutes = withTimeoutOrNull(3_000) {
                 routeManager.routes.first { it.isNotEmpty() }
             } != null
-            cameraManager.requestCameraIdle()
-            if (hasRoutes) {
-                moveToRouteOverview(viewportState, routeResults, topOverlayBottomPx, sheetPeekHeightPx)
+            if (hasRoutes && screenState is HomeMapScreenState.RoutePreview) {
+                cameraManager.applyNavigationPadding(
+                    followingPadding = MapPadding(),
+                    overviewPadding = buildOverlayPadding(topOverlayBottomPx, sheetPeekHeightPx),
+                )
+                cameraManager.requestCameraOverview()
             }
         }
         is HomeMapEffect.EnterGuidanceFollowing -> {
@@ -190,15 +214,33 @@ private suspend fun handleEffect(
 private suspend fun moveToRouteOverview(
     viewportState: HomeMapViewportState,
     routeResults: ImmutableList<RouteResult>,
-    topOverlayBottomPx: Float,
-    sheetPeekHeightPx: Double,
+    waypoints: List<RoutePoint>,
 ) {
-    val points = routeResults.flatMap { it.item.geometry }
+    val points = buildRouteOverviewPoints(routeResults, waypoints)
     if (points.isNotEmpty()) {
         viewportState.moveToBounds(
             points = points,
-            paddingPx = buildBoundsPadding(topOverlayBottomPx, sheetPeekHeightPx),
+            paddingPx = ROUTE_BOUNDS_EXTRA_PADDING,
         )
+    }
+}
+
+private fun buildRouteOverviewPoints(
+    routeResults: ImmutableList<RouteResult>,
+    waypoints: List<RoutePoint>,
+): List<RoutePoint> {
+    return buildList {
+        routeResults.forEach { routeResult ->
+            addAll(routeResult.item.geometry)
+        }
+        addAll(waypoints)
+    }
+}
+
+private fun RouteWaypoint.toRoutePoint(): RoutePoint {
+    return when (this) {
+        is RouteWaypoint.CurrentLocation -> RoutePoint(latitude, longitude)
+        is RouteWaypoint.Place -> RoutePoint(latitude, longitude)
     }
 }
 

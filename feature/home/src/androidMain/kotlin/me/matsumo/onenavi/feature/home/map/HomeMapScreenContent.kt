@@ -78,6 +78,7 @@ internal fun HomeMapScreenContent(
     val currentLocation by viewModel.cameraManager.currentLocation.collectAsStateWithLifecycle()
     val currentBearing by viewModel.cameraManager.currentBearing.collectAsStateWithLifecycle()
     val navigationCameraState by viewModel.cameraManager.cameraState.collectAsStateWithLifecycle()
+    val mapPadding by viewModel.cameraManager.mapPadding.collectAsStateWithLifecycle()
     val isNavigationFollowing3D by viewModel.cameraManager.isFollowing3D.collectAsStateWithLifecycle()
     val arrivalInfo by viewModel.guidanceSessionManager.arrivalInfo.collectAsStateWithLifecycle()
 
@@ -193,12 +194,13 @@ internal fun HomeMapScreenContent(
         effects = viewModel.effects,
         routeManager = viewModel.routeManager,
         cameraManager = viewModel.cameraManager,
-        routeResults = routeResults,
         viewportState = viewportState,
         sheetPeekHeightPx = with(density) {
             if (shouldShowSheet) sheetPeekHeight.toPx() else 0f
         }.toDouble(),
         topOverlayBottomPx = topOverlayBottomPx,
+        navigationCameraState = navigationCameraState,
+        mapPadding = mapPadding,
         activity = activity,
         onTrackingModeChanged = { trackingMode = it },
     )
