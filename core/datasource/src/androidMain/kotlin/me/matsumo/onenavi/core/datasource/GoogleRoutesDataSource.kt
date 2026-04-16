@@ -152,14 +152,15 @@ class GoogleRoutesDataSource(
     private fun List<RouteStep>.toRouteSteps(): List<RouteStepInfo> {
         var cumulativeDistance = 0.0
 
-        return mapIndexedNotNull { index, step ->
+        return mapNotNull { step ->
             val instruction = step.navigationInstruction?.instructions.orEmpty()
             val maneuver = step.navigationInstruction?.maneuver.orEmpty()
             val distance = step.distanceMeters?.toDouble() ?: 0.0
+            val parsedManeuver = parseGoogleManeuver(maneuver)
 
             val routeStepInfo = RouteStepInfo(
-                maneuverType = maneuver.toManeuverType(),
-                modifier = maneuver.toModifier(),
+                maneuverType = parsedManeuver.type,
+                modifier = parsedManeuver.modifier,
                 distanceFromPreviousMeters = distance,
                 cumulativeDistanceMeters = cumulativeDistance,
                 instruction = instruction,
@@ -186,33 +187,6 @@ class GoogleRoutesDataSource(
             ?.removeSuffix("s")
             ?.toDoubleOrNull()
             ?: 0.0
-    }
-
-    private fun String.toManeuverType(): String {
-        return when {
-            contains("TURN", ignoreCase = true) -> "turn"
-            contains("RAMP", ignoreCase = true) -> if (contains("OFF", ignoreCase = true)) "off ramp" else "on ramp"
-            contains("FORK", ignoreCase = true) -> "fork"
-            contains("MERGE", ignoreCase = true) -> "merge"
-            contains("ROUNDABOUT", ignoreCase = true) -> "roundabout"
-            contains("DESTINATION", ignoreCase = true) -> "arrive"
-            contains("STRAIGHT", ignoreCase = true) -> "continue"
-            else -> lowercase()
-        }
-    }
-
-    private fun String.toModifier(): String? {
-        return when {
-            contains("SLIGHT_LEFT", ignoreCase = true) -> "slight left"
-            contains("SLIGHT_RIGHT", ignoreCase = true) -> "slight right"
-            contains("SHARP_LEFT", ignoreCase = true) -> "sharp left"
-            contains("SHARP_RIGHT", ignoreCase = true) -> "sharp right"
-            contains("LEFT", ignoreCase = true) -> "left"
-            contains("RIGHT", ignoreCase = true) -> "right"
-            contains("U_TURN", ignoreCase = true) -> "uturn"
-            contains("STRAIGHT", ignoreCase = true) -> "straight"
-            else -> null
-        }
     }
 
     companion object {
