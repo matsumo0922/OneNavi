@@ -160,7 +160,7 @@ private suspend fun handleEffect(
         }
         is HomeMapEffect.MoveCameraToRouteOverview -> {
             onTrackingModeChanged(null)
-            val hasRoutes = withTimeoutOrNull(1_000) {
+            val hasRoutes = withTimeoutOrNull(3_000) {
                 routeManager.routes.first { it.isNotEmpty() }
             } != null
             cameraManager.requestCameraIdle()
