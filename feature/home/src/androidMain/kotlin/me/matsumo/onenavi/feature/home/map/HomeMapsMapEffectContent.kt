@@ -1,54 +1,48 @@
 package me.matsumo.onenavi.feature.home.map
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.os.Bundle
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.MapsInitializer
+import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
-import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.MarkerOptions
-import com.google.android.gms.maps.model.PolylineOptions
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.Polyline
 import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.CameraManager
-import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.feature.home.R
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 
+private const val TAG = "HomeMapsMap"
 private const val PRIMARY_ROUTE_WIDTH = 14f
 private const val SECONDARY_ROUTE_WIDTH = 9f
-private const val GOOGLE_BLUE = 0xFF1A73E8.toInt()
-private const val GOOGLE_ROUTE_GRAY = 0xFF78909C.toInt()
-private const val TAG = "HomeMapsMap"
+private const val GOOGLE_BLUE = 0xFF1A73E8
+private const val GOOGLE_ROUTE_GRAY = 0xFF78909C
 
 @Composable
 internal fun HomeMapsMapEffectContent(
@@ -58,321 +52,138 @@ internal fun HomeMapsMapEffectContent(
     selectedRouteIndex: Int,
     currentLocation: RoutePoint?,
     currentBearing: Float,
-    routeManager: RouteManager,
     cameraManager: CameraManager,
-    onMapReady: (GoogleMap) -> Unit,
     onMapLandmarkSelected: (name: String?, latitude: Double, longitude: Double) -> Unit,
     onRouteSelected: (index: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
     val hasLocationPermission = remember(context) {
         ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION,
         ) == PackageManager.PERMISSION_GRANTED
     }
+    val mapPadding by cameraManager.mapPadding.collectAsStateWithLifecycle()
     val vehiclePuckBitmap = remember(context) {
         context.createBitmap(R.drawable.ic_vehicle_puck)
     }
-    val currentRouteResults = rememberUpdatedState(routeResults)
-    val currentSelectedRouteIndex = rememberUpdatedState(selectedRouteIndex)
-    val currentOnRouteSelected = rememberUpdatedState(onRouteSelected)
-    val currentOnMapLandmarkSelected = rememberUpdatedState(onMapLandmarkSelected)
-    val currentOnMapReady = rememberUpdatedState(onMapReady)
-    val liveRoutes by routeManager.routes.collectAsStateWithLifecycle()
 
-    var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
-    val mapView = rememberMapViewWithLifecycle(lifecycleOwner)
+    var vehiclePuckIcon by remember { mutableStateOf<BitmapDescriptor?>(null) }
 
-    AndroidView(
+    LaunchedEffect(context, vehiclePuckBitmap) {
+        runCatching {
+            MapsInitializer.initialize(context.applicationContext)
+            BitmapDescriptorFactory.fromBitmap(vehiclePuckBitmap)
+        }.onSuccess { icon ->
+            vehiclePuckIcon = icon
+        }.onFailure { error ->
+            Napier.e(error, tag = TAG) { "Failed to create vehicle puck icon." }
+        }
+    }
+
+    GoogleMap(
         modifier = modifier.fillMaxSize(),
-        factory = {
-            mapView.apply {
-                getMapAsync { map ->
-                    googleMap = map
-                    Napier.d(tag = TAG) {
-                        "getMapAsync ready. target=${map.cameraPosition.target.latitude},${map.cameraPosition.target.longitude} zoom=${map.cameraPosition.zoom}"
-                    }
-                    viewportState.attachMap(map)
-                    cameraManager.setupCamera(map)
-                    currentOnMapReady.value(map)
-                    configureMap(
-                        map = map,
-                        hasLocationPermission = hasLocationPermission,
-                        onMapLandmarkSelected = { name, point ->
-                            currentOnMapLandmarkSelected.value(name, point.latitude, point.longitude)
-                        },
-                        onRoutePolylineSelected = { index ->
-                            if (index != currentSelectedRouteIndex.value) {
-                                currentOnRouteSelected.value(index)
-                            }
-                        },
-                    )
-                    moveCameraToViewportState(map, viewportState.cameraState)
-                    renderMapState(
-                        map = map,
-                        screenState = screenState,
-                        routeGeometries = currentRouteResults.value.map { it.item.geometry },
-                        selectedRouteIndex = currentSelectedRouteIndex.value,
-                        currentLocation = currentLocation,
-                        currentBearing = currentBearing,
-                        vehiclePuckBitmap = vehiclePuckBitmap,
-                    )
-                    map.setOnMapLoadedCallback {
-                        Napier.i(tag = TAG) {
-                            "Map loaded. target=${map.cameraPosition.target.latitude},${map.cameraPosition.target.longitude} zoom=${map.cameraPosition.zoom}"
-                        }
-                        map.snapshot { snapshot ->
-                            Napier.i(tag = TAG) {
-                                "Snapshot ready. size=${snapshot?.width ?: -1}x${snapshot?.height ?: -1}"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        update = {
-            googleMap?.let { map ->
-                renderMapState(
-                    map = map,
-                    screenState = screenState,
-                    routeGeometries = if (screenState is HomeMapScreenState.Navigating || screenState is HomeMapScreenState.Arrived) {
-                        liveRoutes.map { it.geometry }
-                    } else {
-                        routeResults.map { it.item.geometry }
-                    },
-                    selectedRouteIndex = if (screenState is HomeMapScreenState.Navigating || screenState is HomeMapScreenState.Arrived) {
-                        0
-                    } else {
-                        selectedRouteIndex
-                    },
-                    currentLocation = currentLocation,
-                    currentBearing = currentBearing,
-                    vehiclePuckBitmap = vehiclePuckBitmap,
-                )
-            }
-        },
-    )
-
-    LaunchedEffect(routeResults) {
-        routeManager.setRoutes(routeResults.map { it.googleRoute })
-        cameraManager.onRouteChanged(routeResults.firstOrNull()?.googleRoute)
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            googleMap = null
-            viewportState.detachMap()
-            cameraManager.teardownCamera()
-        }
-    }
-}
-
-@SuppressLint("MissingPermission")
-private fun configureMap(
-    map: GoogleMap,
-    hasLocationPermission: Boolean,
-    onMapLandmarkSelected: (String?, LatLng) -> Unit,
-    onRoutePolylineSelected: (Int) -> Unit,
-) {
-    map.uiSettings.isCompassEnabled = false
-    map.uiSettings.isMapToolbarEnabled = false
-    map.uiSettings.isMyLocationButtonEnabled = false
-    map.uiSettings.isZoomControlsEnabled = false
-    map.isBuildingsEnabled = true
-    map.mapType = GoogleMap.MAP_TYPE_NORMAL
-    map.isMyLocationEnabled = hasLocationPermission
-
-    map.setOnMapLongClickListener { latLng ->
-        onMapLandmarkSelected(null, latLng)
-    }
-    map.setOnPoiClickListener { poi ->
-        onMapLandmarkSelected(poi.name, poi.latLng)
-    }
-    map.setOnPolylineClickListener { polyline ->
-        (polyline.tag as? Int)?.let(onRoutePolylineSelected)
-    }
-}
-
-private fun moveCameraToViewportState(
-    map: GoogleMap,
-    cameraState: HomeMapCameraState,
-) {
-    map.moveCamera(
-        CameraUpdateFactory.newCameraPosition(
-            CameraPosition.Builder()
-                .target(LatLng(cameraState.latitude, cameraState.longitude))
-                .zoom(cameraState.zoom)
-                .tilt(cameraState.tilt)
-                .bearing(cameraState.bearing.toFloat())
-                .build(),
+        cameraPositionState = viewportState.cameraPositionState,
+        properties = MapProperties(
+            isBuildingEnabled = true,
+            isMyLocationEnabled = hasLocationPermission && vehiclePuckIcon == null,
         ),
-    )
-}
-
-private fun renderMapState(
-    map: GoogleMap,
-    screenState: HomeMapScreenState,
-    routeGeometries: List<List<RoutePoint>>,
-    selectedRouteIndex: Int,
-    currentLocation: RoutePoint?,
-    currentBearing: Float,
-    vehiclePuckBitmap: Bitmap,
-) {
-    map.clear()
-    renderRoutes(map, routeGeometries, selectedRouteIndex)
-    renderMarkers(map, screenState)
-    renderVehiclePuck(
-        map = map,
-        currentLocation = currentLocation,
-        currentBearing = currentBearing,
-        vehiclePuckBitmap = vehiclePuckBitmap,
-    )
-}
-
-private fun renderRoutes(
-    map: GoogleMap,
-    routeGeometries: List<List<RoutePoint>>,
-    selectedRouteIndex: Int,
-) {
-    routeGeometries.forEachIndexed { index, geometry ->
-        if (index == selectedRouteIndex) return@forEachIndexed
-        map.addPolyline(
-            PolylineOptions()
-                .addAll(geometry.map(RoutePoint::toLatLng))
-                .color(GOOGLE_ROUTE_GRAY)
-                .width(SECONDARY_ROUTE_WIDTH)
-                .clickable(true)
-                .zIndex(1f),
-        ).tag = index
-    }
-
-    routeGeometries.getOrNull(selectedRouteIndex)?.let { geometry ->
-        map.addPolyline(
-            PolylineOptions()
-                .addAll(geometry.map(RoutePoint::toLatLng))
-                .color(GOOGLE_BLUE)
-                .width(PRIMARY_ROUTE_WIDTH)
-                .clickable(true)
-                .zIndex(2f),
-        ).tag = selectedRouteIndex
-    }
-}
-
-private fun renderMarkers(
-    map: GoogleMap,
-    screenState: HomeMapScreenState,
-) {
-    when (screenState) {
-        is HomeMapScreenState.Browsing -> Unit
-        is HomeMapScreenState.SearchResultsList -> {
-            screenState.results.forEachIndexed { index, result ->
-                map.addMarker(
-                    MarkerOptions()
-                        .position(LatLng(result.latitude, result.longitude))
-                        .title(result.name)
-                        .snippet((index + 1).toString())
-                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)),
-                )
+        uiSettings = MapUiSettings(
+            compassEnabled = false,
+            mapToolbarEnabled = false,
+            myLocationButtonEnabled = false,
+            zoomControlsEnabled = false,
+        ),
+        contentPadding = PaddingValues(
+            start = with(density) { mapPadding.left.toDp() },
+            top = with(density) { mapPadding.top.toDp() },
+            end = with(density) { mapPadding.right.toDp() },
+            bottom = with(density) { mapPadding.bottom.toDp() },
+        ),
+        onMapLongClick = { latLng ->
+            onMapLandmarkSelected(null, latLng.latitude, latLng.longitude)
+        },
+        onPOIClick = { poi ->
+            onMapLandmarkSelected(poi.name, poi.latLng.latitude, poi.latLng.longitude)
+        },
+        onMapLoaded = {
+            val camera = viewportState.cameraPositionState.position
+            Napier.d(tag = TAG) {
+                "Map loaded: target=${camera.target}, zoom=${camera.zoom}, tilt=${camera.tilt}, bearing=${camera.bearing}"
             }
-        }
-
-        is HomeMapScreenState.PlaceDetails -> {
-            map.addMarker(
-                MarkerOptions()
-                    .position(LatLng(screenState.place.latitude, screenState.place.longitude))
-                    .title(screenState.place.name)
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)),
+        },
+    ) {
+        routeResults.forEachIndexed { index, routeResult ->
+            Polyline(
+                points = routeResult.item.geometry.map(RoutePoint::toLatLng),
+                color = Color(if (index == selectedRouteIndex) GOOGLE_BLUE else GOOGLE_ROUTE_GRAY),
+                width = if (index == selectedRouteIndex) PRIMARY_ROUTE_WIDTH else SECONDARY_ROUTE_WIDTH,
+                clickable = true,
+                zIndex = if (index == selectedRouteIndex) 2f else 1f,
+                onClick = {
+                    if (index != selectedRouteIndex) {
+                        onRouteSelected(index)
+                    }
+                },
             )
         }
 
-        is HomeMapScreenState.RoutePreview -> {
-            screenState.waypoints.lastOrNull()?.let { waypoint ->
-                val point = waypoint.toRoutePoint()
-                map.addMarker(
-                    MarkerOptions()
-                        .position(point.toLatLng())
-                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)),
-                )
-            }
-            screenState.waypoints.drop(1).dropLast(1).forEachIndexed { index, waypoint ->
-                val point = waypoint.toRoutePoint()
-                map.addMarker(
-                    MarkerOptions()
-                        .position(point.toLatLng())
-                        .title("K${index + 1}"),
+        currentLocation?.let { location ->
+            vehiclePuckIcon?.let { icon ->
+                Marker(
+                    state = MarkerState(position = location.toLatLng()),
+                    icon = icon,
+                    flat = true,
+                    anchor = Offset(0.5f, 0.5f),
+                    rotation = currentBearing,
+                    zIndex = 4f,
                 )
             }
         }
 
-        is HomeMapScreenState.Navigating,
-        is HomeMapScreenState.Arrived,
-        -> Unit
-    }
-}
-
-private fun renderVehiclePuck(
-    map: GoogleMap,
-    currentLocation: RoutePoint?,
-    currentBearing: Float,
-    vehiclePuckBitmap: Bitmap,
-) {
-    val location = currentLocation ?: return
-
-    map.addMarker(
-        MarkerOptions()
-            .position(location.toLatLng())
-            .icon(BitmapDescriptorFactory.fromBitmap(vehiclePuckBitmap))
-            .anchor(0.5f, 0.5f)
-            .flat(true)
-            .rotation(currentBearing)
-            .zIndex(4f),
-    )
-}
-
-@Composable
-private fun rememberMapViewWithLifecycle(lifecycleOwner: LifecycleOwner): MapView {
-    val context = LocalContext.current
-    val mapView = remember {
-        runCatching { MapsInitializer.initialize(context.applicationContext) }
-            .onSuccess { Napier.i(tag = TAG) { "MapsInitializer.initialize success" } }
-            .onFailure { Napier.e(it, tag = TAG) { "MapsInitializer.initialize failed" } }
-        MapView(context).apply {
-            onCreate(Bundle())
-        }
-    }
-
-    DisposableEffect(lifecycleOwner, mapView) {
-        val observer = object : DefaultLifecycleObserver {
-            override fun onStart(owner: LifecycleOwner) = mapView.onStart()
-
-            override fun onResume(owner: LifecycleOwner) = mapView.onResume()
-
-            override fun onPause(owner: LifecycleOwner) = mapView.onPause()
-
-            override fun onStop(owner: LifecycleOwner) = mapView.onStop()
-
-            override fun onDestroy(owner: LifecycleOwner) = mapView.onDestroy()
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        when {
-            lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) -> {
-                mapView.onStart()
-                mapView.onResume()
+        when (screenState) {
+            is HomeMapScreenState.Browsing -> Unit
+            is HomeMapScreenState.SearchResultsList -> {
+                screenState.results.forEachIndexed { index, result ->
+                    Marker(
+                        state = MarkerState(position = LatLng(result.latitude, result.longitude)),
+                        title = result.name,
+                        snippet = (index + 1).toString(),
+                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
+                    )
+                }
             }
 
-            lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) -> {
-                mapView.onStart()
+            is HomeMapScreenState.PlaceDetails -> {
+                Marker(
+                    state = MarkerState(position = LatLng(screenState.place.latitude, screenState.place.longitude)),
+                    title = screenState.place.name,
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
+                )
             }
-        }
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
+
+            is HomeMapScreenState.RoutePreview -> {
+                screenState.waypoints.lastOrNull()?.let { waypoint ->
+                    Marker(
+                        state = MarkerState(position = waypoint.toRoutePoint().toLatLng()),
+                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
+                    )
+                }
+                screenState.waypoints.drop(1).dropLast(1).forEachIndexed { index, waypoint ->
+                    Marker(
+                        state = MarkerState(position = waypoint.toRoutePoint().toLatLng()),
+                        title = "K${index + 1}",
+                    )
+                }
+            }
+
+            is HomeMapScreenState.Navigating,
+            is HomeMapScreenState.Arrived,
+            -> Unit
         }
     }
-
-    return mapView
 }
 
 private fun RoutePoint.toLatLng(): LatLng {

@@ -61,10 +61,6 @@
             </intent-filter>
         </service>
 
-        <service
-            android:name="me.matsumo.onenavi.core.navigation.NavigationUpdatesService"
-            android:exported="false" />
-
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />

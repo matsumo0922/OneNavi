@@ -176,9 +176,6 @@ private suspend fun handleEffect(
                 activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
         }
-        is HomeMapEffect.UseNavigationLocationProvider -> {
-            cameraManager.setNavigationLocationProviderEnabled(effect.enabled)
-        }
     }
 }
 
