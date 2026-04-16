@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.feature.home.map
 
+import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.aakira.napier.Napier
@@ -31,6 +32,7 @@ import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
+import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.core.repository.RouteRepository
 import me.matsumo.onenavi.core.repository.SearchRepository
@@ -47,6 +49,7 @@ class HomeMapViewModel(
     internal val routeManager: RouteManager,
     internal val cameraManager: CameraManager,
     internal val guidanceSessionManager: GuidanceSessionManager,
+    private val navigationSdkManager: NavigationSdkManager,
 ) : ViewModel() {
 
     // ── 既存 raw state ──
@@ -210,11 +213,18 @@ class HomeMapViewModel(
         }
     }
 
-    internal fun onNavigationStarted() {
+    internal suspend fun onNavigationStarted(activity: Activity): Result<Unit> {
+        val initializationResult = navigationSdkManager.initialize(activity)
+        if (initializationResult.isFailure) {
+            Napier.e(initializationResult.exceptionOrNull()) { "Failed to initialize Navigation SDK." }
+            return initializationResult
+        }
+
         guidanceSessionManager.startSession()
         _effects.trySend(HomeMapEffect.EnterGuidanceFollowing)
         _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = true))
         _effects.trySend(HomeMapEffect.UseNavigationLocationProvider(enabled = true))
+        return Result.success(Unit)
     }
 
     fun onNavigationStopped() {
