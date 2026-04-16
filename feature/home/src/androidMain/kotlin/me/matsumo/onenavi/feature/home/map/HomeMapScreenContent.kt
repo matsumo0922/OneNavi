@@ -189,11 +189,11 @@ internal fun HomeMapScreenContent(
     )
 
     HomeMapScreenCameraEffect(
-        screenStateProvider = { viewModel.screenState.value },
+        screenState = screenState,
         effects = viewModel.effects,
         routeManager = viewModel.routeManager,
         cameraManager = viewModel.cameraManager,
-        routeResultsProvider = { viewModel.routeResults.value },
+        routeResults = routeResults,
         viewportState = viewportState,
         sheetPeekHeightPx = with(density) {
             if (shouldShowSheet) sheetPeekHeight.toPx() else 0f
