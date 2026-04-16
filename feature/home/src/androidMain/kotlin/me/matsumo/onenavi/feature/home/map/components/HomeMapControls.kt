@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import me.matsumo.onenavi.feature.home.map.HomeMapViewportState
 
 /**
@@ -62,6 +64,7 @@ internal fun HomeMapControls(
     onTrackingZoomChanged: (Float) -> Unit,
 ) {
     var lastTrackingMode by remember { mutableStateOf(LocationTrackingMode.TiltedHeading) }
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(autoFollowOnStart) {
         if (autoFollowOnStart) {
@@ -71,7 +74,9 @@ internal fun HomeMapControls(
 
     fun setZoom(zoom: Double) {
         val nextZoom = (viewportState.cameraState.zoom + zoom.toFloat()).coerceIn(2f, 21f)
-        viewportState.zoomBy(zoom.toFloat())
+        coroutineScope.launch {
+            viewportState.zoomBy(zoom.toFloat())
+        }
         if (trackingMode != null) {
             onTrackingZoomChanged(nextZoom)
         }

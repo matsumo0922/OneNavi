@@ -72,8 +72,8 @@ class HomeMapViewportState internal constructor(
     var isGestureInProgress by mutableStateOf(false)
         private set
 
-    fun moveTo(point: RoutePoint, zoom: Float = DEFAULT_CAMERA_ZOOM, tilt: Float = 0f, bearing: Float = 0f) {
-        cameraPositionState.move(
+    suspend fun moveTo(point: RoutePoint, zoom: Float = DEFAULT_CAMERA_ZOOM, tilt: Float = 0f, bearing: Float = 0f) {
+        cameraPositionState.animate(
             CameraUpdateFactory.newCameraPosition(
                 CameraPosition.Builder()
                     .target(LatLng(point.latitude, point.longitude))
@@ -82,10 +82,11 @@ class HomeMapViewportState internal constructor(
                     .bearing(bearing)
                     .build(),
             ),
+            CAMERA_ANIMATION_DURATION_MS,
         )
     }
 
-    fun moveToBounds(points: List<RoutePoint>, paddingPx: Int) {
+    suspend fun moveToBounds(points: List<RoutePoint>, paddingPx: Int) {
         if (points.isEmpty()) return
 
         val bounds = LatLngBounds.Builder().apply {
@@ -94,13 +95,17 @@ class HomeMapViewportState internal constructor(
             }
         }.build()
 
-        cameraPositionState.move(
+        cameraPositionState.animate(
             CameraUpdateFactory.newLatLngBounds(bounds, paddingPx),
+            CAMERA_ANIMATION_DURATION_MS,
         )
     }
 
-    fun zoomBy(delta: Float) {
-        cameraPositionState.move(CameraUpdateFactory.zoomBy(delta))
+    suspend fun zoomBy(delta: Float) {
+        cameraPositionState.animate(
+            CameraUpdateFactory.zoomBy(delta),
+            CAMERA_ANIMATION_DURATION_MS,
+        )
     }
 
     internal fun updateFromSnapshot(snapshot: ViewportSnapshot) {
@@ -137,3 +142,4 @@ internal data class ViewportSnapshot(
 private const val DEFAULT_LATITUDE = 35.681236
 private const val DEFAULT_LONGITUDE = 139.767125
 private const val DEFAULT_CAMERA_ZOOM = 15f
+private const val CAMERA_ANIMATION_DURATION_MS = 600

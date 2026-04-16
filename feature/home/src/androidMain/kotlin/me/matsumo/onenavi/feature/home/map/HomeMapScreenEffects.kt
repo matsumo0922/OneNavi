@@ -102,7 +102,7 @@ internal fun HomeMapScreenCameraEffect(
     }
 }
 
-private fun restoreCamera(
+private suspend fun restoreCamera(
     screenState: HomeMapScreenState,
     cameraManager: CameraManager,
     routeResults: ImmutableList<RouteResult>,
@@ -179,7 +179,7 @@ private suspend fun handleEffect(
     }
 }
 
-private fun moveToRouteOverview(
+private suspend fun moveToRouteOverview(
     viewportState: HomeMapViewportState,
     routeResults: ImmutableList<RouteResult>,
     topOverlayBottomPx: Float,
