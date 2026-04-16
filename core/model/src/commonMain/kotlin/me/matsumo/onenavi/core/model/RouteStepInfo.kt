@@ -10,8 +10,8 @@ import androidx.compose.runtime.Immutable
  * @param modifier 方向修飾子（"left", "right", "slight left", "sharp right", "straight", "uturn" 等）
  * @param distanceFromPreviousMeters 前のステップからの距離（メートル）
  * @param cumulativeDistanceMeters 現在位置からの累積距離（メートル）
- * @param instruction 案内テキスト（交差点名 / IC 名 / JCT 名 / 道路名）
- * @param roadName 道路名
+ * @param instruction 案内テキスト（交差点名 / IC 名 / JCT 名 / Google が生成した案内文）
+ * @param roadName 道路名。現状の Google Routes API 実装では未取得のため空文字を取りうる。
  * @param roadRef 道路番号（国道○号等）
  * @param highwayInfo 高速道路関連情報（IC / JCT / 料金所等）。該当しない場合は null。
  */

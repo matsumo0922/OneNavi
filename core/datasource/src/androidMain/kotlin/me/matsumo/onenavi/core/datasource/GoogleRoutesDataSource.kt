@@ -141,7 +141,7 @@ class GoogleRoutesDataSource(
                     durationSeconds = durationSeconds,
                     distanceMeters = distanceMeters,
                     geometry = geometry,
-                    viaRoadNames = extractRoadNames(route).toImmutableList(),
+                    viaRoadNames = emptyList<String>().toImmutableList(),
                     hasTolls = hasTolls,
                 ),
                 platformRoute = googleRoute,
@@ -163,21 +163,13 @@ class GoogleRoutesDataSource(
                 distanceFromPreviousMeters = distance,
                 cumulativeDistanceMeters = cumulativeDistance,
                 instruction = instruction,
-                roadName = instruction,
+                roadName = "",
                 roadRef = null,
                 highwayInfo = null,
             )
             cumulativeDistance += distance
             routeStepInfo
         }
-    }
-
-    private fun extractRoadNames(route: Route): List<String> {
-        return route.legs.orEmpty()
-            .flatMap { it.steps.orEmpty() }
-            .mapNotNull { it.navigationInstruction?.instructions?.takeIf(String::isNotBlank) }
-            .distinct()
-            .take(MAX_ROAD_NAMES)
     }
 
     private fun buildRouteId(
@@ -225,7 +217,6 @@ class GoogleRoutesDataSource(
 
     companion object {
         private const val ROUTES_ENDPOINT = "https://routes.googleapis.com/directions/v2:computeRoutes"
-        private const val MAX_ROAD_NAMES = 2
         private val json = Json {
             ignoreUnknownKeys = true
             isLenient = true
