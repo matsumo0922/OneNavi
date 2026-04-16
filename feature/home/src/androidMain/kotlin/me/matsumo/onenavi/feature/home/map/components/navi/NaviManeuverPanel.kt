@@ -64,6 +64,7 @@ internal fun NaviManeuverPanel(
         NaviManeuverBottomSection(
             currentManeuver = currentManeuver,
             nextManeuver = nextManeuver,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -134,7 +135,7 @@ private fun NaviManeuverBottomSection(
 
     if (hasLanes) {
         Surface(
-            modifier = modifier.fillMaxWidth(),
+            modifier = modifier,
             shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
             color = NavigationColors.maneuverSecondaryBackground,
         ) {

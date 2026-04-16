@@ -332,6 +332,7 @@ private fun BoxScope.HomeMapScreenContentControls(
             HomeMapArrivalContent(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
                     .padding(
                         start = 16.dp,
                         end = 16.dp,

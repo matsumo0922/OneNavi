@@ -15,7 +15,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.GoogleRoute
 import me.matsumo.onenavi.core.model.GuidanceUiState
@@ -62,6 +65,7 @@ class GuidanceSessionManager(
 
     private var progressJob: Job? = null
     private var speechOrchestrator: SpeechOrchestrator? = null
+    private var ttsEngine: AndroidTtsEngine? = null
     private val phraseComposer = JapaneseGuidancePhraseComposer()
     private val speechHistory = GuidanceSpeechHistory()
 
@@ -87,17 +91,30 @@ class GuidanceSessionManager(
         sessionStartTimeMillis = System.currentTimeMillis()
         lastSpokenStepIndex = -1
 
+        val engine = AndroidTtsEngine(
+            context = context,
+            audioFocusManager = AudioFocusManager(context),
+        ).also { createdEngine ->
+            createdEngine.onReadyChanged = { ready ->
+                _guidanceUiState.value = _guidanceUiState.value.copy(isTtsAvailable = ready)
+            }
+        }
+        ttsEngine = engine
         speechOrchestrator = SpeechOrchestrator(
-            ttsEngine = AndroidTtsEngine(
-                context = context,
-                audioFocusManager = AudioFocusManager(context),
-            ),
+            ttsEngine = engine,
             speechHistory = speechHistory,
         )
 
         _navigationState.value = NavigationState.ActiveGuidance
         _guidanceUiState.value = GuidanceUiState.Initial.copy(isTtsAvailable = false)
-        speak(sessionEvent(route.id, SessionGuideKind.START), flush = true)
+        scope.launch {
+            val isReady = withTimeoutOrNull(TTS_READY_TIMEOUT_MS) {
+                engine.isReady.filter { it }.first()
+            } != null
+            if (isReady && activeRoute?.id == route.id) {
+                speak(sessionEvent(route.id, SessionGuideKind.START), flush = true)
+            }
+        }
         cameraManager.requestCameraFollowing(pitch3D = true)
 
         progressJob?.cancel()
@@ -115,6 +132,7 @@ class GuidanceSessionManager(
         activeRoute?.let { speak(sessionEvent(it.id, SessionGuideKind.STOP), flush = true) }
         speechOrchestrator?.shutdown()
         speechOrchestrator = null
+        ttsEngine = null
         activeRoute = null
 
         _guidanceUiState.value = GuidanceUiState.Initial
@@ -171,7 +189,7 @@ class GuidanceSessionManager(
             ),
             currentRoadName = currentStep?.roadName?.takeIf { it.isNotBlank() },
             isOffRoute = false,
-            isTtsAvailable = speechOrchestrator != null,
+            isTtsAvailable = ttsEngine?.isReady?.value == true,
             isLocationStale = false,
         )
 
@@ -320,5 +338,6 @@ class GuidanceSessionManager(
         private const val TAG = "GuidanceSessionManager"
         private const val PROGRESS_INTERVAL_MS = 1000L
         private const val ARRIVAL_THRESHOLD_METERS = 50.0
+        private const val TTS_READY_TIMEOUT_MS = 3_000L
     }
 }

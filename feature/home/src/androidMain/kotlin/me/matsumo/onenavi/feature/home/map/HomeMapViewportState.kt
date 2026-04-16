@@ -125,6 +125,15 @@ class HomeMapViewportState internal constructor(
 }
 
 @Stable
+/**
+ * 地図カメラの現在状態。
+ *
+ * @param latitude カメラ中心の緯度
+ * @param longitude カメラ中心の経度
+ * @param zoom 現在のズーム値
+ * @param bearing 現在のベアリング
+ * @param tilt 現在のチルト値
+ */
 data class HomeMapCameraState(
     val latitude: Double = DEFAULT_LATITUDE,
     val longitude: Double = DEFAULT_LONGITUDE,
@@ -133,6 +142,13 @@ data class HomeMapCameraState(
     val tilt: Float = 0f,
 )
 
+/**
+ * CameraPositionState から取得したスナップショット。
+ *
+ * @param position 現在のカメラ位置
+ * @param isMoving カメラ移動中かどうか
+ * @param moveStartedReason 移動開始理由
+ */
 internal data class ViewportSnapshot(
     val position: CameraPosition,
     val isMoving: Boolean,

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -78,7 +79,6 @@ internal fun HomeMapRouteCallout(
         Column(
             modifier = modifier,
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             Box(
                 modifier = Modifier
@@ -121,6 +121,13 @@ internal fun HomeMapRouteCallout(
     }
 }
 
+/**
+ * ルートプレビュー用吹き出しの視覚スタイル。
+ *
+ * @param backgroundColor 吹き出し背景色
+ * @param textColor 吹き出し文字色
+ */
+@Immutable
 private data class RouteCalloutStyle(
     val backgroundColor: Color,
     val textColor: Color,
