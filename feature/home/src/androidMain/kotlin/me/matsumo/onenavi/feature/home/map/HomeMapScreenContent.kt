@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
@@ -63,6 +65,7 @@ internal fun HomeMapScreenContent(
 ) {
     val density = LocalDensity.current
     val activity = LocalActivity.current
+    val coroutineScope = rememberCoroutineScope()
 
     val screenState by viewModel.screenState.collectAsStateWithLifecycle()
     val overlayState by viewModel.overlayState.collectAsStateWithLifecycle()
@@ -209,7 +212,12 @@ internal fun HomeMapScreenContent(
                 selectedResult = selectedResult,
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
-                onNavigationStarted = viewModel::onNavigationStarted,
+                onNavigationStarted = {
+                    val hostActivity = activity ?: return@HomeMapSheetContent
+                    coroutineScope.launch {
+                        viewModel.onNavigationStarted(hostActivity)
+                    }
+                },
                 onRouteSelected = viewModel::onRouteSelected,
                 onSearchResultSelected = viewModel::onSearchResultSelected,
                 onRouteSearchClicked = viewModel::onRouteSearch,

@@ -27,7 +27,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
 class NavigationSdkManager(
-    application: Application,
+    private val application: Application,
     private val routeManager: RouteManager,
 ) {
 
@@ -57,6 +57,7 @@ class NavigationSdkManager(
     private var navigator: Navigator? = null
     private var navigatorInitializing = false
     private var activeRoute: GoogleRoute? = null
+    private val pendingInitializationCallbacks = mutableListOf<(Result<Unit>) -> Unit>()
 
     private val arrivalListener = Navigator.ArrivalListener { event ->
         handleArrival(event)
@@ -84,8 +85,14 @@ class NavigationSdkManager(
         }
     }
 
-    fun initialize(activity: Activity) {
-        if (navigator != null || navigatorInitializing) return
+    suspend fun initialize(activity: Activity): Result<Unit> = suspendCoroutine { continuation ->
+        if (navigator != null) {
+            continuation.resume(Result.success(Unit))
+            return@suspendCoroutine
+        }
+
+        pendingInitializationCallbacks += continuation::resume
+        if (navigatorInitializing) return@suspendCoroutine
 
         navigatorInitializing = true
         NavigationApi.getNavigator(
@@ -94,12 +101,18 @@ class NavigationSdkManager(
                 override fun onNavigatorReady(navigator: Navigator) {
                     navigatorInitializing = false
                     attachNavigator(navigator)
+                    completeInitialization(Result.success(Unit))
                 }
 
                 override fun onError(errorCode: Int) {
                     navigatorInitializing = false
                     _initializationErrorCode.value = errorCode
                     Napier.e(tag = TAG) { "Navigator init failed. errorCode=$errorCode" }
+                    completeInitialization(
+                        Result.failure(
+                            IllegalStateException("Navigator init failed. errorCode=$errorCode"),
+                        ),
+                    )
                 }
             },
         )
@@ -151,6 +164,7 @@ class NavigationSdkManager(
             navigator.cleanup()
         }
         navigator = null
+        navigatorInitializing = false
         _isNavigatorReady.value = false
         _tripProgress.value = null
         _isOffRoute.value = false
@@ -175,11 +189,18 @@ class NavigationSdkManager(
             packageName,
             SERVICE_CLASS_NAME,
             NavigationUpdatesOptions.builder()
+                .setDisplayMetrics(application.resources.displayMetrics)
                 .setGeneratedStepImagesType(NavigationUpdatesOptions.GeneratedStepImagesType.NONE)
                 .setNumNextStepsToPreview(NUM_NEXT_STEPS_TO_PREVIEW)
                 .build(),
         )
         roadSnappedLocationProvider.addLocationListener(roadSnappedLocationListener)
+    }
+
+    private fun completeInitialization(result: Result<Unit>) {
+        val callbacks = pendingInitializationCallbacks.toList()
+        pendingInitializationCallbacks.clear()
+        callbacks.forEach { callback -> callback(result) }
     }
 
     private fun buildCustomRoutesOptions(route: GoogleRoute): CustomRoutesOptions? {
