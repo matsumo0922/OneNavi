@@ -25,6 +25,7 @@ import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapEffect
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
@@ -36,13 +37,20 @@ import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.feature.home.R
+import me.matsumo.onenavi.feature.home.map.components.HomeMapRouteCallout
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
+import me.matsumo.onenavi.feature.home.map.util.CalloutSize
+import me.matsumo.onenavi.feature.home.map.util.GoogleMapCalloutPositioner
 
 private const val TAG = "HomeMapsMap"
 private const val PRIMARY_ROUTE_WIDTH = 14f
 private const val SECONDARY_ROUTE_WIDTH = 9f
 private const val GOOGLE_BLUE = 0xFF1A73E8
 private const val GOOGLE_ROUTE_GRAY = 0xFF78909C
+private val ROUTE_CALLOUT_SIZE = CalloutSize(
+    widthPx = 132.0,
+    heightPx = 72.0,
+)
 
 @Composable
 internal fun HomeMapsMapEffectContent(
@@ -68,6 +76,9 @@ internal fun HomeMapsMapEffectContent(
     val mapPadding by cameraManager.mapPadding.collectAsStateWithLifecycle()
     val vehiclePuckBitmap = remember(context) {
         context.createBitmap(R.drawable.ic_vehicle_puck)
+    }
+    var routeCalloutPositions by remember(routeResults) {
+        mutableStateOf(List(routeResults.size) { null as LatLng? })
     }
 
     var vehiclePuckIcon by remember { mutableStateOf<BitmapDescriptor?>(null) }
@@ -115,6 +126,17 @@ internal fun HomeMapsMapEffectContent(
             }
         },
     ) {
+        MapEffect(
+            routeResults,
+            viewportState.cameraPositionState.position,
+        ) { googleMap ->
+            routeCalloutPositions = GoogleMapCalloutPositioner.computePositions(
+                googleMap = googleMap,
+                geometries = routeResults.map { it.item.geometry },
+                calloutSize = ROUTE_CALLOUT_SIZE,
+            )
+        }
+
         routeResults.forEachIndexed { index, routeResult ->
             Polyline(
                 points = routeResult.item.geometry.map(RoutePoint::toLatLng),
@@ -165,6 +187,20 @@ internal fun HomeMapsMapEffectContent(
             }
 
             is HomeMapScreenState.RoutePreview -> {
+                routeResults.forEachIndexed { index, routeResult ->
+                    routeCalloutPositions.getOrNull(index)?.let { position ->
+                        HomeMapRouteCallout(
+                            position = position,
+                            routeResult = routeResult,
+                            isPrimary = index == selectedRouteIndex,
+                            onClick = {
+                                if (index != selectedRouteIndex) {
+                                    onRouteSelected(index)
+                                }
+                            },
+                        )
+                    }
+                }
                 screenState.waypoints.lastOrNull()?.let { waypoint ->
                     Marker(
                         state = MarkerState(position = waypoint.toRoutePoint().toLatLng()),
