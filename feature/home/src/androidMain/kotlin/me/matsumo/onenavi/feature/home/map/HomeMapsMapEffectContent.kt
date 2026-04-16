@@ -28,11 +28,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapView
+import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.PolylineOptions
+import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
@@ -45,6 +47,7 @@ private const val PRIMARY_ROUTE_WIDTH = 14f
 private const val SECONDARY_ROUTE_WIDTH = 9f
 private const val GOOGLE_BLUE = 0xFF1A73E8.toInt()
 private const val GOOGLE_ROUTE_GRAY = 0xFF78909C.toInt()
+private const val TAG = "HomeMapsMap"
 
 @Composable
 internal fun HomeMapsMapEffectContent(
@@ -88,6 +91,9 @@ internal fun HomeMapsMapEffectContent(
             mapView.apply {
                 getMapAsync { map ->
                     googleMap = map
+                    Napier.d(tag = TAG) {
+                        "getMapAsync ready. target=${map.cameraPosition.target.latitude},${map.cameraPosition.target.longitude} zoom=${map.cameraPosition.zoom}"
+                    }
                     viewportState.attachMap(map)
                     cameraManager.setupCamera(map)
                     currentOnMapReady.value(map)
@@ -113,6 +119,16 @@ internal fun HomeMapsMapEffectContent(
                         currentBearing = currentBearing,
                         vehiclePuckBitmap = vehiclePuckBitmap,
                     )
+                    map.setOnMapLoadedCallback {
+                        Napier.i(tag = TAG) {
+                            "Map loaded. target=${map.cameraPosition.target.latitude},${map.cameraPosition.target.longitude} zoom=${map.cameraPosition.zoom}"
+                        }
+                        map.snapshot { snapshot ->
+                            Napier.i(tag = TAG) {
+                                "Snapshot ready. size=${snapshot?.width ?: -1}x${snapshot?.height ?: -1}"
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -319,6 +335,9 @@ private fun renderVehiclePuck(
 private fun rememberMapViewWithLifecycle(lifecycleOwner: LifecycleOwner): MapView {
     val context = LocalContext.current
     val mapView = remember {
+        runCatching { MapsInitializer.initialize(context.applicationContext) }
+            .onSuccess { Napier.i(tag = TAG) { "MapsInitializer.initialize success" } }
+            .onFailure { Napier.e(it, tag = TAG) { "MapsInitializer.initialize failed" } }
         MapView(context).apply {
             onCreate(Bundle())
         }
