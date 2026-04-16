@@ -22,15 +22,14 @@ internal fun reduceScreenState(
     navigationState: NavigationState,
     isRouteSearching: Boolean,
 ): HomeMapScreenState = when {
-    // TODO: 将来 Arrived UI を実装する際はこの分岐を有効化する
-    // navigationState is NavigationState.Arrival -> {
-    //     val destination = waypoints.lastOrNull()
-    //     if (destination != null) {
-    //         HomeMapScreenState.Arrived(destination = destination)
-    //     } else {
-    //         HomeMapScreenState.Browsing
-    //     }
-    // }
+    navigationState is NavigationState.Arrival -> {
+        val destination = waypoints.lastOrNull()
+        if (destination != null) {
+            HomeMapScreenState.Arrived(destination = destination)
+        } else {
+            HomeMapScreenState.Browsing
+        }
+    }
     navigationState is NavigationState.ActiveGuidance -> {
         HomeMapScreenState.Navigating
     }
