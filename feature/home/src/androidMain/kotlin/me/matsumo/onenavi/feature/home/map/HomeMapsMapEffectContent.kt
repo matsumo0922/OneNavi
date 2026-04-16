@@ -89,51 +89,49 @@ internal fun HomeMapsMapEffectContent(
 
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
     var vehiclePuckIcon by remember { mutableStateOf<BitmapDescriptor?>(null) }
-    var navigationViewLifecycleDelegate by remember { mutableStateOf<NavigationViewLifecycleDelegate?>(null) }
+    val navigationView = remember(context, restoredNavigationState) {
+        NavigationView(context).apply {
+            setNavigationUiEnabled(false)
+            getMapAsync { map ->
+                googleMap = map
+                vehiclePuckIcon = BitmapDescriptorFactory.fromBitmap(vehiclePuckBitmap)
+                viewportState.attachMap(map)
+                cameraManager.setupCamera(map)
+                currentOnMapReady.value(map)
+                configureMap(
+                    map = map,
+                    hasLocationPermission = hasLocationPermission,
+                    onMapLandmarkSelected = { name, point ->
+                        currentOnMapLandmarkSelected.value(name, point.latitude, point.longitude)
+                    },
+                    onRoutePolylineSelected = { index ->
+                        if (index != currentSelectedRouteIndex.value) {
+                            currentOnRouteSelected.value(index)
+                        }
+                    },
+                )
+                renderMapState(
+                    map = map,
+                    screenState = currentScreenState.value,
+                    routeGeometries = routeResults.map { it.item.geometry },
+                    selectedRouteIndex = currentSelectedRouteIndex.value,
+                    currentLocation = currentLocation,
+                    currentBearing = currentBearing,
+                    vehiclePuckIcon = vehiclePuckIcon,
+                )
+            }
+        }
+    }
+    val navigationViewLifecycleDelegate = remember(navigationView, restoredNavigationState) {
+        NavigationViewLifecycleDelegate(
+            navigationView = navigationView,
+            initialSavedState = restoredNavigationState,
+        )
+    }
 
     AndroidView(
         modifier = modifier.fillMaxSize(),
-        factory = { viewContext ->
-            NavigationView(viewContext).apply {
-                navigationViewLifecycleDelegate = NavigationViewLifecycleDelegate(
-                    navigationView = this,
-                    initialSavedState = restoredNavigationState,
-                ).also { delegate ->
-                    viewContext.applicationContext.registerComponentCallbacks(delegate)
-                    delegate.moveTo(lifecycleOwner.lifecycle.currentState)
-                }
-
-                setNavigationUiEnabled(false)
-                getMapAsync { map ->
-                    googleMap = map
-                    vehiclePuckIcon = BitmapDescriptorFactory.fromBitmap(vehiclePuckBitmap)
-                    viewportState.attachMap(map)
-                    cameraManager.setupCamera(map)
-                    currentOnMapReady.value(map)
-                    configureMap(
-                        map = map,
-                        hasLocationPermission = hasLocationPermission,
-                        onMapLandmarkSelected = { name, point ->
-                            currentOnMapLandmarkSelected.value(name, point.latitude, point.longitude)
-                        },
-                        onRoutePolylineSelected = { index ->
-                            if (index != currentSelectedRouteIndex.value) {
-                                currentOnRouteSelected.value(index)
-                            }
-                        },
-                    )
-                    renderMapState(
-                        map = map,
-                        screenState = currentScreenState.value,
-                        routeGeometries = routeResults.map { it.item.geometry },
-                        selectedRouteIndex = currentSelectedRouteIndex.value,
-                        currentLocation = currentLocation,
-                        currentBearing = currentBearing,
-                        vehiclePuckIcon = vehiclePuckIcon,
-                    )
-                }
-            }
-        },
+        factory = { navigationView },
         update = { navigationView ->
             navigationView.setNavigationUiEnabled(false)
             googleMap?.let { map ->
@@ -164,30 +162,30 @@ internal fun HomeMapsMapEffectContent(
     }
 
     DisposableEffect(lifecycleOwner, navigationViewLifecycleDelegate) {
-        val delegate = navigationViewLifecycleDelegate ?: return@DisposableEffect onDispose {}
         val observer = object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
-                delegate.onStart()
+                navigationViewLifecycleDelegate.onStart()
             }
 
             override fun onResume(owner: LifecycleOwner) {
-                delegate.onResume()
+                navigationViewLifecycleDelegate.onResume()
             }
 
             override fun onPause(owner: LifecycleOwner) {
-                delegate.onPause()
+                navigationViewLifecycleDelegate.onPause()
             }
 
             override fun onStop(owner: LifecycleOwner) {
-                delegate.onStop()
+                navigationViewLifecycleDelegate.onStop()
             }
 
             override fun onDestroy(owner: LifecycleOwner) {
-                delegate.onDestroy()
+                navigationViewLifecycleDelegate.onDestroy()
             }
         }
 
         lifecycleOwner.lifecycle.addObserver(observer)
+        navigationViewLifecycleDelegate.moveTo(lifecycleOwner.lifecycle.currentState)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
@@ -195,10 +193,9 @@ internal fun HomeMapsMapEffectContent(
 
     DisposableEffect(savedStateRegistryOwner, navigationViewLifecycleDelegate) {
         val owner = savedStateRegistryOwner ?: return@DisposableEffect onDispose {}
-        val delegate = navigationViewLifecycleDelegate ?: return@DisposableEffect onDispose {}
         owner.savedStateRegistry.unregisterSavedStateProvider(NAVIGATION_VIEW_SAVED_STATE_KEY)
         owner.savedStateRegistry.registerSavedStateProvider(NAVIGATION_VIEW_SAVED_STATE_KEY) {
-            delegate.saveState()
+            navigationViewLifecycleDelegate.saveState()
         }
         onDispose {
             owner.savedStateRegistry.unregisterSavedStateProvider(NAVIGATION_VIEW_SAVED_STATE_KEY)
@@ -206,15 +203,14 @@ internal fun HomeMapsMapEffectContent(
     }
 
     DisposableEffect(context, navigationViewLifecycleDelegate) {
-        val delegate = navigationViewLifecycleDelegate ?: return@DisposableEffect onDispose {}
+        context.applicationContext.registerComponentCallbacks(navigationViewLifecycleDelegate)
         onDispose {
-            context.applicationContext.unregisterComponentCallbacks(delegate)
+            context.applicationContext.unregisterComponentCallbacks(navigationViewLifecycleDelegate)
             googleMap = null
             vehiclePuckIcon = null
             viewportState.detachMap()
             cameraManager.teardownCamera()
-            delegate.onDestroy()
-            navigationViewLifecycleDelegate = null
+            navigationViewLifecycleDelegate.onDestroy()
         }
     }
 }
