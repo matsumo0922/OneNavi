@@ -162,15 +162,6 @@ class HomeMapViewModel(
             .distinctUntilChanged()
             .onEach { query -> performSearch(query) }
             .launchIn(viewModelScope)
-
-        // Arrival 検知 → 即ナビ停止扱い（将来 Arrived UI 実装時はこの監視を外す）
-        guidanceSessionManager.navigationState
-            .onEach { navState ->
-                if (navState is NavigationState.Arrival) {
-                    onNavigationStopped()
-                }
-            }
-            .launchIn(viewModelScope)
     }
 
     override fun onCleared() {
@@ -211,10 +202,7 @@ class HomeMapViewModel(
                         onNavigationStopped()
                     }
                     is HomeMapScreenState.Arrived -> {
-                        _routeResults.value = persistentListOf()
-                        _waypoints.value = persistentListOf()
-                        _selectedResult.value = null
-                        routeManager.clearRoutes()
+                        onArrivalDismissed()
                     }
                     else -> { /* Browsing: 何もしない */ }
                 }
@@ -234,12 +222,23 @@ class HomeMapViewModel(
         guidanceSessionManager.setNavigationState(NavigationState.Browsing)
         _isRouteSearching.value = true
 
-        _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = false))
-        _effects.trySend(HomeMapEffect.UseNavigationLocationProvider(enabled = false))
+        clearGuidanceEffects()
         _effects.trySend(HomeMapEffect.MoveCameraToRouteOverview)
 
         // waypoints を保持してルート再検索（旧ルートは表示し続け、再検索完了で差し替え）
         searchRoutesFromWaypoints(_waypoints.value)
+    }
+
+    internal fun onArrivalDismissed() {
+        guidanceSessionManager.stopSession()
+        guidanceSessionManager.setNavigationState(NavigationState.Browsing)
+        _routeResults.value = persistentListOf()
+        _waypoints.value = persistentListOf()
+        _selectedResult.value = null
+        _topBarMode.value = RoutePreviewTopBarMode.Viewing
+        _isRouteSearching.value = false
+        routeManager.clearRoutes()
+        clearGuidanceEffects()
     }
 
     internal fun onQueryChanged(query: String) {
@@ -576,6 +575,11 @@ class HomeMapViewModel(
         if (place != null) {
             _effects.trySend(HomeMapEffect.MoveCameraToPlace(place))
         }
+    }
+
+    private fun clearGuidanceEffects() {
+        _effects.trySend(HomeMapEffect.SetKeepScreenOn(enabled = false))
+        _effects.trySend(HomeMapEffect.UseNavigationLocationProvider(enabled = false))
     }
 
     fun onDismissSearchResults() {

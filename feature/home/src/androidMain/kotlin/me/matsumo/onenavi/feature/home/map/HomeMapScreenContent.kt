@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
+import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
@@ -41,6 +42,7 @@ import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
+import me.matsumo.onenavi.feature.home.map.components.navi.HomeMapArrivalContent
 import me.matsumo.onenavi.feature.home.map.components.navi.HomeMapNaviContent
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapRouteTopAppBar
 import me.matsumo.onenavi.feature.home.map.components.topappbar.HomeMapTopAppBar
@@ -75,6 +77,7 @@ internal fun HomeMapScreenContent(
     val waypointEditResult by viewModel.waypointEditResult.collectAsStateWithLifecycle()
     val currentLocation by viewModel.cameraManager.currentLocation.collectAsStateWithLifecycle()
     val currentBearing by viewModel.cameraManager.currentBearing.collectAsStateWithLifecycle()
+    val arrivalInfo by viewModel.guidanceSessionManager.arrivalInfo.collectAsStateWithLifecycle()
 
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
     var trackingZoom by remember { mutableFloatStateOf(DEFAULT_TRACKING_ZOOM) }
@@ -243,6 +246,8 @@ internal fun HomeMapScreenContent(
                     if (shouldShowSheet) sheetPeekHeight.toPx() else 0f
                 },
                 onNavigationStopped = viewModel::onNavigationStopped,
+                onArrivalDismissed = viewModel::onArrivalDismissed,
+                arrivalInfo = arrivalInfo,
                 trackingMode = trackingMode,
                 onTrackingModeChanged = { trackingMode = it },
                 onTrackingZoomChanged = { trackingZoom = it },
@@ -296,6 +301,8 @@ private fun BoxScope.HomeMapScreenContentControls(
     cameraManager: CameraManager,
     bottomSheetPeekHeightPx: Float,
     onNavigationStopped: () -> Unit,
+    onArrivalDismissed: () -> Unit,
+    arrivalInfo: ArrivalInfo?,
     trackingMode: LocationTrackingMode?,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
     onTrackingZoomChanged: (Float) -> Unit,
@@ -308,6 +315,22 @@ private fun BoxScope.HomeMapScreenContentControls(
                 cameraManager = cameraManager,
                 bottomSheetPeekHeightPx = bottomSheetPeekHeightPx,
                 onNavigationStopped = onNavigationStopped,
+            )
+        }
+        is HomeMapScreenState.Arrived -> {
+            val destinationName = (screenState.destination as? RouteWaypoint.Place)?.name
+
+            HomeMapArrivalContent(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        bottom = 24.dp,
+                    ),
+                arrivalInfo = arrivalInfo,
+                destinationName = destinationName,
+                onFinishClicked = onArrivalDismissed,
             )
         }
         else -> {
