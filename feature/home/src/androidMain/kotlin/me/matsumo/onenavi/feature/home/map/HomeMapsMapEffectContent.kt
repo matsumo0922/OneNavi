@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -356,6 +357,16 @@ private fun rememberMapViewWithLifecycle(lifecycleOwner: LifecycleOwner): MapVie
             override fun onDestroy(owner: LifecycleOwner) = mapView.onDestroy()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+        when {
+            lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) -> {
+                mapView.onStart()
+                mapView.onResume()
+            }
+
+            lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) -> {
+                mapView.onStart()
+            }
+        }
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
