@@ -61,6 +61,14 @@ internal fun rememberHomeMapViewportState(): HomeMapViewportState {
     return viewportState
 }
 
+/**
+ * Home 画面の地図カメラ状態とユーザー操作状態を管理する。
+ *
+ * Compose の `CameraPositionState` を監視しつつ、UI から扱いやすい
+ * カメラ状態とジェスチャー中フラグを提供する。
+ *
+ * @property cameraPositionState Google Maps Compose が保持するカメラ状態
+ */
 @Stable
 class HomeMapViewportState internal constructor(
     val cameraPositionState: CameraPositionState,
@@ -124,7 +132,6 @@ class HomeMapViewportState internal constructor(
     }
 }
 
-@Stable
 /**
  * 地図カメラの現在状態。
  *
@@ -134,6 +141,7 @@ class HomeMapViewportState internal constructor(
  * @param bearing 現在のベアリング
  * @param tilt 現在のチルト値
  */
+@Stable
 data class HomeMapCameraState(
     val latitude: Double = DEFAULT_LATITUDE,
     val longitude: Double = DEFAULT_LONGITUDE,
