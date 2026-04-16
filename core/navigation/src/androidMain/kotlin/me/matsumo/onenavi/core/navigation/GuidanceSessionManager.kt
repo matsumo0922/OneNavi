@@ -92,6 +92,7 @@ class GuidanceSessionManager(
         sessionStartTimeMillis = System.currentTimeMillis()
         lastSpokenStepIndex = -1
         lastTraveledDistanceMeters = 0.0
+        speechHistory.resetForNewRoute(route.id)
 
         val engine = AndroidTtsEngine(
             context = context,
@@ -175,30 +176,23 @@ class GuidanceSessionManager(
             ?: 0
         val currentStep = steps.getOrNull(currentStepIndex)
         val visibleUpcomingSteps = steps
+            .withIndex()
             .drop(currentStepIndex.coerceAtLeast(0))
-            .filter { it.isDisplayableManeuver() }
-        val currentManeuver = visibleUpcomingSteps
-            .getOrNull(0)
-            ?.let { step ->
-                step.toManeuverInfo(
-                    distanceMeters = (
-                        step.cumulativeDistanceMeters +
-                            step.distanceFromPreviousMeters -
-                            traveledDistance
-                        ).coerceAtLeast(0.0),
-                )
-            }
-        val nextManeuver = visibleUpcomingSteps
-            .getOrNull(1)
-            ?.let { step ->
-                step.toManeuverInfo(
-                    distanceMeters = (
-                        step.cumulativeDistanceMeters +
-                            step.distanceFromPreviousMeters -
-                            traveledDistance
-                        ).coerceAtLeast(0.0),
-                )
-            }
+            .filter { it.value.isDisplayableManeuver() }
+        val currentVisibleStep = visibleUpcomingSteps.getOrNull(0)
+        val nextVisibleStep = visibleUpcomingSteps.getOrNull(1)
+        val currentManeuver = when {
+            currentVisibleStep != null -> currentVisibleStep.value.toManeuverInfo(
+                distanceMeters = currentVisibleStep.value.remainingDistanceFrom(traveledDistance),
+            )
+            else -> null
+        }
+        val nextManeuver = when {
+            nextVisibleStep != null -> nextVisibleStep.value.toManeuverInfo(
+                distanceMeters = nextVisibleStep.value.remainingDistanceFrom(traveledDistance),
+            )
+            else -> null
+        }
         val upcomingSteps = steps.drop(currentStepIndex.coerceAtLeast(0)).toImmutableList()
 
         _guidanceUiState.value = _guidanceUiState.value.copy(
@@ -216,17 +210,24 @@ class GuidanceSessionManager(
             isLocationStale = false,
         )
 
-        if (currentStep != null && currentStepIndex != lastSpokenStepIndex) {
-            lastSpokenStepIndex = currentStepIndex
-            speak(currentStep.toTurnEvent(route.id, currentStepIndex, currentManeuver?.distanceMeters ?: 0.0))
+        if (currentVisibleStep != null && currentVisibleStep.index != lastSpokenStepIndex) {
+            lastSpokenStepIndex = currentVisibleStep.index
+            speak(
+                currentVisibleStep.value.toTurnEvent(
+                    routeId = route.id,
+                    stepIndex = currentVisibleStep.index,
+                    distanceMeters = currentManeuver?.distanceMeters ?: 0.0,
+                ),
+            )
         }
     }
 
-    private fun onFinalDestinationArrival(route: GoogleRoute) {
+    private fun onFinalDestinationArrival(route: GoogleRoute?) {
+        val activeRoute = route ?: return
         val elapsedSeconds = (System.currentTimeMillis() - sessionStartTimeMillis) / 1000.0
         _arrivalInfo.value = ArrivalInfo(
             destinationName = "",
-            totalDistanceMeters = route.distanceMeters,
+            totalDistanceMeters = activeRoute.distanceMeters,
             totalDurationSeconds = elapsedSeconds,
         )
         _navigationState.value = NavigationState.Arrival
@@ -260,6 +261,14 @@ class GuidanceSessionManager(
         }
 
         return nearestProgress.coerceIn(0.0, distanceMeters)
+    }
+
+    private fun RouteStepInfo.remainingDistanceFrom(traveledDistance: Double): Double {
+        return (
+            cumulativeDistanceMeters +
+                distanceFromPreviousMeters -
+                traveledDistance
+            ).coerceAtLeast(0.0)
     }
 
     private fun RouteStepInfo.toManeuverInfo(distanceMeters: Double): ManeuverInfo {

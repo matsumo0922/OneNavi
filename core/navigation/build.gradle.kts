@@ -18,7 +18,6 @@ kotlin {
         }
 
         androidMain.dependencies {
-            implementation(libs.play.services.maps)
             implementation(libs.play.services.location)
         }
     }
