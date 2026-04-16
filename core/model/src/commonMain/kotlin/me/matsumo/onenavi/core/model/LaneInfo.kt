@@ -5,7 +5,7 @@ import kotlinx.collections.immutable.ImmutableList
 
 /**
  * 交差点のレーン情報。
- * Mapbox の BannerInstructions.sub().components() のうち type="lane" の要素から変換される。
+ * Google Navigation SDK の turn-by-turn feed から変換される。
  *
  * @param directions このレーンが示す進行方向の一覧（"left" / "straight" / "right" / "slight left" 等）
  * @param activeDirection 推奨レーンの場合、強調すべき方向（無ければ null）

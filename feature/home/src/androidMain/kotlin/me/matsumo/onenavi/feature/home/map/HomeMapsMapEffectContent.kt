@@ -1,337 +1,245 @@
 package me.matsumo.onenavi.feature.home.map
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.Dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.mapbox.geojson.Point
-import com.mapbox.maps.ImageHolder
-import com.mapbox.maps.MapView
-import com.mapbox.maps.MapboxExperimental
-import com.mapbox.maps.Style
-import com.mapbox.maps.extension.compose.DisposableMapEffect
-import com.mapbox.maps.extension.compose.MapEffect
-import com.mapbox.maps.extension.compose.MapboxMap
-import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
-import com.mapbox.maps.extension.compose.annotation.Marker
-import com.mapbox.maps.extension.compose.style.standard.MapboxStandardStyle
-import com.mapbox.maps.extension.compose.style.standard.StandardStyleState
-import com.mapbox.maps.plugin.LocationPuck2D
-import com.mapbox.maps.plugin.PuckBearing
-import com.mapbox.maps.plugin.gestures.OnMapClickListener
-import com.mapbox.maps.plugin.gestures.addOnMapClickListener
-import com.mapbox.maps.plugin.gestures.removeOnMapClickListener
-import com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListener
-import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
-import com.mapbox.maps.plugin.locationcomponent.location
-import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
-import com.mapbox.navigation.base.route.NavigationRoute
-import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
-import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
-import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
-import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineViewOptions
+import com.google.android.gms.maps.MapsInitializer
+import com.google.android.gms.maps.model.BitmapDescriptor
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapEffect
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.Polyline
+import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.ImmutableList
+import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.CameraManager
-import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.feature.home.R
-import me.matsumo.onenavi.feature.home.map.components.HomeMapNumberedPin
 import me.matsumo.onenavi.feature.home.map.components.HomeMapRouteCallout
-import me.matsumo.onenavi.feature.home.map.components.HomeMapWaypointPin
-import me.matsumo.onenavi.feature.home.map.components.RouteCalloutStyle
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 import me.matsumo.onenavi.feature.home.map.util.CalloutSize
-import me.matsumo.onenavi.feature.home.map.util.MapCalloutPositioner
+import me.matsumo.onenavi.feature.home.map.util.GoogleMapCalloutPositioner
 
-private const val ROUTE_CLICK_PADDING = 30f
-
+private const val TAG = "HomeMapsMap"
+private const val PRIMARY_ROUTE_WIDTH = 14f
+private const val SECONDARY_ROUTE_WIDTH = 9f
+private const val GOOGLE_BLUE = 0xFF1A73E8
+private const val GOOGLE_ROUTE_GRAY = 0xFF78909C
 private val ROUTE_CALLOUT_SIZE = CalloutSize(
-    widthPx = 180.0,
-    heightPx = 80.0,
+    widthPx = 132.0,
+    heightPx = 72.0,
 )
 
-@Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
-@OptIn(MapboxExperimental::class, ExperimentalPreviewMapboxNavigationAPI::class)
 @Composable
 internal fun HomeMapsMapEffectContent(
-    viewportState: MapViewportState,
-    standardStyleState: StandardStyleState,
-    sheetVisibleHeight: Dp,
+    viewportState: HomeMapViewportState,
     screenState: HomeMapScreenState,
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
-    routeManager: RouteManager,
+    currentLocation: RoutePoint?,
+    currentBearing: Float,
     cameraManager: CameraManager,
-    onMapViewChanged: (MapView) -> Unit,
-    onUserLocationUpdated: (latitude: Double, longitude: Double) -> Unit,
+    onMapLandmarkSelected: (name: String?, latitude: Double, longitude: Double) -> Unit,
     onRouteSelected: (index: Int) -> Unit,
     modifier: Modifier = Modifier,
-    onBearingChanged: (Double) -> Unit,
 ) {
     val context = LocalContext.current
-
-    val currentRouteResults = rememberUpdatedState(routeResults)
-    val currentSelectedRouteIndex = rememberUpdatedState(selectedRouteIndex)
-    val currentOnRouteSelected = rememberUpdatedState(onRouteSelected)
-
-    val navigationRoutes by routeManager.routes.collectAsStateWithLifecycle()
-    val currentNavigationRoutes = rememberUpdatedState(navigationRoutes)
-
-    var calloutPoints by remember { mutableStateOf<List<Point?>>(emptyList()) }
-
-    val primaryStyle = remember { RouteCalloutStyle.forRoute(isPrimary = true) }
-    val secondaryStyle = remember { RouteCalloutStyle.forRoute(isPrimary = false) }
-
-    val routeLineApi = remember {
-        MapboxRouteLineApi(
-            MapboxRouteLineApiOptions.Builder()
-                .build(),
-        )
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val hasLocationPermission = remember(context) {
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+    val mapPadding by cameraManager.mapPadding.collectAsStateWithLifecycle()
+    val vehiclePuckBitmap = remember(context) {
+        context.createBitmap(R.drawable.ic_vehicle_puck)
+    }
+    var routeCalloutPositions by remember(routeResults) {
+        mutableStateOf(List(routeResults.size) { null as LatLng? })
     }
 
-    val routeLineView = remember {
-        MapboxRouteLineView(
-            MapboxRouteLineViewOptions.Builder(context)
-                .displaySoftGradientForTraffic(true)
-                .build(),
-        )
-    }
+    var vehiclePuckIcon by remember { mutableStateOf<BitmapDescriptor?>(null) }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            routeLineApi.cancel()
-            routeLineView.cancel()
+    LaunchedEffect(context, vehiclePuckBitmap) {
+        runCatching {
+            MapsInitializer.initialize(context.applicationContext)
+            BitmapDescriptorFactory.fromBitmap(vehiclePuckBitmap)
+        }.onSuccess { icon ->
+            vehiclePuckIcon = icon
+        }.onFailure { error ->
+            Napier.e(error, tag = TAG) { "Failed to create vehicle puck icon." }
         }
     }
 
-    MapboxMap(
+    GoogleMap(
         modifier = modifier.fillMaxSize(),
-        mapViewportState = viewportState,
-        compass = {},
-        scaleBar = {},
-        logo = {
-            Logo(
-                modifier = Modifier.padding(
-                    bottom = sheetVisibleHeight,
-                ),
-            )
+        cameraPositionState = viewportState.cameraPositionState,
+        properties = MapProperties(
+            isBuildingEnabled = true,
+            isMyLocationEnabled = hasLocationPermission && vehiclePuckIcon == null,
+        ),
+        uiSettings = MapUiSettings(
+            compassEnabled = false,
+            mapToolbarEnabled = false,
+            myLocationButtonEnabled = false,
+            zoomControlsEnabled = false,
+        ),
+        contentPadding = PaddingValues(
+            start = with(density) { mapPadding.left.toDp() },
+            top = with(density) { mapPadding.top.toDp() },
+            end = with(density) { mapPadding.right.toDp() },
+            bottom = with(density) { mapPadding.bottom.toDp() },
+        ),
+        onMapLongClick = { latLng ->
+            onMapLandmarkSelected(null, latLng.latitude, latLng.longitude)
         },
-        attribution = {
-            Attribution(
-                modifier = Modifier.padding(
-                    bottom = sheetVisibleHeight,
-                ),
-            )
+        onPOIClick = { poi ->
+            onMapLandmarkSelected(poi.name, poi.latLng.latitude, poi.latLng.longitude)
         },
-        style = {
-            MapboxStandardStyle(
-                standardStyleState = standardStyleState,
-            )
+        onMapLoaded = {
+            val camera = viewportState.cameraPositionState.position
+            Napier.d(tag = TAG) {
+                "Map loaded: target=${camera.target}, zoom=${camera.zoom}, tilt=${camera.tilt}, bearing=${camera.bearing}"
+            }
         },
     ) {
-        DisposableMapEffect(Unit) { view ->
-            onMapViewChanged(view)
-
-            cameraManager.setupCamera(view)
-            cameraManager.onRouteChanged(currentNavigationRoutes.value.firstOrNull())
-
-            view.location.enabled = true
-            view.location.locationPuck = LocationPuck2D(
-                bearingImage = ImageHolder.from(R.drawable.ic_vehicle_puck),
+        MapEffect(
+            routeResults,
+            viewportState.cameraPositionState.position,
+        ) { googleMap ->
+            routeCalloutPositions = GoogleMapCalloutPositioner.computePositions(
+                googleMap = googleMap,
+                geometries = routeResults.map { it.item.geometry },
+                calloutSize = ROUTE_CALLOUT_SIZE,
             )
-            view.location.puckBearing = PuckBearing.HEADING
-            view.location.puckBearingEnabled = true
+        }
 
-            val positionListener = OnIndicatorPositionChangedListener { point ->
-                onUserLocationUpdated(point.latitude(), point.longitude())
-            }
-
-            val bearingListener = OnIndicatorBearingChangedListener { bearing ->
-                onBearingChanged(bearing)
-            }
-
-            val mapClickListener = OnMapClickListener { point ->
-                val results = currentRouteResults.value
-                if (results.isEmpty()) return@OnMapClickListener false
-
-                routeLineApi.findClosestRoute(point, view.mapboxMap, ROUTE_CLICK_PADDING) { result ->
-                    result.onValue { closestRoute ->
-                        val clickedRoute = closestRoute.navigationRoute
-                        val index = results.indexOfFirst { it.navigationRoute.id == clickedRoute.id }
-
-                        if (index >= 0 && index != currentSelectedRouteIndex.value) {
-                            currentOnRouteSelected.value(index)
-                        }
+        routeResults.forEachIndexed { index, routeResult ->
+            Polyline(
+                points = routeResult.item.geometry.map(RoutePoint::toLatLng),
+                color = Color(if (index == selectedRouteIndex) GOOGLE_BLUE else GOOGLE_ROUTE_GRAY),
+                width = if (index == selectedRouteIndex) PRIMARY_ROUTE_WIDTH else SECONDARY_ROUTE_WIDTH,
+                clickable = true,
+                zIndex = if (index == selectedRouteIndex) 2f else 1f,
+                onClick = {
+                    if (index != selectedRouteIndex) {
+                        onRouteSelected(index)
                     }
-                }
-
-                false
-            }
-
-            view.location.addOnIndicatorPositionChangedListener(positionListener)
-            view.location.addOnIndicatorBearingChangedListener(bearingListener)
-            view.mapboxMap.addOnMapClickListener(mapClickListener)
-
-            // カメラ変更のたびに吹き出し位置をリアルタイム再計算
-            val cameraChangeCancelable = view.mapboxMap.subscribeCameraChanged {
-                calloutPoints = MapCalloutPositioner.computePositions(
-                    mapboxMap = view.mapboxMap,
-                    geometries = currentRouteResults.value.map { it.item.geometry },
-                    calloutSize = ROUTE_CALLOUT_SIZE,
-                )
-            }
-            val styleLoadedCancelable = view.mapboxMap.subscribeStyleLoaded {
-                view.mapboxMap.style?.let { style ->
-                    renderRouteLine(
-                        style = style,
-                        mapView = view,
-                        navigationRoutes = currentNavigationRoutes.value,
-                        routeResults = currentRouteResults.value,
-                        routeLineApi = routeLineApi,
-                        routeLineView = routeLineView,
-                        onCalloutPointsChanged = { calloutPoints = it },
-                    )
-                }
-            }
-
-            onDispose {
-                view.location.removeOnIndicatorPositionChangedListener(positionListener)
-                view.location.removeOnIndicatorBearingChangedListener(bearingListener)
-                view.mapboxMap.removeOnMapClickListener(mapClickListener)
-                cameraChangeCancelable.cancel()
-                styleLoadedCancelable.cancel()
-                cameraManager.teardownCamera()
-            }
+                },
+            )
         }
 
-        // ルートライン描画: routeManager.routes（SDK の RoutesObserver 経由）を source of truth とする
-        MapEffect(navigationRoutes, selectedRouteIndex) { mapView ->
-            cameraManager.onRouteChanged(currentNavigationRoutes.value.firstOrNull())
-
-            mapView.mapboxMap.getStyle { style ->
-                renderRouteLine(
-                    style = style,
-                    mapView = mapView,
-                    navigationRoutes = currentNavigationRoutes.value,
-                    routeResults = currentRouteResults.value,
-                    routeLineApi = routeLineApi,
-                    routeLineView = routeLineView,
-                    onCalloutPointsChanged = { calloutPoints = it },
+        currentLocation?.let { location ->
+            vehiclePuckIcon?.let { icon ->
+                Marker(
+                    state = MarkerState(position = location.toLatLng()),
+                    icon = icon,
+                    flat = true,
+                    anchor = Offset(0.5f, 0.5f),
+                    rotation = currentBearing,
+                    zIndex = 4f,
                 )
             }
         }
 
-        // ルート吹き出し: ナビ中は非表示、プレビュー時のみ表示
-        if (screenState is HomeMapScreenState.RoutePreview) {
-            routeResults.forEachIndexed { index, result ->
-                if (index != selectedRouteIndex) {
-                    calloutPoints.getOrNull(index)?.let { point ->
-                        HomeMapRouteCallout(
-                            point = point,
-                            routeResult = result,
-                            isPrimary = false,
-                            style = secondaryStyle,
-                            onClick = { onRouteSelected(index) },
-                        )
-                    }
-                }
-            }
-
-            calloutPoints.getOrNull(selectedRouteIndex)?.let { point ->
-                HomeMapRouteCallout(
-                    point = point,
-                    routeResult = routeResults[selectedRouteIndex],
-                    isPrimary = true,
-                    style = primaryStyle,
-                    onClick = { },
-                )
-            }
-        }
-
-        // マーカー表示: screenState ベース
         when (screenState) {
-            is HomeMapScreenState.Browsing -> { /* マーカーなし */ }
+            is HomeMapScreenState.Browsing -> Unit
             is HomeMapScreenState.SearchResultsList -> {
                 screenState.results.forEachIndexed { index, result ->
-                    HomeMapNumberedPin(
-                        point = Point.fromLngLat(result.longitude, result.latitude),
-                        number = index + 1,
+                    Marker(
+                        state = MarkerState(position = LatLng(result.latitude, result.longitude)),
+                        title = result.name,
+                        snippet = (index + 1).toString(),
+                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
                     )
                 }
             }
+
             is HomeMapScreenState.PlaceDetails -> {
                 Marker(
-                    point = Point.fromLngLat(screenState.place.longitude, screenState.place.latitude),
-                    color = Color.Red,
-                    innerColor = Color.White,
-                    stroke = Color.White,
+                    state = MarkerState(position = LatLng(screenState.place.latitude, screenState.place.longitude)),
+                    title = screenState.place.name,
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
                 )
             }
+
             is HomeMapScreenState.RoutePreview -> {
-                screenState.waypoints.lastOrNull()?.let { waypoint ->
-                    Marker(
-                        point = Point.fromLngLat(waypoint.longitude, waypoint.latitude),
-                        color = Color.Red,
-                        innerColor = Color.White,
-                        stroke = Color.White,
-                    )
-                }
-                if (screenState.waypoints.size > 2) {
-                    screenState.waypoints.drop(1).dropLast(1).forEachIndexed { index, waypoint ->
-                        val point = when (waypoint) {
-                            is RouteWaypoint.CurrentLocation -> Point.fromLngLat(waypoint.longitude, waypoint.latitude)
-                            is RouteWaypoint.Place -> Point.fromLngLat(waypoint.longitude, waypoint.latitude)
-                        }
-                        HomeMapWaypointPin(
-                            point = point,
-                            label = "K${index + 1}",
+                routeResults.forEachIndexed { index, routeResult ->
+                    routeCalloutPositions.getOrNull(index)?.let { position ->
+                        HomeMapRouteCallout(
+                            position = position,
+                            routeResult = routeResult,
+                            isPrimary = index == selectedRouteIndex,
+                            onClick = {
+                                if (index != selectedRouteIndex) {
+                                    onRouteSelected(index)
+                                }
+                            },
                         )
                     }
                 }
+                screenState.waypoints.lastOrNull()?.let { waypoint ->
+                    Marker(
+                        state = MarkerState(position = waypoint.toRoutePoint().toLatLng()),
+                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
+                    )
+                }
+                screenState.waypoints.drop(1).dropLast(1).forEachIndexed { index, waypoint ->
+                    Marker(
+                        state = MarkerState(position = waypoint.toRoutePoint().toLatLng()),
+                        title = "K${index + 1}",
+                    )
+                }
             }
+
             is HomeMapScreenState.Navigating,
             is HomeMapScreenState.Arrived,
-            -> { /* ナビ中はマーカー非表示 */ }
+            -> Unit
         }
     }
 }
 
-private fun renderRouteLine(
-    style: Style,
-    mapView: MapView,
-    navigationRoutes: List<NavigationRoute>,
-    routeResults: ImmutableList<RouteResult>,
-    routeLineApi: MapboxRouteLineApi,
-    routeLineView: MapboxRouteLineView,
-    onCalloutPointsChanged: (List<Point?>) -> Unit,
-) {
-    if (navigationRoutes.isEmpty()) {
-        routeLineApi.clearRouteLine { expected ->
-            routeLineView.renderClearRouteLineValue(style, expected)
-        }
-        onCalloutPointsChanged(emptyList())
-        return
-    }
+private fun RoutePoint.toLatLng(): LatLng {
+    return LatLng(latitude, longitude)
+}
 
-    routeLineApi.setNavigationRoutes(navigationRoutes) { expected ->
-        routeLineView.renderRouteDrawData(style, expected)
+private fun RouteWaypoint.toRoutePoint(): RoutePoint {
+    return when (this) {
+        is RouteWaypoint.CurrentLocation -> RoutePoint(latitude, longitude)
+        is RouteWaypoint.Place -> RoutePoint(latitude, longitude)
     }
+}
 
-    onCalloutPointsChanged(
-        MapCalloutPositioner.computePositions(
-            mapboxMap = mapView.mapboxMap,
-            geometries = routeResults.map { it.item.geometry },
-            calloutSize = ROUTE_CALLOUT_SIZE,
-        ),
-    )
+private fun Context.createBitmap(drawableRes: Int): Bitmap {
+    val drawable = checkNotNull(AppCompatResources.getDrawable(this, drawableRes))
+    val width = drawable.intrinsicWidth.coerceAtLeast(1)
+    val height = drawable.intrinsicHeight.coerceAtLeast(1)
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    drawable.setBounds(0, 0, canvas.width, canvas.height)
+    drawable.draw(canvas)
+    return bitmap
 }

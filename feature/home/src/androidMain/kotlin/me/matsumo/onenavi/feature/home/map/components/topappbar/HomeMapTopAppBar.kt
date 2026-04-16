@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
-import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -59,6 +58,7 @@ import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_search_bar_placeholder
+import me.matsumo.onenavi.feature.home.map.HomeMapViewportState
 import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -67,7 +67,7 @@ internal fun HomeMapTopAppBar(
     suggestions: ImmutableList<SearchSuggestionItem>,
     histories: ImmutableList<SearchHistory>,
     selectedResult: SearchResultItem?,
-    viewportState: MapViewportState,
+    viewportState: HomeMapViewportState,
     onQueryChanged: (String) -> Unit,
     onSearch: (query: String, latitude: Double?, longitude: Double?) -> Unit,
     onSuggestionSelected: (SearchSuggestionItem) -> Unit,
@@ -85,11 +85,11 @@ internal fun HomeMapTopAppBar(
     var canFocus by remember { mutableStateOf(false) }
 
     fun onSearchAction(query: String) {
-        val center = viewportState.cameraState?.center
+        val center = viewportState.cameraState
 
         textFieldState.setTextAndPlaceCursorAtEnd(query)
         onQueryChanged(query)
-        onSearch(query, center?.latitude(), center?.longitude())
+        onSearch(query, center.latitude, center.longitude)
 
         scope.launch {
             showSearchResult = true

@@ -18,8 +18,8 @@ kotlin {
         }
 
         androidMain.dependencies {
-            implementation(libs.compose.runtime)
-            implementation(libs.bundles.mapbox)
+            implementation(libs.play.services.maps)
+            implementation(libs.play.services.location)
         }
     }
 }

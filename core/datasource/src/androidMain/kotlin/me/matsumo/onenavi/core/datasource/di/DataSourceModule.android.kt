@@ -1,8 +1,8 @@
 package me.matsumo.onenavi.core.datasource.di
 
-import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
+import io.ktor.client.HttpClient
 import me.matsumo.onenavi.core.datasource.GooglePlacesSearchDataSource
-import me.matsumo.onenavi.core.datasource.MapboxNavigationRouteDataSource
+import me.matsumo.onenavi.core.datasource.GoogleRoutesDataSource
 import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.datasource.SearchDataSource
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
@@ -28,12 +28,11 @@ internal actual val dataSourcePlatformModule: Module = module {
     }
 
     single<RouteDataSource> {
-        MapboxNavigationRouteDataSource(
+        val appConfig: AppConfig = get()
+        GoogleRoutesDataSource(
             context = get(),
-            navigationProvider = {
-                MapboxNavigationApp.current()
-                    ?: error("MapboxNavigation is not yet available")
-            },
+            httpClient = get<HttpClient>(),
+            googleApiKey = appConfig.googleApiKey,
         )
     }
 }

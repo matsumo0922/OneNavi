@@ -43,6 +43,8 @@ androidxSqlite = "2.5.1"
 
 # Google
 googlePlaces = "5.1.1"
+googleMapsCompose = "6.12.0"
+playServicesMaps = "19.2.0"
 playReview = "2.0.2"
 playUpdate = "2.1.0"
 playServiceAds = "24.9.0"
@@ -61,11 +63,6 @@ calf = "0.9.0"
 zoomable = "2.9.0"
 kolor = "4.0.5"
 colorPicker = "1.1.3"
-
-# Mapbox
-mapbox = "3.21.0-rc.1"
-mapboxExtension = "11.20.2"
-mapboxSearch = "2.20.2"
 
 # Ads
 lexilabsBasicAds = "1.1.0"
@@ -161,16 +158,6 @@ compose-material-icons = { module = "org.jetbrains.compose.material:material-ico
 compose-navigation3 = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version = "1.0.0-alpha06" }
 compose-navigation3-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3", version = "2.10.0-alpha07" }
 
-# Mapbox
-mapbox-android = { module = "com.mapbox.navigationcore:android-ndk27", version.ref = "mapbox" }
-mapbox-ui-maps = { module = "com.mapbox.navigationcore:ui-maps-ndk27", version.ref = "mapbox" }
-mapbox-ui-components = { module = "com.mapbox.navigationcore:ui-components-ndk27", version.ref = "mapbox" }
-mapbox-tripdata = { module = "com.mapbox.navigationcore:tripdata-ndk27", version.ref = "mapbox" }
-mapbox-extension-compose = { module = "com.mapbox.extension:maps-compose-ndk27", version.ref = "mapboxExtension" }
-mapbox-extension-localization = { module = "com.mapbox.extension:maps-localization-ndk27", version.ref = "mapboxExtension" }
-mapbox-search = { module = "com.mapbox.search:mapbox-search-android-ndk27", version.ref = "mapboxSearch" }
-mapbox-androidauto = { module = "com.mapbox.navigationcore:android-auto-components-ndk27", version.ref = "mapbox" }
-
 # Android Auto
 androidx-car-app = { module = "androidx.car.app:app", version.ref = "androidxCarApp" }
 
@@ -190,6 +177,8 @@ firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 
 # Google
 google-places = { module = "com.google.android.libraries.places:places", version.ref = "googlePlaces" }
+google-maps-compose = { module = "com.google.maps.android:maps-compose", version.ref = "googleMapsCompose" }
+play-services-maps = { module = "com.google.android.gms:play-services-maps", version.ref = "playServicesMaps" }
 play-services-location = { module = "com.google.android.gms:play-services-location", version = "21.3.0" }
 play-review = { module = "com.google.android.play:review-ktx", version.ref = "playReview" }
 play-update = { module = "com.google.android.play:app-update-ktx", version.ref = "playUpdate" }
@@ -234,7 +223,7 @@ filekit-coil = { module = "io.github.vinceglb:filekit-coil", version.ref = "file
 # Others
 coil3-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil3" }
 coil3-network = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil3" }
-desugar = { module = "com.android.tools:desugar_jdk_libs", version = "2.1.5" }
+desugar = { module = "com.android.tools:desugar_jdk_libs_nio", version = "2.1.5" }
 placeholder = { module = "com.revenuecat.purchases:placeholder", version.ref = "placeholder" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version = "3.0.0" }
 libraries-core = { module = "com.mikepenz:aboutlibraries-core", version.ref = "libraries" }
@@ -328,13 +317,4 @@ filekit = [
     "filekit-core",
     "filekit-dialogs",
     "filekit-coil",
-]
-
-mapbox = [
-    "mapbox-android",
-    "mapbox-tripdata",
-    "mapbox-ui-maps",
-    "mapbox-ui-components",
-    "mapbox-extension-compose",
-    "mapbox-extension-localization",
 ]

@@ -33,12 +33,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
-import com.mapbox.maps.CameraOptions
-import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
-import com.mapbox.maps.plugin.viewport.data.DefaultViewportTransitionOptions
-import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateBearing
-import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateOptions
 import kotlinx.coroutines.launch
+import me.matsumo.onenavi.feature.home.map.HomeMapViewportState
 
 /**
  * 地図の追従モードを表す列挙型。
@@ -55,47 +51,34 @@ enum class LocationTrackingMode {
     TopDownNorth,
 }
 
-private const val TRANSITION_MAX_DURATION_MS = 1000L
-private const val FOLLOW_PUCK_ZOOM = 16.0
-private const val FOLLOW_PUCK_PITCH = 45.0
 private const val ZOOM_STEP = 1.0
 
 @Composable
 internal fun HomeMapControls(
     cameraBearing: Double,
-    deviceBearing: Double,
     trackingMode: LocationTrackingMode?,
-    viewportState: MapViewportState,
+    viewportState: HomeMapViewportState,
     autoFollowOnStart: Boolean,
-    modifier: Modifier = Modifier,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
+    onTrackingZoomChanged: (Float) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val scope = rememberCoroutineScope()
     var lastTrackingMode by remember { mutableStateOf(LocationTrackingMode.TiltedHeading) }
-
-    val transitionOptions = remember {
-        DefaultViewportTransitionOptions.Builder()
-            .maxDurationMs(TRANSITION_MAX_DURATION_MS)
-            .build()
-    }
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(autoFollowOnStart) {
         if (autoFollowOnStart) {
-            viewportState.transitionToFollowPuckState(
-                followPuckViewportStateOptions = buildFollowPuckOptions(LocationTrackingMode.TiltedHeading),
-                defaultTransitionOptions = transitionOptions,
-            )
+            onTrackingModeChanged(LocationTrackingMode.TiltedHeading)
         }
     }
 
     fun setZoom(zoom: Double) {
-        scope.launch {
-            val currentZoom = viewportState.cameraState?.zoom ?: FOLLOW_PUCK_ZOOM
-            viewportState.easeTo(
-                CameraOptions.Builder()
-                    .zoom(currentZoom + zoom)
-                    .build(),
-            )
+        val nextZoom = (viewportState.cameraState.zoom + zoom.toFloat()).coerceIn(2f, 21f)
+        coroutineScope.launch {
+            viewportState.zoomBy(zoom.toFloat())
+        }
+        if (trackingMode != null) {
+            onTrackingZoomChanged(nextZoom)
         }
     }
 
@@ -105,68 +88,41 @@ internal fun HomeMapControls(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         HomeMapCompass(
+            modifier = Modifier.size(48.dp),
             bearing = cameraBearing,
             onClicked = {
-                scope.launch {
-                    val currentZoom = viewportState.cameraState?.zoom
-                    val nextMode = when (trackingMode) {
-                        LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
-                        LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
-                        LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
-                        null -> {
-                            val next = when (lastTrackingMode) {
-                                LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
-                                LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
-                                LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
-                            }
-                            lastTrackingMode = next
-                            next
+                onTrackingZoomChanged(viewportState.cameraState.zoom)
+                val nextMode = when (trackingMode) {
+                    LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
+                    LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
+                    LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
+                    null -> {
+                        val next = when (lastTrackingMode) {
+                            LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
+                            LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
+                            LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
                         }
-                    }
-
-                    if (trackingMode != null) {
-                        lastTrackingMode = nextMode
-                        onTrackingModeChanged(nextMode)
-
-                        viewportState.transitionToFollowPuckState(
-                            followPuckViewportStateOptions = buildFollowPuckOptions(
-                                mode = nextMode,
-                                zoom = currentZoom,
-                            ),
-                            defaultTransitionOptions = transitionOptions,
-                        )
-                    } else {
-                        viewportState.easeTo(
-                            buildCameraOptionsForMode(
-                                mode = nextMode,
-                                bearing = deviceBearing,
-                            ),
-                        )
+                        lastTrackingMode = next
+                        next
                     }
                 }
+
+                lastTrackingMode = nextMode
+                onTrackingModeChanged(nextMode)
             },
         )
 
         HomeMapZoomButtons(
             onZoomInClicked = { setZoom(ZOOM_STEP) },
             onZoomOutClicked = { setZoom(-ZOOM_STEP) },
+            modifier = Modifier.width(48.dp),
         )
 
         FloatingActionButton(
             onClick = {
-                scope.launch {
-                    val currentZoom = viewportState.cameraState?.zoom
-                    val mode = trackingMode ?: lastTrackingMode
-                    onTrackingModeChanged(mode)
-
-                    viewportState.transitionToFollowPuckState(
-                        followPuckViewportStateOptions = buildFollowPuckOptions(
-                            mode = mode,
-                            zoom = currentZoom,
-                        ),
-                        defaultTransitionOptions = transitionOptions,
-                    )
-                }
+                val mode = trackingMode ?: lastTrackingMode
+                onTrackingZoomChanged(viewportState.cameraState.zoom)
+                onTrackingModeChanged(mode)
             },
         ) {
             Icon(
@@ -180,11 +136,11 @@ internal fun HomeMapControls(
 @Composable
 private fun HomeMapZoomButtons(
     onZoomInClicked: () -> Unit,
-    modifier: Modifier = Modifier,
     onZoomOutClicked: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier.width(48.dp),
+        modifier = modifier,
         shape = CircleShape,
         color = FloatingActionButtonDefaults.containerColor(),
         tonalElevation = 6.dp,
@@ -232,8 +188,8 @@ private const val COMPASS_NEEDLE_INSET_RATIO = 0.03f
 @Composable
 private fun HomeMapCompass(
     bearing: Double,
-    modifier: Modifier = Modifier,
     onClicked: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val rotationDegrees = -bearing.toFloat()
 
@@ -242,7 +198,7 @@ private fun HomeMapCompass(
     val surfaceColor = FloatingActionButtonDefaults.containerColor()
 
     Surface(
-        modifier = modifier.size(48.dp),
+        modifier = modifier,
         shape = CircleShape,
         color = surfaceColor,
         tonalElevation = 6.dp,
@@ -289,55 +245,6 @@ private fun HomeMapCompass(
                 )
             }
         }
-    }
-}
-
-private fun buildCameraOptionsForMode(
-    mode: LocationTrackingMode,
-    bearing: Double,
-): CameraOptions {
-    return when (mode) {
-        LocationTrackingMode.TiltedHeading -> CameraOptions.Builder()
-            .pitch(FOLLOW_PUCK_PITCH)
-            .bearing(bearing)
-            .build()
-
-        LocationTrackingMode.TopDownHeading -> CameraOptions.Builder()
-            .pitch(0.0)
-            .bearing(bearing)
-            .build()
-
-        LocationTrackingMode.TopDownNorth -> CameraOptions.Builder()
-            .pitch(0.0)
-            .bearing(0.0)
-            .build()
-    }
-}
-
-private fun buildFollowPuckOptions(
-    mode: LocationTrackingMode,
-    zoom: Double? = null,
-): FollowPuckViewportStateOptions {
-    val effectiveZoom = zoom ?: FOLLOW_PUCK_ZOOM
-
-    return when (mode) {
-        LocationTrackingMode.TiltedHeading -> FollowPuckViewportStateOptions.Builder()
-            .zoom(effectiveZoom)
-            .pitch(FOLLOW_PUCK_PITCH)
-            .bearing(FollowPuckViewportStateBearing.SyncWithLocationPuck)
-            .build()
-
-        LocationTrackingMode.TopDownHeading -> FollowPuckViewportStateOptions.Builder()
-            .zoom(effectiveZoom)
-            .pitch(0.0)
-            .bearing(FollowPuckViewportStateBearing.SyncWithLocationPuck)
-            .build()
-
-        LocationTrackingMode.TopDownNorth -> FollowPuckViewportStateOptions.Builder()
-            .zoom(effectiveZoom)
-            .pitch(0.0)
-            .bearing(FollowPuckViewportStateBearing.Constant(0.0))
-            .build()
     }
 }
 

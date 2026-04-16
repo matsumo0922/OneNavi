@@ -1,5 +1,10 @@
 # 16. ターンバイターンナビゲーション フロー詳細
 
+> 2026-04-16 更新:
+> この文書の多くは Mapbox ベース実装時のフローを記述している。
+> 現在の Android head は Google Routes API + 独自 guidance に移行しており、
+> レーン案内と道路名抽出、Android Auto はこの仕様どおりには未実装である。
+
 ## 概要
 
 本ドキュメントでは、`OnNavigationStarted` イベントの発火からナビゲーション走行中、`OnNavigationStopped` による終了までの処理フローを解説する。
@@ -471,7 +476,7 @@ data class GuidanceUiState(
     val currentManeuver: ManeuverInfo?,   // 次の曲がり角
     val nextManeuver: ManeuverInfo?,      // その次の曲がり角（先読み）
     val tripProgress: TripProgressInfo,   // 残り距離・時間・ETA
-    val currentRoadName: String?,         // 現在の道路名
+    val currentRoadName: String?,         // 現在の道路名。Google Routes API 実装では通常 null
     val isOffRoute: Boolean,              // ルート逸脱中か
     val isTtsAvailable: Boolean,          // TTS 利用可能か
     val isLocationStale: Boolean,         // GPS 信号ロスト中か
@@ -486,7 +491,7 @@ data class ManeuverInfo(
     val type: String,          // "turn", "fork", "merge", "on ramp", "off ramp", "arrive" 等
     val modifier: String?,     // "left", "right", "slight left", "sharp right", "straight", "uturn" 等
     val distanceMeters: Double, // 次のマニューバまでの残り距離（メートル）
-    val instruction: String,   // 交差点名 / JCT 名 / 道路名
+    val instruction: String,   // 交差点名 / JCT 名 / Google が生成した案内文
 )
 ```
 
