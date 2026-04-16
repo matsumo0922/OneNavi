@@ -22,7 +22,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,7 +32,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
@@ -65,7 +63,6 @@ internal fun HomeMapScreenContent(
 ) {
     val density = LocalDensity.current
     val activity = LocalActivity.current
-    val coroutineScope = rememberCoroutineScope()
 
     val screenState by viewModel.screenState.collectAsStateWithLifecycle()
     val overlayState by viewModel.overlayState.collectAsStateWithLifecycle()
@@ -80,12 +77,14 @@ internal fun HomeMapScreenContent(
     val waypointEditResult by viewModel.waypointEditResult.collectAsStateWithLifecycle()
     val currentLocation by viewModel.cameraManager.currentLocation.collectAsStateWithLifecycle()
     val currentBearing by viewModel.cameraManager.currentBearing.collectAsStateWithLifecycle()
+    val navigationCameraState by viewModel.cameraManager.cameraState.collectAsStateWithLifecycle()
+    val isNavigationFollowing3D by viewModel.cameraManager.isFollowing3D.collectAsStateWithLifecycle()
     val arrivalInfo by viewModel.guidanceSessionManager.arrivalInfo.collectAsStateWithLifecycle()
 
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
     var trackingZoom by remember { mutableFloatStateOf(DEFAULT_TRACKING_ZOOM) }
 
-    val viewportState = remember { HomeMapViewportState() }
+    val viewportState = rememberHomeMapViewportState()
 
     // 設計書では allowSheetHide 廃止としたが、BottomSheetState.hide() が confirmValueChange を経由するため
     // プログラムからの hide を許可するフラグとして残す必要がある
@@ -128,12 +127,21 @@ internal fun HomeMapScreenContent(
         }
     }
 
-    LaunchedEffect(trackingMode, currentLocation, currentBearing) {
+    LaunchedEffect(trackingMode, currentLocation, currentBearing, screenState, navigationCameraState, isNavigationFollowing3D) {
         val location = currentLocation ?: return@LaunchedEffect
         val point = RoutePoint(location.latitude, location.longitude)
 
-        when (trackingMode) {
-            LocationTrackingMode.TiltedHeading -> {
+        when {
+            screenState is HomeMapScreenState.Navigating && navigationCameraState == me.matsumo.onenavi.core.navigation.CameraState.FOLLOWING -> {
+                viewportState.moveTo(
+                    point = point,
+                    zoom = trackingZoom,
+                    tilt = if (isNavigationFollowing3D) TRACKING_TILT_3D else 0f,
+                    bearing = if (isNavigationFollowing3D) currentBearing else 0f,
+                )
+            }
+
+            trackingMode == LocationTrackingMode.TiltedHeading -> {
                 viewportState.moveTo(
                     point = point,
                     zoom = trackingZoom,
@@ -142,7 +150,7 @@ internal fun HomeMapScreenContent(
                 )
             }
 
-            LocationTrackingMode.TopDownHeading -> {
+            trackingMode == LocationTrackingMode.TopDownHeading -> {
                 viewportState.moveTo(
                     point = point,
                     zoom = trackingZoom,
@@ -151,7 +159,7 @@ internal fun HomeMapScreenContent(
                 )
             }
 
-            LocationTrackingMode.TopDownNorth -> {
+            trackingMode == LocationTrackingMode.TopDownNorth -> {
                 viewportState.moveTo(
                     point = point,
                     zoom = trackingZoom,
@@ -160,7 +168,7 @@ internal fun HomeMapScreenContent(
                 )
             }
 
-            null -> Unit
+            else -> Unit
         }
     }
 
@@ -212,12 +220,7 @@ internal fun HomeMapScreenContent(
                 selectedResult = selectedResult,
                 routeResults = routeResults,
                 selectedRouteIndex = selectedRouteIndex,
-                onNavigationStarted = {
-                    val hostActivity = activity ?: return@HomeMapSheetContent
-                    coroutineScope.launch {
-                        viewModel.onNavigationStarted(hostActivity)
-                    }
-                },
+                onNavigationStarted = viewModel::onNavigationStarted,
                 onRouteSelected = viewModel::onRouteSelected,
                 onSearchResultSelected = viewModel::onSearchResultSelected,
                 onRouteSearchClicked = viewModel::onRouteSearch,
@@ -237,9 +240,7 @@ internal fun HomeMapScreenContent(
                 selectedRouteIndex = selectedRouteIndex,
                 currentLocation = currentLocation,
                 currentBearing = currentBearing,
-                routeManager = viewModel.routeManager,
                 cameraManager = viewModel.cameraManager,
-                onMapReady = { /* no-op */ },
                 onMapLandmarkSelected = viewModel::onMapLandmarkSelected,
                 onRouteSelected = viewModel::onRouteSelected,
             )

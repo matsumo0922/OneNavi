@@ -32,9 +32,4 @@ sealed interface HomeMapEffect {
     data class SetKeepScreenOn(
         val enabled: Boolean,
     ) : HomeMapEffect
-
-    /** ナビゲーション LocationProvider の切り替え */
-    data class UseNavigationLocationProvider(
-        val enabled: Boolean,
-    ) : HomeMapEffect
 }

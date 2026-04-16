@@ -26,7 +26,8 @@ kotlin {
         }
 
         androidMain.dependencies {
-            implementation(libs.google.navigation)
+            implementation(libs.google.maps.compose)
+            implementation(libs.play.services.location)
         }
     }
 }
