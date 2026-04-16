@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,8 +22,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -34,6 +37,9 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
+import com.google.maps.android.compose.internal.GoogleMapsInitializer
+import com.google.maps.android.compose.internal.InitializationState
+import com.google.maps.android.compose.internal.LocalGoogleMapsInitializer
 import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
@@ -78,6 +84,31 @@ internal fun HomeMapsMapEffectContent(
     val currentOnRouteSelected = rememberUpdatedState(onRouteSelected)
     val currentOnMapLandmarkSelected = rememberUpdatedState(onMapLandmarkSelected)
     val liveRoutes by routeManager.routes.collectAsStateWithLifecycle()
+    val mapsInitializer = remember {
+        object : GoogleMapsInitializer {
+            override val state = mutableStateOf(InitializationState.UNINITIALIZED)
+            override var attributionId: String = ""
+
+            override suspend fun initialize(
+                context: Context,
+                forceInitialization: Boolean,
+            ) {
+                if (!forceInitialization && state.value == InitializationState.SUCCESS) {
+                    return
+                }
+                state.value = InitializationState.INITIALIZING
+                state.value = if (MapsInitializer.initialize(context.applicationContext) == ConnectionResult.SUCCESS) {
+                    InitializationState.SUCCESS
+                } else {
+                    InitializationState.FAILURE
+                }
+            }
+
+            override suspend fun reset() {
+                state.value = InitializationState.UNINITIALIZED
+            }
+        }
+    }
 
     val displayedRouteGeometries = remember(screenState, routeResults, liveRoutes) {
         if (screenState is HomeMapScreenState.Navigating || screenState is HomeMapScreenState.Arrived) {
@@ -104,117 +135,119 @@ internal fun HomeMapsMapEffectContent(
         )
     }
 
-    GoogleMap(
-        modifier = modifier.fillMaxSize(),
-        cameraPositionState = cameraPositionState,
-        properties = MapProperties(
-            isMyLocationEnabled = hasLocationPermission,
-        ),
-        uiSettings = MapUiSettings(
-            compassEnabled = false,
-            mapToolbarEnabled = false,
-            myLocationButtonEnabled = false,
-            zoomControlsEnabled = false,
-        ),
-        onMapLongClick = { latLng ->
-            currentOnMapLandmarkSelected.value(null, latLng.latitude, latLng.longitude)
-        },
-        onPOIClick = { poi ->
-            currentOnMapLandmarkSelected.value(poi.name, poi.latLng.latitude, poi.latLng.longitude)
-        },
-    ) {
-        displayedRouteGeometries.forEachIndexed { index, geometry ->
-            Polyline(
-                points = geometry.map(RoutePoint::toLatLng),
-                color = Color(if (index == displayedSelectedRouteIndex) GOOGLE_BLUE else GOOGLE_ROUTE_GRAY),
-                width = if (index == displayedSelectedRouteIndex) PRIMARY_ROUTE_WIDTH else SECONDARY_ROUTE_WIDTH,
-                clickable = true,
-                zIndex = if (index == displayedSelectedRouteIndex) 2f else 1f,
-                onClick = {
-                    if (index != displayedSelectedRouteIndex) {
-                        currentOnRouteSelected.value(index)
-                    }
-                },
-            )
-        }
-
-        when (screenState) {
-            is HomeMapScreenState.Browsing -> Unit
-            is HomeMapScreenState.SearchResultsList -> {
-                screenState.results.forEachIndexed { index, result ->
-                    Marker(
-                        state = MarkerState(position = LatLng(result.latitude, result.longitude)),
-                        title = result.name,
-                        snippet = (index + 1).toString(),
-                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
-                    )
-                }
-            }
-
-            is HomeMapScreenState.PlaceDetails -> {
-                Marker(
-                    state = MarkerState(position = LatLng(screenState.place.latitude, screenState.place.longitude)),
-                    title = screenState.place.name,
-                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
+    CompositionLocalProvider(LocalGoogleMapsInitializer provides mapsInitializer) {
+        GoogleMap(
+            modifier = modifier.fillMaxSize(),
+            cameraPositionState = cameraPositionState,
+            properties = MapProperties(
+                isMyLocationEnabled = hasLocationPermission,
+            ),
+            uiSettings = MapUiSettings(
+                compassEnabled = false,
+                mapToolbarEnabled = false,
+                myLocationButtonEnabled = false,
+                zoomControlsEnabled = false,
+            ),
+            onMapLongClick = { latLng ->
+                currentOnMapLandmarkSelected.value(null, latLng.latitude, latLng.longitude)
+            },
+            onPOIClick = { poi ->
+                currentOnMapLandmarkSelected.value(poi.name, poi.latLng.latitude, poi.latLng.longitude)
+            },
+        ) {
+            displayedRouteGeometries.forEachIndexed { index, geometry ->
+                Polyline(
+                    points = geometry.map(RoutePoint::toLatLng),
+                    color = Color(if (index == displayedSelectedRouteIndex) GOOGLE_BLUE else GOOGLE_ROUTE_GRAY),
+                    width = if (index == displayedSelectedRouteIndex) PRIMARY_ROUTE_WIDTH else SECONDARY_ROUTE_WIDTH,
+                    clickable = true,
+                    zIndex = if (index == displayedSelectedRouteIndex) 2f else 1f,
+                    onClick = {
+                        if (index != displayedSelectedRouteIndex) {
+                            currentOnRouteSelected.value(index)
+                        }
+                    },
                 )
             }
 
-            is HomeMapScreenState.RoutePreview -> {
-                screenState.waypoints.lastOrNull()?.let { waypoint ->
-                    val point = waypoint.toRoutePoint()
+            when (screenState) {
+                is HomeMapScreenState.Browsing -> Unit
+                is HomeMapScreenState.SearchResultsList -> {
+                    screenState.results.forEachIndexed { index, result ->
+                        Marker(
+                            state = MarkerState(position = LatLng(result.latitude, result.longitude)),
+                            title = result.name,
+                            snippet = (index + 1).toString(),
+                            icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
+                        )
+                    }
+                }
+
+                is HomeMapScreenState.PlaceDetails -> {
                     Marker(
-                        state = MarkerState(position = point.toLatLng()),
+                        state = MarkerState(position = LatLng(screenState.place.latitude, screenState.place.longitude)),
+                        title = screenState.place.name,
                         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
                     )
                 }
-                screenState.waypoints.drop(1).dropLast(1).forEachIndexed { index, waypoint ->
-                    val point = waypoint.toRoutePoint()
-                    Marker(
-                        state = MarkerState(position = point.toLatLng()),
-                        title = "K${index + 1}",
-                    )
+
+                is HomeMapScreenState.RoutePreview -> {
+                    screenState.waypoints.lastOrNull()?.let { waypoint ->
+                        val point = waypoint.toRoutePoint()
+                        Marker(
+                            state = MarkerState(position = point.toLatLng()),
+                            icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
+                        )
+                    }
+                    screenState.waypoints.drop(1).dropLast(1).forEachIndexed { index, waypoint ->
+                        val point = waypoint.toRoutePoint()
+                        Marker(
+                            state = MarkerState(position = point.toLatLng()),
+                            title = "K${index + 1}",
+                        )
+                    }
                 }
+
+                is HomeMapScreenState.Navigating,
+                is HomeMapScreenState.Arrived,
+                -> Unit
             }
 
-            is HomeMapScreenState.Navigating,
-            is HomeMapScreenState.Arrived,
-            -> Unit
-        }
-
-        if (currentLocation != null && vehiclePuckIcon != null) {
-            Marker(
-                state = MarkerState(position = currentLocation.toLatLng()),
-                icon = requireNotNull(vehiclePuckIcon),
-                anchor = Offset(0.5f, 0.5f),
-                flat = true,
-                rotation = currentBearing,
-                zIndex = 4f,
-            )
-        }
-
-        MapEffect(hasLocationPermission) { map ->
-            googleMap = map
-            if (vehiclePuckIcon == null) {
-                vehiclePuckIcon = BitmapDescriptorFactory.fromBitmap(vehiclePuckBitmap)
+            if (currentLocation != null && vehiclePuckIcon != null) {
+                Marker(
+                    state = MarkerState(position = currentLocation.toLatLng()),
+                    icon = requireNotNull(vehiclePuckIcon),
+                    anchor = Offset(0.5f, 0.5f),
+                    flat = true,
+                    rotation = currentBearing,
+                    zIndex = 4f,
+                )
             }
-            map.mapType = GoogleMap.MAP_TYPE_NORMAL
-            map.isBuildingsEnabled = true
 
-            viewportState.attachMap(map)
-            cameraManager.setupCamera(map)
-            currentOnMapReady.value(map)
+            MapEffect(hasLocationPermission) { map ->
+                googleMap = map
+                if (vehiclePuckIcon == null) {
+                    vehiclePuckIcon = BitmapDescriptorFactory.fromBitmap(vehiclePuckBitmap)
+                }
+                map.mapType = GoogleMap.MAP_TYPE_NORMAL
+                map.isBuildingsEnabled = true
 
-            val currentCamera = viewportState.cameraState
-            map.moveCamera(
-                CameraUpdateFactory.newCameraPosition(
-                    CameraPosition.Builder()
-                        .target(LatLng(currentCamera.latitude, currentCamera.longitude))
-                        .zoom(currentCamera.zoom)
-                        .tilt(currentCamera.tilt)
-                        .bearing(currentCamera.bearing.toFloat())
-                        .build(),
-                ),
-            )
+                viewportState.attachMap(map)
+                cameraManager.setupCamera(map)
+                currentOnMapReady.value(map)
+
+                val currentCamera = viewportState.cameraState
+                map.moveCamera(
+                    CameraUpdateFactory.newCameraPosition(
+                        CameraPosition.Builder()
+                            .target(LatLng(currentCamera.latitude, currentCamera.longitude))
+                            .zoom(currentCamera.zoom)
+                            .tilt(currentCamera.tilt)
+                            .bearing(currentCamera.bearing.toFloat())
+                            .build(),
+                    ),
+                )
+            }
         }
     }
 
