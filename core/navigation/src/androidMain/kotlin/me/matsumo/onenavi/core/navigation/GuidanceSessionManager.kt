@@ -72,6 +72,7 @@ class GuidanceSessionManager(
     private var sessionStartTimeMillis: Long = 0L
     private var activeRoute: GoogleRoute? = null
     private var lastSpokenStepIndex: Int = -1
+    private var lastTraveledDistanceMeters: Double = 0.0
 
     fun register() {
         // no-op
@@ -90,6 +91,7 @@ class GuidanceSessionManager(
         activeRoute = route
         sessionStartTimeMillis = System.currentTimeMillis()
         lastSpokenStepIndex = -1
+        lastTraveledDistanceMeters = 0.0
 
         val engine = AndroidTtsEngine(
             context = context,
@@ -138,6 +140,7 @@ class GuidanceSessionManager(
         _guidanceUiState.value = GuidanceUiState.Initial
         _arrivalInfo.value = null
         lastSpokenStepIndex = -1
+        lastTraveledDistanceMeters = 0.0
     }
 
     fun returnToBrowsing() {
@@ -151,6 +154,9 @@ class GuidanceSessionManager(
     private fun updateProgress(route: GoogleRoute) {
         val location = cameraManager.currentLocation.value ?: route.origin
         val traveledDistance = route.itemProgressDistance(location)
+            .coerceAtLeast(lastTraveledDistanceMeters)
+            .coerceAtMost(route.distanceMeters)
+        lastTraveledDistanceMeters = traveledDistance
         val distanceRemaining = (route.distanceMeters - traveledDistance).coerceAtLeast(0.0)
         val durationRemaining = if (route.distanceMeters > 0.0) {
             route.durationSeconds * (distanceRemaining / route.distanceMeters)
@@ -164,17 +170,25 @@ class GuidanceSessionManager(
         }
 
         val steps = route.steps
-        val currentStepIndex = steps.indexOfFirst { it.cumulativeDistanceMeters >= traveledDistance }
+        val currentStepIndex = steps.indexOfLast { it.cumulativeDistanceMeters <= traveledDistance }
             .takeIf { it >= 0 }
-            ?: steps.lastIndex
+            ?: 0
         val currentStep = steps.getOrNull(currentStepIndex)
         val nextStep = steps.getOrNull(currentStepIndex + 1)
 
         val currentManeuver = currentStep?.toManeuverInfo(
-            distanceMeters = (currentStep.cumulativeDistanceMeters - traveledDistance).coerceAtLeast(0.0),
+            distanceMeters = (
+                currentStep.cumulativeDistanceMeters +
+                    currentStep.distanceFromPreviousMeters -
+                    traveledDistance
+                ).coerceAtLeast(0.0),
         )
         val nextManeuver = nextStep?.toManeuverInfo(
-            distanceMeters = (nextStep.cumulativeDistanceMeters - traveledDistance).coerceAtLeast(0.0),
+            distanceMeters = (
+                nextStep.cumulativeDistanceMeters +
+                    nextStep.distanceFromPreviousMeters -
+                    traveledDistance
+                ).coerceAtLeast(0.0),
         )
         val upcomingSteps = steps.drop(currentStepIndex.coerceAtLeast(0)).toImmutableList()
 
@@ -212,25 +226,31 @@ class GuidanceSessionManager(
     private fun GoogleRoute.itemProgressDistance(location: RoutePoint): Double {
         if (distanceMeters <= 0.0 || geometry.isEmpty()) return 0.0
 
-        var distanceToNearest = Double.MAX_VALUE
-        var distanceAtNearest = 0.0
-        var cumulative = 0.0
-        var previous = geometry.first()
-
-        geometry.forEachIndexed { index, point ->
-            if (index > 0) {
-                cumulative += previous.distanceTo(point)
+        if (geometry.size == 1) {
+            return if (location.distanceTo(geometry.first()) <= ARRIVAL_THRESHOLD_METERS) {
+                distanceMeters
+            } else {
+                0.0
             }
-
-            val distanceToPoint = location.distanceTo(point)
-            if (distanceToPoint < distanceToNearest) {
-                distanceToNearest = distanceToPoint
-                distanceAtNearest = cumulative
-            }
-            previous = point
         }
 
-        return distanceAtNearest.coerceAtMost(distanceMeters)
+        var nearestDistance = Double.MAX_VALUE
+        var nearestProgress = 0.0
+        var cumulativeDistance = 0.0
+
+        geometry.zipWithNext().forEach { (start, end) ->
+            val segmentLength = start.distanceTo(end)
+            if (segmentLength <= 0.0) return@forEach
+
+            val projection = location.projectOntoSegment(start, end)
+            if (projection.distanceMeters < nearestDistance) {
+                nearestDistance = projection.distanceMeters
+                nearestProgress = cumulativeDistance + segmentLength * projection.fraction
+            }
+            cumulativeDistance += segmentLength
+        }
+
+        return nearestProgress.coerceIn(0.0, distanceMeters)
     }
 
     private fun RouteStepInfo.toManeuverInfo(distanceMeters: Double): ManeuverInfo {
@@ -333,6 +353,51 @@ class GuidanceSessionManager(
         val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
         return radius * c
     }
+
+    private fun RoutePoint.projectOntoSegment(
+        start: RoutePoint,
+        end: RoutePoint,
+    ): SegmentProjection {
+        val radius = 6_371_000.0
+        val originLatitudeRad = Math.toRadians(start.latitude)
+        val originLongitudeRad = Math.toRadians(start.longitude)
+        val cosLatitude = kotlin.math.cos(
+            Math.toRadians((start.latitude + end.latitude + latitude) / 3.0),
+        )
+
+        fun RoutePoint.toLocalVector(): Pair<Double, Double> {
+            val x = (Math.toRadians(longitude) - originLongitudeRad) * radius * cosLatitude
+            val y = (Math.toRadians(latitude) - originLatitudeRad) * radius
+            return x to y
+        }
+
+        val (endX, endY) = end.toLocalVector()
+        val (pointX, pointY) = toLocalVector()
+        val segmentLengthSquared = endX * endX + endY * endY
+        if (segmentLengthSquared <= 0.0) {
+            return SegmentProjection(
+                fraction = 0.0,
+                distanceMeters = distanceTo(start),
+            )
+        }
+
+        val fraction = ((pointX * endX) + (pointY * endY)) / segmentLengthSquared
+        val clampedFraction = fraction.coerceIn(0.0, 1.0)
+        val projectedX = endX * clampedFraction
+        val projectedY = endY * clampedFraction
+        val dx = pointX - projectedX
+        val dy = pointY - projectedY
+
+        return SegmentProjection(
+            fraction = clampedFraction,
+            distanceMeters = kotlin.math.sqrt(dx * dx + dy * dy),
+        )
+    }
+
+    private data class SegmentProjection(
+        val fraction: Double,
+        val distanceMeters: Double,
+    )
 
     companion object {
         private const val TAG = "GuidanceSessionManager"

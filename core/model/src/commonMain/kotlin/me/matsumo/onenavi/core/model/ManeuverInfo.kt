@@ -16,7 +16,7 @@ import kotlinx.collections.immutable.persistentListOf
  * @param instruction 交差点名 / JCT 名 / Google が生成した案内テキスト
  * @param roadName 進入後の道路名（step.name）
  * @param destinations 方面情報（step.destinations）
- * @param lanes レーン情報。交差点接近中のみ SDK が sub banner に含める
+ * @param lanes レーン情報。現状の Google Routes API ベース実装では取得できないため通常は空。
  */
 @Immutable
 data class ManeuverInfo(

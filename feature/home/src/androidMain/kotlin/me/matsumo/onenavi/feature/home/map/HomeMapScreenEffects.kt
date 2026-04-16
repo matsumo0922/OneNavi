@@ -62,11 +62,11 @@ internal fun HomeMapScreenViewportTrackingEffect(
 
 @Composable
 internal fun HomeMapScreenCameraEffect(
-    screenStateProvider: () -> HomeMapScreenState,
+    screenState: HomeMapScreenState,
     effects: Flow<HomeMapEffect>,
     routeManager: RouteManager,
     cameraManager: CameraManager,
-    routeResultsProvider: () -> ImmutableList<RouteResult>,
+    routeResults: ImmutableList<RouteResult>,
     viewportState: HomeMapViewportState,
     sheetPeekHeightPx: Double,
     topOverlayBottomPx: Float,
@@ -76,23 +76,26 @@ internal fun HomeMapScreenCameraEffect(
     val currentActivity = rememberUpdatedState(activity)
     val currentSheetPeekHeightPx = rememberUpdatedState(sheetPeekHeightPx)
     val currentTopOverlayBottomPx = rememberUpdatedState(topOverlayBottomPx)
+    val currentRouteResults = rememberUpdatedState(routeResults)
+
+    LaunchedEffect(viewportState, screenState, routeResults, sheetPeekHeightPx, topOverlayBottomPx) {
+        restoreCamera(
+            screenState = screenState,
+            cameraManager = cameraManager,
+            routeResults = routeResults,
+            viewportState = viewportState,
+            sheetPeekHeightPx = sheetPeekHeightPx,
+            topOverlayBottomPx = topOverlayBottomPx,
+        )
+    }
 
     LaunchedEffect(viewportState) {
-        restoreCamera(
-            screenState = screenStateProvider(),
-            cameraManager = cameraManager,
-            routeResults = routeResultsProvider(),
-            viewportState = viewportState,
-            sheetPeekHeightPx = currentSheetPeekHeightPx.value,
-            topOverlayBottomPx = currentTopOverlayBottomPx.value,
-        )
-
         effects.collect { effect ->
             handleEffect(
                 effect = effect,
                 routeManager = routeManager,
                 cameraManager = cameraManager,
-                routeResults = routeResultsProvider(),
+                routeResults = currentRouteResults.value,
                 viewportState = viewportState,
                 sheetPeekHeightPx = currentSheetPeekHeightPx.value,
                 topOverlayBottomPx = currentTopOverlayBottomPx.value,
