@@ -2,6 +2,7 @@ package me.matsumo.onenavi.core.datasource
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -105,7 +106,7 @@ class GoogleRoutesDataSource(
         }
         val responseBody = response.bodyAsText()
         check(response.status.isSuccess()) {
-            "Routes API request failed. status=${response.status.value}, body=$responseBody"
+            "Routes API request failed. status=${response.status.value}, bodyPreview=${responseBody.sanitizedLogSnippet()}"
         }
         val decodedResponse = json.decodeFromString<ComputeRoutesResponse>(responseBody)
 
@@ -156,11 +157,7 @@ class GoogleRoutesDataSource(
             val maneuver = step.navigationInstruction?.maneuver.orEmpty()
             val distance = step.distanceMeters?.toDouble() ?: 0.0
 
-            if (index > 0) {
-                cumulativeDistance += distance
-            }
-
-            RouteStepInfo(
+            val routeStepInfo = RouteStepInfo(
                 maneuverType = maneuver.toManeuverType(),
                 modifier = maneuver.toModifier(),
                 distanceFromPreviousMeters = distance,
@@ -170,6 +167,8 @@ class GoogleRoutesDataSource(
                 roadRef = null,
                 highwayInfo = null,
             )
+            cumulativeDistance += distance
+            routeStepInfo
         }
     }
 
@@ -245,14 +244,23 @@ class GoogleRoutesDataSource(
 }
 
 private fun Context.signingCertificateSha1(): String {
-    val packageInfo = packageManager.getPackageInfo(
-        packageName,
-        PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong()),
-    )
+    val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        packageManager.getPackageInfo(
+            packageName,
+            PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong()),
+        )
+    } else {
+        @Suppress("DEPRECATION")
+        packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+    }
     val signature = packageInfo.signingInfo?.apkContentsSigners?.firstOrNull()
         ?: error("No signing certificate found for package $packageName")
     val digest = MessageDigest.getInstance("SHA-1").digest(signature.toByteArray())
     return digest.joinToString(separator = "") { byte -> "%02X".format(byte) }
+}
+
+private fun String.sanitizedLogSnippet(maxLength: Int = 200): String {
+    return replace("\n", " ").replace("\r", " ").take(maxLength)
 }
 
 private fun String.decodePolyline(): List<RoutePoint> {

@@ -12,6 +12,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.MapPadding
@@ -159,9 +160,13 @@ private suspend fun handleEffect(
         }
         is HomeMapEffect.MoveCameraToRouteOverview -> {
             onTrackingModeChanged(null)
-            routeManager.routes.first { it.isNotEmpty() }
+            val hasRoutes = withTimeoutOrNull(1_000) {
+                routeManager.routes.first { it.isNotEmpty() }
+            } != null
             cameraManager.requestCameraIdle()
-            moveToRouteOverview(viewportState, routeResults, topOverlayBottomPx, sheetPeekHeightPx)
+            if (hasRoutes) {
+                moveToRouteOverview(viewportState, routeResults, topOverlayBottomPx, sheetPeekHeightPx)
+            }
         }
         is HomeMapEffect.EnterGuidanceFollowing -> {
             cameraManager.requestCameraFollowing(pitch3D = true)

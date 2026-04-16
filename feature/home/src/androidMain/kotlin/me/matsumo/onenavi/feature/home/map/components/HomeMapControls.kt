@@ -60,8 +60,8 @@ internal fun HomeMapControls(
     viewportState: HomeMapViewportState,
     autoFollowOnStart: Boolean,
     onTrackingModeChanged: (LocationTrackingMode?) -> Unit,
-    modifier: Modifier = Modifier,
     onTrackingZoomChanged: (Float) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var lastTrackingMode by remember { mutableStateOf(LocationTrackingMode.TiltedHeading) }
     val coroutineScope = rememberCoroutineScope()
@@ -88,6 +88,7 @@ internal fun HomeMapControls(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         HomeMapCompass(
+            modifier = Modifier.size(48.dp),
             bearing = cameraBearing,
             onClicked = {
                 onTrackingZoomChanged(viewportState.cameraState.zoom)
@@ -114,6 +115,7 @@ internal fun HomeMapControls(
         HomeMapZoomButtons(
             onZoomInClicked = { setZoom(ZOOM_STEP) },
             onZoomOutClicked = { setZoom(-ZOOM_STEP) },
+            modifier = Modifier.width(48.dp),
         )
 
         FloatingActionButton(
@@ -134,11 +136,11 @@ internal fun HomeMapControls(
 @Composable
 private fun HomeMapZoomButtons(
     onZoomInClicked: () -> Unit,
-    modifier: Modifier = Modifier,
     onZoomOutClicked: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier.width(48.dp),
+        modifier = modifier,
         shape = CircleShape,
         color = FloatingActionButtonDefaults.containerColor(),
         tonalElevation = 6.dp,
@@ -186,8 +188,8 @@ private const val COMPASS_NEEDLE_INSET_RATIO = 0.03f
 @Composable
 private fun HomeMapCompass(
     bearing: Double,
-    modifier: Modifier = Modifier,
     onClicked: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val rotationDegrees = -bearing.toFloat()
 
@@ -196,7 +198,7 @@ private fun HomeMapCompass(
     val surfaceColor = FloatingActionButtonDefaults.containerColor()
 
     Surface(
-        modifier = modifier.size(48.dp),
+        modifier = modifier,
         shape = CircleShape,
         color = surfaceColor,
         tonalElevation = 6.dp,

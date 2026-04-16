@@ -48,7 +48,7 @@ internal fun HomeMapArrivalContent(
     }
 
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier,
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 6.dp,
         shadowElevation = 6.dp,

@@ -9,6 +9,7 @@ import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
 import com.google.android.libraries.places.api.net.PlacesClient
 import com.google.android.libraries.places.api.net.SearchByTextRequest
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.tasks.await
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
@@ -46,7 +47,7 @@ class GooglePlacesSearchDataSource(
                     name = prediction.getPrimaryText(null).toString(),
                     address = prediction.getSecondaryText(null).toString().takeIf { it.isNotBlank() },
                     distanceMeters = prediction.distanceMeters?.toDouble(),
-                    categories = emptyList(),
+                    categories = persistentListOf(),
                 )
             }
         }
