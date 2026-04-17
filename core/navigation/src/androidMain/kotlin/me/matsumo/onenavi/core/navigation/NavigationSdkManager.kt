@@ -11,6 +11,7 @@ import com.google.android.libraries.navigation.NavigationApi
 import com.google.android.libraries.navigation.NavigationApi.NavigatorListener
 import com.google.android.libraries.navigation.NavigationUpdatesOptions
 import com.google.android.libraries.navigation.Navigator
+import com.google.android.libraries.navigation.RoadSnappedLocationProvider
 import com.google.android.libraries.navigation.Waypoint
 import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.toImmutableList
@@ -29,7 +30,7 @@ import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.milliseconds
 
 class NavigationSdkManager(
-    application: Application,
+    private val application: Application,
     private val routeManager: RouteManager,
 ) {
 
@@ -51,6 +52,10 @@ class NavigationSdkManager(
     val arrivalEvents: SharedFlow<NavigationArrivalSnapshot> = _arrivalEvents.asSharedFlow()
 
     val navInfo: StateFlow<NavigationFeedSnapshot?> = TurnByTurnUpdateBus.navInfo
+
+    private val _roadSnappedLocationProvider = MutableStateFlow<RoadSnappedLocationProvider?>(null)
+    val roadSnappedLocationProvider: StateFlow<RoadSnappedLocationProvider?> =
+        _roadSnappedLocationProvider.asStateFlow()
 
     private var navigator: Navigator? = null
     private var navigatorInitializing = false
@@ -167,6 +172,7 @@ class NavigationSdkManager(
         this.navigator = navigator
         _isNavigatorReady.value = true
         _initializationErrorCode.value = null
+        _roadSnappedLocationProvider.value = NavigationApi.getRoadSnappedLocationProvider(application)
 
         navigator.addArrivalListener(arrivalListener)
         navigator.addRouteChangedListener(routeChangedListener)

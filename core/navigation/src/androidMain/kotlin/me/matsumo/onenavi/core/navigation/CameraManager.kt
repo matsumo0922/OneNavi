@@ -1,29 +1,32 @@
 package me.matsumo.onenavi.core.navigation
 
-import android.Manifest
-import android.annotation.SuppressLint
-import android.content.Context
-import android.content.pm.PackageManager
 import android.location.Location
-import android.os.Looper
-import androidx.core.content.ContextCompat
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
+import com.google.android.libraries.navigation.RoadSnappedLocationProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.RoutePoint
 
+/**
+ * 地図カメラおよび自車位置に関する状態を保持する。
+ * 位置の取得は Google Navigation SDK の RoadSnappedLocationProvider に委譲し、
+ * map-matched された位置と bearing をそのまま StateFlow として公開する。
+ */
 enum class CameraState {
     IDLE,
     FOLLOWING,
     OVERVIEW,
 }
 
+/**
+ * 地図カメラに適用する padding。画面状態ごとに異なる値を適用する。
+ */
 data class MapPadding(
     val top: Int = 0,
     val left: Int = 0,
@@ -32,11 +35,12 @@ data class MapPadding(
 )
 
 class CameraManager(
-    private val context: Context,
+    private val navigationSdkManager: NavigationSdkManager,
 ) {
 
-    private val fusedLocationClient: FusedLocationProviderClient =
-        LocationServices.getFusedLocationProviderClient(context)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var collectJob: Job? = null
+    private var attachedProvider: RoadSnappedLocationProvider? = null
 
     private var lastBearing: Float = 0f
     private var followingPadding = MapPadding()
@@ -57,18 +61,25 @@ class CameraManager(
     private val _mapPadding = MutableStateFlow(MapPadding())
     val mapPadding: StateFlow<MapPadding> = _mapPadding.asStateFlow()
 
-    private val locationCallback = object : LocationCallback() {
-        override fun onLocationResult(result: LocationResult) {
-            result.lastLocation?.let(::onLocationUpdated)
-        }
+    private val locationListener = RoadSnappedLocationProvider.LocationListener { location ->
+        onLocationUpdated(location)
     }
 
     fun register() {
-        startLocationUpdates()
+        collectJob?.cancel()
+        collectJob = scope.launch {
+            navigationSdkManager.roadSnappedLocationProvider.collectLatest { provider ->
+                detachProvider()
+                attachedProvider = provider
+                provider?.addLocationListener(locationListener)
+            }
+        }
     }
 
     fun unregister() {
-        fusedLocationClient.removeLocationUpdates(locationCallback)
+        collectJob?.cancel()
+        collectJob = null
+        detachProvider()
     }
 
     fun onRouteChanged(route: Any?) {
@@ -122,37 +133,18 @@ class CameraManager(
     }
 
     private fun onLocationUpdated(location: Location) {
-        lastBearing = location.bearing
-        _currentBearing.value = lastBearing
+        if (location.hasBearing()) {
+            lastBearing = location.bearing
+            _currentBearing.value = lastBearing
+        }
         _currentLocation.value = RoutePoint(
             latitude = location.latitude,
             longitude = location.longitude,
         )
     }
 
-    @SuppressLint("MissingPermission")
-    private fun startLocationUpdates() {
-        if (!hasLocationPermission()) return
-
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MS)
-            .setMinUpdateIntervalMillis(LOCATION_FASTEST_INTERVAL_MS)
-            .build()
-
-        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            if (location != null) {
-                onLocationUpdated(location)
-            }
-        }
-        fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
-    }
-
-    private fun hasLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
-    }
-
-    companion object {
-        private const val LOCATION_INTERVAL_MS = 1000L
-        private const val LOCATION_FASTEST_INTERVAL_MS = 500L
+    private fun detachProvider() {
+        attachedProvider?.removeLocationListener(locationListener)
+        attachedProvider = null
     }
 }

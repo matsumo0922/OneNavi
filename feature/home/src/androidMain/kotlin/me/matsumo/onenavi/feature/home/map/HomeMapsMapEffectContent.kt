@@ -1,16 +1,19 @@
 package me.matsumo.onenavi.feature.home.map
 
 import android.Manifest
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Bundle
+import android.view.animation.LinearInterpolator
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,11 +31,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
@@ -69,6 +74,7 @@ internal fun HomeMapsMapEffectContent(
     currentLocation: RoutePoint?,
     currentBearing: Float,
     cameraManager: CameraManager,
+    cameraFollowSpec: CameraFollowSpec?,
     onMapLandmarkSelected: (name: String?, latitude: Double, longitude: Double) -> Unit,
     onRouteSelected: (index: Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -146,7 +152,7 @@ internal fun HomeMapsMapEffectContent(
         )
     }
 
-    LaunchedEffect(googleMap, currentLocation, currentBearing, vehiclePuckIcon, hasLocationPermission) {
+    LaunchedEffect(googleMap, currentLocation, currentBearing, vehiclePuckIcon, hasLocationPermission, cameraFollowSpec) {
         val map = googleMap ?: return@LaunchedEffect
         overlayObjects.updateVehicleMarker(
             googleMap = map,
@@ -154,6 +160,7 @@ internal fun HomeMapsMapEffectContent(
             currentBearing = currentBearing,
             vehiclePuckIcon = vehiclePuckIcon,
             hasLocationPermission = hasLocationPermission,
+            cameraFollowSpec = cameraFollowSpec,
         )
     }
 
@@ -310,6 +317,9 @@ private class HomeMapOverlayObjects {
     private val routePolylines = mutableListOf<Polyline>()
     private val staticMarkers = mutableListOf<Marker>()
     private var vehicleMarker: Marker? = null
+    private var vehicleAnimator: ValueAnimator? = null
+    private var lastAppliedPosition: LatLng? = null
+    private var lastAppliedBearing: Float = 0f
 
     fun replaceRoutePolylines(
         googleMap: GoogleMap,
@@ -392,31 +402,98 @@ private class HomeMapOverlayObjects {
         currentBearing: Float,
         vehiclePuckIcon: BitmapDescriptor?,
         hasLocationPermission: Boolean,
+        cameraFollowSpec: CameraFollowSpec?,
     ) {
         googleMap.isMyLocationEnabled = hasLocationPermission && vehiclePuckIcon == null
 
         if (vehiclePuckIcon == null || currentLocation == null) {
+            vehicleAnimator?.cancel()
+            vehicleAnimator = null
             vehicleMarker?.remove()
             vehicleMarker = null
+            lastAppliedPosition = null
             return
         }
 
-        val position = currentLocation.toLatLng()
+        val targetPosition = currentLocation.toLatLng()
         val marker = vehicleMarker
         if (marker == null) {
             vehicleMarker = googleMap.addMarker(
                 MarkerOptions()
-                    .position(position)
+                    .position(targetPosition)
                     .icon(vehiclePuckIcon)
                     .flat(true)
                     .anchor(0.5f, 0.5f)
                     .rotation(currentBearing)
                     .zIndex(4f),
             )
-        } else {
-            marker.position = position
-            marker.rotation = currentBearing
-            marker.setIcon(vehiclePuckIcon)
+            lastAppliedPosition = targetPosition
+            lastAppliedBearing = currentBearing
+            return
         }
+
+        marker.setIcon(vehiclePuckIcon)
+
+        val fromPosition = lastAppliedPosition ?: targetPosition
+        val fromBearing = lastAppliedBearing
+        val bearingDelta = shortestBearingDelta(fromBearing, currentBearing)
+        val toBearing = fromBearing + bearingDelta
+
+        vehicleAnimator?.cancel()
+        vehicleAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = VEHICLE_ANIMATION_DURATION_MS
+            interpolator = LinearInterpolator()
+            addUpdateListener { animator ->
+                val fraction = animator.animatedValue as Float
+                val latitude = fromPosition.latitude +
+                    (targetPosition.latitude - fromPosition.latitude) * fraction
+                val longitude = fromPosition.longitude +
+                    (targetPosition.longitude - fromPosition.longitude) * fraction
+                val bearing = fromBearing + (toBearing - fromBearing) * fraction
+                val latLng = LatLng(latitude, longitude)
+
+                marker.position = latLng
+                marker.rotation = bearing
+
+                cameraFollowSpec?.let { spec ->
+                    googleMap.moveCamera(
+                        CameraUpdateFactory.newCameraPosition(
+                            CameraPosition.Builder()
+                                .target(latLng)
+                                .zoom(spec.zoom)
+                                .tilt(spec.tilt)
+                                .bearing(if (spec.useLocationBearing) bearing else 0f)
+                                .build(),
+                        ),
+                    )
+                }
+            }
+            start()
+        }
+
+        lastAppliedPosition = targetPosition
+        lastAppliedBearing = currentBearing
     }
+
+    companion object {
+        private const val VEHICLE_ANIMATION_DURATION_MS = 1000L
+    }
+}
+
+/**
+ * カメラ追従の指定仕様。null ならカメラ追従せず、マーカー補間のみを行う。
+ *
+ * @param zoom カメラのズーム
+ * @param tilt カメラのチルト
+ * @param useLocationBearing true の場合は自車の進行方向、false の場合は常に北を向ける
+ */
+@Immutable
+internal data class CameraFollowSpec(
+    val zoom: Float,
+    val tilt: Float,
+    val useLocationBearing: Boolean,
+)
+
+private fun shortestBearingDelta(from: Float, to: Float): Float {
+    return ((to - from + 540f) % 360f) - 180f
 }

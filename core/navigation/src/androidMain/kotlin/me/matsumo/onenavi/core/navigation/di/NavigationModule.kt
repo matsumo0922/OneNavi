@@ -12,6 +12,6 @@ import org.koin.dsl.module
 actual val navigationModule: Module = module {
     single { RouteManager() }
     single { NavigationSdkManager(androidApplication(), get()) }
-    single { CameraManager(androidContext()) }
+    single { CameraManager(get()) }
     single { GuidanceSessionManager(androidContext(), get(), get(), get()) }
 }
