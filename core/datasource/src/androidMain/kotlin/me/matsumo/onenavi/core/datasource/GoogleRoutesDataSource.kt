@@ -15,6 +15,8 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import me.matsumo.onenavi.core.model.CongestionSegment
+import me.matsumo.onenavi.core.model.CongestionSeverity
 import me.matsumo.onenavi.core.model.GoogleRoute
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.RoutePoint
@@ -93,7 +95,7 @@ class GoogleRoutesDataSource(
             units = "METRIC",
             polylineEncoding = "ENCODED_POLYLINE",
             polylineQuality = "HIGH_QUALITY",
-            extraComputations = listOf("TOLLS"),
+            extraComputations = listOf("TOLLS", "TRAFFIC_ON_POLYLINE"),
         )
 
         val response = httpClient.post(ROUTES_ENDPOINT) {
@@ -123,6 +125,10 @@ class GoogleRoutesDataSource(
                 route.routeLabels.orEmpty().any { it.contains("TOLL", ignoreCase = true) }
             val distanceMeters = route.distanceMeters?.toDouble() ?: 0.0
             val durationSeconds = route.duration.parseDurationSeconds()
+            val congestionSegments = route.travelAdvisory?.speedReadingIntervals
+                ?.toCongestionSegments(geometry.size)
+                .orEmpty()
+                .toImmutableList()
 
             val googleRoute = GoogleRoute(
                 id = buildRouteId(index, route.routeToken, geometry),
@@ -143,6 +149,7 @@ class GoogleRoutesDataSource(
                     geometry = geometry,
                     viaRoadNames = emptyList<String>().toImmutableList(),
                     hasTolls = hasTolls,
+                    congestionSegments = congestionSegments,
                 ),
                 platformRoute = googleRoute,
             )
@@ -203,6 +210,7 @@ class GoogleRoutesDataSource(
                 "routes.duration," +
                 "routes.polyline.encodedPolyline," +
                 "routes.travelAdvisory.tollInfo," +
+                "routes.travelAdvisory.speedReadingIntervals," +
                 "routes.legs.steps.distanceMeters," +
                 "routes.legs.steps.navigationInstruction"
     }
@@ -226,6 +234,32 @@ private fun Context.signingCertificateSha1(): String {
 
 private fun String.sanitizedLogSnippet(maxLength: Int = 200): String {
     return replace("\n", " ").replace("\r", " ").take(maxLength)
+}
+
+private fun List<SpeedReadingInterval>.toCongestionSegments(geometrySize: Int): List<CongestionSegment> {
+    if (geometrySize <= 0) return emptyList()
+    val lastIndex = geometrySize - 1
+    return mapNotNull { interval ->
+        val startIndex = interval.startPolylinePointIndex ?: 0
+        val endIndex = interval.endPolylinePointIndex ?: return@mapNotNull null
+        val clampedStart = startIndex.coerceIn(0, lastIndex)
+        val clampedEnd = endIndex.coerceIn(0, lastIndex)
+        if (clampedEnd <= clampedStart) return@mapNotNull null
+        CongestionSegment(
+            startPolylinePointIndex = clampedStart,
+            endPolylinePointIndex = clampedEnd,
+            severity = interval.speed.toCongestionSeverity(),
+        )
+    }
+}
+
+private fun String?.toCongestionSeverity(): CongestionSeverity {
+    return when (this) {
+        "NORMAL" -> CongestionSeverity.NORMAL
+        "SLOW" -> CongestionSeverity.SLOW
+        "TRAFFIC_JAM" -> CongestionSeverity.TRAFFIC_JAM
+        else -> CongestionSeverity.UNKNOWN
+    }
 }
 
 private fun String.decodePolyline(): List<RoutePoint> {
@@ -345,6 +379,14 @@ private data class NavigationInstruction(
 @Serializable
 private data class RouteTravelAdvisory(
     val tollInfo: TollInfo? = null,
+    val speedReadingIntervals: List<SpeedReadingInterval>? = null,
+)
+
+@Serializable
+private data class SpeedReadingInterval(
+    val startPolylinePointIndex: Int? = null,
+    val endPolylinePointIndex: Int? = null,
+    val speed: String? = null,
 )
 
 @Serializable
