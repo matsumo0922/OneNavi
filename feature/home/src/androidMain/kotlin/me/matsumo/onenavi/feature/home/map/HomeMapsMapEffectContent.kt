@@ -9,8 +9,11 @@ import android.graphics.Canvas
 import android.os.Bundle
 import android.view.animation.LinearInterpolator
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,12 +25,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -69,6 +74,7 @@ import me.matsumo.onenavi.core.ui.callout.CalloutAnchor
 import me.matsumo.onenavi.core.ui.callout.CalloutLayer
 import me.matsumo.onenavi.core.ui.callout.CalloutPlacementStrategy
 import me.matsumo.onenavi.core.ui.callout.CalloutTailDirection
+import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
 import me.matsumo.onenavi.feature.home.R
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 import org.jetbrains.compose.resources.stringResource
@@ -108,6 +114,7 @@ internal fun HomeMapsMapEffectContent(
     selectedRouteIndex: Int,
     currentLocation: RoutePoint?,
     currentBearing: Float,
+    upcomingNavigationCallouts: ImmutableList<NavigationCalloutInfo>,
     cameraManager: CameraManager,
     cameraFollowSpec: CameraFollowSpec?,
     onMapLandmarkSelected: (name: String?, latitude: Double, longitude: Double) -> Unit,
@@ -291,6 +298,38 @@ internal fun HomeMapsMapEffectContent(
                 )
             }
         }
+
+        if (screenState is HomeMapScreenState.Navigating && upcomingNavigationCallouts.isNotEmpty()) {
+            val navigationAnchors = remember(
+                upcomingNavigationCallouts,
+                googleMap,
+                viewportState.cameraState,
+            ) {
+                val map = googleMap
+                if (map == null) {
+                    persistentListOf()
+                } else {
+                    buildNavigationCalloutAnchors(map, upcomingNavigationCallouts)
+                }
+            }
+
+            CalloutLayer(
+                anchors = navigationAnchors,
+                placementStrategy = CalloutPlacementStrategy.AnchorFirst,
+                isCameraMoving = viewportState.isGestureInProgress,
+                cameraSettleEpoch = viewportState.cameraSettleEpoch,
+                modifier = Modifier.fillMaxSize(),
+                isContinuousTracking = true,
+            ) { index, tailDirection ->
+                val info = upcomingNavigationCallouts[index]
+                HomeMapNavigationCallout(
+                    tailDirection = tailDirection,
+                    maneuverType = info.maneuverType,
+                    maneuverModifier = info.maneuverModifier,
+                    intersectionName = info.intersectionName,
+                )
+            }
+        }
     }
 }
 
@@ -325,6 +364,57 @@ private fun buildRouteCalloutAnchors(
             candidates = candidates,
         )
     }.toImmutableList()
+}
+
+private fun buildNavigationCalloutAnchors(
+    googleMap: GoogleMap,
+    callouts: ImmutableList<NavigationCalloutInfo>,
+): ImmutableList<CalloutAnchor> {
+    return callouts.mapIndexed { index, info ->
+        val screen = googleMap.projection.toScreenLocation(
+            LatLng(info.maneuverLocation.latitude, info.maneuverLocation.longitude),
+        )
+        CalloutAnchor.Fixed(
+            id = "nav-$index",
+            primaryPoint = Offset(screen.x.toFloat(), screen.y.toFloat()),
+        )
+    }.toImmutableList()
+}
+
+@Composable
+private fun HomeMapNavigationCallout(
+    tailDirection: CalloutTailDirection,
+    maneuverType: String,
+    maneuverModifier: String?,
+    intersectionName: String?,
+    modifier: Modifier = Modifier,
+) {
+    Callout(
+        tailDirection = tailDirection,
+        modifier = modifier,
+        backgroundColor = Color(ROUTE_CALLOUT_PRIMARY_BG),
+        contentColor = Color.White,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ManeuverIcon(
+                modifier = Modifier.size(20.dp),
+                type = maneuverType,
+                maneuverModifier = maneuverModifier,
+                contentDescription = null,
+                tint = Color.White,
+            )
+            intersectionName?.takeIf { it.isNotBlank() }?.let { text ->
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
 }
 
 @Composable
