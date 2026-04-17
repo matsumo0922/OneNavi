@@ -84,11 +84,19 @@ internal fun HomeMapScreenContent(
     val activeRoutes by viewModel.routeManager.routes.collectAsStateWithLifecycle()
     val activeGoogleRoute = activeRoutes.firstOrNull()
     val distanceRemainingMeters = guidanceUiState.tripProgress.distanceRemainingMeters
+    val currentManeuverRoadName = guidanceUiState.currentManeuver?.simpleRoadName
+    val nextManeuverRoadName = guidanceUiState.nextManeuver?.simpleRoadName
 
-    val upcomingNavigationCallouts = remember(activeGoogleRoute, distanceRemainingMeters) {
+    val upcomingNavigationCallouts = remember(
+        activeGoogleRoute,
+        distanceRemainingMeters,
+        currentManeuverRoadName,
+        nextManeuverRoadName,
+    ) {
         buildUpcomingNavigationCallouts(
             activeRoute = activeGoogleRoute,
             distanceRemainingMeters = distanceRemainingMeters,
+            upcomingRoadNames = listOf(currentManeuverRoadName, nextManeuverRoadName),
         )
     }
 

@@ -295,6 +295,7 @@ class GuidanceSessionManager(
             distanceMeters = distanceMeters,
             instruction = instruction,
             roadName = roadName?.takeIf { it.isNotBlank() },
+            simpleRoadName = simpleRoadName?.takeIf { it.isNotBlank() },
             destinations = null,
             lanes = toLaneInfos(),
         )

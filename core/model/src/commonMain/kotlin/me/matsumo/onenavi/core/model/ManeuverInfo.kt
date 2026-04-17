@@ -14,7 +14,9 @@ import kotlinx.collections.immutable.persistentListOf
  * @param drivingSide 走行側（"right" / "left"）。アイコン生成時に使用
  * @param distanceMeters 次のマニューバまでの残り距離（メートル）
  * @param instruction 交差点名 / JCT 名 / Google が生成した案内テキスト
- * @param roadName 進入後の道路名（step.name）
+ * @param roadName 進入後の道路名（Navigation SDK の fullRoadName）。長く詳細な形式
+ * @param simpleRoadName 進入後の道路名の短縮版（Navigation SDK の simpleRoadName）。
+ *   Callout 等、短く表示したい場面向け
  * @param destinations 方面情報（step.destinations）
  * @param lanes レーン情報。現状の Google Routes API ベース実装では取得できないため通常は空。
  */
@@ -27,6 +29,7 @@ data class ManeuverInfo(
     val distanceMeters: Double,
     val instruction: String,
     val roadName: String? = null,
+    val simpleRoadName: String? = null,
     val destinations: String? = null,
     val lanes: ImmutableList<LaneInfo> = persistentListOf(),
 )
