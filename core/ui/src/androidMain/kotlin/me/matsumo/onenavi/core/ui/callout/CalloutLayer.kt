@@ -7,29 +7,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
-
-/**
- * 自動追従中（自車移動による地図移動）に Callout を再配置する間隔。
- *
- * 3 秒の間は採用済み配置を保持し、インターバル経過ごとに最新の anchor を読み直して
- * 再計算する。ジェスチャー中は再計算せず Callout 自体をフェードアウトする。
- */
-const val CALLOUT_RELAYOUT_INTERVAL_MS: Long = 3_000L
 
 /**
  * スナップショット切り替え（配置再計算）時のクロスフェード所要時間。
@@ -47,13 +32,13 @@ private const val CALLOUT_CROSSFADE_DURATION_MS: Int = 220
  * [CalloutShape] の「全方向に tail 分の padding を確保」設計により、tail 方向が
  * 変わっても Callout のサイズは変わらない前提。Pass 1 のサイズがそのまま Pass 3 でも有効になる。
  *
- * @param anchors 配置対象。カメラ静止後と、静止中は [CALLOUT_RELAYOUT_INTERVAL_MS] ごとに読み直される
+ * @param anchors 配置対象。カメラ静止時点の値だけがスナップショットとして採用される
  * @param placementStrategy 配置戦略
  * @param isCameraMoving 地図が動いている間は true。ユーザージェスチャー/プログラム由来問わず、
  *   true の間は Callout をフェードアウトし再計算も停止する
  * @param cameraSettleEpoch カメラが静止した通算回数。マウント時点の値から変化するまでは
- *   レイヤーごと非表示にし、変化したタイミングでフェードインする。以降は値の変化ごとに
- *   内部状態をリセットして再計算後の配置でフレッシュに描画する
+ *   レイヤーごと非表示にし、変化したタイミングでフェードインする。以降は値の変化に合わせて
+ *   同期的に anchors を取り込み直し、内部状態もリセットして再計算後の配置で描画する
  * @param modifier 外部から渡される Modifier。`fillMaxSize` 相当を期待する
  * @param content (index, tailDirection) を受け取って [Callout] を返すスロット
  */
@@ -66,26 +51,9 @@ fun CalloutLayer(
     modifier: Modifier = Modifier,
     content: @Composable (index: Int, tailDirection: CalloutTailDirection) -> Unit,
 ) {
-    val currentAnchors by rememberUpdatedState(anchors)
-    var lockedAnchors by remember { mutableStateOf(anchors) }
-
-    val anchorIds = anchors.map { it.id }
-    LaunchedEffect(anchorIds) {
-        lockedAnchors = currentAnchors
-    }
-
-    LaunchedEffect(isCameraMoving, cameraSettleEpoch) {
-        if (!isCameraMoving) {
-            lockedAnchors = currentAnchors
-            while (true) {
-                delay(CALLOUT_RELAYOUT_INTERVAL_MS)
-                lockedAnchors = currentAnchors
-            }
-        }
-    }
-
     val initialSettleEpoch = remember { cameraSettleEpoch }
     val hasSettledSinceMount = cameraSettleEpoch != initialSettleEpoch
+    val snapshotAnchors = remember(cameraSettleEpoch) { anchors }
 
     AnimatedVisibility(
         visible = !isCameraMoving && hasSettledSinceMount,
@@ -95,12 +63,12 @@ fun CalloutLayer(
     ) {
         key(cameraSettleEpoch) {
             Crossfade(
-                targetState = lockedAnchors,
+                targetState = snapshotAnchors,
                 animationSpec = tween(durationMillis = CALLOUT_CROSSFADE_DURATION_MS),
                 label = "callout-layer-snapshot",
             ) { snapshot ->
                 SubcomposeCalloutLayout(
-                    anchors = snapshot.toImmutableList(),
+                    anchors = snapshot,
                     placementStrategy = placementStrategy,
                     modifier = Modifier.fillMaxSize(),
                     content = content,
