@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.navigation
 
 import com.google.android.libraries.mapsplatform.turnbyturn.model.NavInfo
+import com.google.android.libraries.mapsplatform.turnbyturn.model.StepInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -11,11 +12,11 @@ internal object TurnByTurnUpdateBus {
 
     fun publish(navInfo: NavInfo) {
         _navInfo.value = NavigationFeedSnapshot(
-            navState = navInfo.getNavState(),
-            currentStep = navInfo.getCurrentStep()?.toSnapshot(),
-            remainingSteps = navInfo.getRemainingSteps().orEmpty().mapNotNull { it?.toSnapshot() },
-            distanceToCurrentStepMeters = navInfo.getDistanceToCurrentStepMeters(),
-            timeToCurrentStepSeconds = navInfo.getTimeToCurrentStepSeconds(),
+            navState = navInfo.navState,
+            currentStep = navInfo.currentStep?.toSnapshot(),
+            remainingSteps = navInfo.remainingSteps.orEmpty().mapNotNull { it?.toSnapshot() },
+            distanceToCurrentStepMeters = navInfo.distanceToCurrentStepMeters,
+            timeToCurrentStepSeconds = navInfo.timeToCurrentStepSeconds,
         )
     }
 
@@ -24,22 +25,23 @@ internal object TurnByTurnUpdateBus {
     }
 }
 
-private fun com.google.android.libraries.mapsplatform.turnbyturn.model.StepInfo.toSnapshot(): NavigationStepSnapshot {
+private fun StepInfo.toSnapshot(): NavigationStepSnapshot {
     return NavigationStepSnapshot(
-        maneuver = getManeuver(),
-        instruction = getFullInstructionText().orEmpty(),
-        roadName = getFullRoadName(),
-        lanes = getLanes().orEmpty().map { lane ->
+        maneuver = maneuver,
+        instruction = fullInstructionText.orEmpty(),
+        roadName = fullRoadName,
+        lanes = lanes.orEmpty().map { lane ->
             val directions = lane.laneDirections().orEmpty()
-            val activeDirection = directions.firstOrNull { it.isRecommended() }?.laneShape()
+            val activeDirection = directions.firstOrNull { it.isRecommended }?.laneShape()
+
             NavigationLaneSnapshot(
                 directions = directions.map { it.laneShape() },
                 activeDirection = activeDirection,
                 isRecommended = activeDirection != null,
             )
         },
-        drivingSide = getDrivingSide(),
-        distanceFromPreviousMeters = getDistanceFromPrevStepMeters(),
-        roundaboutTurnNumber = getRoundaboutTurnNumber(),
+        drivingSide = drivingSide,
+        distanceFromPreviousMeters = distanceFromPrevStepMeters,
+        roundaboutTurnNumber = roundaboutTurnNumber,
     )
 }

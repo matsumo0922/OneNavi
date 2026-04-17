@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -48,6 +47,7 @@ import me.matsumo.onenavi.core.navigation.guidance.TurnTiming
 import me.matsumo.onenavi.core.navigation.tts.AndroidTtsEngine
 import me.matsumo.onenavi.core.navigation.tts.AudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.SpeechOrchestrator
+import kotlin.time.Duration.Companion.milliseconds
 
 class GuidanceSessionManager(
     private val context: Context,
@@ -97,6 +97,7 @@ class GuidanceSessionManager(
 
     fun startSession() {
         val route = routeManager.routes.value.firstOrNull() ?: return
+
         activeRoute = route
         sessionStartTimeMillis = System.currentTimeMillis()
         lastSpokenStepIndex = -1
@@ -144,9 +145,7 @@ class GuidanceSessionManager(
         }
 
         scope.launch {
-            val isReady = withTimeoutOrNull(TTS_READY_TIMEOUT_MS) {
-                engine.isReady.filter { it }.first()
-            } != null
+            val isReady = withTimeoutOrNull(TTS_READY_TIMEOUT_MS.milliseconds) { engine.isReady.first { it } } != null
             if (isReady && activeRoute?.id == route.id) {
                 speak(sessionEvent(route.id, SessionGuideKind.START), flush = true)
             }
@@ -157,7 +156,7 @@ class GuidanceSessionManager(
         progressJob = scope.launch {
             while (_navigationState.value == NavigationState.ActiveGuidance) {
                 updateProgress(route)
-                delay(PROGRESS_INTERVAL_MS)
+                delay(PROGRESS_INTERVAL_MS.milliseconds)
             }
         }
     }
