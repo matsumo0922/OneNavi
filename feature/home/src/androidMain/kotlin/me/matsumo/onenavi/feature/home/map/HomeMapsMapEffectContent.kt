@@ -11,6 +11,8 @@ import android.view.animation.LinearInterpolator
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -21,10 +23,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -45,25 +48,39 @@ import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
 import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toPersistentList
+import me.matsumo.onenavi.core.common.formatDuration
+import me.matsumo.onenavi.core.common.formatYen
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.CameraManager
+import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.common_unit_day
+import me.matsumo.onenavi.core.resource.common_unit_hour
+import me.matsumo.onenavi.core.resource.common_unit_minute
+import me.matsumo.onenavi.core.resource.home_map_route_result_general_road
+import me.matsumo.onenavi.core.resource.home_map_route_result_toll_road
+import me.matsumo.onenavi.core.ui.callout.Callout
+import me.matsumo.onenavi.core.ui.callout.CalloutAnchor
+import me.matsumo.onenavi.core.ui.callout.CalloutLayer
+import me.matsumo.onenavi.core.ui.callout.CalloutPlacementStrategy
+import me.matsumo.onenavi.core.ui.callout.CalloutTailDirection
 import me.matsumo.onenavi.feature.home.R
-import me.matsumo.onenavi.feature.home.map.components.HomeMapRouteCallout
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
-import me.matsumo.onenavi.feature.home.map.util.CalloutSize
-import me.matsumo.onenavi.feature.home.map.util.GoogleMapCalloutPositioner
+import org.jetbrains.compose.resources.stringResource
 
 private const val TAG = "HomeMapsMap"
 private const val PRIMARY_ROUTE_WIDTH = 14f
 private const val SECONDARY_ROUTE_WIDTH = 9f
 private const val GOOGLE_BLUE = 0xFF1A73E8
 private const val GOOGLE_ROUTE_GRAY = 0xFF78909C
-private const val ROUTE_CALLOUT_ARROW_HEIGHT_PX = 10
-private val ROUTE_CALLOUT_SIZE = CalloutSize(
-    widthPx = 132.0,
-    heightPx = 72.0,
-)
+private const val ROUTE_CALLOUT_PRIMARY_BG = 0xFF4285F4
+private const val ROUTE_CALLOUT_SECONDARY_BG = 0xFFFFFFFF
+private const val ROUTE_CALLOUT_SECONDARY_FG = 0xFF202124
+
+private val ROUTE_CALLOUT_CANDIDATE_FRACTIONS = doubleArrayOf(0.3, 0.7, 0.5, 0.15, 0.85, 0.05, 0.95)
 
 @Composable
 internal fun HomeMapsMapEffectContent(
@@ -96,14 +113,9 @@ internal fun HomeMapsMapEffectContent(
     val currentOnMapLandmarkSelected = rememberUpdatedState(onMapLandmarkSelected)
     val currentOnRouteSelected = rememberUpdatedState(onRouteSelected)
     val currentSelectedRouteIndex = rememberUpdatedState(selectedRouteIndex)
-    val currentRouteResults = rememberUpdatedState(routeResults)
-    val currentScreenState = rememberUpdatedState(screenState)
 
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
     var vehiclePuckIcon by remember { mutableStateOf<BitmapDescriptor?>(null) }
-    var routeCalloutOffsets by remember(routeResults) {
-        mutableStateOf(List(routeResults.size) { null as IntOffset? })
-    }
 
     LaunchedEffect(context, vehiclePuckBitmap) {
         runCatching {
@@ -143,11 +155,6 @@ internal fun HomeMapsMapEffectContent(
         )
         overlayObjects.replaceStaticMarkers(
             googleMap = map,
-            screenState = screenState,
-        )
-        routeCalloutOffsets = computeRouteCalloutOffsets(
-            googleMap = map,
-            routeResults = routeResults,
             screenState = screenState,
         )
     }
@@ -204,6 +211,7 @@ internal fun HomeMapsMapEffectContent(
                             }
                         }
                         map.setOnCameraMoveStartedListener { reason ->
+                            viewportState.setCameraMoving(true)
                             viewportState.setGestureInProgress(
                                 reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE,
                             )
@@ -214,22 +222,14 @@ internal fun HomeMapsMapEffectContent(
                         map.setOnCameraIdleListener {
                             viewportState.updateCameraPosition(map.cameraPosition)
                             viewportState.setGestureInProgress(false)
-                            routeCalloutOffsets = computeRouteCalloutOffsets(
-                                googleMap = map,
-                                routeResults = currentRouteResults.value,
-                                screenState = currentScreenState.value,
-                            )
+                            viewportState.setCameraMoving(false)
+                            viewportState.notifyCameraSettled()
                         }
                         map.setOnMapLoadedCallback {
                             val camera = map.cameraPosition
                             Napier.d(tag = TAG) {
                                 "Map loaded: target=${camera.target}, zoom=${camera.zoom}, tilt=${camera.tilt}, bearing=${camera.bearing}"
                             }
-                            routeCalloutOffsets = computeRouteCalloutOffsets(
-                                googleMap = map,
-                                routeResults = currentRouteResults.value,
-                                screenState = currentScreenState.value,
-                            )
                         }
                     }
                 }
@@ -237,46 +237,133 @@ internal fun HomeMapsMapEffectContent(
         )
 
         if (screenState is HomeMapScreenState.RoutePreview) {
-            routeCalloutOffsets.forEachIndexed { index, offset ->
-                val routeResult = routeResults.getOrNull(index) ?: return@forEachIndexed
-                offset?.let {
-                    HomeMapRouteCallout(
-                        screenOffset = it,
-                        routeResult = routeResult,
-                        isPrimary = index == selectedRouteIndex,
-                        onClick = {
-                            if (index != selectedRouteIndex) {
-                                onRouteSelected(index)
-                            }
-                        },
-                    )
+            val routeAnchors = remember(
+                routeResults,
+                screenState,
+                googleMap,
+                viewportState.cameraState,
+            ) {
+                val map = googleMap
+                if (map == null) {
+                    persistentListOf()
+                } else {
+                    buildRouteCalloutAnchors(map, routeResults)
                 }
+            }
+
+            CalloutLayer(
+                anchors = routeAnchors,
+                placementStrategy = CalloutPlacementStrategy.AvoidOverlap,
+                isCameraMoving = viewportState.isCameraMoving,
+                cameraSettleEpoch = viewportState.cameraSettleEpoch,
+                modifier = Modifier.fillMaxSize(),
+            ) { index, tailDirection ->
+                val routeResult = routeResults[index]
+                val isPrimary = index == selectedRouteIndex
+
+                HomeMapRouteCallout(
+                    tailDirection = tailDirection,
+                    routeResult = routeResult,
+                    isPrimary = isPrimary,
+                    onClick = {
+                        if (!isPrimary) {
+                            onRouteSelected(index)
+                        }
+                    },
+                )
             }
         }
     }
 }
 
-private fun computeRouteCalloutOffsets(
+private fun buildRouteCalloutAnchors(
     googleMap: GoogleMap,
     routeResults: ImmutableList<RouteResult>,
-    screenState: HomeMapScreenState,
-): List<IntOffset?> {
-    if (screenState !is HomeMapScreenState.RoutePreview) {
-        return List(routeResults.size) { null }
+): ImmutableList<CalloutAnchor> {
+    val visibleBounds = googleMap.projection.visibleRegion.latLngBounds
+    return routeResults.mapIndexed { index, routeResult ->
+        val visiblePoints = routeResult.item.geometry.filter { point ->
+            visibleBounds.contains(LatLng(point.latitude, point.longitude))
+        }
+        val candidates = if (visiblePoints.isEmpty()) {
+            persistentListOf()
+        } else {
+            ROUTE_CALLOUT_CANDIDATE_FRACTIONS
+                .map { fraction ->
+                    val pointIndex = (visiblePoints.size * fraction).toInt()
+                        .coerceIn(0, visiblePoints.lastIndex)
+                    val point = visiblePoints[pointIndex]
+                    val screen = googleMap.projection.toScreenLocation(
+                        LatLng(point.latitude, point.longitude),
+                    )
+                    Offset(screen.x.toFloat(), screen.y.toFloat())
+                }
+                .distinct()
+                .toPersistentList()
+        }
+        CalloutAnchor.Flexible(
+            id = index,
+            primaryPoint = candidates.firstOrNull() ?: Offset.Zero,
+            candidates = candidates,
+        )
+    }.toImmutableList()
+}
+
+@Composable
+private fun HomeMapRouteCallout(
+    tailDirection: CalloutTailDirection,
+    routeResult: RouteResult,
+    isPrimary: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val dayLabel = stringResource(Res.string.common_unit_day)
+    val hourLabel = stringResource(Res.string.common_unit_hour)
+    val minuteLabel = stringResource(Res.string.common_unit_minute)
+    val tollRoadLabel = stringResource(Res.string.home_map_route_result_toll_road)
+    val generalRoadLabel = stringResource(Res.string.home_map_route_result_general_road)
+
+    val durationText = formatDuration(
+        totalSeconds = routeResult.item.durationSeconds,
+        dayLabel = dayLabel,
+        hourLabel = hourLabel,
+        minuteLabel = minuteLabel,
+    )
+    val tollFee = routeResult.item.tollFee
+    val tollText = when {
+        tollFee != null -> formatYen(tollFee)
+        routeResult.item.hasTolls -> tollRoadLabel
+        else -> generalRoadLabel
     }
 
-    return GoogleMapCalloutPositioner.computePositions(
-        googleMap = googleMap,
-        geometries = routeResults.map { it.item.geometry },
-        calloutSize = ROUTE_CALLOUT_SIZE,
-    ).map { position ->
-        position?.let { latLng ->
-            val screenPoint = googleMap.projection.toScreenLocation(latLng)
-            IntOffset(
-                x = screenPoint.x - (ROUTE_CALLOUT_SIZE.widthPx / 2.0).toInt(),
-                y = screenPoint.y - ROUTE_CALLOUT_SIZE.heightPx.toInt() - ROUTE_CALLOUT_ARROW_HEIGHT_PX,
-            )
-        }
+    val backgroundColor = if (isPrimary) {
+        Color(ROUTE_CALLOUT_PRIMARY_BG)
+    } else {
+        Color(ROUTE_CALLOUT_SECONDARY_BG)
+    }
+    val contentColor = if (isPrimary) {
+        Color.White
+    } else {
+        Color(ROUTE_CALLOUT_SECONDARY_FG)
+    }
+
+    Callout(
+        tailDirection = tailDirection,
+        modifier = modifier,
+        backgroundColor = backgroundColor,
+        contentColor = contentColor,
+        onClick = onClick,
+    ) {
+        Text(
+            text = durationText,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+        )
+
+        Text(
+            text = tollText,
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
 

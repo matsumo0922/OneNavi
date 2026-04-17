@@ -36,6 +36,21 @@ class HomeMapViewportState internal constructor() {
     var isGestureInProgress by mutableStateOf(false)
         private set
 
+    /**
+     * ユーザージェスチャー由来・プログラム由来を問わず、カメラが移動中であれば true。
+     * `onCameraMoveStarted` で true、`onCameraIdle` で false になる。
+     */
+    var isCameraMoving by mutableStateOf(false)
+        private set
+
+    /**
+     * カメラが静止した通算回数。ジェスチャーでもプログラム的アニメーションでも、
+     * `onCameraIdle` が発火したタイミングで増える。消費側は値の変化をトリガとして
+     * 再計算（例: Callout 再配置）を走らせる。
+     */
+    var cameraSettleEpoch by mutableStateOf(0)
+        private set
+
     internal var googleMap: GoogleMap? by mutableStateOf(null)
         private set
 
@@ -96,6 +111,14 @@ class HomeMapViewportState internal constructor() {
 
     internal fun setGestureInProgress(isGestureInProgress: Boolean) {
         this.isGestureInProgress = isGestureInProgress
+    }
+
+    internal fun setCameraMoving(isCameraMoving: Boolean) {
+        this.isCameraMoving = isCameraMoving
+    }
+
+    internal fun notifyCameraSettled() {
+        cameraSettleEpoch++
     }
 
     private suspend fun animate(update: CameraUpdate) {
