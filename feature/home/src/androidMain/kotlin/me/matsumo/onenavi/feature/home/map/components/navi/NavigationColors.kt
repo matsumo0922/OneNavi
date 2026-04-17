@@ -11,7 +11,7 @@ object NavigationColors {
     val maneuverSecondaryBackground = Color(0xFF1E4BB8)
     val maneuverText = Color.White
     val maneuverDistance = Color.White
-    val maneuverSecondaryText = Color(0xFFD6DEF5)
+    val maneuverSecondaryText = Color.LightGray.copy(alpha = 0.7f)
     val maneuverLaneActive = Color.White
     val maneuverLaneInactive = Color.White.copy(alpha = 0.35f)
 
