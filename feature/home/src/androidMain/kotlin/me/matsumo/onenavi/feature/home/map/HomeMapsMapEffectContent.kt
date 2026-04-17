@@ -138,6 +138,8 @@ internal fun HomeMapsMapEffectContent(
     val currentOnMapLandmarkSelected = rememberUpdatedState(onMapLandmarkSelected)
     val currentOnRouteSelected = rememberUpdatedState(onRouteSelected)
     val currentSelectedRouteIndex = rememberUpdatedState(selectedRouteIndex)
+    val currentScreenState = rememberUpdatedState(screenState)
+    val currentCameraManager = rememberUpdatedState(cameraManager)
 
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
     var vehiclePuckIcon by remember { mutableStateOf<BitmapDescriptor?>(null) }
@@ -237,9 +239,14 @@ internal fun HomeMapsMapEffectContent(
                         }
                         map.setOnCameraMoveStartedListener { reason ->
                             viewportState.setCameraMoving(true)
-                            viewportState.setGestureInProgress(
-                                reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE,
-                            )
+                            val isGesture = reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE
+                            viewportState.setGestureInProgress(isGesture)
+                            // ナビ中のジェスチャーでは、自車移動アニメの moveCamera との
+                            // 取り合いを避けるためカメラ追従を IDLE に切り替える。
+                            // NaviReturnButton で再度 FOLLOWING へ戻せる。
+                            if (isGesture && currentScreenState.value is HomeMapScreenState.Navigating) {
+                                currentCameraManager.value.requestCameraIdle()
+                            }
                         }
                         map.setOnCameraMoveListener {
                             viewportState.updateCameraPosition(map.cameraPosition)
