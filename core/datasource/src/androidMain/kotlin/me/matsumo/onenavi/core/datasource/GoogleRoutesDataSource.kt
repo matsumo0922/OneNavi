@@ -165,11 +165,16 @@ class GoogleRoutesDataSource(
             val distance = step.distanceMeters?.toDouble() ?: 0.0
             val parsedManeuver = parseGoogleManeuver(maneuver)
 
+            val maneuverLocation = step.startLocation?.latLng?.let { latLng ->
+                RoutePoint(latitude = latLng.latitude, longitude = latLng.longitude)
+            }
+
             val routeStepInfo = RouteStepInfo(
                 maneuverType = parsedManeuver.type,
                 modifier = parsedManeuver.modifier,
                 distanceFromPreviousMeters = distance,
                 cumulativeDistanceMeters = cumulativeDistance,
+                maneuverLocation = maneuverLocation,
                 instruction = instruction,
                 roadName = "",
                 roadRef = null,
@@ -212,7 +217,8 @@ class GoogleRoutesDataSource(
                 "routes.travelAdvisory.tollInfo," +
                 "routes.travelAdvisory.speedReadingIntervals," +
                 "routes.legs.steps.distanceMeters," +
-                "routes.legs.steps.navigationInstruction"
+                "routes.legs.steps.navigationInstruction," +
+                "routes.legs.steps.startLocation"
     }
 }
 
@@ -368,6 +374,12 @@ private data class RouteLeg(
 private data class RouteStep(
     val distanceMeters: Int? = null,
     val navigationInstruction: NavigationInstruction? = null,
+    val startLocation: RouteStepLocation? = null,
+)
+
+@Serializable
+private data class RouteStepLocation(
+    val latLng: LatLng? = null,
 )
 
 @Serializable

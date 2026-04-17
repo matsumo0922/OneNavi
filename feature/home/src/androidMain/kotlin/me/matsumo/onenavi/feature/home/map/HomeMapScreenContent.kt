@@ -80,6 +80,17 @@ internal fun HomeMapScreenContent(
     val mapPadding by viewModel.cameraManager.mapPadding.collectAsStateWithLifecycle()
     val isNavigationFollowing3D by viewModel.cameraManager.isFollowing3D.collectAsStateWithLifecycle()
     val arrivalInfo by viewModel.guidanceSessionManager.arrivalInfo.collectAsStateWithLifecycle()
+    val guidanceUiState by viewModel.guidanceSessionManager.guidanceUiState.collectAsStateWithLifecycle()
+    val activeRoutes by viewModel.routeManager.routes.collectAsStateWithLifecycle()
+
+    val upcomingNavigationCallouts by remember(activeRoutes, guidanceUiState) {
+        derivedStateOf {
+            buildUpcomingNavigationCallouts(
+                activeRoute = activeRoutes.firstOrNull(),
+                distanceRemainingMeters = guidanceUiState.tripProgress.distanceRemainingMeters,
+            )
+        }
+    }
 
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
     var trackingZoom by remember { mutableFloatStateOf(DEFAULT_TRACKING_ZOOM) }
@@ -237,6 +248,7 @@ internal fun HomeMapScreenContent(
                 selectedRouteIndex = selectedRouteIndex,
                 currentLocation = currentLocation,
                 currentBearing = currentBearing,
+                upcomingNavigationCallouts = upcomingNavigationCallouts,
                 cameraManager = viewModel.cameraManager,
                 cameraFollowSpec = cameraFollowSpec,
                 onMapLandmarkSelected = viewModel::onMapLandmarkSelected,

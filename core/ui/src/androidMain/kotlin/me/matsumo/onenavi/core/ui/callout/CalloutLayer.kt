@@ -32,18 +32,78 @@ private const val CALLOUT_CROSSFADE_DURATION_MS: Int = 220
  * [CalloutShape] の「全方向に tail 分の padding を確保」設計により、tail 方向が
  * 変わっても Callout のサイズは変わらない前提。Pass 1 のサイズがそのまま Pass 3 でも有効になる。
  *
- * @param anchors 配置対象。カメラ静止時点の値だけがスナップショットとして採用される
+ * 動作モードは [isContinuousTracking] により 2 通りある:
+ * - false（既定・ルートプレビュー向け）: カメラ静止時点の [anchors] をスナップショット化し、
+ *   次の静止まで前回配置を保持する。カメラ移動中はフェードアウトする。
+ * - true（ナビゲーション自動追従向け）: [anchors] の変化を毎フレーム取り込んで配置を
+ *   追従させる。自動追従で [isCameraMoving] が常時 true になる状況でも表示を維持する。
+ *
+ * @param anchors 配置対象。スナップショットモードではカメラ静止時点の値だけが採用される
  * @param placementStrategy 配置戦略
- * @param isCameraMoving 地図が動いている間は true。ユーザージェスチャー/プログラム由来問わず、
- *   true の間は Callout をフェードアウトし再計算も停止する
- * @param cameraSettleEpoch カメラが静止した通算回数。マウント時点の値から変化するまでは
- *   レイヤーごと非表示にし、変化したタイミングでフェードインする。以降は値の変化に合わせて
- *   同期的に anchors を取り込み直し、内部状態もリセットして再計算後の配置で描画する
+ * @param isCameraMoving 地図が動いている間は true。スナップショットモードでは true の間
+ *   Callout をフェードアウトし再計算も停止する。ライブ追従モードでは、ユーザージェスチャー等で
+ *   真に隠したいタイミングだけ true を渡すことで同等のフェード挙動になる
+ * @param cameraSettleEpoch カメラが静止した通算回数。スナップショットモードでのみ使用し、
+ *   マウント時点の値から変化するまではレイヤーごと非表示にする。ライブ追従モードでは無視される
  * @param modifier 外部から渡される Modifier。`fillMaxSize` 相当を期待する
+ * @param isContinuousTracking ライブ追従モードを有効にするかどうか
  * @param content (index, tailDirection) を受け取って [Callout] を返すスロット
  */
 @Composable
 fun CalloutLayer(
+    anchors: ImmutableList<CalloutAnchor>,
+    placementStrategy: CalloutPlacementStrategy,
+    isCameraMoving: Boolean,
+    cameraSettleEpoch: Int,
+    modifier: Modifier = Modifier,
+    isContinuousTracking: Boolean = false,
+    content: @Composable (index: Int, tailDirection: CalloutTailDirection) -> Unit,
+) {
+    if (isContinuousTracking) {
+        ContinuousCalloutLayer(
+            anchors = anchors,
+            placementStrategy = placementStrategy,
+            isCameraMoving = isCameraMoving,
+            modifier = modifier,
+            content = content,
+        )
+    } else {
+        SnapshotCalloutLayer(
+            anchors = anchors,
+            placementStrategy = placementStrategy,
+            isCameraMoving = isCameraMoving,
+            cameraSettleEpoch = cameraSettleEpoch,
+            modifier = modifier,
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun ContinuousCalloutLayer(
+    anchors: ImmutableList<CalloutAnchor>,
+    placementStrategy: CalloutPlacementStrategy,
+    isCameraMoving: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable (index: Int, tailDirection: CalloutTailDirection) -> Unit,
+) {
+    AnimatedVisibility(
+        visible = !isCameraMoving,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier,
+    ) {
+        SubcomposeCalloutLayout(
+            anchors = anchors,
+            placementStrategy = placementStrategy,
+            modifier = Modifier.fillMaxSize(),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun SnapshotCalloutLayer(
     anchors: ImmutableList<CalloutAnchor>,
     placementStrategy: CalloutPlacementStrategy,
     isCameraMoving: Boolean,
