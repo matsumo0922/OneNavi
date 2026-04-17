@@ -11,7 +11,7 @@ import android.view.animation.LinearInterpolator
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -28,8 +28,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -262,6 +260,7 @@ internal fun HomeMapsMapEffectContent(
             ) { index, tailDirection ->
                 val routeResult = routeResults[index]
                 val isPrimary = index == selectedRouteIndex
+
                 HomeMapRouteCallout(
                     tailDirection = tailDirection,
                     routeResult = routeResult,
@@ -357,16 +356,13 @@ private fun HomeMapRouteCallout(
     ) {
         Text(
             text = durationText,
-            fontSize = 14.sp,
+            style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
         )
+
         Text(
-            modifier = Modifier
-                .padding(top = 2.dp),
             text = tollText,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            color = contentColor.copy(alpha = if (isPrimary) 0.92f else 0.78f),
+            style = MaterialTheme.typography.labelMedium,
         )
     }
 }
