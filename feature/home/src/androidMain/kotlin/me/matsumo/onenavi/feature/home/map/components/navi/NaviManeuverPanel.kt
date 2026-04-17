@@ -196,8 +196,8 @@ private fun NaviNextManeuverHint(
     ) {
         Text(
             text = "その先",
-            color = NavigationColors.maneuverSecondaryText,
-            style = MaterialTheme.typography.bodyMedium,
+            color = NavigationColors.maneuverText,
+            style = MaterialTheme.typography.labelLarge,
         )
 
         ManeuverTurnIcon(
@@ -227,6 +227,7 @@ private fun NaviLaneIcon(
     modifier: Modifier = Modifier,
 ) {
     val direction = lane.activeDirection ?: lane.directions.firstOrNull()
+
     ManeuverIcon(
         modifier = modifier,
         type = "turn",
