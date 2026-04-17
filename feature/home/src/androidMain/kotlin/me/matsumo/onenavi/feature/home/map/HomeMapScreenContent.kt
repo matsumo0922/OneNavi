@@ -112,8 +112,8 @@ internal fun HomeMapScreenContent(
     }
 
     val shouldShowSheet = screenState is HomeMapScreenState.SearchResultsList ||
-        screenState is HomeMapScreenState.PlaceDetails ||
-        screenState is HomeMapScreenState.RoutePreview
+            screenState is HomeMapScreenState.PlaceDetails ||
+            screenState is HomeMapScreenState.RoutePreview
 
     LaunchedEffect(screenState) {
         if (screenState !is HomeMapScreenState.Browsing) {
@@ -137,7 +137,7 @@ internal fun HomeMapScreenContent(
         derivedStateOf {
             when {
                 screenState is HomeMapScreenState.Navigating &&
-                    navigationCameraState == me.matsumo.onenavi.core.navigation.CameraState.FOLLOWING ->
+                        navigationCameraState == me.matsumo.onenavi.core.navigation.CameraState.FOLLOWING ->
                     CameraFollowSpec(
                         zoom = trackingZoom,
                         tilt = if (isNavigationFollowing3D) TRACKING_TILT_3D else 0f,
@@ -192,9 +192,7 @@ internal fun HomeMapScreenContent(
         routeManager = viewModel.routeManager,
         cameraManager = viewModel.cameraManager,
         viewportState = viewportState,
-        sheetPeekHeightPx = with(density) {
-            if (shouldShowSheet) sheetPeekHeight.toPx() else 0f
-        }.toDouble(),
+        sheetPeekHeightPx = with(density) { if (shouldShowSheet) sheetPeekHeight.toPx() else 0f }.toDouble(),
         topOverlayBottomPx = topOverlayBottomPx,
         navigationCameraState = navigationCameraState,
         mapPadding = mapPadding,
@@ -326,6 +324,7 @@ private fun BoxScope.HomeMapScreenContentControls(
                 onNavigationStopped = onNavigationStopped,
             )
         }
+
         is HomeMapScreenState.Arrived -> {
             val destinationName = (screenState.destination as? RouteWaypoint.Place)?.name
 
@@ -343,6 +342,7 @@ private fun BoxScope.HomeMapScreenContentControls(
                 onFinishClicked = onArrivalDismissed,
             )
         }
+
         else -> {
             HomeMapControls(
                 modifier = Modifier
@@ -392,7 +392,7 @@ private fun BoxScope.HomeMapScreenContentTopAppBar(
         is HomeMapScreenState.Browsing,
         is HomeMapScreenState.SearchResultsList,
         is HomeMapScreenState.PlaceDetails,
-        -> {
+            -> {
             HomeMapTopAppBar(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -415,6 +415,7 @@ private fun BoxScope.HomeMapScreenContentTopAppBar(
                 onDismissSearchResult = onDismissSearchResult,
             )
         }
+
         is HomeMapScreenState.RoutePreview -> {
             HomeMapRouteTopAppBar(
                 modifier = Modifier
@@ -436,9 +437,10 @@ private fun BoxScope.HomeMapScreenContentTopAppBar(
                 onWaypointClicked = onWaypointClicked,
             )
         }
+
         is HomeMapScreenState.Navigating,
         is HomeMapScreenState.Arrived,
-        -> {
+            -> {
             SideEffect {
                 onTopOverlayBottomChanged(0f)
             }
