@@ -12,6 +12,7 @@ data class NavigationStepSnapshot(
     val maneuver: Int,
     val instruction: String,
     val roadName: String?,
+    val simpleRoadName: String?,
     val lanes: List<NavigationLaneSnapshot>,
     val drivingSide: Int,
     val distanceFromPreviousMeters: Int?,

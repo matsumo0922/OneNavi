@@ -30,6 +30,7 @@ private fun StepInfo.toSnapshot(): NavigationStepSnapshot {
         maneuver = maneuver,
         instruction = fullInstructionText.orEmpty(),
         roadName = fullRoadName,
+        simpleRoadName = simpleRoadName,
         lanes = lanes.orEmpty().map { lane ->
             val directions = lane.laneDirections().orEmpty()
             val recommendedDirection = directions.firstOrNull { it.isRecommended }?.laneShape()

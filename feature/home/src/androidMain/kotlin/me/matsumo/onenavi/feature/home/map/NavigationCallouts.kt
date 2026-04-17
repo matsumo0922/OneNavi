@@ -14,7 +14,7 @@ import me.matsumo.onenavi.core.model.RouteStepInfo
  * @param maneuverLocation マニューバ点の緯度経度
  * @param maneuverType マニューバ種別。[me.matsumo.onenavi.core.model.ManeuverInfo.type] 相当
  * @param maneuverModifier 方向修飾子。[me.matsumo.onenavi.core.model.ManeuverInfo.modifier] 相当
- * @param intersectionName 交差点名などの表示用テキスト。取得できない場合は null
+ * @param intersectionName Callout に表示する行き先の道路名ラベル。取得できない場合は null
  */
 @Immutable
 internal data class NavigationCalloutInfo(
@@ -30,9 +30,6 @@ private const val UPCOMING_NAV_CALLOUT_MAX_COUNT = 2
 /** 「通り過ぎた」判定に使う余裕距離（メートル）。 */
 private const val MANEUVER_PASSED_MARGIN_METERS = 5.0
 
-/** 交差点名として採用するには短すぎる bold テキスト長の閾値（日本語を想定）。 */
-private const val INTERSECTION_NAME_MIN_LENGTH = 2
-
 /**
  * Callout を描画する対象外のマニューバ種別。
  *
@@ -46,36 +43,21 @@ private val NON_MANEUVER_TYPES = setOf(
     "arrive",
 )
 
-/** bold で囲まれた部分を全て取り出すための正規表現。 */
-private val BOLD_TAG_REGEX = Regex("<b>(.*?)</b>", RegexOption.DOT_MATCHES_ALL)
-
-/**
- * Google Routes API の instruction テキストから日本語の交差点名として使えそうな
- * bold テキストを 1 つ抽出する。
- *
- * Google は交差点名 / 道路名を `<b>...</b>` で囲んで返すが、方向語（右折 / 左折 など）も
- * 同じタグで囲まれるため、最も長い bold テキストを採用することで方向語との衝突を避ける。
- * 該当がなければ null を返す。
- */
-internal fun extractIntersectionName(instruction: String): String? {
-    if (instruction.isBlank()) return null
-    val boldTexts = BOLD_TAG_REGEX
-        .findAll(instruction)
-        .map { match -> match.groupValues[1].trim() }
-        .filter { text -> text.length > INTERSECTION_NAME_MIN_LENGTH }
-        .toList()
-    return boldTexts.maxByOrNull { it.length }
-}
-
 /**
  * ナビゲーション中のルート + 残距離から、二つ先までの案内地点 Callout 情報を算出する。
  *
  * 位置情報（`maneuverLocation`）を持たない step、既に通り過ぎた step、および直進等の
  * 実質的な案内を伴わない step は除外する。
+ *
+ * @param activeRoute 現在案内中のルート
+ * @param distanceRemainingMeters 目的地までの残距離（メートル）
+ * @param upcomingRoadNames Navigation SDK が把握する今後のマニューバ道路名。
+ *   先頭から順に、算出された Callout にインデックス対応で割り当てる。null / 空文字は非表示扱い
  */
 internal fun buildUpcomingNavigationCallouts(
     activeRoute: GoogleRoute?,
     distanceRemainingMeters: Double,
+    upcomingRoadNames: List<String?>,
 ): ImmutableList<NavigationCalloutInfo> {
     if (activeRoute == null) return persistentListOf()
     if (distanceRemainingMeters <= 0.0) return persistentListOf()
@@ -87,6 +69,13 @@ internal fun buildUpcomingNavigationCallouts(
         .asSequence()
         .mapNotNull { step -> step.toUpcomingCalloutOrNull(traveledMeters) }
         .take(UPCOMING_NAV_CALLOUT_MAX_COUNT)
+        .withIndex()
+        .map { (calloutIndex, callout) ->
+            callout.copy(
+                intersectionName = upcomingRoadNames.getOrNull(calloutIndex)
+                    ?.takeIf { name -> name.isNotBlank() },
+            )
+        }
         .toList()
         .toImmutableList()
 }
@@ -102,6 +91,6 @@ private fun RouteStepInfo.toUpcomingCalloutOrNull(
         maneuverLocation = location,
         maneuverType = maneuverType,
         maneuverModifier = modifier,
-        intersectionName = extractIntersectionName(instruction),
+        intersectionName = null,
     )
 }
