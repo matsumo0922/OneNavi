@@ -112,8 +112,8 @@ internal fun HomeMapScreenContent(
     }
 
     val shouldShowSheet = screenState is HomeMapScreenState.SearchResultsList ||
-            screenState is HomeMapScreenState.PlaceDetails ||
-            screenState is HomeMapScreenState.RoutePreview
+        screenState is HomeMapScreenState.PlaceDetails ||
+        screenState is HomeMapScreenState.RoutePreview
 
     LaunchedEffect(screenState) {
         if (screenState !is HomeMapScreenState.Browsing) {
@@ -137,7 +137,7 @@ internal fun HomeMapScreenContent(
         derivedStateOf {
             when {
                 screenState is HomeMapScreenState.Navigating &&
-                        navigationCameraState == me.matsumo.onenavi.core.navigation.CameraState.FOLLOWING ->
+                    navigationCameraState == me.matsumo.onenavi.core.navigation.CameraState.FOLLOWING ->
                     CameraFollowSpec(
                         zoom = trackingZoom,
                         tilt = if (isNavigationFollowing3D) TRACKING_TILT_3D else 0f,
@@ -392,7 +392,7 @@ private fun BoxScope.HomeMapScreenContentTopAppBar(
         is HomeMapScreenState.Browsing,
         is HomeMapScreenState.SearchResultsList,
         is HomeMapScreenState.PlaceDetails,
-            -> {
+        -> {
             HomeMapTopAppBar(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -440,7 +440,7 @@ private fun BoxScope.HomeMapScreenContentTopAppBar(
 
         is HomeMapScreenState.Navigating,
         is HomeMapScreenState.Arrived,
-            -> {
+        -> {
             SideEffect {
                 onTopOverlayBottomChanged(0f)
             }
