@@ -20,13 +20,13 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import me.matsumo.onenavi.core.model.GoogleRoute
 import me.matsumo.onenavi.core.model.RoutePoint
 import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
+import kotlin.time.Duration.Companion.milliseconds
 
 class NavigationSdkManager(
     application: Application,
@@ -59,6 +59,7 @@ class NavigationSdkManager(
     private val arrivalListener = Navigator.ArrivalListener { event ->
         handleArrival(event)
     }
+
     private val routeChangedListener = Navigator.RouteChangedListener {
         refreshRouteGeometry()
         if (_isOffRoute.value) {
@@ -66,15 +67,34 @@ class NavigationSdkManager(
         }
         updateTripProgress()
     }
+
     private val reroutingListener = Navigator.ReroutingListener {
         _isOffRoute.value = true
     }
+
     private val remainingListener = Navigator.RemainingTimeOrDistanceChangedListener {
         updateTripProgress()
     }
 
     fun initialize(activity: Activity) {
         if (navigator != null || navigatorInitializing) return
+
+        if (!NavigationApi.areTermsAccepted(activity.application)) {
+            navigatorInitializing = true
+            Napier.i(tag = TAG) { "Navigation SDK terms were not accepted. Showing terms dialog." }
+
+            NavigationApi.showTermsAndConditionsDialog(activity, COMPANY_NAME) { accepted ->
+                navigatorInitializing = false
+                if (accepted) {
+                    Napier.i(tag = TAG) { "Navigation SDK terms were accepted." }
+                    initialize(activity)
+                } else {
+                    _initializationErrorCode.value = TERMS_NOT_ACCEPTED_ERROR_CODE
+                    Napier.e(tag = TAG) { "Navigation SDK terms were not accepted." }
+                }
+            }
+            return
+        }
 
         navigatorInitializing = true
         NavigationApi.getNavigator(
@@ -136,9 +156,7 @@ class NavigationSdkManager(
 
     private suspend fun awaitNavigatorReady(): Navigator? {
         navigator?.let { return it }
-        val isReady = withTimeoutOrNull(NAVIGATOR_READY_TIMEOUT_MS) {
-            isNavigatorReady.filter { it }.first()
-        } != null
+        val isReady = withTimeoutOrNull(NAVIGATOR_READY_TIMEOUT_MS.milliseconds) { isNavigatorReady.first { it } } != null
         return navigator.takeIf { isReady }
     }
 
@@ -202,8 +220,8 @@ class NavigationSdkManager(
         val navigator = navigator ?: return
         val currentRoutes = routeManager.routes.value
         val primaryRoute = activeRoute ?: currentRoutes.firstOrNull() ?: return
-        val geometry = navigator.getRouteSegments()
-            .flatMap { segment -> segment.getLatLngs().map { point -> point.toRoutePoint() } }
+        val geometry = navigator.routeSegments
+            .flatMap { segment -> segment.latLngs.map { point -> point.toRoutePoint() } }
             .dedupeAdjacent()
             .toImmutableList()
 
@@ -220,22 +238,23 @@ class NavigationSdkManager(
     }
 
     private fun updateTripProgress() {
-        val current = navigator?.getCurrentTimeAndDistance() ?: return
+        val current = navigator?.currentTimeAndDistance ?: return
+
         _tripProgress.value = NavigationTripProgressSnapshot(
-            timeRemainingSeconds = current.getSeconds(),
-            distanceRemainingMeters = current.getMeters(),
+            timeRemainingSeconds = current.seconds,
+            distanceRemainingMeters = current.meters,
         )
     }
 
     private fun handleArrival(event: ArrivalEvent) {
         val snapshot = NavigationArrivalSnapshot(
-            waypointTitle = event.getWaypoint().getTitle(),
-            isFinalDestination = event.isFinalDestination(),
+            waypointTitle = event.waypoint.title,
+            isFinalDestination = event.isFinalDestination,
         )
         _arrivalEvents.tryEmit(snapshot)
     }
 
-    private suspend fun <T> ListenableResultFuture<T>.awaitResult(): T = suspendCoroutine { continuation ->
+    private suspend fun <T> ListenableResultFuture<T>.awaitResult(): T = suspendCancellableCoroutine { continuation ->
         setOnResultListener { result ->
             continuation.resume(result)
         }
@@ -277,5 +296,7 @@ class NavigationSdkManager(
         private const val PROGRESS_TIME_THRESHOLD_SECONDS = 5
         private const val PROGRESS_DISTANCE_THRESHOLD_METERS = 50
         private const val NAVIGATOR_READY_TIMEOUT_MS = 5_000L
+        private const val COMPANY_NAME = "OneNavi"
+        private const val TERMS_NOT_ACCEPTED_ERROR_CODE = -1
     }
 }

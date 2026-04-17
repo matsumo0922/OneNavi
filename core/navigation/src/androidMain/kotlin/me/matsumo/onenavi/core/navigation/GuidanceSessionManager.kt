@@ -12,14 +12,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import me.matsumo.onenavi.core.model.ArrivalInfo
@@ -28,8 +30,6 @@ import me.matsumo.onenavi.core.model.GuidanceUiState
 import me.matsumo.onenavi.core.model.LaneInfo
 import me.matsumo.onenavi.core.model.ManeuverInfo
 import me.matsumo.onenavi.core.model.NavigationState
-import me.matsumo.onenavi.core.model.RoutePoint
-import me.matsumo.onenavi.core.model.RouteStepInfo
 import me.matsumo.onenavi.core.model.TripProgressInfo
 import me.matsumo.onenavi.core.navigation.guidance.Direction
 import me.matsumo.onenavi.core.navigation.guidance.DistanceBucket
@@ -70,7 +70,7 @@ class GuidanceSessionManager(
     private val _guidanceEvents = MutableSharedFlow<GuidanceEvent>(extraBufferCapacity = 32)
     val guidanceEvents: SharedFlow<GuidanceEvent> = _guidanceEvents.asSharedFlow()
 
-    private var progressJob: Job? = null
+    private var guidanceJob: Job? = null
     private var arrivalJob: Job? = null
     private var speechOrchestrator: SpeechOrchestrator? = null
     private var ttsEngine: AndroidTtsEngine? = null
@@ -79,8 +79,8 @@ class GuidanceSessionManager(
 
     private var sessionStartTimeMillis: Long = 0L
     private var activeRoute: GoogleRoute? = null
-    private var lastSpokenStepIndex: Int = -1
-    private var lastTraveledDistanceMeters: Double = 0.0
+    private var lastSpokenStep: NavigationStepSnapshot? = null
+    private var spokenStepCounter: Int = 0
     private var lastOffRoute: Boolean = false
 
     fun register() {
@@ -100,8 +100,8 @@ class GuidanceSessionManager(
 
         activeRoute = route
         sessionStartTimeMillis = System.currentTimeMillis()
-        lastSpokenStepIndex = -1
-        lastTraveledDistanceMeters = 0.0
+        lastSpokenStep = null
+        spokenStepCounter = 0
         lastOffRoute = false
         speechHistory.resetForNewRoute(route.id)
 
@@ -126,7 +126,7 @@ class GuidanceSessionManager(
             navigationSdkManager.startNavigation(route)
                 .onFailure { throwable ->
                     Napier.e(tag = TAG, throwable = throwable) {
-                        "Navigation SDK guidance failed to start. Fallback to route-only guidance."
+                        "Navigation SDK guidance failed to start."
                     }
                 }
         }
@@ -152,18 +152,25 @@ class GuidanceSessionManager(
         }
         cameraManager.requestCameraFollowing(pitch3D = true)
 
-        progressJob?.cancel()
-        progressJob = scope.launch {
-            while (_navigationState.value == NavigationState.ActiveGuidance) {
-                updateProgress(route)
-                delay(PROGRESS_INTERVAL_MS.milliseconds)
-            }
+        guidanceJob?.cancel()
+        guidanceJob = combine(
+            navigationSdkManager.navInfo,
+            navigationSdkManager.tripProgress,
+            navigationSdkManager.isOffRoute,
+        ) { navInfo, tripProgress, isOffRouteRaw ->
+            GuidanceUpdate(
+                navInfo = navInfo,
+                tripProgress = tripProgress,
+                isOffRouteRaw = isOffRouteRaw,
+            )
         }
+            .onEach { update -> applyGuidanceUpdate(route.id, update) }
+            .launchIn(scope)
     }
 
     fun stopSession() {
-        progressJob?.cancel()
-        progressJob = null
+        guidanceJob?.cancel()
+        guidanceJob = null
         arrivalJob?.cancel()
         arrivalJob = null
         activeRoute?.let { speak(sessionEvent(it.id, SessionGuideKind.STOP), flush = true) }
@@ -175,8 +182,8 @@ class GuidanceSessionManager(
 
         _guidanceUiState.value = GuidanceUiState.Initial
         _arrivalInfo.value = null
-        lastSpokenStepIndex = -1
-        lastTraveledDistanceMeters = 0.0
+        lastSpokenStep = null
+        spokenStepCounter = 0
         lastOffRoute = false
     }
 
@@ -188,111 +195,76 @@ class GuidanceSessionManager(
         speechOrchestrator?.setMuted(muted)
     }
 
-    private fun updateProgress(route: GoogleRoute) {
-        val resolvedRoute = routeManager.routes.value.firstOrNull()
-            ?.takeIf { it.id == route.id }
-            ?: activeRoute
-            ?: route
-        activeRoute = resolvedRoute
+    private fun applyGuidanceUpdate(
+        routeId: String,
+        update: GuidanceUpdate,
+    ) {
+        if (activeRoute?.id != routeId) return
 
-        val location = cameraManager.currentLocation.value ?: resolvedRoute.origin
-        val traveledDistance = resolvedRoute.itemProgressDistance(location)
-            .coerceAtLeast(lastTraveledDistanceMeters)
-            .coerceAtMost(resolvedRoute.distanceMeters)
-        lastTraveledDistanceMeters = traveledDistance
+        val navInfo = update.navInfo
+        val tripProgress = update.tripProgress
+        val navState = navInfo?.navState
+        val isOffRoute = update.isOffRouteRaw || navState == NavState.REROUTING
+        maybeSpeakReroute(routeId, isOffRoute)
 
-        val routeDistanceRemaining = (resolvedRoute.distanceMeters - traveledDistance).coerceAtLeast(0.0)
-        val routeDurationRemaining = if (resolvedRoute.distanceMeters > 0.0) {
-            resolvedRoute.durationSeconds * (routeDistanceRemaining / resolvedRoute.distanceMeters)
-        } else {
-            0.0
-        }
-
-        val navInfo = navigationSdkManager.navInfo.value
-        val sdkTripProgress = navigationSdkManager.tripProgress.value
-        val isOffRoute = navigationSdkManager.isOffRoute.value || navInfo?.navState == NavState.REROUTING
-        maybeSpeakReroute(resolvedRoute.id, isOffRoute)
-
-        if (sdkTripProgress == null && routeDistanceRemaining <= ARRIVAL_THRESHOLD_METERS) {
-            onFinalDestinationArrival(resolvedRoute)
+        // NavInfo のマニューバ関連フィールドは navState == ENROUTE の時だけ有効。
+        // REROUTING / STOPPED / UNKNOWN では前回値を維持し、補助フラグのみ更新する。
+        if (navState != NavState.ENROUTE) {
+            _guidanceUiState.value = _guidanceUiState.value.copy(
+                isOffRoute = isOffRoute,
+                isTtsAvailable = ttsEngine?.isReady?.value == true,
+            )
             return
         }
 
-        val distanceRemaining = sdkTripProgress?.distanceRemainingMeters?.toDouble() ?: routeDistanceRemaining
-        val durationRemaining = sdkTripProgress?.timeRemainingSeconds?.toDouble() ?: routeDurationRemaining
+        val currentStep = navInfo.currentStep
+        val nextStep = navInfo.remainingSteps.firstOrNull()
 
-        val steps = resolvedRoute.steps
-        val currentStepIndex = steps.indexOfLast { it.cumulativeDistanceMeters <= traveledDistance }
-            .takeIf { it >= 0 }
-            ?: 0
-        val currentStep = steps.getOrNull(currentStepIndex)
-        val routeVisibleUpcomingSteps = steps
-            .withIndex()
-            .drop(currentStepIndex.coerceAtLeast(0))
-            .filter { it.value.isDisplayableManeuver() }
-        val sdkCurrentStep = navInfo?.currentStep?.takeIf { it.isDisplayableManeuver() }
-        val sdkNextStep = navInfo?.remainingSteps
-            .orEmpty()
-            .firstOrNull { it.isDisplayableManeuver() }
+        val currentStepDistance = navInfo.distanceToCurrentStepMeters?.toDouble() ?: 0.0
+        val nextStepDistance = currentStepDistance +
+            (nextStep?.distanceFromPreviousMeters?.toDouble() ?: 0.0)
 
-        val currentVisibleStep = routeVisibleUpcomingSteps.getOrNull(0)
-        val nextVisibleStep = routeVisibleUpcomingSteps.getOrNull(1)
+        val currentManeuver = currentStep?.toManeuverInfo(distanceMeters = currentStepDistance)
+        val nextManeuver = nextStep?.toManeuverInfo(distanceMeters = nextStepDistance)
 
-        val currentManeuver = when {
-            sdkCurrentStep != null -> sdkCurrentStep.toManeuverInfo(
-                distanceMeters = sdkCurrentStep.distanceFromCurrentLocation(navInfo),
-            )
-            currentVisibleStep != null -> currentVisibleStep.value.toManeuverInfo(
-                distanceMeters = currentVisibleStep.value.remainingDistanceFrom(traveledDistance),
-            )
-            else -> null
-        }
-        val nextManeuver = when {
-            sdkNextStep != null -> sdkNextStep.toManeuverInfo(
-                distanceMeters = sdkNextStep.distanceFromCurrentLocation(navInfo),
-            )
-            nextVisibleStep != null -> nextVisibleStep.value.toManeuverInfo(
-                distanceMeters = nextVisibleStep.value.remainingDistanceFrom(traveledDistance),
-            )
-            else -> null
-        }
-        val upcomingSteps = steps.drop(currentStepIndex.coerceAtLeast(0)).toImmutableList()
+        val distanceRemaining = tripProgress?.distanceRemainingMeters?.toDouble() ?: 0.0
+        val durationRemaining = tripProgress?.timeRemainingSeconds?.toDouble() ?: 0.0
 
         _guidanceUiState.value = _guidanceUiState.value.copy(
             currentManeuver = currentManeuver,
             nextManeuver = nextManeuver,
-            upcomingSteps = upcomingSteps,
+            upcomingSteps = persistentListOf(),
             tripProgress = TripProgressInfo(
                 distanceRemainingMeters = distanceRemaining,
                 durationRemainingSeconds = durationRemaining,
                 estimatedArrivalTimeMillis = System.currentTimeMillis() + (durationRemaining * 1000).toLong(),
             ),
             currentRoadName = currentManeuver?.roadName
-                ?: sdkCurrentStep?.roadName?.takeIf { it.isNotBlank() }
                 ?: currentStep?.roadName?.takeIf { it.isNotBlank() },
-            isOffRoute = isOffRoute,
+            isOffRoute = false,
             isTtsAvailable = ttsEngine?.isReady?.value == true,
             isLocationStale = false,
         )
 
-        if (!isOffRoute && currentVisibleStep != null && currentVisibleStep.index != lastSpokenStepIndex) {
-            lastSpokenStepIndex = currentVisibleStep.index
+        if (currentStep != null && currentStep != lastSpokenStep) {
+            lastSpokenStep = currentStep
+            spokenStepCounter += 1
             speak(
-                currentVisibleStep.value.toTurnEvent(
-                    routeId = resolvedRoute.id,
-                    stepIndex = currentVisibleStep.index,
-                    distanceMeters = currentManeuver?.distanceMeters ?: 0.0,
+                currentStep.toTurnEvent(
+                    routeId = routeId,
+                    stepIndex = spokenStepCounter,
+                    distanceMeters = currentStepDistance,
                 ),
             )
         }
     }
 
     private fun onFinalDestinationArrival(route: GoogleRoute?) {
-        val activeRoute = route ?: return
+        val arrivedRoute = route ?: return
         val elapsedSeconds = (System.currentTimeMillis() - sessionStartTimeMillis) / 1000.0
         _arrivalInfo.value = ArrivalInfo(
             destinationName = "",
-            totalDistanceMeters = activeRoute.distanceMeters,
+            totalDistanceMeters = arrivedRoute.distanceMeters,
             totalDurationSeconds = elapsedSeconds,
         )
         _navigationState.value = NavigationState.Arrival
@@ -314,64 +286,10 @@ class GuidanceSessionManager(
         )
     }
 
-    private fun GoogleRoute.itemProgressDistance(location: RoutePoint): Double {
-        if (distanceMeters <= 0.0 || geometry.isEmpty()) return 0.0
-
-        if (geometry.size == 1) {
-            return if (location.distanceTo(geometry.first()) <= ARRIVAL_THRESHOLD_METERS) {
-                distanceMeters
-            } else {
-                0.0
-            }
-        }
-
-        var nearestDistance = Double.MAX_VALUE
-        var nearestProgress = 0.0
-        var cumulativeDistance = 0.0
-
-        geometry.zipWithNext().forEach { (start, end) ->
-            val segmentLength = start.distanceTo(end)
-            if (segmentLength <= 0.0) return@forEach
-
-            val projection = location.projectOntoSegment(start, end)
-            if (projection.distanceMeters < nearestDistance) {
-                nearestDistance = projection.distanceMeters
-                nearestProgress = cumulativeDistance + segmentLength * projection.fraction
-            }
-            cumulativeDistance += segmentLength
-        }
-
-        return nearestProgress.coerceIn(0.0, distanceMeters)
-    }
-
-    private fun RouteStepInfo.remainingDistanceFrom(traveledDistance: Double): Double {
-        return (
-            cumulativeDistanceMeters +
-                distanceFromPreviousMeters -
-                traveledDistance
-            ).coerceAtLeast(0.0)
-    }
-
-    private fun RouteStepInfo.toManeuverInfo(distanceMeters: Double): ManeuverInfo {
-        return ManeuverInfo(
-            type = maneuverType,
-            modifier = modifier,
-            degrees = null,
-            drivingSide = "left",
-            distanceMeters = distanceMeters,
-            instruction = instruction,
-            roadName = roadName.takeIf { it.isNotBlank() },
-            destinations = null,
-            lanes = persistentListOf(),
-        )
-    }
-
     private fun NavigationStepSnapshot.toManeuverInfo(distanceMeters: Double): ManeuverInfo {
-        val laneGuidanceModifier = preferredLaneDirection()
-        val isLaneGuidance = lanes.isNotEmpty() && instruction.contains("車線")
         return ManeuverInfo(
-            type = if (isLaneGuidance) "continue" else maneuver.toManeuverType(),
-            modifier = if (isLaneGuidance) laneGuidanceModifier ?: maneuver.toModifier() else maneuver.toModifier(),
+            type = maneuver.toManeuverType(),
+            modifier = maneuver.toModifier(),
             degrees = null,
             drivingSide = drivingSide.toDrivingSideString(),
             distanceMeters = distanceMeters,
@@ -382,13 +300,6 @@ class GuidanceSessionManager(
         )
     }
 
-    private fun NavigationStepSnapshot.preferredLaneDirection(): String? {
-        return lanes.firstOrNull { it.isRecommended }?.activeDirection?.toLaneDirectionString()
-            ?: lanes.firstOrNull { it.isRecommended }?.directions?.firstNotNullOfOrNull { it.toLaneDirectionString() }
-            ?: lanes.firstOrNull()?.activeDirection?.toLaneDirectionString()
-            ?: lanes.firstOrNull()?.directions?.firstNotNullOfOrNull { it.toLaneDirectionString() }
-    }
-
     private fun NavigationStepSnapshot.toLaneInfos() = lanes.map { lane ->
         LaneInfo(
             directions = lane.directions.mapNotNull { it.toLaneDirectionString() }.toImmutableList(),
@@ -397,40 +308,7 @@ class GuidanceSessionManager(
         )
     }.toImmutableList()
 
-    private fun RouteStepInfo.isDisplayableManeuver(): Boolean {
-        return maneuverType != "depart"
-    }
-
-    private fun NavigationFeedSnapshot?.displayableUpcomingSteps(): List<NavigationStepSnapshot> {
-        val snapshot = this ?: return emptyList()
-        return buildList {
-            snapshot.currentStep?.let(::add)
-            addAll(snapshot.remainingSteps)
-        }.filter { it.isDisplayableManeuver() }
-    }
-
-    private fun NavigationStepSnapshot.isDisplayableManeuver(): Boolean {
-        return maneuver != Maneuver.DEPART && maneuver != Maneuver.UNKNOWN
-    }
-
-    private fun NavigationStepSnapshot.distanceFromCurrentLocation(navInfo: NavigationFeedSnapshot?): Double {
-        val snapshot = navInfo ?: return 0.0
-        if (snapshot.currentStep == this) {
-            return snapshot.distanceToCurrentStepMeters.toDouble()
-        }
-        return snapshot.distanceToCurrentStepMeters.toDouble() + remainingStepsBeforeThis(snapshot)
-    }
-
-    private fun NavigationStepSnapshot.remainingStepsBeforeThis(snapshot: NavigationFeedSnapshot): Double {
-        var distance = 0.0
-        for (step in snapshot.remainingSteps) {
-            if (step == this) break
-            distance += step.distanceFromPreviousMeters ?: 0
-        }
-        return distance
-    }
-
-    private fun RouteStepInfo.toTurnEvent(
+    private fun NavigationStepSnapshot.toTurnEvent(
         routeId: String,
         stepIndex: Int,
         distanceMeters: Double,
@@ -447,13 +325,13 @@ class GuidanceSessionManager(
             ),
             priority = GuidancePriority.NORMAL,
             distanceMeters = distanceMeters,
-            direction = modifier.toDirection(),
+            direction = maneuver.toModifier().toDirection(),
             timing = when {
                 distanceMeters <= 120.0 -> TurnTiming.SOON
                 distanceMeters <= 500.0 -> TurnTiming.MIDDLE
                 else -> TurnTiming.FAR
             },
-            roadName = roadName,
+            roadName = roadName?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -685,68 +563,21 @@ class GuidanceSessionManager(
         }
     }
 
-    private fun RoutePoint.distanceTo(other: RoutePoint): Double {
-        val radius = 6_371_000.0
-        val dLat = Math.toRadians(other.latitude - latitude)
-        val dLng = Math.toRadians(other.longitude - longitude)
-        val lat1 = Math.toRadians(latitude)
-        val lat2 = Math.toRadians(other.latitude)
-        val sinLat = kotlin.math.sin(dLat / 2)
-        val sinLng = kotlin.math.sin(dLng / 2)
-        val a = sinLat * sinLat + sinLng * sinLng * kotlin.math.cos(lat1) * kotlin.math.cos(lat2)
-        val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
-        return radius * c
-    }
-
-    private fun RoutePoint.projectOntoSegment(
-        start: RoutePoint,
-        end: RoutePoint,
-    ): SegmentProjection {
-        val radius = 6_371_000.0
-        val originLatitudeRad = Math.toRadians(start.latitude)
-        val originLongitudeRad = Math.toRadians(start.longitude)
-        val cosLatitude = kotlin.math.cos(
-            Math.toRadians((start.latitude + end.latitude + latitude) / 3.0),
-        )
-
-        fun RoutePoint.toLocalVector(): Pair<Double, Double> {
-            val x = (Math.toRadians(longitude) - originLongitudeRad) * radius * cosLatitude
-            val y = (Math.toRadians(latitude) - originLatitudeRad) * radius
-            return x to y
-        }
-
-        val (endX, endY) = end.toLocalVector()
-        val (pointX, pointY) = toLocalVector()
-        val segmentLengthSquared = endX * endX + endY * endY
-        if (segmentLengthSquared <= 0.0) {
-            return SegmentProjection(
-                fraction = 0.0,
-                distanceMeters = distanceTo(start),
-            )
-        }
-
-        val fraction = ((pointX * endX) + (pointY * endY)) / segmentLengthSquared
-        val clampedFraction = fraction.coerceIn(0.0, 1.0)
-        val projectedX = endX * clampedFraction
-        val projectedY = endY * clampedFraction
-        val dx = pointX - projectedX
-        val dy = pointY - projectedY
-
-        return SegmentProjection(
-            fraction = clampedFraction,
-            distanceMeters = kotlin.math.sqrt(dx * dx + dy * dy),
-        )
-    }
-
-    private data class SegmentProjection(
-        val fraction: Double,
-        val distanceMeters: Double,
+    /**
+     * Navigation SDK からの 3 系統の Flow を一度に受け取るための中間ホルダー。
+     *
+     * @param navInfo turn-by-turn feed の最新スナップショット
+     * @param tripProgress SDK が算出する残距離・残時間
+     * @param isOffRouteRaw 経路逸脱フラグ（REROUTING 状態はここで合成される前の生値）
+     */
+    private data class GuidanceUpdate(
+        val navInfo: NavigationFeedSnapshot?,
+        val tripProgress: NavigationTripProgressSnapshot?,
+        val isOffRouteRaw: Boolean,
     )
 
     companion object {
         private const val TAG = "GuidanceSessionManager"
-        private const val PROGRESS_INTERVAL_MS = 1000L
-        private const val ARRIVAL_THRESHOLD_METERS = 50.0
         private const val TTS_READY_TIMEOUT_MS = 3_000L
     }
 }

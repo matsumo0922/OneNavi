@@ -4,8 +4,8 @@ data class NavigationFeedSnapshot(
     val navState: Int,
     val currentStep: NavigationStepSnapshot?,
     val remainingSteps: List<NavigationStepSnapshot>,
-    val distanceToCurrentStepMeters: Int,
-    val timeToCurrentStepSeconds: Int,
+    val distanceToCurrentStepMeters: Int?,
+    val timeToCurrentStepSeconds: Int?,
 )
 
 data class NavigationStepSnapshot(

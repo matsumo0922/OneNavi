@@ -32,12 +32,12 @@ private fun StepInfo.toSnapshot(): NavigationStepSnapshot {
         roadName = fullRoadName,
         lanes = lanes.orEmpty().map { lane ->
             val directions = lane.laneDirections().orEmpty()
-            val activeDirection = directions.firstOrNull { it.isRecommended }?.laneShape()
+            val recommendedDirection = directions.firstOrNull { it.isRecommended }?.laneShape()
 
             NavigationLaneSnapshot(
                 directions = directions.map { it.laneShape() },
-                activeDirection = activeDirection,
-                isRecommended = activeDirection != null,
+                activeDirection = recommendedDirection,
+                isRecommended = directions.any { it.isRecommended },
             )
         },
         drivingSide = drivingSide,
