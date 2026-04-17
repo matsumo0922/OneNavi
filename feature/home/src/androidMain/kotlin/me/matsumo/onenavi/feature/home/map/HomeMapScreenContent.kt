@@ -192,9 +192,7 @@ internal fun HomeMapScreenContent(
         routeManager = viewModel.routeManager,
         cameraManager = viewModel.cameraManager,
         viewportState = viewportState,
-        sheetPeekHeightPx = with(density) {
-            if (shouldShowSheet) sheetPeekHeight.toPx() else 0f
-        }.toDouble(),
+        sheetPeekHeightPx = with(density) { if (shouldShowSheet) sheetPeekHeight.toPx() else 0f }.toDouble(),
         topOverlayBottomPx = topOverlayBottomPx,
         navigationCameraState = navigationCameraState,
         mapPadding = mapPadding,
@@ -326,6 +324,7 @@ private fun BoxScope.HomeMapScreenContentControls(
                 onNavigationStopped = onNavigationStopped,
             )
         }
+
         is HomeMapScreenState.Arrived -> {
             val destinationName = (screenState.destination as? RouteWaypoint.Place)?.name
 
@@ -343,6 +342,7 @@ private fun BoxScope.HomeMapScreenContentControls(
                 onFinishClicked = onArrivalDismissed,
             )
         }
+
         else -> {
             HomeMapControls(
                 modifier = Modifier
@@ -415,6 +415,7 @@ private fun BoxScope.HomeMapScreenContentTopAppBar(
                 onDismissSearchResult = onDismissSearchResult,
             )
         }
+
         is HomeMapScreenState.RoutePreview -> {
             HomeMapRouteTopAppBar(
                 modifier = Modifier
@@ -436,6 +437,7 @@ private fun BoxScope.HomeMapScreenContentTopAppBar(
                 onWaypointClicked = onWaypointClicked,
             )
         }
+
         is HomeMapScreenState.Navigating,
         is HomeMapScreenState.Arrived,
         -> {

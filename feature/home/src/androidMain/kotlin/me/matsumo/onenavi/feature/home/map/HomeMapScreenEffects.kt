@@ -160,7 +160,8 @@ private suspend fun restoreCamera(
             cameraManager.requestCameraFollowing(pitch3D = true)
         }
 
-        else -> { /* Browsing / Arrived */
+        else -> {
+            /* Browsing / Arrived */
         }
     }
 }
