@@ -46,9 +46,10 @@ private const val CALLOUT_CROSSFADE_DURATION_MS: Int = 220
  * [CalloutShape] の「全方向に tail 分の padding を確保」設計により、tail 方向が
  * 変わっても Callout のサイズは変わらない前提。Pass 1 のサイズがそのまま Pass 3 でも有効になる。
  *
- * @param anchors 配置対象。ジェスチャー停止後と、非ジェスチャー中は [CALLOUT_RELAYOUT_INTERVAL_MS] ごとに読み直される
+ * @param anchors 配置対象。カメラ静止後と、静止中は [CALLOUT_RELAYOUT_INTERVAL_MS] ごとに読み直される
  * @param placementStrategy 配置戦略
- * @param isGestureInProgress ユーザージェスチャー中かどうか。true の間は Callout をフェードアウトし計算停止
+ * @param isCameraMoving 地図が動いている間は true。ユーザージェスチャー/プログラム由来問わず、
+ *   true の間は Callout をフェードアウトし再計算も停止する
  * @param cameraSettleEpoch カメラが静止した通算回数。値が変わるとスナップショットを直ちに更新する
  * @param modifier 外部から渡される Modifier。`fillMaxSize` 相当を期待する
  * @param content (index, tailDirection) を受け取って [Callout] を返すスロット
@@ -57,7 +58,7 @@ private const val CALLOUT_CROSSFADE_DURATION_MS: Int = 220
 fun CalloutLayer(
     anchors: ImmutableList<CalloutAnchor>,
     placementStrategy: CalloutPlacementStrategy,
-    isGestureInProgress: Boolean,
+    isCameraMoving: Boolean,
     cameraSettleEpoch: Int,
     modifier: Modifier = Modifier,
     content: @Composable (index: Int, tailDirection: CalloutTailDirection) -> Unit,
@@ -70,8 +71,8 @@ fun CalloutLayer(
         lockedAnchors = currentAnchors
     }
 
-    LaunchedEffect(isGestureInProgress, cameraSettleEpoch) {
-        if (!isGestureInProgress) {
+    LaunchedEffect(isCameraMoving, cameraSettleEpoch) {
+        if (!isCameraMoving) {
             lockedAnchors = currentAnchors
             while (true) {
                 delay(CALLOUT_RELAYOUT_INTERVAL_MS)
@@ -81,7 +82,7 @@ fun CalloutLayer(
     }
 
     AnimatedVisibility(
-        visible = !isGestureInProgress,
+        visible = !isCameraMoving,
         enter = fadeIn(),
         exit = fadeOut(),
         modifier = modifier,

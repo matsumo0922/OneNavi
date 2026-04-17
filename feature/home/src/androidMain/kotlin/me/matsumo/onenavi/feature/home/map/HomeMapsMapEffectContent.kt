@@ -213,6 +213,7 @@ internal fun HomeMapsMapEffectContent(
                             }
                         }
                         map.setOnCameraMoveStartedListener { reason ->
+                            viewportState.setCameraMoving(true)
                             viewportState.setGestureInProgress(
                                 reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE,
                             )
@@ -223,6 +224,7 @@ internal fun HomeMapsMapEffectContent(
                         map.setOnCameraIdleListener {
                             viewportState.updateCameraPosition(map.cameraPosition)
                             viewportState.setGestureInProgress(false)
+                            viewportState.setCameraMoving(false)
                             viewportState.notifyCameraSettled()
                         }
                         map.setOnMapLoadedCallback {
@@ -254,7 +256,7 @@ internal fun HomeMapsMapEffectContent(
             CalloutLayer(
                 anchors = routeAnchors,
                 placementStrategy = CalloutPlacementStrategy.AvoidOverlap,
-                isGestureInProgress = viewportState.isGestureInProgress,
+                isCameraMoving = viewportState.isCameraMoving,
                 cameraSettleEpoch = viewportState.cameraSettleEpoch,
                 modifier = Modifier.fillMaxSize(),
             ) { index, tailDirection ->
