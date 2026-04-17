@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.ArrivalInfo
-import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -128,48 +127,46 @@ internal fun HomeMapScreenContent(
         }
     }
 
-    LaunchedEffect(trackingMode, currentLocation, currentBearing, screenState, navigationCameraState, isNavigationFollowing3D) {
-        val location = currentLocation ?: return@LaunchedEffect
-        val point = RoutePoint(location.latitude, location.longitude)
+    val cameraFollowSpec by remember(
+        trackingMode,
+        screenState,
+        navigationCameraState,
+        isNavigationFollowing3D,
+        trackingZoom,
+    ) {
+        derivedStateOf {
+            when {
+                screenState is HomeMapScreenState.Navigating &&
+                    navigationCameraState == me.matsumo.onenavi.core.navigation.CameraState.FOLLOWING ->
+                    CameraFollowSpec(
+                        zoom = trackingZoom,
+                        tilt = if (isNavigationFollowing3D) TRACKING_TILT_3D else 0f,
+                        useLocationBearing = isNavigationFollowing3D,
+                    )
 
-        when {
-            screenState is HomeMapScreenState.Navigating && navigationCameraState == me.matsumo.onenavi.core.navigation.CameraState.FOLLOWING -> {
-                viewportState.moveTo(
-                    point = point,
-                    zoom = trackingZoom,
-                    tilt = if (isNavigationFollowing3D) TRACKING_TILT_3D else 0f,
-                    bearing = if (isNavigationFollowing3D) currentBearing else 0f,
-                )
+                trackingMode == LocationTrackingMode.TiltedHeading ->
+                    CameraFollowSpec(
+                        zoom = trackingZoom,
+                        tilt = TRACKING_TILT_3D,
+                        useLocationBearing = true,
+                    )
+
+                trackingMode == LocationTrackingMode.TopDownHeading ->
+                    CameraFollowSpec(
+                        zoom = trackingZoom,
+                        tilt = 0f,
+                        useLocationBearing = true,
+                    )
+
+                trackingMode == LocationTrackingMode.TopDownNorth ->
+                    CameraFollowSpec(
+                        zoom = trackingZoom,
+                        tilt = 0f,
+                        useLocationBearing = false,
+                    )
+
+                else -> null
             }
-
-            trackingMode == LocationTrackingMode.TiltedHeading -> {
-                viewportState.moveTo(
-                    point = point,
-                    zoom = trackingZoom,
-                    tilt = TRACKING_TILT_3D,
-                    bearing = currentBearing,
-                )
-            }
-
-            trackingMode == LocationTrackingMode.TopDownHeading -> {
-                viewportState.moveTo(
-                    point = point,
-                    zoom = trackingZoom,
-                    tilt = 0f,
-                    bearing = currentBearing,
-                )
-            }
-
-            trackingMode == LocationTrackingMode.TopDownNorth -> {
-                viewportState.moveTo(
-                    point = point,
-                    zoom = trackingZoom,
-                    tilt = 0f,
-                    bearing = 0f,
-                )
-            }
-
-            else -> Unit
         }
     }
 
@@ -243,6 +240,7 @@ internal fun HomeMapScreenContent(
                 currentLocation = currentLocation,
                 currentBearing = currentBearing,
                 cameraManager = viewModel.cameraManager,
+                cameraFollowSpec = cameraFollowSpec,
                 onMapLandmarkSelected = viewModel::onMapLandmarkSelected,
                 onRouteSelected = viewModel::onRouteSelected,
             )
