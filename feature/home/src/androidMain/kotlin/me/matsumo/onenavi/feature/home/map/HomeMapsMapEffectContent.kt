@@ -223,6 +223,7 @@ internal fun HomeMapsMapEffectContent(
                         map.setOnCameraIdleListener {
                             viewportState.updateCameraPosition(map.cameraPosition)
                             viewportState.setGestureInProgress(false)
+                            viewportState.notifyCameraSettled()
                         }
                         map.setOnMapLoadedCallback {
                             val camera = map.cameraPosition
@@ -254,6 +255,7 @@ internal fun HomeMapsMapEffectContent(
                 anchors = routeAnchors,
                 placementStrategy = CalloutPlacementStrategy.AvoidOverlap,
                 isGestureInProgress = viewportState.isGestureInProgress,
+                cameraSettleEpoch = viewportState.cameraSettleEpoch,
                 modifier = Modifier.fillMaxSize(),
             ) { index, tailDirection ->
                 val routeResult = routeResults[index]
