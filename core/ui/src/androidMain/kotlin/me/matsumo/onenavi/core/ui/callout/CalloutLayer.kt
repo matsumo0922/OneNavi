@@ -42,6 +42,7 @@ const val CALLOUT_RELAYOUT_INTERVAL_MS: Long = 3_000L
  * @param anchors 配置対象。ジェスチャー停止後と、非ジェスチャー中は [CALLOUT_RELAYOUT_INTERVAL_MS] ごとに読み直される
  * @param placementStrategy 配置戦略
  * @param isGestureInProgress ユーザージェスチャー中かどうか。true の間は Callout をフェードアウトし計算停止
+ * @param cameraSettleEpoch カメラが静止した通算回数。値が変わるとスナップショットを直ちに更新する
  * @param modifier 外部から渡される Modifier。`fillMaxSize` 相当を期待する
  * @param content (index, tailDirection) を受け取って [Callout] を返すスロット
  */
@@ -50,6 +51,7 @@ fun CalloutLayer(
     anchors: ImmutableList<CalloutAnchor>,
     placementStrategy: CalloutPlacementStrategy,
     isGestureInProgress: Boolean,
+    cameraSettleEpoch: Int,
     modifier: Modifier = Modifier,
     content: @Composable (index: Int, tailDirection: CalloutTailDirection) -> Unit,
 ) {
@@ -61,7 +63,7 @@ fun CalloutLayer(
         lockedAnchors = currentAnchors
     }
 
-    LaunchedEffect(isGestureInProgress) {
+    LaunchedEffect(isGestureInProgress, cameraSettleEpoch) {
         if (!isGestureInProgress) {
             lockedAnchors = currentAnchors
             while (true) {
