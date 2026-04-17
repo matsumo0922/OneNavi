@@ -1,6 +1,8 @@
 package me.matsumo.onenavi.core.ui.callout
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,6 +29,11 @@ import kotlin.math.roundToInt
  * 再計算する。ジェスチャー中は再計算せず Callout 自体をフェードアウトする。
  */
 const val CALLOUT_RELAYOUT_INTERVAL_MS: Long = 3_000L
+
+/**
+ * スナップショット切り替え（配置再計算）時のクロスフェード所要時間。
+ */
+private const val CALLOUT_CROSSFADE_DURATION_MS: Int = 220
 
 /**
  * 複数 Callout を画面上に絶対配置するレイヤー。
@@ -79,12 +86,18 @@ fun CalloutLayer(
         exit = fadeOut(),
         modifier = modifier,
     ) {
-        SubcomposeCalloutLayout(
-            anchors = lockedAnchors.toImmutableList(),
-            placementStrategy = placementStrategy,
-            modifier = Modifier.fillMaxSize(),
-            content = content,
-        )
+        Crossfade(
+            targetState = lockedAnchors,
+            animationSpec = tween(durationMillis = CALLOUT_CROSSFADE_DURATION_MS),
+            label = "callout-layer-snapshot",
+        ) { snapshot ->
+            SubcomposeCalloutLayout(
+                anchors = snapshot.toImmutableList(),
+                placementStrategy = placementStrategy,
+                modifier = Modifier.fillMaxSize(),
+                content = content,
+            )
+        }
     }
 }
 
