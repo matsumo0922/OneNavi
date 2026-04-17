@@ -53,6 +53,8 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.common.formatYen
+import me.matsumo.onenavi.core.model.CongestionSegment
+import me.matsumo.onenavi.core.model.CongestionSeverity
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.CameraManager
@@ -72,10 +74,26 @@ import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 import org.jetbrains.compose.resources.stringResource
 
 private const val TAG = "HomeMapsMap"
-private const val PRIMARY_ROUTE_WIDTH = 14f
-private const val SECONDARY_ROUTE_WIDTH = 9f
-private const val GOOGLE_BLUE = 0xFF1A73E8
-private const val GOOGLE_ROUTE_GRAY = 0xFF78909C
+
+private const val PRIMARY_ROUTE_OUTER_WIDTH = 24f
+private const val PRIMARY_ROUTE_INNER_WIDTH = 16f
+private const val SECONDARY_ROUTE_OUTER_WIDTH = 16f
+private const val SECONDARY_ROUTE_INNER_WIDTH = 10f
+
+private const val PRIMARY_ROUTE_OUTER_COLOR = 0xFF1A56C7
+private const val PRIMARY_ROUTE_INNER_COLOR = 0xFF4285F4
+private const val SECONDARY_ROUTE_OUTER_COLOR = 0xFF7986CB
+private const val SECONDARY_ROUTE_INNER_COLOR = 0xFFB0BEC5
+
+private const val CONGESTION_SLOW_COLOR = 0xFFFBBC04
+private const val CONGESTION_JAM_COLOR = 0xFFE53935
+
+private const val ROUTE_OUTER_PRIMARY_Z = 2f
+private const val ROUTE_INNER_PRIMARY_Z = 3f
+private const val ROUTE_OUTER_SECONDARY_Z = 0f
+private const val ROUTE_INNER_SECONDARY_Z = 1f
+private const val ROUTE_CONGESTION_OVERLAY_Z = 4f
+
 private const val ROUTE_CALLOUT_PRIMARY_BG = 0xFF4285F4
 private const val ROUTE_CALLOUT_SECONDARY_BG = 0xFFFFFFFF
 private const val ROUTE_CALLOUT_SECONDARY_FG = 0xFF202124
@@ -417,15 +435,111 @@ private class HomeMapOverlayObjects {
         routePolylines.clear()
 
         routeResults.forEachIndexed { index, routeResult ->
+            if (index == selectedRouteIndex) return@forEachIndexed
+            addRoutePolylinePair(
+                googleMap = googleMap,
+                routeIndex = index,
+                geometry = routeResult.item.geometry,
+                outerColor = SECONDARY_ROUTE_OUTER_COLOR,
+                innerColor = SECONDARY_ROUTE_INNER_COLOR,
+                outerWidth = SECONDARY_ROUTE_OUTER_WIDTH,
+                innerWidth = SECONDARY_ROUTE_INNER_WIDTH,
+                outerZIndex = ROUTE_OUTER_SECONDARY_Z,
+                innerZIndex = ROUTE_INNER_SECONDARY_Z,
+            )
+        }
+
+        val primaryRoute = routeResults.getOrNull(selectedRouteIndex) ?: return
+        addRoutePolylinePair(
+            googleMap = googleMap,
+            routeIndex = selectedRouteIndex,
+            geometry = primaryRoute.item.geometry,
+            outerColor = PRIMARY_ROUTE_OUTER_COLOR,
+            innerColor = PRIMARY_ROUTE_INNER_COLOR,
+            outerWidth = PRIMARY_ROUTE_OUTER_WIDTH,
+            innerWidth = PRIMARY_ROUTE_INNER_WIDTH,
+            outerZIndex = ROUTE_OUTER_PRIMARY_Z,
+            innerZIndex = ROUTE_INNER_PRIMARY_Z,
+        )
+
+        addCongestionOverlays(
+            googleMap = googleMap,
+            routeIndex = selectedRouteIndex,
+            geometry = primaryRoute.item.geometry,
+            congestionSegments = primaryRoute.item.congestionSegments,
+        )
+    }
+
+    private fun addRoutePolylinePair(
+        googleMap: GoogleMap,
+        routeIndex: Int,
+        geometry: ImmutableList<RoutePoint>,
+        outerColor: Long,
+        innerColor: Long,
+        outerWidth: Float,
+        innerWidth: Float,
+        outerZIndex: Float,
+        innerZIndex: Float,
+    ) {
+        if (geometry.size < 2) return
+        val latLngs = geometry.map(RoutePoint::toLatLng)
+
+        val outer = googleMap.addPolyline(
+            PolylineOptions()
+                .addAll(latLngs)
+                .color(Color(outerColor).toArgb())
+                .width(outerWidth)
+                .clickable(true)
+                .zIndex(outerZIndex),
+        )
+        outer.tag = routeIndex
+        routePolylines += outer
+
+        val inner = googleMap.addPolyline(
+            PolylineOptions()
+                .addAll(latLngs)
+                .color(Color(innerColor).toArgb())
+                .width(innerWidth)
+                .clickable(true)
+                .zIndex(innerZIndex),
+        )
+        inner.tag = routeIndex
+        routePolylines += inner
+    }
+
+    private fun addCongestionOverlays(
+        googleMap: GoogleMap,
+        routeIndex: Int,
+        geometry: ImmutableList<RoutePoint>,
+        congestionSegments: ImmutableList<CongestionSegment>,
+    ) {
+        if (geometry.isEmpty() || congestionSegments.isEmpty()) return
+
+        congestionSegments.forEach { segment ->
+            val color = when (segment.severity) {
+                CongestionSeverity.SLOW -> CONGESTION_SLOW_COLOR
+                CongestionSeverity.TRAFFIC_JAM -> CONGESTION_JAM_COLOR
+                CongestionSeverity.NORMAL,
+                CongestionSeverity.UNKNOWN,
+                -> return@forEach
+            }
+
+            val fromIndex = segment.startPolylinePointIndex.coerceIn(0, geometry.lastIndex)
+            val toIndex = (segment.endPolylinePointIndex + 1).coerceIn(fromIndex + 1, geometry.size)
+            val slice = geometry
+                .subList(fromIndex, toIndex)
+                .map(RoutePoint::toLatLng)
+            if (slice.size < 2) return@forEach
+
             val polyline = googleMap.addPolyline(
                 PolylineOptions()
-                    .addAll(routeResult.item.geometry.map(RoutePoint::toLatLng))
-                    .color(if (index == selectedRouteIndex) Color(GOOGLE_BLUE).toArgb() else Color(GOOGLE_ROUTE_GRAY).toArgb())
-                    .width(if (index == selectedRouteIndex) PRIMARY_ROUTE_WIDTH else SECONDARY_ROUTE_WIDTH)
+                    .addAll(slice)
+                    .color(Color(color).toArgb())
+                    .width(PRIMARY_ROUTE_INNER_WIDTH)
                     .clickable(true)
-                    .zIndex(if (index == selectedRouteIndex) 2f else 1f),
+                    .zIndex(ROUTE_CONGESTION_OVERLAY_Z),
             )
-            polyline.tag = index
+            polyline.tag = routeIndex
             routePolylines += polyline
         }
     }

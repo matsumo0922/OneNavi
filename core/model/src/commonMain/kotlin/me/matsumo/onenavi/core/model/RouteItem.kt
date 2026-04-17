@@ -13,6 +13,7 @@ import kotlinx.collections.immutable.ImmutableList
  * @param viaRoadNames 経由する主要道路名。現状の Google Routes API 実装では未取得のため通常は空。
  * @param hasTolls 有料道路区間を含むかどうか
  * @param tollFee 有料道路の料金（円）。null の場合は料金不明。
+ * @param congestionSegments geometry 上の渋滞区間。Google Routes API の speedReadingIntervals に対応。
  */
 @Immutable
 data class RouteItem(
@@ -22,6 +23,7 @@ data class RouteItem(
     val viaRoadNames: ImmutableList<String>,
     val hasTolls: Boolean,
     val tollFee: Int? = null,
+    val congestionSegments: ImmutableList<CongestionSegment> = kotlinx.collections.immutable.persistentListOf(),
 )
 
 /**
