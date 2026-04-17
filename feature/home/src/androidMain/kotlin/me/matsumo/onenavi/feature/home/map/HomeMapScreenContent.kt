@@ -82,14 +82,14 @@ internal fun HomeMapScreenContent(
     val arrivalInfo by viewModel.guidanceSessionManager.arrivalInfo.collectAsStateWithLifecycle()
     val guidanceUiState by viewModel.guidanceSessionManager.guidanceUiState.collectAsStateWithLifecycle()
     val activeRoutes by viewModel.routeManager.routes.collectAsStateWithLifecycle()
+    val activeGoogleRoute = activeRoutes.firstOrNull()
+    val distanceRemainingMeters = guidanceUiState.tripProgress.distanceRemainingMeters
 
-    val upcomingNavigationCallouts by remember(activeRoutes, guidanceUiState) {
-        derivedStateOf {
-            buildUpcomingNavigationCallouts(
-                activeRoute = activeRoutes.firstOrNull(),
-                distanceRemainingMeters = guidanceUiState.tripProgress.distanceRemainingMeters,
-            )
-        }
+    val upcomingNavigationCallouts = remember(activeGoogleRoute, distanceRemainingMeters) {
+        buildUpcomingNavigationCallouts(
+            activeRoute = activeGoogleRoute,
+            distanceRemainingMeters = distanceRemainingMeters,
+        )
     }
 
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
