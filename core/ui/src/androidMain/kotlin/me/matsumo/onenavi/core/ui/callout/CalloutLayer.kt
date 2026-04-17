@@ -16,6 +16,7 @@ import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -77,7 +78,7 @@ fun CalloutLayer(
         modifier = modifier,
     ) {
         SubcomposeCalloutLayout(
-            anchors = lockedAnchors,
+            anchors = lockedAnchors.toImmutableList(),
             placementStrategy = placementStrategy,
             modifier = Modifier.fillMaxSize(),
             content = content,
@@ -87,10 +88,10 @@ fun CalloutLayer(
 
 @Composable
 private fun SubcomposeCalloutLayout(
-    anchors: List<CalloutAnchor>,
+    anchors: ImmutableList<CalloutAnchor>,
     placementStrategy: CalloutPlacementStrategy,
-    modifier: Modifier,
     content: @Composable (index: Int, tailDirection: CalloutTailDirection) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     SubcomposeLayout(modifier) { constraints ->
         val layerSize = IntSize(constraints.maxWidth, constraints.maxHeight)

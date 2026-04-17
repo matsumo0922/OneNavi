@@ -82,9 +82,7 @@ private const val ROUTE_CALLOUT_PRIMARY_BG = 0xFF4285F4
 private const val ROUTE_CALLOUT_SECONDARY_BG = 0xFFFFFFFF
 private const val ROUTE_CALLOUT_SECONDARY_FG = 0xFF202124
 
-private val ROUTE_CALLOUT_CANDIDATE_FRACTIONS = doubleArrayOf(
-    0.3, 0.7, 0.5, 0.15, 0.85, 0.05, 0.95,
-)
+private val ROUTE_CALLOUT_CANDIDATE_FRACTIONS = doubleArrayOf(0.3, 0.7, 0.5, 0.15, 0.85, 0.05, 0.95)
 
 @Composable
 internal fun HomeMapsMapEffectContent(
