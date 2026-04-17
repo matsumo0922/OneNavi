@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -50,7 +51,9 @@ private const val CALLOUT_CROSSFADE_DURATION_MS: Int = 220
  * @param placementStrategy 配置戦略
  * @param isCameraMoving 地図が動いている間は true。ユーザージェスチャー/プログラム由来問わず、
  *   true の間は Callout をフェードアウトし再計算も停止する
- * @param cameraSettleEpoch カメラが静止した通算回数。値が変わるとスナップショットを直ちに更新する
+ * @param cameraSettleEpoch カメラが静止した通算回数。マウント時点の値から変化するまでは
+ *   レイヤーごと非表示にし、変化したタイミングでフェードインする。以降は値の変化ごとに
+ *   内部状態をリセットして再計算後の配置でフレッシュに描画する
  * @param modifier 外部から渡される Modifier。`fillMaxSize` 相当を期待する
  * @param content (index, tailDirection) を受け取って [Callout] を返すスロット
  */
@@ -81,23 +84,28 @@ fun CalloutLayer(
         }
     }
 
+    val initialSettleEpoch = remember { cameraSettleEpoch }
+    val hasSettledSinceMount = cameraSettleEpoch != initialSettleEpoch
+
     AnimatedVisibility(
-        visible = !isCameraMoving,
+        visible = !isCameraMoving && hasSettledSinceMount,
         enter = fadeIn(),
         exit = fadeOut(),
         modifier = modifier,
     ) {
-        Crossfade(
-            targetState = lockedAnchors,
-            animationSpec = tween(durationMillis = CALLOUT_CROSSFADE_DURATION_MS),
-            label = "callout-layer-snapshot",
-        ) { snapshot ->
-            SubcomposeCalloutLayout(
-                anchors = snapshot.toImmutableList(),
-                placementStrategy = placementStrategy,
-                modifier = Modifier.fillMaxSize(),
-                content = content,
-            )
+        key(cameraSettleEpoch) {
+            Crossfade(
+                targetState = lockedAnchors,
+                animationSpec = tween(durationMillis = CALLOUT_CROSSFADE_DURATION_MS),
+                label = "callout-layer-snapshot",
+            ) { snapshot ->
+                SubcomposeCalloutLayout(
+                    anchors = snapshot.toImmutableList(),
+                    placementStrategy = placementStrategy,
+                    modifier = Modifier.fillMaxSize(),
+                    content = content,
+                )
+            }
         }
     }
 }
