@@ -172,18 +172,21 @@ class HomeMapViewModel(
     }
 
     fun onBackPressed() {
-        when (val overlay = _overlayState.value) {
+        when (_overlayState.value) {
             is HomeMapOverlayState.WaypointSearch -> {
                 _overlayState.value = HomeMapOverlayState.None
             }
+
             HomeMapOverlayState.None -> {
                 when (screenState.value) {
                     is HomeMapScreenState.SearchResultsList -> {
                         _searchResults.value = persistentListOf()
                     }
+
                     is HomeMapScreenState.PlaceDetails -> {
                         _selectedResult.value = null
                     }
+
                     is HomeMapScreenState.RoutePreview -> {
                         routeSearchJob?.cancel()
                         _routeResults.value = persistentListOf()
@@ -192,19 +195,25 @@ class HomeMapViewModel(
                         _isRouteSearching.value = false
                         routeManager.clearRoutes()
                         guidanceSessionManager.setNavigationState(NavigationState.Browsing)
+
                         // selectedResult は維持 → reduce が PlaceDetails を返す
                         val place = _selectedResult.value
                         if (place != null) {
                             _effects.trySend(HomeMapEffect.MoveCameraToPlace(place))
                         }
                     }
+
                     is HomeMapScreenState.Navigating -> {
                         onNavigationStopped()
                     }
+
                     is HomeMapScreenState.Arrived -> {
                         onArrivalDismissed()
                     }
-                    else -> { /* Browsing: 何もしない */ }
+
+                    else -> {
+                        /* Browsing: 何もしない */
+                    }
                 }
             }
         }

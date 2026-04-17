@@ -22,6 +22,7 @@ import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
 import me.matsumo.onenavi.feature.home.map.state.HomeMapEffect
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val FOLLOW_PUCK_ZOOM = 16f
 private const val ROUTE_BOUNDS_EXTRA_PADDING = 96
@@ -133,9 +134,11 @@ private suspend fun restoreCamera(
                 paddingPx = buildBoundsPadding(topOverlayBottomPx, sheetPeekHeightPx),
             )
         }
+
         is HomeMapScreenState.PlaceDetails -> {
             viewportState.moveTo(RoutePoint(state.place.latitude, state.place.longitude), FOLLOW_PUCK_ZOOM)
         }
+
         is HomeMapScreenState.RoutePreview -> {
             val overviewPadding = buildOverlayPadding(topOverlayBottomPx, sheetPeekHeightPx)
             cameraManager.applyNavigationPadding(
@@ -152,10 +155,13 @@ private suspend fun restoreCamera(
                 waypoints = state.waypoints.map { it.toRoutePoint() },
             )
         }
+
         is HomeMapScreenState.Navigating -> {
             cameraManager.requestCameraFollowing(pitch3D = true)
         }
-        else -> { /* Browsing / Arrived */ }
+
+        else -> { /* Browsing / Arrived */
+        }
     }
 }
 
@@ -178,13 +184,15 @@ private suspend fun handleEffect(
                 paddingPx = buildBoundsPadding(topOverlayBottomPx, sheetPeekHeightPx),
             )
         }
+
         is HomeMapEffect.MoveCameraToPlace -> {
             onTrackingModeChanged(null)
             viewportState.moveTo(RoutePoint(effect.place.latitude, effect.place.longitude), FOLLOW_PUCK_ZOOM)
         }
+
         is HomeMapEffect.MoveCameraToRouteOverview -> {
             onTrackingModeChanged(null)
-            val hasRoutes = withTimeoutOrNull(3_000) {
+            val hasRoutes = withTimeoutOrNull(3_000.milliseconds) {
                 routeManager.routes.first { it.isNotEmpty() }
             } != null
             if (hasRoutes && screenState is HomeMapScreenState.RoutePreview) {
@@ -195,12 +203,15 @@ private suspend fun handleEffect(
                 cameraManager.requestCameraOverview()
             }
         }
+
         is HomeMapEffect.EnterGuidanceFollowing -> {
             cameraManager.requestCameraFollowing(pitch3D = true)
         }
+
         is HomeMapEffect.RestoreTracking -> {
             onTrackingModeChanged(LocationTrackingMode.TiltedHeading)
         }
+
         is HomeMapEffect.SetKeepScreenOn -> {
             if (effect.enabled) {
                 activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
