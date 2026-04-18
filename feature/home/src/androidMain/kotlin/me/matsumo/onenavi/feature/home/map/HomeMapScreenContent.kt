@@ -149,8 +149,11 @@ internal fun HomeMapScreenContent(
         }
     }
     val effectiveSelectedRouteIndex =
-        if (screenState is HomeMapScreenState.Navigating && effectiveRouteResults.isNotEmpty()) 0
-        else selectedRouteIndex
+        if (screenState is HomeMapScreenState.Navigating && effectiveRouteResults.isNotEmpty()) {
+            0
+        } else {
+            selectedRouteIndex
+        }
 
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
     var trackingZoom by remember { mutableFloatStateOf(DEFAULT_TRACKING_ZOOM) }

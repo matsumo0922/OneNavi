@@ -1,17 +1,16 @@
 package me.matsumo.onenavi.core.navigation.tts
 
-import me.matsumo.onenavi.core.navigation.guidance.GuidanceEvent
-import me.matsumo.onenavi.core.navigation.guidance.GuidancePriority
-import me.matsumo.onenavi.core.navigation.guidance.GuidanceSpeechHistory
-import java.util.UUID
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 発話の優先度、重複抑制、完了通知をまとめて制御するクラス。
+ * 発話キューの制御と完了通知を扱うクラス。
+ *
+ * 発話内容の生成や重複排除、優先度判定は行わず、呼び出し側から渡されたテキストをそのまま
+ * TTS エンジンへ流す。発話内容の加工は呼び出し側（GuidanceSessionManager 等）の責務とする。
  */
 class SpeechOrchestrator(
     private val ttsEngine: TtsEngine,
-    private val speechHistory: GuidanceSpeechHistory,
 ) {
 
     private val completionCallbacks = ConcurrentHashMap<String, () -> Unit>()
@@ -34,25 +33,16 @@ class SpeechOrchestrator(
     }
 
     fun enqueue(
-        event: GuidanceEvent,
         text: String,
+        flush: Boolean = false,
         onComplete: (() -> Unit)? = null,
     ): Boolean {
         if (muted || text.isBlank()) return false
         if (!ttsEngine.isReady.value) return false
-        if (speechHistory.hasSpoken(event.id)) return false
 
-        val queueMode = when (event.priority) {
-            GuidancePriority.CRITICAL,
-            GuidancePriority.HIGH,
-            -> SpeechQueueMode.FLUSH
-            GuidancePriority.NORMAL,
-            GuidancePriority.LOW,
-            -> SpeechQueueMode.ADD
-        }
-
+        val queueMode = if (flush) SpeechQueueMode.FLUSH else SpeechQueueMode.ADD
         val utteranceId = UUID.randomUUID().toString()
-        if (queueMode == SpeechQueueMode.FLUSH) {
+        if (flush) {
             completionCallbacks.clear()
         }
         val spoken = ttsEngine.speak(
@@ -65,14 +55,12 @@ class SpeechOrchestrator(
         if (onComplete != null) {
             completionCallbacks[utteranceId] = onComplete
         }
-        speechHistory.markSpoken(event.id)
         return true
     }
 
     fun shutdown() {
         completionCallbacks.clear()
         ttsEngine.shutdown()
-        speechHistory.clear()
     }
 
     private fun handleUtteranceCompleted(utteranceId: String) {
