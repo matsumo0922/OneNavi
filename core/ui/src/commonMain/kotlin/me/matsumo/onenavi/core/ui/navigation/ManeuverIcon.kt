@@ -1,16 +1,20 @@
 package me.matsumo.onenavi.core.ui.navigation
 
+import androidx.compose.foundation.Image
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ImageBitmap
+import me.matsumo.onenavi.core.model.ManeuverModifier
+import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.direction_arrive
 import me.matsumo.onenavi.core.resource.direction_arrive_left
 import me.matsumo.onenavi.core.resource.direction_arrive_right
 import me.matsumo.onenavi.core.resource.direction_arrive_straight
-import me.matsumo.onenavi.core.resource.direction_close
 import me.matsumo.onenavi.core.resource.direction_continue
 import me.matsumo.onenavi.core.resource.direction_continue_left
 import me.matsumo.onenavi.core.resource.direction_continue_right
@@ -24,7 +28,6 @@ import me.matsumo.onenavi.core.resource.direction_depart_right
 import me.matsumo.onenavi.core.resource.direction_depart_straight
 import me.matsumo.onenavi.core.resource.direction_end_of_road_left
 import me.matsumo.onenavi.core.resource.direction_end_of_road_right
-import me.matsumo.onenavi.core.resource.direction_flag
 import me.matsumo.onenavi.core.resource.direction_fork
 import me.matsumo.onenavi.core.resource.direction_fork_left
 import me.matsumo.onenavi.core.resource.direction_fork_right
@@ -99,200 +102,210 @@ import me.matsumo.onenavi.core.resource.direction_turn_sharp_right
 import me.matsumo.onenavi.core.resource.direction_turn_slight_left
 import me.matsumo.onenavi.core.resource.direction_turn_slight_right
 import me.matsumo.onenavi.core.resource.direction_turn_straight
-import me.matsumo.onenavi.core.resource.direction_updown
 import me.matsumo.onenavi.core.resource.direction_uturn
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
+/**
+ * Navigation SDK が生成した bitmap 優先のマニューバアイコン。
+ * bitmap が無い場合は [type] / [maneuverModifier] をもとに内蔵 VectorDrawable を選択する。
+ */
 @Composable
 fun ManeuverIcon(
-    type: String,
-    maneuverModifier: String?,
+    type: ManeuverType,
+    maneuverModifier: ManeuverModifier?,
     contentDescription: String?,
     modifier: Modifier = Modifier,
+    iconBitmap: ImageBitmap? = null,
     tint: Color = LocalContentColor.current,
 ) {
-    Icon(
-        modifier = modifier,
-        painter = painterResource(maneuverIconResource(type, maneuverModifier)),
-        contentDescription = contentDescription,
-        tint = tint,
-    )
+    if (iconBitmap != null) {
+        Image(
+            modifier = modifier,
+            bitmap = iconBitmap,
+            contentDescription = contentDescription,
+            colorFilter = ColorFilter.tint(tint),
+        )
+    } else {
+        Icon(
+            modifier = modifier,
+            painter = painterResource(maneuverIconResource(type, maneuverModifier)),
+            contentDescription = contentDescription,
+            tint = tint,
+        )
+    }
 }
 
 /**
- * Google Routes API の maneuver 情報から描画用 VectorDrawable を解決する。
+ * マニューバ情報から描画用 VectorDrawable を解決する。
  *
  * 解決の優先順位:
  * 1. `type` と `maneuverModifier` の完全一致
  * 2. `type` 単独のアイコン
- * 3. `"turn"` + `maneuverModifier` へのフォールバック
+ * 3. `TURN` + `maneuverModifier` へのフォールバック
  * 4. 最終フォールバックとして直進アイコン
  */
-fun maneuverIconResource(type: String, maneuverModifier: String?): DrawableResource {
-    val normalizedType = type.normalizeKey()
-    val normalizedModifier = maneuverModifier?.normalizeKey()
-
-    return exactDirectionIcon(normalizedType, normalizedModifier)
-        ?: typeOnlyDirectionIcon(normalizedType)
-        ?: exactDirectionIcon(TURN_TYPE, normalizedModifier)
+fun maneuverIconResource(type: ManeuverType, maneuverModifier: ManeuverModifier?): DrawableResource {
+    return exactDirectionIcon(type, maneuverModifier)
+        ?: typeOnlyDirectionIcon(type)
+        ?: exactDirectionIcon(ManeuverType.TURN, maneuverModifier)
         ?: Res.drawable.direction_continue
 }
 
-private fun String.normalizeKey(): String = trim().lowercase().replace(' ', '_')
-
 @Suppress("CyclomaticComplexMethod", "LongMethod")
-private fun exactDirectionIcon(type: String, modifier: String?): DrawableResource? {
+private fun exactDirectionIcon(type: ManeuverType, modifier: ManeuverModifier?): DrawableResource? {
     if (modifier == null) return null
     return when (type) {
-        "arrive" -> when (modifier) {
-            "left" -> Res.drawable.direction_arrive_left
-            "right" -> Res.drawable.direction_arrive_right
-            "straight" -> Res.drawable.direction_arrive_straight
+        ManeuverType.ARRIVE -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_arrive_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_arrive_right
+            ManeuverModifier.STRAIGHT -> Res.drawable.direction_arrive_straight
             else -> null
         }
-        "continue" -> when (modifier) {
-            "left" -> Res.drawable.direction_continue_left
-            "right" -> Res.drawable.direction_continue_right
-            "slight_left" -> Res.drawable.direction_continue_slight_left
-            "slight_right" -> Res.drawable.direction_continue_slight_right
-            "straight" -> Res.drawable.direction_continue_straight
-            "uturn" -> Res.drawable.direction_continue_uturn
+        ManeuverType.CONTINUE -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_continue_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_continue_right
+            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_continue_slight_left
+            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_continue_slight_right
+            ManeuverModifier.STRAIGHT -> Res.drawable.direction_continue_straight
+            ManeuverModifier.UTURN -> Res.drawable.direction_continue_uturn
             else -> null
         }
-        "depart" -> when (modifier) {
-            "left" -> Res.drawable.direction_depart_left
-            "right" -> Res.drawable.direction_depart_right
-            "straight" -> Res.drawable.direction_depart_straight
+        ManeuverType.DEPART -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_depart_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_depart_right
+            ManeuverModifier.STRAIGHT -> Res.drawable.direction_depart_straight
             else -> null
         }
-        "end_of_road" -> when (modifier) {
-            "left" -> Res.drawable.direction_end_of_road_left
-            "right" -> Res.drawable.direction_end_of_road_right
+        ManeuverType.END_OF_ROAD -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_end_of_road_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_end_of_road_right
             else -> null
         }
-        "fork" -> when (modifier) {
-            "left" -> Res.drawable.direction_fork_left
-            "right" -> Res.drawable.direction_fork_right
-            "slight_left" -> Res.drawable.direction_fork_slight_left
-            "slight_right" -> Res.drawable.direction_fork_slight_right
-            "straight" -> Res.drawable.direction_fork_straight
+        ManeuverType.FORK -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_fork_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_fork_right
+            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_fork_slight_left
+            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_fork_slight_right
+            ManeuverModifier.STRAIGHT -> Res.drawable.direction_fork_straight
             else -> null
         }
-        "invalid" -> when (modifier) {
-            "left" -> Res.drawable.direction_invalid_left
-            "right" -> Res.drawable.direction_invalid_right
-            "slight_left" -> Res.drawable.direction_invalid_slight_left
-            "slight_right" -> Res.drawable.direction_invalid_slight_right
-            "straight" -> Res.drawable.direction_invalid_straight
-            "uturn" -> Res.drawable.direction_invalid_uturn
+        ManeuverType.INVALID -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_invalid_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_invalid_right
+            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_invalid_slight_left
+            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_invalid_slight_right
+            ManeuverModifier.STRAIGHT -> Res.drawable.direction_invalid_straight
+            ManeuverModifier.UTURN -> Res.drawable.direction_invalid_uturn
             else -> null
         }
-        "merge" -> when (modifier) {
-            "left" -> Res.drawable.direction_merge_left
-            "right" -> Res.drawable.direction_merge_right
-            "slight_left" -> Res.drawable.direction_merge_slight_left
-            "slight_right" -> Res.drawable.direction_merge_slight_right
-            "straight" -> Res.drawable.direction_merge_straight
+        ManeuverType.MERGE -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_merge_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_merge_right
+            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_merge_slight_left
+            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_merge_slight_right
+            ManeuverModifier.STRAIGHT -> Res.drawable.direction_merge_straight
             else -> null
         }
-        "new_name" -> when (modifier) {
-            "left" -> Res.drawable.direction_new_name_left
-            "right" -> Res.drawable.direction_new_name_right
-            "sharp_left" -> Res.drawable.direction_new_name_sharp_left
-            "sharp_right" -> Res.drawable.direction_new_name_sharp_right
-            "slight_left" -> Res.drawable.direction_new_name_slight_left
-            "slight_right" -> Res.drawable.direction_new_name_slight_right
-            "straight" -> Res.drawable.direction_new_name_straight
+        ManeuverType.NAME_CHANGE -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_new_name_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_new_name_right
+            ManeuverModifier.SHARP_LEFT -> Res.drawable.direction_new_name_sharp_left
+            ManeuverModifier.SHARP_RIGHT -> Res.drawable.direction_new_name_sharp_right
+            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_new_name_slight_left
+            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_new_name_slight_right
+            ManeuverModifier.STRAIGHT -> Res.drawable.direction_new_name_straight
             else -> null
         }
-        "notification" -> when (modifier) {
-            "left" -> Res.drawable.direction_notification_left
-            "right" -> Res.drawable.direction_notification_right
-            "sharp_left" -> Res.drawable.direction_notification_sharp_left
-            "sharp_right" -> Res.drawable.direction_notification_sharp_right
-            "slight_left" -> Res.drawable.direction_notification_slight_left
-            "slight_right" -> Res.drawable.direction_notification_slight_right
-            "straight" -> Res.drawable.direction_notification_straight
+        ManeuverType.NOTIFICATION -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_notification_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_notification_right
+            ManeuverModifier.SHARP_LEFT -> Res.drawable.direction_notification_sharp_left
+            ManeuverModifier.SHARP_RIGHT -> Res.drawable.direction_notification_sharp_right
+            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_notification_slight_left
+            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_notification_slight_right
+            ManeuverModifier.STRAIGHT -> Res.drawable.direction_notification_straight
             else -> null
         }
-        "off_ramp" -> when (modifier) {
-            "left" -> Res.drawable.direction_off_ramp_left
-            "right" -> Res.drawable.direction_off_ramp_right
-            "slight_left" -> Res.drawable.direction_off_ramp_slight_left
-            "slight_right" -> Res.drawable.direction_off_ramp_slight_right
+        ManeuverType.OFF_RAMP -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_off_ramp_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_off_ramp_right
+            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_off_ramp_slight_left
+            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_off_ramp_slight_right
             else -> null
         }
-        "on_ramp" -> when (modifier) {
-            "left" -> Res.drawable.direction_on_ramp_left
-            "right" -> Res.drawable.direction_on_ramp_right
-            "sharp_left" -> Res.drawable.direction_on_ramp_sharp_left
-            "sharp_right" -> Res.drawable.direction_on_ramp_sharp_right
-            "slight_left" -> Res.drawable.direction_on_ramp_slight_left
-            "slight_right" -> Res.drawable.direction_on_ramp_slight_right
-            "straight" -> Res.drawable.direction_on_ramp_straight
+        ManeuverType.ON_RAMP -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_on_ramp_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_on_ramp_right
+            ManeuverModifier.SHARP_LEFT -> Res.drawable.direction_on_ramp_sharp_left
+            ManeuverModifier.SHARP_RIGHT -> Res.drawable.direction_on_ramp_sharp_right
+            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_on_ramp_slight_left
+            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_on_ramp_slight_right
+            ManeuverModifier.STRAIGHT -> Res.drawable.direction_on_ramp_straight
             else -> null
         }
-        "rotary" -> when (modifier) {
-            "left" -> Res.drawable.direction_rotary_left
-            "right" -> Res.drawable.direction_rotary_right
-            "sharp_left" -> Res.drawable.direction_rotary_sharp_left
-            "sharp_right" -> Res.drawable.direction_rotary_sharp_right
-            "slight_left" -> Res.drawable.direction_rotary_slight_left
-            "slight_right" -> Res.drawable.direction_rotary_slight_right
-            "straight" -> Res.drawable.direction_rotary_straight
+        ManeuverType.ROTARY -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_rotary_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_rotary_right
+            ManeuverModifier.SHARP_LEFT -> Res.drawable.direction_rotary_sharp_left
+            ManeuverModifier.SHARP_RIGHT -> Res.drawable.direction_rotary_sharp_right
+            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_rotary_slight_left
+            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_rotary_slight_right
+            ManeuverModifier.STRAIGHT -> Res.drawable.direction_rotary_straight
             else -> null
         }
-        "roundabout" -> when (modifier) {
-            "left" -> Res.drawable.direction_roundabout_left
-            "right" -> Res.drawable.direction_roundabout_right
-            "sharp_left" -> Res.drawable.direction_roundabout_sharp_left
-            "sharp_right" -> Res.drawable.direction_roundabout_sharp_right
-            "slight_left" -> Res.drawable.direction_roundabout_slight_left
-            "slight_right" -> Res.drawable.direction_roundabout_slight_right
-            "straight" -> Res.drawable.direction_roundabout_straight
+        ManeuverType.ROUNDABOUT -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_roundabout_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_roundabout_right
+            ManeuverModifier.SHARP_LEFT -> Res.drawable.direction_roundabout_sharp_left
+            ManeuverModifier.SHARP_RIGHT -> Res.drawable.direction_roundabout_sharp_right
+            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_roundabout_slight_left
+            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_roundabout_slight_right
+            ManeuverModifier.STRAIGHT -> Res.drawable.direction_roundabout_straight
             else -> null
         }
-        "traffic_circle" -> when (modifier) {
-            "left" -> Res.drawable.direction_traffic_circle_left
-            "right" -> Res.drawable.direction_traffic_circle_right
-            "slight_left" -> Res.drawable.direction_traffic_circle_slight_left
-            "slight_right" -> Res.drawable.direction_traffic_circle_slight_right
+        ManeuverType.TRAFFIC_CIRCLE -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_traffic_circle_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_traffic_circle_right
+            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_traffic_circle_slight_left
+            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_traffic_circle_slight_right
             else -> null
         }
-        "turn" -> when (modifier) {
-            "left" -> Res.drawable.direction_turn_left
-            "right" -> Res.drawable.direction_turn_right
-            "sharp_left" -> Res.drawable.direction_turn_sharp_left
-            "sharp_right" -> Res.drawable.direction_turn_sharp_right
-            "slight_left" -> Res.drawable.direction_turn_slight_left
-            "slight_right" -> Res.drawable.direction_turn_slight_right
-            "straight" -> Res.drawable.direction_turn_straight
+        ManeuverType.TURN -> when (modifier) {
+            ManeuverModifier.LEFT -> Res.drawable.direction_turn_left
+            ManeuverModifier.RIGHT -> Res.drawable.direction_turn_right
+            ManeuverModifier.SHARP_LEFT -> Res.drawable.direction_turn_sharp_left
+            ManeuverModifier.SHARP_RIGHT -> Res.drawable.direction_turn_sharp_right
+            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_turn_slight_left
+            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_turn_slight_right
+            ManeuverModifier.STRAIGHT -> Res.drawable.direction_turn_straight
             else -> null
         }
-        else -> null
+        ManeuverType.UTURN,
+        ManeuverType.RAMP,
+        -> null
     }
 }
 
-private fun typeOnlyDirectionIcon(type: String): DrawableResource? {
+private fun typeOnlyDirectionIcon(type: ManeuverType): DrawableResource? {
     return when (type) {
-        "arrive" -> Res.drawable.direction_arrive
-        "close" -> Res.drawable.direction_close
-        "continue" -> Res.drawable.direction_continue
-        "depart" -> Res.drawable.direction_depart
-        "flag" -> Res.drawable.direction_flag
-        "fork" -> Res.drawable.direction_fork
-        "invalid" -> Res.drawable.direction_invalid
-        "off_ramp" -> Res.drawable.direction_off_ramp
-        "on_ramp" -> Res.drawable.direction_on_ramp
-        "ramp" -> Res.drawable.direction_ramp
-        "rotary" -> Res.drawable.direction_rotary
-        "roundabout" -> Res.drawable.direction_roundabout
-        "traffic_circle" -> Res.drawable.direction_traffic_circle
-        "updown" -> Res.drawable.direction_updown
-        "uturn" -> Res.drawable.direction_uturn
-        else -> null
+        ManeuverType.ARRIVE -> Res.drawable.direction_arrive
+        ManeuverType.CONTINUE -> Res.drawable.direction_continue
+        ManeuverType.DEPART -> Res.drawable.direction_depart
+        ManeuverType.FORK -> Res.drawable.direction_fork
+        ManeuverType.INVALID -> Res.drawable.direction_invalid
+        ManeuverType.OFF_RAMP -> Res.drawable.direction_off_ramp
+        ManeuverType.ON_RAMP -> Res.drawable.direction_on_ramp
+        ManeuverType.RAMP -> Res.drawable.direction_ramp
+        ManeuverType.ROTARY -> Res.drawable.direction_rotary
+        ManeuverType.ROUNDABOUT -> Res.drawable.direction_roundabout
+        ManeuverType.TRAFFIC_CIRCLE -> Res.drawable.direction_traffic_circle
+        ManeuverType.UTURN -> Res.drawable.direction_uturn
+        ManeuverType.TURN,
+        ManeuverType.END_OF_ROAD,
+        ManeuverType.MERGE,
+        ManeuverType.NAME_CHANGE,
+        ManeuverType.NOTIFICATION,
+        -> null
     }
 }
-
-private const val TURN_TYPE = "turn"

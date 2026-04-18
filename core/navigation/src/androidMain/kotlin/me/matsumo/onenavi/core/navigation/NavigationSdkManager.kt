@@ -186,7 +186,7 @@ class NavigationSdkManager(
             packageName,
             SERVICE_CLASS_NAME,
             NavigationUpdatesOptions.builder()
-                .setGeneratedStepImagesType(NavigationUpdatesOptions.GeneratedStepImagesType.NONE)
+                .setGeneratedStepImagesType(NavigationUpdatesOptions.GeneratedStepImagesType.BITMAP)
                 .setNumNextStepsToPreview(NUM_NEXT_STEPS_TO_PREVIEW)
                 .setDisplayMetrics(displayMetrics)
                 .build(),

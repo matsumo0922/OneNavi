@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
 import androidx.compose.runtime.Stable
+import me.matsumo.onenavi.core.model.ManeuverModifier
 
 /**
  * 発話済み判定に使う案内イベントの一意キー。
@@ -26,21 +27,6 @@ sealed interface GuidanceEvent {
 }
 
 /**
- * マニューバの方向。
- */
-enum class Direction {
-    LEFT,
-    RIGHT,
-    SLIGHT_LEFT,
-    SLIGHT_RIGHT,
-    SHARP_LEFT,
-    SHARP_RIGHT,
-    STRAIGHT,
-    UTURN,
-    UNKNOWN,
-}
-
-/**
  * ターン案内の発話タイミング。
  */
 enum class TurnTiming {
@@ -57,7 +43,7 @@ data class TurnGuideEvent(
     override val id: GuidanceEventId,
     override val priority: GuidancePriority,
     override val distanceMeters: Double,
-    val direction: Direction,
+    val direction: ManeuverModifier,
     val timing: TurnTiming,
     val roadName: String?,
 ) : GuidanceEvent
@@ -70,8 +56,8 @@ data class LinkedTurnGuideEvent(
     override val id: GuidanceEventId,
     override val priority: GuidancePriority,
     override val distanceMeters: Double,
-    val firstDirection: Direction,
-    val nextDirection: Direction,
+    val firstDirection: ManeuverModifier,
+    val nextDirection: ManeuverModifier,
 ) : GuidanceEvent
 
 /**
@@ -95,7 +81,7 @@ data class HighwayGuideEvent(
     override val priority: GuidancePriority,
     override val distanceMeters: Double?,
     val kind: HighwayGuideKind,
-    val direction: Direction,
+    val direction: ManeuverModifier,
     val name: String?,
 ) : GuidanceEvent
 

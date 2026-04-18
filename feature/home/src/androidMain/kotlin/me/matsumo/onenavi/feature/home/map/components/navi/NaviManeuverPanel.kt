@@ -23,6 +23,7 @@ import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.model.LaneInfo
 import me.matsumo.onenavi.core.model.ManeuverInfo
+import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_kilometer
 import me.matsumo.onenavi.core.resource.common_unit_meter
@@ -217,6 +218,7 @@ private fun ManeuverTurnIcon(
         type = maneuver.type,
         maneuverModifier = maneuver.modifier,
         contentDescription = null,
+        iconBitmap = maneuver.iconBitmap,
         tint = NavigationColors.maneuverText,
     )
 }
@@ -230,7 +232,7 @@ private fun NaviLaneIcon(
 
     ManeuverIcon(
         modifier = modifier,
-        type = "turn",
+        type = ManeuverType.TURN,
         maneuverModifier = direction,
         contentDescription = null,
         tint = if (lane.isRecommended) NavigationColors.maneuverText else NavigationColors.maneuverSecondaryText,

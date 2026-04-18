@@ -5,6 +5,8 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.GoogleRoute
+import me.matsumo.onenavi.core.model.ManeuverModifier
+import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteStepInfo
 
@@ -12,15 +14,15 @@ import me.matsumo.onenavi.core.model.RouteStepInfo
  * ナビゲーション中に表示する案内地点 Callout 1 個分の情報。
  *
  * @param maneuverLocation マニューバ点の緯度経度
- * @param maneuverType マニューバ種別。[me.matsumo.onenavi.core.model.ManeuverInfo.type] 相当
- * @param maneuverModifier 方向修飾子。[me.matsumo.onenavi.core.model.ManeuverInfo.modifier] 相当
+ * @param maneuverType マニューバ種別
+ * @param maneuverModifier 方向修飾子
  * @param intersectionName Callout に表示する行き先の道路名ラベル。取得できない場合は null
  */
 @Immutable
 internal data class NavigationCalloutInfo(
     val maneuverLocation: RoutePoint,
-    val maneuverType: String,
-    val maneuverModifier: String?,
+    val maneuverType: ManeuverType,
+    val maneuverModifier: ManeuverModifier?,
     val intersectionName: String?,
 )
 
@@ -33,14 +35,14 @@ private const val MANEUVER_PASSED_MARGIN_METERS = 5.0
 /**
  * Callout を描画する対象外のマニューバ種別。
  *
- * "continue"/"depart" は直進や出発で案内すべき地点ではなく、"new_name" は道路名変更の通知、
- * "arrive" は目的地到着で別 UI が担当するため除外する。
+ * `CONTINUE` / `DEPART` は直進や出発で案内すべき地点ではなく、`NAME_CHANGE` は道路名変更の通知、
+ * `ARRIVE` は目的地到着で別 UI が担当するため除外する。
  */
 private val NON_MANEUVER_TYPES = setOf(
-    "continue",
-    "depart",
-    "new_name",
-    "arrive",
+    ManeuverType.CONTINUE,
+    ManeuverType.DEPART,
+    ManeuverType.NAME_CHANGE,
+    ManeuverType.ARRIVE,
 )
 
 /**
