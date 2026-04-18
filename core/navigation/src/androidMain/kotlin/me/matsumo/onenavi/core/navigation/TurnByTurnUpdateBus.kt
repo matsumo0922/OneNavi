@@ -43,6 +43,9 @@ private fun StepInfo.toSnapshot(): NavigationStepSnapshot {
         },
         drivingSide = drivingSide,
         distanceFromPreviousMeters = distanceFromPrevStepMeters,
+        timeFromPreviousSeconds = timeFromPrevStepSeconds,
         roundaboutTurnNumber = roundaboutTurnNumber,
+        lanesBitmap = lanesBitmap,
+        maneuverBitmap = maneuverBitmap,
     )
 }
