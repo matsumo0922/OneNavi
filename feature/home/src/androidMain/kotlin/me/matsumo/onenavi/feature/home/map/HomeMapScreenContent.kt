@@ -39,6 +39,8 @@ import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
+import me.matsumo.onenavi.core.ui.theme.LocalAppSetting
+import me.matsumo.onenavi.core.ui.theme.shouldUseDarkTheme
 import me.matsumo.onenavi.feature.home.map.components.HomeMapControls
 import me.matsumo.onenavi.feature.home.map.components.LocationTrackingMode
 import me.matsumo.onenavi.feature.home.map.components.navi.HomeMapArrivalContent
@@ -62,6 +64,8 @@ internal fun HomeMapScreenContent(
 ) {
     val density = LocalDensity.current
     val activity = LocalActivity.current
+    val appSetting = LocalAppSetting.current
+    val isDarkMap = shouldUseDarkTheme(appSetting.theme)
 
     val screenState by viewModel.screenState.collectAsStateWithLifecycle()
     val overlayState by viewModel.overlayState.collectAsStateWithLifecycle()
@@ -259,6 +263,7 @@ internal fun HomeMapScreenContent(
                 upcomingNavigationCallouts = upcomingNavigationCallouts,
                 cameraManager = viewModel.cameraManager,
                 cameraFollowSpec = cameraFollowSpec,
+                isDarkMap = isDarkMap,
                 onMapLandmarkSelected = viewModel::onMapLandmarkSelected,
                 onRouteSelected = viewModel::onRouteSelected,
             )

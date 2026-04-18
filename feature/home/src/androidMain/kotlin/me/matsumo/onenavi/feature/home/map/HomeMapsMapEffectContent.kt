@@ -47,6 +47,7 @@ import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MapColorScheme
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.Polyline
@@ -119,6 +120,7 @@ internal fun HomeMapsMapEffectContent(
     upcomingNavigationCallouts: ImmutableList<NavigationCalloutInfo>,
     cameraManager: CameraManager,
     cameraFollowSpec: CameraFollowSpec?,
+    isDarkMap: Boolean,
     onMapLandmarkSelected: (name: String?, latitude: Double, longitude: Double) -> Unit,
     onRouteSelected: (index: Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -155,6 +157,11 @@ internal fun HomeMapsMapEffectContent(
         }.onFailure { error ->
             Napier.e(error, tag = TAG) { "Failed to create vehicle puck icon." }
         }
+    }
+
+    LaunchedEffect(googleMap, isDarkMap) {
+        val map = googleMap ?: return@LaunchedEffect
+        map.setMapColorScheme(if (isDarkMap) MapColorScheme.DARK else MapColorScheme.LIGHT)
     }
 
     LaunchedEffect(googleMap, mapPadding, hasLocationPermission, vehiclePuckIcon) {
