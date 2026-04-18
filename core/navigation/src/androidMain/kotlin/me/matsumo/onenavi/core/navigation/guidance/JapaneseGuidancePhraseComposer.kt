@@ -1,5 +1,7 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
+import me.matsumo.onenavi.core.model.ManeuverModifier
+
 /**
  * 構造化案内イベントを日本語 TTS 文言へ変換するクラス。
  */
@@ -70,33 +72,33 @@ class JapaneseGuidancePhraseComposer {
         }
     }
 
-    private fun turnActionText(direction: Direction): String {
+    private fun turnActionText(direction: ManeuverModifier): String {
         return when (direction) {
-            Direction.LEFT -> "左折"
-            Direction.RIGHT -> "右折"
-            Direction.SLIGHT_LEFT -> "斜め左"
-            Direction.SLIGHT_RIGHT -> "斜め右"
-            Direction.SHARP_LEFT -> "鋭角左折"
-            Direction.SHARP_RIGHT -> "鋭角右折"
-            Direction.STRAIGHT -> "直進"
-            Direction.UTURN -> "Uターン"
-            Direction.UNKNOWN -> "案内方向へ進行"
+            ManeuverModifier.LEFT -> "左折"
+            ManeuverModifier.RIGHT -> "右折"
+            ManeuverModifier.SLIGHT_LEFT -> "斜め左"
+            ManeuverModifier.SLIGHT_RIGHT -> "斜め右"
+            ManeuverModifier.SHARP_LEFT -> "鋭角左折"
+            ManeuverModifier.SHARP_RIGHT -> "鋭角右折"
+            ManeuverModifier.STRAIGHT -> "直進"
+            ManeuverModifier.UTURN -> "Uターン"
+            ManeuverModifier.UNKNOWN -> "案内方向へ進行"
         }
     }
 
-    private fun directionText(direction: Direction): String {
+    private fun directionText(direction: ManeuverModifier): String {
         return when (direction) {
-            Direction.LEFT,
-            Direction.SLIGHT_LEFT,
-            Direction.SHARP_LEFT,
+            ManeuverModifier.LEFT,
+            ManeuverModifier.SLIGHT_LEFT,
+            ManeuverModifier.SHARP_LEFT,
             -> "左"
-            Direction.RIGHT,
-            Direction.SLIGHT_RIGHT,
-            Direction.SHARP_RIGHT,
+            ManeuverModifier.RIGHT,
+            ManeuverModifier.SLIGHT_RIGHT,
+            ManeuverModifier.SHARP_RIGHT,
             -> "右"
-            Direction.STRAIGHT -> "直進"
-            Direction.UTURN -> "Uターン"
-            Direction.UNKNOWN -> "案内"
+            ManeuverModifier.STRAIGHT -> "直進"
+            ManeuverModifier.UTURN -> "Uターン"
+            ManeuverModifier.UNKNOWN -> "案内"
         }
     }
 }

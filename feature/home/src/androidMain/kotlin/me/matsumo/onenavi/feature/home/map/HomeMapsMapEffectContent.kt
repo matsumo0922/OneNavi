@@ -60,6 +60,8 @@ import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.common.formatYen
 import me.matsumo.onenavi.core.model.CongestionSegment
 import me.matsumo.onenavi.core.model.CongestionSeverity
+import me.matsumo.onenavi.core.model.ManeuverModifier
+import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.CameraManager
@@ -391,8 +393,8 @@ private fun buildNavigationCalloutAnchors(
 @Composable
 private fun HomeMapNavigationCallout(
     tailDirection: CalloutTailDirection,
-    maneuverType: String,
-    maneuverModifier: String?,
+    maneuverType: ManeuverType,
+    maneuverModifier: ManeuverModifier?,
     intersectionName: String?,
     modifier: Modifier = Modifier,
 ) {

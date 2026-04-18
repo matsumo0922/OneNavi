@@ -1,7 +1,7 @@
 package me.matsumo.onenavi.core.navigation
 
 import android.content.Context
-import com.google.android.libraries.mapsplatform.turnbyturn.model.DrivingSide
+import androidx.compose.ui.graphics.asImageBitmap
 import com.google.android.libraries.mapsplatform.turnbyturn.model.LaneDirection
 import com.google.android.libraries.mapsplatform.turnbyturn.model.Maneuver
 import com.google.android.libraries.mapsplatform.turnbyturn.model.NavState
@@ -25,13 +25,15 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import me.matsumo.onenavi.core.model.ArrivalInfo
+import me.matsumo.onenavi.core.model.DrivingSide
 import me.matsumo.onenavi.core.model.GoogleRoute
 import me.matsumo.onenavi.core.model.GuidanceUiState
 import me.matsumo.onenavi.core.model.LaneInfo
 import me.matsumo.onenavi.core.model.ManeuverInfo
+import me.matsumo.onenavi.core.model.ManeuverModifier
+import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.TripProgressInfo
-import me.matsumo.onenavi.core.navigation.guidance.Direction
 import me.matsumo.onenavi.core.navigation.guidance.DistanceBucket
 import me.matsumo.onenavi.core.navigation.guidance.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.guidance.GuidanceEventId
@@ -48,6 +50,7 @@ import me.matsumo.onenavi.core.navigation.tts.AndroidTtsEngine
 import me.matsumo.onenavi.core.navigation.tts.AudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.SpeechOrchestrator
 import kotlin.time.Duration.Companion.milliseconds
+import com.google.android.libraries.mapsplatform.turnbyturn.model.DrivingSide as SdkDrivingSide
 
 class GuidanceSessionManager(
     private val context: Context,
@@ -289,22 +292,24 @@ class GuidanceSessionManager(
     private fun NavigationStepSnapshot.toManeuverInfo(distanceMeters: Double): ManeuverInfo {
         return ManeuverInfo(
             type = maneuver.toManeuverType(),
-            modifier = maneuver.toModifier(),
+            modifier = maneuver.toManeuverModifier(),
             degrees = null,
-            drivingSide = drivingSide.toDrivingSideString(),
+            drivingSide = drivingSide.toDrivingSide(),
             distanceMeters = distanceMeters,
             instruction = instruction,
             roadName = roadName?.takeIf { it.isNotBlank() },
             simpleRoadName = simpleRoadName?.takeIf { it.isNotBlank() },
             destinations = null,
+            iconBitmap = maneuverBitmap?.asImageBitmap(),
+            lanesBitmap = lanesBitmap?.asImageBitmap(),
             lanes = toLaneInfos(),
         )
     }
 
     private fun NavigationStepSnapshot.toLaneInfos() = lanes.map { lane ->
         LaneInfo(
-            directions = lane.directions.mapNotNull { it.toLaneDirectionString() }.toImmutableList(),
-            activeDirection = lane.activeDirection?.toLaneDirectionString(),
+            directions = lane.directions.mapNotNull { it.toLaneManeuverModifier() }.toImmutableList(),
+            activeDirection = lane.activeDirection?.toLaneManeuverModifier(),
             isRecommended = lane.isRecommended,
         )
     }.toImmutableList()
@@ -314,6 +319,7 @@ class GuidanceSessionManager(
         stepIndex: Int,
         distanceMeters: Double,
     ): TurnGuideEvent {
+        val modifier = maneuver.toManeuverModifier() ?: ManeuverModifier.UNKNOWN
         return TurnGuideEvent(
             id = GuidanceEventId(
                 routeId = routeId,
@@ -326,7 +332,7 @@ class GuidanceSessionManager(
             ),
             priority = GuidancePriority.NORMAL,
             distanceMeters = distanceMeters,
-            direction = maneuver.toModifier().toDirection(),
+            direction = modifier,
             timing = when {
                 distanceMeters <= 120.0 -> TurnTiming.SOON
                 distanceMeters <= 500.0 -> TurnTiming.MIDDLE
@@ -389,181 +395,6 @@ class GuidanceSessionManager(
         }
     }
 
-    private fun String?.toDirection(): Direction {
-        return when (this) {
-            "left" -> Direction.LEFT
-            "right" -> Direction.RIGHT
-            "slight left" -> Direction.SLIGHT_LEFT
-            "slight right" -> Direction.SLIGHT_RIGHT
-            "sharp left" -> Direction.SHARP_LEFT
-            "sharp right" -> Direction.SHARP_RIGHT
-            "straight" -> Direction.STRAIGHT
-            "uturn" -> Direction.UTURN
-            else -> Direction.UNKNOWN
-        }
-    }
-
-    private fun Int.toDrivingSideString(): String? {
-        return when (this) {
-            DrivingSide.LEFT -> "left"
-            DrivingSide.RIGHT -> "right"
-            else -> null
-        }
-    }
-
-    private fun Int.toManeuverType(): String {
-        return when (this) {
-            Maneuver.DEPART -> "depart"
-            Maneuver.DESTINATION,
-            Maneuver.DESTINATION_LEFT,
-            Maneuver.DESTINATION_RIGHT,
-            -> "arrive"
-            Maneuver.FORK_LEFT,
-            Maneuver.FORK_RIGHT,
-            -> "fork"
-            Maneuver.MERGE_UNSPECIFIED,
-            Maneuver.MERGE_LEFT,
-            Maneuver.MERGE_RIGHT,
-            -> "merge"
-            Maneuver.ON_RAMP_UNSPECIFIED,
-            Maneuver.ON_RAMP_LEFT,
-            Maneuver.ON_RAMP_RIGHT,
-            Maneuver.ON_RAMP_KEEP_LEFT,
-            Maneuver.ON_RAMP_KEEP_RIGHT,
-            Maneuver.ON_RAMP_SLIGHT_LEFT,
-            Maneuver.ON_RAMP_SLIGHT_RIGHT,
-            Maneuver.ON_RAMP_SHARP_LEFT,
-            Maneuver.ON_RAMP_SHARP_RIGHT,
-            Maneuver.ON_RAMP_U_TURN_CLOCKWISE,
-            Maneuver.ON_RAMP_U_TURN_COUNTERCLOCKWISE,
-            -> "on ramp"
-            Maneuver.OFF_RAMP_UNSPECIFIED,
-            Maneuver.OFF_RAMP_LEFT,
-            Maneuver.OFF_RAMP_RIGHT,
-            Maneuver.OFF_RAMP_KEEP_LEFT,
-            Maneuver.OFF_RAMP_KEEP_RIGHT,
-            Maneuver.OFF_RAMP_SLIGHT_LEFT,
-            Maneuver.OFF_RAMP_SLIGHT_RIGHT,
-            Maneuver.OFF_RAMP_SHARP_LEFT,
-            Maneuver.OFF_RAMP_SHARP_RIGHT,
-            Maneuver.OFF_RAMP_U_TURN_CLOCKWISE,
-            Maneuver.OFF_RAMP_U_TURN_COUNTERCLOCKWISE,
-            -> "off ramp"
-            Maneuver.ROUNDABOUT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_COUNTERCLOCKWISE,
-            Maneuver.ROUNDABOUT_STRAIGHT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_STRAIGHT_COUNTERCLOCKWISE,
-            Maneuver.ROUNDABOUT_LEFT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_LEFT_COUNTERCLOCKWISE,
-            Maneuver.ROUNDABOUT_RIGHT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_RIGHT_COUNTERCLOCKWISE,
-            Maneuver.ROUNDABOUT_SLIGHT_LEFT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_SLIGHT_LEFT_COUNTERCLOCKWISE,
-            Maneuver.ROUNDABOUT_SLIGHT_RIGHT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_SLIGHT_RIGHT_COUNTERCLOCKWISE,
-            Maneuver.ROUNDABOUT_SHARP_LEFT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_SHARP_LEFT_COUNTERCLOCKWISE,
-            Maneuver.ROUNDABOUT_SHARP_RIGHT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_SHARP_RIGHT_COUNTERCLOCKWISE,
-            Maneuver.ROUNDABOUT_U_TURN_CLOCKWISE,
-            Maneuver.ROUNDABOUT_U_TURN_COUNTERCLOCKWISE,
-            Maneuver.ROUNDABOUT_EXIT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_EXIT_COUNTERCLOCKWISE,
-            -> "roundabout"
-            Maneuver.NAME_CHANGE -> "new_name"
-            else -> "turn"
-        }
-    }
-
-    private fun Int.toModifier(): String? {
-        return when (this) {
-            Maneuver.DESTINATION_LEFT,
-            Maneuver.TURN_LEFT,
-            Maneuver.TURN_KEEP_LEFT,
-            Maneuver.MERGE_LEFT,
-            Maneuver.FORK_LEFT,
-            Maneuver.ON_RAMP_LEFT,
-            Maneuver.ON_RAMP_KEEP_LEFT,
-            Maneuver.OFF_RAMP_LEFT,
-            Maneuver.OFF_RAMP_KEEP_LEFT,
-            Maneuver.ROUNDABOUT_LEFT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_LEFT_COUNTERCLOCKWISE,
-            Maneuver.ROUNDABOUT_EXIT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_EXIT_COUNTERCLOCKWISE,
-            -> "left"
-            Maneuver.DESTINATION_RIGHT,
-            Maneuver.TURN_RIGHT,
-            Maneuver.TURN_KEEP_RIGHT,
-            Maneuver.MERGE_RIGHT,
-            Maneuver.FORK_RIGHT,
-            Maneuver.ON_RAMP_RIGHT,
-            Maneuver.ON_RAMP_KEEP_RIGHT,
-            Maneuver.OFF_RAMP_RIGHT,
-            Maneuver.OFF_RAMP_KEEP_RIGHT,
-            Maneuver.ROUNDABOUT_RIGHT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_RIGHT_COUNTERCLOCKWISE,
-            -> "right"
-            Maneuver.TURN_SLIGHT_LEFT,
-            Maneuver.ON_RAMP_SLIGHT_LEFT,
-            Maneuver.OFF_RAMP_SLIGHT_LEFT,
-            Maneuver.ROUNDABOUT_SLIGHT_LEFT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_SLIGHT_LEFT_COUNTERCLOCKWISE,
-            -> "slight left"
-            Maneuver.TURN_SLIGHT_RIGHT,
-            Maneuver.ON_RAMP_SLIGHT_RIGHT,
-            Maneuver.OFF_RAMP_SLIGHT_RIGHT,
-            Maneuver.ROUNDABOUT_SLIGHT_RIGHT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_SLIGHT_RIGHT_COUNTERCLOCKWISE,
-            -> "slight right"
-            Maneuver.TURN_SHARP_LEFT,
-            Maneuver.ON_RAMP_SHARP_LEFT,
-            Maneuver.OFF_RAMP_SHARP_LEFT,
-            Maneuver.ROUNDABOUT_SHARP_LEFT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_SHARP_LEFT_COUNTERCLOCKWISE,
-            -> "sharp left"
-            Maneuver.TURN_SHARP_RIGHT,
-            Maneuver.ON_RAMP_SHARP_RIGHT,
-            Maneuver.OFF_RAMP_SHARP_RIGHT,
-            Maneuver.ROUNDABOUT_SHARP_RIGHT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_SHARP_RIGHT_COUNTERCLOCKWISE,
-            -> "sharp right"
-            Maneuver.STRAIGHT,
-            Maneuver.MERGE_UNSPECIFIED,
-            Maneuver.ON_RAMP_UNSPECIFIED,
-            Maneuver.OFF_RAMP_UNSPECIFIED,
-            Maneuver.ROUNDABOUT_STRAIGHT_CLOCKWISE,
-            Maneuver.ROUNDABOUT_STRAIGHT_COUNTERCLOCKWISE,
-            Maneuver.NAME_CHANGE,
-            -> "straight"
-            Maneuver.TURN_U_TURN_CLOCKWISE,
-            Maneuver.TURN_U_TURN_COUNTERCLOCKWISE,
-            Maneuver.ON_RAMP_U_TURN_CLOCKWISE,
-            Maneuver.ON_RAMP_U_TURN_COUNTERCLOCKWISE,
-            Maneuver.OFF_RAMP_U_TURN_CLOCKWISE,
-            Maneuver.OFF_RAMP_U_TURN_COUNTERCLOCKWISE,
-            Maneuver.ROUNDABOUT_U_TURN_CLOCKWISE,
-            Maneuver.ROUNDABOUT_U_TURN_COUNTERCLOCKWISE,
-            -> "uturn"
-            else -> null
-        }
-    }
-
-    private fun Int.toLaneDirectionString(): String? {
-        return when (this) {
-            LaneDirection.LaneShape.STRAIGHT -> "straight"
-            LaneDirection.LaneShape.SLIGHT_LEFT -> "slight left"
-            LaneDirection.LaneShape.SLIGHT_RIGHT -> "slight right"
-            LaneDirection.LaneShape.NORMAL_LEFT -> "left"
-            LaneDirection.LaneShape.NORMAL_RIGHT -> "right"
-            LaneDirection.LaneShape.SHARP_LEFT -> "sharp left"
-            LaneDirection.LaneShape.SHARP_RIGHT -> "sharp right"
-            LaneDirection.LaneShape.U_TURN_LEFT,
-            LaneDirection.LaneShape.U_TURN_RIGHT,
-            -> "uturn"
-            else -> null
-        }
-    }
-
     /**
      * Navigation SDK からの 3 系統の Flow を一度に受け取るための中間ホルダー。
      *
@@ -580,5 +411,173 @@ class GuidanceSessionManager(
     companion object {
         private const val TAG = "GuidanceSessionManager"
         private const val TTS_READY_TIMEOUT_MS = 3_000L
+    }
+}
+
+private fun Int.toManeuverType(): ManeuverType {
+    return when (this) {
+        Maneuver.DEPART -> ManeuverType.DEPART
+        Maneuver.DESTINATION,
+        Maneuver.DESTINATION_LEFT,
+        Maneuver.DESTINATION_RIGHT,
+        -> ManeuverType.ARRIVE
+        Maneuver.FORK_LEFT,
+        Maneuver.FORK_RIGHT,
+        -> ManeuverType.FORK
+        Maneuver.MERGE_UNSPECIFIED,
+        Maneuver.MERGE_LEFT,
+        Maneuver.MERGE_RIGHT,
+        -> ManeuverType.MERGE
+        Maneuver.ON_RAMP_UNSPECIFIED,
+        Maneuver.ON_RAMP_LEFT,
+        Maneuver.ON_RAMP_RIGHT,
+        Maneuver.ON_RAMP_KEEP_LEFT,
+        Maneuver.ON_RAMP_KEEP_RIGHT,
+        Maneuver.ON_RAMP_SLIGHT_LEFT,
+        Maneuver.ON_RAMP_SLIGHT_RIGHT,
+        Maneuver.ON_RAMP_SHARP_LEFT,
+        Maneuver.ON_RAMP_SHARP_RIGHT,
+        Maneuver.ON_RAMP_U_TURN_CLOCKWISE,
+        Maneuver.ON_RAMP_U_TURN_COUNTERCLOCKWISE,
+        -> ManeuverType.ON_RAMP
+        Maneuver.OFF_RAMP_UNSPECIFIED,
+        Maneuver.OFF_RAMP_LEFT,
+        Maneuver.OFF_RAMP_RIGHT,
+        Maneuver.OFF_RAMP_KEEP_LEFT,
+        Maneuver.OFF_RAMP_KEEP_RIGHT,
+        Maneuver.OFF_RAMP_SLIGHT_LEFT,
+        Maneuver.OFF_RAMP_SLIGHT_RIGHT,
+        Maneuver.OFF_RAMP_SHARP_LEFT,
+        Maneuver.OFF_RAMP_SHARP_RIGHT,
+        Maneuver.OFF_RAMP_U_TURN_CLOCKWISE,
+        Maneuver.OFF_RAMP_U_TURN_COUNTERCLOCKWISE,
+        -> ManeuverType.OFF_RAMP
+        Maneuver.ROUNDABOUT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_COUNTERCLOCKWISE,
+        Maneuver.ROUNDABOUT_STRAIGHT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_STRAIGHT_COUNTERCLOCKWISE,
+        Maneuver.ROUNDABOUT_LEFT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_LEFT_COUNTERCLOCKWISE,
+        Maneuver.ROUNDABOUT_RIGHT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_RIGHT_COUNTERCLOCKWISE,
+        Maneuver.ROUNDABOUT_SLIGHT_LEFT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_SLIGHT_LEFT_COUNTERCLOCKWISE,
+        Maneuver.ROUNDABOUT_SLIGHT_RIGHT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_SLIGHT_RIGHT_COUNTERCLOCKWISE,
+        Maneuver.ROUNDABOUT_SHARP_LEFT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_SHARP_LEFT_COUNTERCLOCKWISE,
+        Maneuver.ROUNDABOUT_SHARP_RIGHT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_SHARP_RIGHT_COUNTERCLOCKWISE,
+        Maneuver.ROUNDABOUT_U_TURN_CLOCKWISE,
+        Maneuver.ROUNDABOUT_U_TURN_COUNTERCLOCKWISE,
+        Maneuver.ROUNDABOUT_EXIT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_EXIT_COUNTERCLOCKWISE,
+        -> ManeuverType.ROUNDABOUT
+        Maneuver.NAME_CHANGE -> ManeuverType.NAME_CHANGE
+        Maneuver.TURN_U_TURN_CLOCKWISE,
+        Maneuver.TURN_U_TURN_COUNTERCLOCKWISE,
+        -> ManeuverType.UTURN
+        Maneuver.STRAIGHT -> ManeuverType.CONTINUE
+        else -> ManeuverType.TURN
+    }
+}
+
+@Suppress("CyclomaticComplexMethod")
+private fun Int.toManeuverModifier(): ManeuverModifier? {
+    return when (this) {
+        Maneuver.DESTINATION_LEFT,
+        Maneuver.TURN_LEFT,
+        Maneuver.TURN_KEEP_LEFT,
+        Maneuver.MERGE_LEFT,
+        Maneuver.FORK_LEFT,
+        Maneuver.ON_RAMP_LEFT,
+        Maneuver.ON_RAMP_KEEP_LEFT,
+        Maneuver.OFF_RAMP_LEFT,
+        Maneuver.OFF_RAMP_KEEP_LEFT,
+        Maneuver.ROUNDABOUT_LEFT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_LEFT_COUNTERCLOCKWISE,
+        Maneuver.ROUNDABOUT_EXIT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_EXIT_COUNTERCLOCKWISE,
+        -> ManeuverModifier.LEFT
+        Maneuver.DESTINATION_RIGHT,
+        Maneuver.TURN_RIGHT,
+        Maneuver.TURN_KEEP_RIGHT,
+        Maneuver.MERGE_RIGHT,
+        Maneuver.FORK_RIGHT,
+        Maneuver.ON_RAMP_RIGHT,
+        Maneuver.ON_RAMP_KEEP_RIGHT,
+        Maneuver.OFF_RAMP_RIGHT,
+        Maneuver.OFF_RAMP_KEEP_RIGHT,
+        Maneuver.ROUNDABOUT_RIGHT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_RIGHT_COUNTERCLOCKWISE,
+        -> ManeuverModifier.RIGHT
+        Maneuver.TURN_SLIGHT_LEFT,
+        Maneuver.ON_RAMP_SLIGHT_LEFT,
+        Maneuver.OFF_RAMP_SLIGHT_LEFT,
+        Maneuver.ROUNDABOUT_SLIGHT_LEFT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_SLIGHT_LEFT_COUNTERCLOCKWISE,
+        -> ManeuverModifier.SLIGHT_LEFT
+        Maneuver.TURN_SLIGHT_RIGHT,
+        Maneuver.ON_RAMP_SLIGHT_RIGHT,
+        Maneuver.OFF_RAMP_SLIGHT_RIGHT,
+        Maneuver.ROUNDABOUT_SLIGHT_RIGHT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_SLIGHT_RIGHT_COUNTERCLOCKWISE,
+        -> ManeuverModifier.SLIGHT_RIGHT
+        Maneuver.TURN_SHARP_LEFT,
+        Maneuver.ON_RAMP_SHARP_LEFT,
+        Maneuver.OFF_RAMP_SHARP_LEFT,
+        Maneuver.ROUNDABOUT_SHARP_LEFT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_SHARP_LEFT_COUNTERCLOCKWISE,
+        -> ManeuverModifier.SHARP_LEFT
+        Maneuver.TURN_SHARP_RIGHT,
+        Maneuver.ON_RAMP_SHARP_RIGHT,
+        Maneuver.OFF_RAMP_SHARP_RIGHT,
+        Maneuver.ROUNDABOUT_SHARP_RIGHT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_SHARP_RIGHT_COUNTERCLOCKWISE,
+        -> ManeuverModifier.SHARP_RIGHT
+        Maneuver.STRAIGHT,
+        Maneuver.MERGE_UNSPECIFIED,
+        Maneuver.ON_RAMP_UNSPECIFIED,
+        Maneuver.OFF_RAMP_UNSPECIFIED,
+        Maneuver.ROUNDABOUT_STRAIGHT_CLOCKWISE,
+        Maneuver.ROUNDABOUT_STRAIGHT_COUNTERCLOCKWISE,
+        Maneuver.NAME_CHANGE,
+        -> ManeuverModifier.STRAIGHT
+        Maneuver.TURN_U_TURN_CLOCKWISE,
+        Maneuver.TURN_U_TURN_COUNTERCLOCKWISE,
+        Maneuver.ON_RAMP_U_TURN_CLOCKWISE,
+        Maneuver.ON_RAMP_U_TURN_COUNTERCLOCKWISE,
+        Maneuver.OFF_RAMP_U_TURN_CLOCKWISE,
+        Maneuver.OFF_RAMP_U_TURN_COUNTERCLOCKWISE,
+        Maneuver.ROUNDABOUT_U_TURN_CLOCKWISE,
+        Maneuver.ROUNDABOUT_U_TURN_COUNTERCLOCKWISE,
+        -> ManeuverModifier.UTURN
+        else -> null
+    }
+}
+
+private fun Int.toDrivingSide(): DrivingSide? {
+    return when (this) {
+        SdkDrivingSide.LEFT -> DrivingSide.LEFT
+        SdkDrivingSide.RIGHT -> DrivingSide.RIGHT
+        else -> null
+    }
+}
+
+// LaneDirection.LaneShape の Int 値を ManeuverModifier に射影する。
+// Maneuver の Int 値とは enum 値空間が異なるため、別関数として用意している。
+private fun Int.toLaneManeuverModifier(): ManeuverModifier? {
+    return when (this) {
+        LaneDirection.LaneShape.STRAIGHT -> ManeuverModifier.STRAIGHT
+        LaneDirection.LaneShape.SLIGHT_LEFT -> ManeuverModifier.SLIGHT_LEFT
+        LaneDirection.LaneShape.SLIGHT_RIGHT -> ManeuverModifier.SLIGHT_RIGHT
+        LaneDirection.LaneShape.NORMAL_LEFT -> ManeuverModifier.LEFT
+        LaneDirection.LaneShape.NORMAL_RIGHT -> ManeuverModifier.RIGHT
+        LaneDirection.LaneShape.SHARP_LEFT -> ManeuverModifier.SHARP_LEFT
+        LaneDirection.LaneShape.SHARP_RIGHT -> ManeuverModifier.SHARP_RIGHT
+        LaneDirection.LaneShape.U_TURN_LEFT,
+        LaneDirection.LaneShape.U_TURN_RIGHT,
+        -> ManeuverModifier.UTURN
+        else -> null
     }
 }
