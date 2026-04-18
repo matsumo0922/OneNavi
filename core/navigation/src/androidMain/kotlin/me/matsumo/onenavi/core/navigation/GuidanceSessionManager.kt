@@ -70,6 +70,12 @@ class GuidanceSessionManager(
     private val _arrivalInfo = MutableStateFlow<ArrivalInfo?>(null)
     val arrivalInfo: StateFlow<ArrivalInfo?> = _arrivalInfo.asStateFlow()
 
+    /**
+     * Navigation SDK が現セッション中に自動再ルーティングしたかを示す。UI 側はこの値を見て、
+     * Routes API 由来の step 表示（Callout 等）が信頼できるかを判断する。
+     */
+    val hasReroutedSinceStart: StateFlow<Boolean> = navigationSdkManager.hasReroutedSinceStart
+
     private val _guidanceEvents = MutableSharedFlow<GuidanceEvent>(extraBufferCapacity = 32)
     val guidanceEvents: SharedFlow<GuidanceEvent> = _guidanceEvents.asSharedFlow()
 

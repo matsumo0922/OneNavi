@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
@@ -87,22 +89,68 @@ internal fun HomeMapScreenContent(
     val guidanceUiState by viewModel.guidanceSessionManager.guidanceUiState.collectAsStateWithLifecycle()
     val activeRoutes by viewModel.routeManager.routes.collectAsStateWithLifecycle()
     val activeGoogleRoute = activeRoutes.firstOrNull()
+    val hasReroutedSinceStart by viewModel.guidanceSessionManager.hasReroutedSinceStart
+        .collectAsStateWithLifecycle()
     val distanceRemainingMeters = guidanceUiState.tripProgress.distanceRemainingMeters
+    val distanceToCurrentStepMeters = guidanceUiState.currentManeuver?.distanceMeters
     val currentManeuverRoadName = guidanceUiState.currentManeuver?.simpleRoadName
     val nextManeuverRoadName = guidanceUiState.nextManeuver?.simpleRoadName
 
     val upcomingNavigationCallouts = remember(
         activeGoogleRoute,
         distanceRemainingMeters,
+        distanceToCurrentStepMeters,
         currentManeuverRoadName,
         nextManeuverRoadName,
+        hasReroutedSinceStart,
     ) {
-        buildUpcomingNavigationCallouts(
-            activeRoute = activeGoogleRoute,
-            distanceRemainingMeters = distanceRemainingMeters,
-            upcomingRoadNames = listOf(currentManeuverRoadName, nextManeuverRoadName),
-        )
+        // SDK が自動再ルーティングすると Routes API 由来の step と実走ルートが乖離するので、
+        // Callout は抑制して誤った案内地点を表示しないようにする。
+        if (hasReroutedSinceStart) {
+            persistentListOf()
+        } else {
+            buildUpcomingNavigationCallouts(
+                activeRoute = activeGoogleRoute,
+                distanceRemainingMeters = distanceRemainingMeters,
+                distanceToCurrentStepMeters = distanceToCurrentStepMeters,
+                upcomingRoadNames = listOf(currentManeuverRoadName, nextManeuverRoadName),
+            )
+        }
     }
+
+    // ナビゲーション中は Navigation SDK が実際に走っているルートで青線を描きたいので、
+    // `routeResults` の geometry / congestion を SDK が追従更新している `activeGoogleRoute.geometry`
+    // に差し替えた擬似リストに置き換える。代替ルートはナビ中には表示しないため、単一要素のリストになる。
+    val effectiveRouteResults = remember(
+        screenState,
+        routeResults,
+        selectedRouteIndex,
+        activeGoogleRoute,
+    ) {
+        if (screenState is HomeMapScreenState.Navigating && activeGoogleRoute != null) {
+            val original = routeResults.getOrNull(selectedRouteIndex)
+                ?: routeResults.firstOrNull()
+            if (original != null) {
+                persistentListOf(
+                    original.copy(
+                        item = original.item.copy(
+                            geometry = activeGoogleRoute.geometry,
+                            // 再ルート後は元の polyline index を前提にした混雑表示は意味を持たなくなるため外す。
+                            congestionSegments = persistentListOf(),
+                        ),
+                        googleRoute = activeGoogleRoute,
+                    ),
+                ).toImmutableList()
+            } else {
+                persistentListOf()
+            }
+        } else {
+            routeResults
+        }
+    }
+    val effectiveSelectedRouteIndex =
+        if (screenState is HomeMapScreenState.Navigating && effectiveRouteResults.isNotEmpty()) 0
+        else selectedRouteIndex
 
     var trackingMode by remember { mutableStateOf<LocationTrackingMode?>(LocationTrackingMode.TiltedHeading) }
     var trackingZoom by remember { mutableFloatStateOf(DEFAULT_TRACKING_ZOOM) }
@@ -256,8 +304,8 @@ internal fun HomeMapScreenContent(
             HomeMapsMapEffectContent(
                 viewportState = viewportState,
                 screenState = screenState,
-                routeResults = routeResults,
-                selectedRouteIndex = selectedRouteIndex,
+                routeResults = effectiveRouteResults,
+                selectedRouteIndex = effectiveSelectedRouteIndex,
                 currentLocation = currentLocation,
                 currentBearing = currentBearing,
                 upcomingNavigationCallouts = upcomingNavigationCallouts,

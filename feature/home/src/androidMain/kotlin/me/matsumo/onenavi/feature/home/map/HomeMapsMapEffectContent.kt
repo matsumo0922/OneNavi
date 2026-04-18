@@ -299,7 +299,7 @@ internal fun HomeMapsMapEffectContent(
                 cameraSettleEpoch = viewportState.cameraSettleEpoch,
                 modifier = Modifier.fillMaxSize(),
             ) { index, tailDirection ->
-                val routeResult = routeResults[index]
+                val routeResult = routeResults.getOrNull(index) ?: return@CalloutLayer
                 val isPrimary = index == selectedRouteIndex
 
                 HomeMapRouteCallout(
@@ -337,7 +337,9 @@ internal fun HomeMapsMapEffectContent(
                 modifier = Modifier.fillMaxSize(),
                 isContinuousTracking = true,
             ) { index, tailDirection ->
-                val info = upcomingNavigationCallouts[index]
+                // SubcomposeLayout の測定パスとリストの再構築が 1 フレーム分ずれるケースで index が
+                // callouts の範囲外を指すことがあるため、getOrNull で防御して次フレームの再構成を待つ。
+                val info = upcomingNavigationCallouts.getOrNull(index) ?: return@CalloutLayer
                 HomeMapNavigationCallout(
                     tailDirection = tailDirection,
                     maneuverType = info.maneuverType,
