@@ -331,7 +331,7 @@ internal fun HomeMapsMapEffectContent(
 
             CalloutLayer(
                 anchors = navigationAnchors,
-                placementStrategy = CalloutPlacementStrategy.AnchorFirst,
+                placementStrategy = CalloutPlacementStrategy.AvoidOverlap,
                 isCameraMoving = viewportState.isGestureInProgress,
                 cameraSettleEpoch = viewportState.cameraSettleEpoch,
                 modifier = Modifier.fillMaxSize(),
