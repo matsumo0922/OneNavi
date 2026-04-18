@@ -90,7 +90,9 @@ class GoogleRoutesDataSource(
             travelMode = "DRIVE",
             routingPreference = "TRAFFIC_AWARE",
             computeAlternativeRoutes = computeAlternativeRoutes,
-            routeModifiers = RouteModifiers(avoidTolls = avoidTolls),
+            // Google Routes API は routeModifiers を付けると routeToken を返さない仕様があるため、
+            // 有料道路回避が必要な時だけフィールドを含める。
+            routeModifiers = if (avoidTolls) RouteModifiers(avoidTolls = true) else null,
             languageCode = "ja-JP",
             units = "METRIC",
             polylineEncoding = "ENCODED_POLYLINE",
@@ -315,7 +317,7 @@ private data class ComputeRoutesRequest(
     val travelMode: String,
     val routingPreference: String,
     val computeAlternativeRoutes: Boolean,
-    val routeModifiers: RouteModifiers,
+    val routeModifiers: RouteModifiers? = null,
     val languageCode: String,
     val units: String,
     val polylineEncoding: String,

@@ -48,6 +48,16 @@ class NavigationSdkManager(
     private val _isOffRoute = MutableStateFlow(false)
     val isOffRoute: StateFlow<Boolean> = _isOffRoute.asStateFlow()
 
+    /**
+     * 現在のナビゲーションセッション中に Navigation SDK が自動的に再ルーティングしたかを示す。
+     *
+     * true の場合、`activeRoute.steps` / `distanceMeters` は Routes API 由来の古いルート情報のままで、
+     * Navigation SDK が実際に案内しているルートとは乖離している可能性がある。UI 側はこのフラグを見て、
+     * step ベースの表示（Callout 等）を抑制する判断ができる。
+     */
+    private val _hasReroutedSinceStart = MutableStateFlow(false)
+    val hasReroutedSinceStart: StateFlow<Boolean> = _hasReroutedSinceStart.asStateFlow()
+
     private val _arrivalEvents = MutableSharedFlow<NavigationArrivalSnapshot>(extraBufferCapacity = 4)
     val arrivalEvents: SharedFlow<NavigationArrivalSnapshot> = _arrivalEvents.asSharedFlow()
 
@@ -66,6 +76,10 @@ class NavigationSdkManager(
     }
 
     private val routeChangedListener = Navigator.RouteChangedListener {
+        Napier.i(tag = TAG) {
+            "Navigator route changed. segments=${navigator?.routeSegments?.size ?: 0}, " +
+                "activeRouteId=${activeRoute?.id}"
+        }
         refreshRouteGeometry()
         if (_isOffRoute.value) {
             _isOffRoute.value = false
@@ -74,7 +88,11 @@ class NavigationSdkManager(
     }
 
     private val reroutingListener = Navigator.ReroutingListener {
+        Napier.w(tag = TAG) {
+            "Navigator started rerouting. activeRouteId=${activeRoute?.id}"
+        }
         _isOffRoute.value = true
+        _hasReroutedSinceStart.value = true
     }
 
     private val remainingListener = Navigator.RemainingTimeOrDistanceChangedListener {
@@ -127,13 +145,21 @@ class NavigationSdkManager(
             ?: error("Navigator is not ready.")
 
         activeRoute = route
+        _hasReroutedSinceStart.value = false
 
         val waypoints = buildWaypoints(route)
-        val routeStatus = buildCustomRoutesOptions(route)
-            ?.let { customRoutesOptions ->
-                navigator.setDestinations(waypoints, customRoutesOptions).awaitResult()
-            }
+        val customRoutesOptions = buildCustomRoutesOptions(route)
+        Napier.i(tag = TAG) {
+            "Starting navigation. routeId=${route.id.take(16)}..., " +
+                "hasRouteToken=${customRoutesOptions != null}, " +
+                "waypointCount=${waypoints.size}, " +
+                "distanceMeters=${route.distanceMeters}, " +
+                "stepCount=${route.steps.size}"
+        }
+        val routeStatus = customRoutesOptions
+            ?.let { options -> navigator.setDestinations(waypoints, options).awaitResult() }
             ?: navigator.setDestinations(waypoints).awaitResult()
+        Napier.i(tag = TAG) { "setDestinations result. status=$routeStatus" }
 
         check(routeStatus == Navigator.RouteStatus.OK) {
             "Failed to set destinations. status=$routeStatus"
@@ -143,6 +169,13 @@ class NavigationSdkManager(
         navigator.startGuidance()
         updateTripProgress()
         refreshRouteGeometry()
+
+        val initialSegments = navigator.routeSegments.size
+        val initialDistance = navigator.currentTimeAndDistance?.meters
+        Napier.i(tag = TAG) {
+            "Guidance started. initialSegments=$initialSegments, " +
+                "initialRemainingMeters=$initialDistance (vs requested ${route.distanceMeters.toInt()})"
+        }
     }
 
     fun stopNavigation() {
@@ -150,6 +183,7 @@ class NavigationSdkManager(
         navigator?.clearDestinations()
         _tripProgress.value = null
         _isOffRoute.value = false
+        _hasReroutedSinceStart.value = false
         activeRoute = null
         TurnByTurnUpdateBus.clear()
     }
@@ -197,7 +231,14 @@ class NavigationSdkManager(
     }
 
     private fun buildCustomRoutesOptions(route: GoogleRoute): CustomRoutesOptions? {
-        val routeToken = route.routeToken ?: return null
+        val routeToken = route.routeToken
+        if (routeToken == null) {
+            Napier.w(tag = TAG) {
+                "Route has no routeToken; Navigation SDK will compute its own route and may " +
+                    "diverge from the user-selected route. routeId=${route.id}"
+            }
+            return null
+        }
         return CustomRoutesOptions.builder()
             .setRouteToken(routeToken)
             .setTravelMode(CustomRoutesOptions.TravelMode.DRIVING)
