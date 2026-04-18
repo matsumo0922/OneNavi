@@ -1,5 +1,7 @@
 package me.matsumo.onenavi.core.navigation
 
+import android.graphics.Bitmap
+
 data class NavigationFeedSnapshot(
     val navState: Int,
     val currentStep: NavigationStepSnapshot?,
@@ -16,7 +18,10 @@ data class NavigationStepSnapshot(
     val lanes: List<NavigationLaneSnapshot>,
     val drivingSide: Int,
     val distanceFromPreviousMeters: Int?,
+    val timeFromPreviousSeconds: Int?,
     val roundaboutTurnNumber: Int?,
+    val lanesBitmap: Bitmap?,
+    val maneuverBitmap: Bitmap?,
 )
 
 data class NavigationLaneSnapshot(
