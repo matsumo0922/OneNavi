@@ -12,18 +12,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.DrivingSide
 import me.matsumo.onenavi.core.model.GoogleRoute
@@ -34,22 +29,9 @@ import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.TripProgressInfo
-import me.matsumo.onenavi.core.navigation.guidance.DistanceBucket
-import me.matsumo.onenavi.core.navigation.guidance.GuidanceEvent
-import me.matsumo.onenavi.core.navigation.guidance.GuidanceEventId
-import me.matsumo.onenavi.core.navigation.guidance.GuidancePriority
-import me.matsumo.onenavi.core.navigation.guidance.GuidanceSpeechHistory
-import me.matsumo.onenavi.core.navigation.guidance.GuideCategory
-import me.matsumo.onenavi.core.navigation.guidance.JapaneseGuidancePhraseComposer
-import me.matsumo.onenavi.core.navigation.guidance.RerouteGuideEvent
-import me.matsumo.onenavi.core.navigation.guidance.SessionGuideEvent
-import me.matsumo.onenavi.core.navigation.guidance.SessionGuideKind
-import me.matsumo.onenavi.core.navigation.guidance.TurnGuideEvent
-import me.matsumo.onenavi.core.navigation.guidance.TurnTiming
 import me.matsumo.onenavi.core.navigation.tts.AndroidTtsEngine
 import me.matsumo.onenavi.core.navigation.tts.AudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.SpeechOrchestrator
-import kotlin.time.Duration.Companion.milliseconds
 import com.google.android.libraries.mapsplatform.turnbyturn.model.DrivingSide as SdkDrivingSide
 
 class GuidanceSessionManager(
@@ -76,21 +58,14 @@ class GuidanceSessionManager(
      */
     val hasReroutedSinceStart: StateFlow<Boolean> = navigationSdkManager.hasReroutedSinceStart
 
-    private val _guidanceEvents = MutableSharedFlow<GuidanceEvent>(extraBufferCapacity = 32)
-    val guidanceEvents: SharedFlow<GuidanceEvent> = _guidanceEvents.asSharedFlow()
-
     private var guidanceJob: Job? = null
     private var arrivalJob: Job? = null
     private var speechOrchestrator: SpeechOrchestrator? = null
     private var ttsEngine: AndroidTtsEngine? = null
-    private val phraseComposer = JapaneseGuidancePhraseComposer()
-    private val speechHistory = GuidanceSpeechHistory()
 
     private var sessionStartTimeMillis: Long = 0L
     private var activeRoute: GoogleRoute? = null
     private var lastSpokenStep: NavigationStepSnapshot? = null
-    private var spokenStepCounter: Int = 0
-    private var lastOffRoute: Boolean = false
 
     fun register() {
         // no-op
@@ -110,9 +85,6 @@ class GuidanceSessionManager(
         activeRoute = route
         sessionStartTimeMillis = System.currentTimeMillis()
         lastSpokenStep = null
-        spokenStepCounter = 0
-        lastOffRoute = false
-        speechHistory.resetForNewRoute(route.id)
 
         val engine = AndroidTtsEngine(
             context = context,
@@ -123,10 +95,7 @@ class GuidanceSessionManager(
             }
         }
         ttsEngine = engine
-        speechOrchestrator = SpeechOrchestrator(
-            ttsEngine = engine,
-            speechHistory = speechHistory,
-        )
+        speechOrchestrator = SpeechOrchestrator(ttsEngine = engine)
 
         _navigationState.value = NavigationState.ActiveGuidance
         _guidanceUiState.value = GuidanceUiState.Initial.copy(isTtsAvailable = false)
@@ -153,12 +122,6 @@ class GuidanceSessionManager(
             }
         }
 
-        scope.launch {
-            val isReady = withTimeoutOrNull(TTS_READY_TIMEOUT_MS.milliseconds) { engine.isReady.first { it } } != null
-            if (isReady && activeRoute?.id == route.id) {
-                speak(sessionEvent(route.id, SessionGuideKind.START), flush = true)
-            }
-        }
         cameraManager.requestCameraFollowing(pitch3D = true)
 
         guidanceJob?.cancel()
@@ -182,7 +145,6 @@ class GuidanceSessionManager(
         guidanceJob = null
         arrivalJob?.cancel()
         arrivalJob = null
-        activeRoute?.let { speak(sessionEvent(it.id, SessionGuideKind.STOP), flush = true) }
         navigationSdkManager.stopNavigation()
         speechOrchestrator?.shutdown()
         speechOrchestrator = null
@@ -192,8 +154,6 @@ class GuidanceSessionManager(
         _guidanceUiState.value = GuidanceUiState.Initial
         _arrivalInfo.value = null
         lastSpokenStep = null
-        spokenStepCounter = 0
-        lastOffRoute = false
     }
 
     fun returnToBrowsing() {
@@ -214,7 +174,6 @@ class GuidanceSessionManager(
         val tripProgress = update.tripProgress
         val navState = navInfo?.navState
         val isOffRoute = update.isOffRouteRaw || navState == NavState.REROUTING
-        maybeSpeakReroute(routeId, isOffRoute)
 
         // NavInfo のマニューバ関連フィールドは navState == ENROUTE の時だけ有効。
         // REROUTING / STOPPED / UNKNOWN では前回値を維持し、補助フラグのみ更新する。
@@ -257,14 +216,7 @@ class GuidanceSessionManager(
 
         if (currentStep != null && currentStep != lastSpokenStep) {
             lastSpokenStep = currentStep
-            spokenStepCounter += 1
-            speak(
-                currentStep.toTurnEvent(
-                    routeId = routeId,
-                    stepIndex = spokenStepCounter,
-                    distanceMeters = currentStepDistance,
-                ),
-            )
+            speak(currentStep.instruction)
         }
     }
 
@@ -277,22 +229,6 @@ class GuidanceSessionManager(
             totalDurationSeconds = elapsedSeconds,
         )
         _navigationState.value = NavigationState.Arrival
-    }
-
-    private fun maybeSpeakReroute(
-        routeId: String,
-        isOffRoute: Boolean,
-    ) {
-        if (isOffRoute == lastOffRoute) return
-
-        lastOffRoute = isOffRoute
-        speak(
-            rerouteEvent(
-                routeId = routeId,
-                offRoute = isOffRoute,
-            ),
-            flush = isOffRoute,
-        )
     }
 
     private fun NavigationStepSnapshot.toManeuverInfo(distanceMeters: Double): ManeuverInfo {
@@ -320,82 +256,9 @@ class GuidanceSessionManager(
         )
     }.toImmutableList()
 
-    private fun NavigationStepSnapshot.toTurnEvent(
-        routeId: String,
-        stepIndex: Int,
-        distanceMeters: Double,
-    ): TurnGuideEvent {
-        val modifier = maneuver.toManeuverModifier() ?: ManeuverModifier.UNKNOWN
-        return TurnGuideEvent(
-            id = GuidanceEventId(
-                routeId = routeId,
-                category = GuideCategory.TURN,
-                legIndex = 0,
-                stepIndex = stepIndex,
-                geometryIndex = null,
-                distanceBucket = DistanceBucket.fromMeters(distanceMeters),
-                variant = instruction,
-            ),
-            priority = GuidancePriority.NORMAL,
-            distanceMeters = distanceMeters,
-            direction = modifier,
-            timing = when {
-                distanceMeters <= 120.0 -> TurnTiming.SOON
-                distanceMeters <= 500.0 -> TurnTiming.MIDDLE
-                else -> TurnTiming.FAR
-            },
-            roadName = roadName?.takeIf { it.isNotBlank() },
-        )
-    }
-
-    private fun sessionEvent(
-        routeId: String,
-        kind: SessionGuideKind,
-    ): SessionGuideEvent {
-        return SessionGuideEvent(
-            id = GuidanceEventId(
-                routeId = routeId,
-                category = GuideCategory.SESSION,
-                legIndex = 0,
-                stepIndex = 0,
-                geometryIndex = null,
-                distanceBucket = null,
-                variant = kind.name,
-            ),
-            priority = GuidancePriority.HIGH,
-            kind = kind,
-        )
-    }
-
-    private fun rerouteEvent(
-        routeId: String,
-        offRoute: Boolean,
-    ): RerouteGuideEvent {
-        return RerouteGuideEvent(
-            id = GuidanceEventId(
-                routeId = routeId,
-                category = GuideCategory.REROUTE,
-                legIndex = 0,
-                stepIndex = 0,
-                geometryIndex = null,
-                distanceBucket = null,
-                variant = if (offRoute) "off_route" else "rerouted",
-            ),
-            priority = GuidancePriority.HIGH,
-            offRoute = offRoute,
-        )
-    }
-
-    private fun speak(
-        event: GuidanceEvent,
-        flush: Boolean = false,
-    ) {
-        if (flush) {
-            speechOrchestrator?.setMuted(false, stopCurrent = true)
-        }
-        _guidanceEvents.tryEmit(event)
-        val text = phraseComposer.compose(event)
-        val spoken = speechOrchestrator?.enqueue(event, text) ?: false
+    private fun speak(text: String) {
+        if (text.isBlank()) return
+        val spoken = speechOrchestrator?.enqueue(text = text) ?: false
         if (!spoken) {
             Napier.d(tag = TAG) { "TTS skipped: $text" }
         }
@@ -416,7 +279,6 @@ class GuidanceSessionManager(
 
     companion object {
         private const val TAG = "GuidanceSessionManager"
-        private const val TTS_READY_TIMEOUT_MS = 3_000L
     }
 }
 
