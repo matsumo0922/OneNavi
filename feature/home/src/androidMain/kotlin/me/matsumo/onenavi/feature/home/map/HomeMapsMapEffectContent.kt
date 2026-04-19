@@ -34,11 +34,11 @@ import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.FollowMyLocationOptions
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.MapColorScheme
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
+import com.google.android.libraries.navigation.ForceNightMode
 import com.google.android.libraries.navigation.NavigationCalloutDisplayMode
 import com.google.android.libraries.navigation.NavigationView
 import io.github.aakira.napier.Napier
@@ -134,9 +134,14 @@ internal fun HomeMapsMapEffectContent(
         }
     }
 
-    LaunchedEffect(googleMap, isDarkMap) {
-        val map = googleMap ?: return@LaunchedEffect
-        map.setMapColorScheme(if (isDarkMap) MapColorScheme.DARK else MapColorScheme.LIGHT)
+    // ナビ中は Navigation SDK の自動切替（夕方以降にダーク）に任せ、
+    // それ以外ではアプリのテーマ設定に追従させる。
+    LaunchedEffect(mapView, screenState, isDarkMap) {
+        val forceNightMode = when (screenState) {
+            is HomeMapScreenState.Navigating -> ForceNightMode.AUTO
+            else -> if (isDarkMap) ForceNightMode.FORCE_NIGHT else ForceNightMode.FORCE_DAY
+        }
+        mapView.setForceNightMode(forceNightMode)
     }
 
     // route preview は自前 Callout を使うため SDK 側は抑制し、ナビ中は SDK 標準の route callout を有効化する。
