@@ -3,11 +3,8 @@ package me.matsumo.onenavi.feature.home.map
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,14 +16,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -55,8 +50,6 @@ import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.common.formatYen
 import me.matsumo.onenavi.core.model.CongestionSegment
 import me.matsumo.onenavi.core.model.CongestionSeverity
-import me.matsumo.onenavi.core.model.ManeuverModifier
-import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.CameraManager
@@ -71,7 +64,6 @@ import me.matsumo.onenavi.core.ui.callout.CalloutAnchor
 import me.matsumo.onenavi.core.ui.callout.CalloutLayer
 import me.matsumo.onenavi.core.ui.callout.CalloutPlacementStrategy
 import me.matsumo.onenavi.core.ui.callout.CalloutTailDirection
-import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 import org.jetbrains.compose.resources.stringResource
 
@@ -108,9 +100,6 @@ internal fun HomeMapsMapEffectContent(
     screenState: HomeMapScreenState,
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
-    currentLocation: RoutePoint?,
-    currentBearing: Float,
-    upcomingNavigationCallouts: ImmutableList<NavigationCalloutInfo>,
     cameraManager: CameraManager,
     cameraFollowSpec: CameraFollowSpec?,
     isDarkMap: Boolean,
@@ -148,6 +137,15 @@ internal fun HomeMapsMapEffectContent(
     LaunchedEffect(googleMap, isDarkMap) {
         val map = googleMap ?: return@LaunchedEffect
         map.setMapColorScheme(if (isDarkMap) MapColorScheme.DARK else MapColorScheme.LIGHT)
+    }
+
+    // route preview は自前 Callout を使うため SDK 側は抑制し、ナビ中は SDK 標準の route callout を有効化する。
+    LaunchedEffect(mapView, screenState) {
+        val mode = when (screenState) {
+            is HomeMapScreenState.Navigating -> NavigationCalloutDisplayMode.SHOW_ALL
+            else -> NavigationCalloutDisplayMode.SHOW_NONE
+        }
+        mapView.setCalloutInfoDisplayModeOverride(mode)
     }
 
     LaunchedEffect(googleMap, mapPadding, hasLocationPermission) {
@@ -309,40 +307,6 @@ internal fun HomeMapsMapEffectContent(
                 )
             }
         }
-
-        if (screenState is HomeMapScreenState.Navigating && upcomingNavigationCallouts.isNotEmpty()) {
-            val navigationAnchors = remember(
-                upcomingNavigationCallouts,
-                googleMap,
-                viewportState.cameraState,
-            ) {
-                val map = googleMap
-                if (map == null) {
-                    persistentListOf()
-                } else {
-                    buildNavigationCalloutAnchors(map, upcomingNavigationCallouts)
-                }
-            }
-
-            CalloutLayer(
-                anchors = navigationAnchors,
-                placementStrategy = CalloutPlacementStrategy.AvoidOverlap,
-                isCameraMoving = viewportState.isGestureInProgress,
-                cameraSettleEpoch = viewportState.cameraSettleEpoch,
-                modifier = Modifier.fillMaxSize(),
-                isContinuousTracking = true,
-            ) { index, tailDirection ->
-                // SubcomposeLayout の測定パスとリストの再構築が 1 フレーム分ずれるケースで index が
-                // callouts の範囲外を指すことがあるため、getOrNull で防御して次フレームの再構成を待つ。
-                val info = upcomingNavigationCallouts.getOrNull(index) ?: return@CalloutLayer
-                HomeMapNavigationCallout(
-                    tailDirection = tailDirection,
-                    maneuverType = info.maneuverType,
-                    maneuverModifier = info.maneuverModifier,
-                    intersectionName = info.intersectionName,
-                )
-            }
-        }
     }
 }
 
@@ -377,57 +341,6 @@ private fun buildRouteCalloutAnchors(
             candidates = candidates,
         )
     }.toImmutableList()
-}
-
-private fun buildNavigationCalloutAnchors(
-    googleMap: GoogleMap,
-    callouts: ImmutableList<NavigationCalloutInfo>,
-): ImmutableList<CalloutAnchor> {
-    return callouts.mapIndexed { index, info ->
-        val screen = googleMap.projection.toScreenLocation(
-            LatLng(info.maneuverLocation.latitude, info.maneuverLocation.longitude),
-        )
-        CalloutAnchor.Fixed(
-            id = "nav-$index",
-            primaryPoint = Offset(screen.x.toFloat(), screen.y.toFloat()),
-        )
-    }.toImmutableList()
-}
-
-@Composable
-private fun HomeMapNavigationCallout(
-    tailDirection: CalloutTailDirection,
-    maneuverType: ManeuverType,
-    maneuverModifier: ManeuverModifier?,
-    intersectionName: String?,
-    modifier: Modifier = Modifier,
-) {
-    Callout(
-        tailDirection = tailDirection,
-        modifier = modifier,
-        backgroundColor = Color(ROUTE_CALLOUT_PRIMARY_BG),
-        contentColor = Color.White,
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ManeuverIcon(
-                modifier = Modifier.size(20.dp),
-                type = maneuverType,
-                maneuverModifier = maneuverModifier,
-                contentDescription = null,
-                tint = Color.White,
-            )
-            intersectionName?.takeIf { it.isNotBlank() }?.let { text ->
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-    }
 }
 
 @Composable
@@ -509,6 +422,7 @@ private fun rememberMapViewWithLifecycle(): NavigationView {
             // setNavigationUiEnabled(false) だけでは followMyLocation によるナビモード突入時に
             // 個別 UI 部品が再表示されてしまうため、各 setter も明示的に false にする。
             // ルート上の信号機・一時停止標識のレンダリングは NavigationView のマップ機能として維持される。
+            // route callout（所要時間/距離）は画面ごとに動的に制御するためここでは設定しない。
             setNavigationUiEnabled(false)
             setHeaderEnabled(false)
             setEtaCardEnabled(false)
@@ -518,7 +432,6 @@ private fun rememberMapViewWithLifecycle(): NavigationView {
             setSpeedometerEnabled(false)
             setTrafficIncidentCardsEnabled(false)
             setTrafficPromptsEnabled(false)
-            setCalloutInfoDisplayModeOverride(NavigationCalloutDisplayMode.SHOW_NONE)
         }
     }
 }
@@ -698,7 +611,6 @@ private class HomeMapOverlayObjects {
             }
         }
     }
-
 }
 
 /**
