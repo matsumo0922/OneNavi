@@ -3,7 +3,6 @@ package me.matsumo.onenavi.core.navigation.tts
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
-import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 
@@ -21,18 +20,14 @@ class PcmAudioPlayer {
      * @param audio Google Cloud TTS から返却されたバイト列 (WAV ヘッダ + PCM)
      */
     suspend fun playAndAwait(audio: ByteArray) {
-        if (audio.size <= WAV_HEADER_BYTES) {
-            Napier.w(tag = TAG) { "Audio too small to contain PCM payload: size=${audio.size}" }
-            return
+        require(audio.size > WAV_HEADER_BYTES) {
+            "Audio too small to contain PCM payload: size=${audio.size}"
         }
         val pcm = audio.copyOfRange(WAV_HEADER_BYTES, audio.size)
         val track = buildAudioTrack(bufferSize = pcm.size)
         try {
             val written = track.write(pcm, 0, pcm.size)
-            if (written <= 0) {
-                Napier.w(tag = TAG) { "AudioTrack.write returned $written" }
-                return
-            }
+            check(written > 0) { "AudioTrack.write returned $written" }
             val totalFrames = written / BYTES_PER_FRAME
             val completion = CompletableDeferred<Unit>()
             track.setPlaybackPositionUpdateListener(
@@ -80,7 +75,6 @@ class PcmAudioPlayer {
     }
 
     private companion object {
-        private const val TAG = "PcmAudioPlayer"
         private const val WAV_HEADER_BYTES = 44
         private const val SAMPLE_RATE_HZ = 24_000
         private const val BYTES_PER_FRAME = 2
