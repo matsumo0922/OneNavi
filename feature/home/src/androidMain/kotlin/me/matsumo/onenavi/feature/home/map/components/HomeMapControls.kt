@@ -38,16 +38,13 @@ import me.matsumo.onenavi.feature.home.map.HomeMapViewportState
 
 /**
  * 地図の追従モードを表す列挙型。
- * コンパス押下で [TiltedHeading] → [TopDownHeading] → [TopDownNorth] の順にループする。
+ * コンパス押下で [TiltedHeading] と [TopDownNorth] を交互に切り替える。
  */
 enum class LocationTrackingMode {
-    /** 斜め上視点 + 進行方向 */
+    /** 斜め上視点 + 進行方向（3D） */
     TiltedHeading,
 
-    /** 真上視点 + 進行方向 */
-    TopDownHeading,
-
-    /** 真上視点 + 北向き */
+    /** 真上視点 + 北向き（ノースアップ） */
     TopDownNorth,
 }
 
@@ -74,11 +71,15 @@ internal fun HomeMapControls(
 
     fun setZoom(zoom: Double) {
         val nextZoom = (viewportState.cameraState.zoom + zoom.toFloat()).coerceIn(2f, 21f)
-        coroutineScope.launch {
-            viewportState.zoomBy(zoom.toFloat())
-        }
+        // 追従中は SDK の followMyLocation がカメラを制御しているため、
+        // zoomBy（animateCamera）は上書きされて見えない。trackingZoom を更新して
+        // FollowMyLocationOptions 経由で SDK に反映させる。
         if (trackingMode != null) {
             onTrackingZoomChanged(nextZoom)
+        } else {
+            coroutineScope.launch {
+                viewportState.zoomBy(zoom.toFloat())
+            }
         }
     }
 
@@ -93,17 +94,11 @@ internal fun HomeMapControls(
             onClicked = {
                 onTrackingZoomChanged(viewportState.cameraState.zoom)
                 val nextMode = when (trackingMode) {
-                    LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
-                    LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
+                    LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownNorth
                     LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
-                    null -> {
-                        val next = when (lastTrackingMode) {
-                            LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownHeading
-                            LocationTrackingMode.TopDownHeading -> LocationTrackingMode.TopDownNorth
-                            LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
-                        }
-                        lastTrackingMode = next
-                        next
+                    null -> when (lastTrackingMode) {
+                        LocationTrackingMode.TiltedHeading -> LocationTrackingMode.TopDownNorth
+                        LocationTrackingMode.TopDownNorth -> LocationTrackingMode.TiltedHeading
                     }
                 }
 
