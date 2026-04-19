@@ -41,7 +41,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
@@ -52,6 +51,7 @@ import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
+import com.google.android.libraries.navigation.NavigationView
 import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -516,11 +516,14 @@ private fun Context.createBitmap(drawableRes: Int): Bitmap {
 }
 
 @Composable
-private fun rememberMapViewWithLifecycle(): MapView {
+private fun rememberMapViewWithLifecycle(): NavigationView {
     val context = LocalContext.current
     return remember(context) {
-        MapView(context).apply {
+        NavigationView(context).apply {
             onCreate(Bundle())
+            // ナビ UI（ETA カード・ヘッダー・スピードメーター等）は自前描画なので非表示にする。
+            // ルート上の信号機・一時停止標識のレンダリングは NavigationView のマップ機能として維持される。
+            setNavigationUiEnabled(false)
         }
     }
 }
