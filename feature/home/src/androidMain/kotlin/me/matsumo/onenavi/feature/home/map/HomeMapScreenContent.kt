@@ -225,13 +225,6 @@ internal fun HomeMapScreenContent(
                         useLocationBearing = true,
                     )
 
-                trackingMode == LocationTrackingMode.TopDownHeading ->
-                    CameraFollowSpec(
-                        zoom = trackingZoom,
-                        tilt = 0f,
-                        useLocationBearing = true,
-                    )
-
                 trackingMode == LocationTrackingMode.TopDownNorth ->
                     CameraFollowSpec(
                         zoom = trackingZoom,

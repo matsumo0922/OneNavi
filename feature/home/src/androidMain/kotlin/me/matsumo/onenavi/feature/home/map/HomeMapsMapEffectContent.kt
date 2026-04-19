@@ -1,14 +1,8 @@
 package me.matsumo.onenavi.feature.home.map
 
 import android.Manifest
-import android.animation.ValueAnimator
-import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.os.Bundle
-import android.view.animation.LinearInterpolator
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -42,15 +36,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapsInitializer
-import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
-import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.FollowMyLocationOptions
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapColorScheme
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
+import com.google.android.libraries.navigation.NavigationCalloutDisplayMode
 import com.google.android.libraries.navigation.NavigationView
 import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.ImmutableList
@@ -78,7 +72,6 @@ import me.matsumo.onenavi.core.ui.callout.CalloutLayer
 import me.matsumo.onenavi.core.ui.callout.CalloutPlacementStrategy
 import me.matsumo.onenavi.core.ui.callout.CalloutTailDirection
 import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
-import me.matsumo.onenavi.feature.home.R
 import me.matsumo.onenavi.feature.home.map.state.HomeMapScreenState
 import org.jetbrains.compose.resources.stringResource
 
@@ -134,9 +127,6 @@ internal fun HomeMapsMapEffectContent(
         ) == PackageManager.PERMISSION_GRANTED
     }
     val mapPadding by cameraManager.mapPadding.collectAsStateWithLifecycle()
-    val vehiclePuckBitmap = remember(context) {
-        context.createBitmap(R.drawable.ic_vehicle_puck)
-    }
     val mapView = rememberMapViewWithLifecycle()
     val overlayObjects = remember { HomeMapOverlayObjects() }
     val currentOnMapLandmarkSelected = rememberUpdatedState(onMapLandmarkSelected)
@@ -146,16 +136,12 @@ internal fun HomeMapsMapEffectContent(
     val currentCameraManager = rememberUpdatedState(cameraManager)
 
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
-    var vehiclePuckIcon by remember { mutableStateOf<BitmapDescriptor?>(null) }
 
-    LaunchedEffect(context, vehiclePuckBitmap) {
+    LaunchedEffect(googleMap) {
         runCatching {
             MapsInitializer.initialize(context.applicationContext)
-            BitmapDescriptorFactory.fromBitmap(vehiclePuckBitmap)
-        }.onSuccess { icon ->
-            vehiclePuckIcon = icon
         }.onFailure { error ->
-            Napier.e(error, tag = TAG) { "Failed to create vehicle puck icon." }
+            Napier.e(error, tag = TAG) { "Failed to initialize MapsInitializer." }
         }
     }
 
@@ -164,7 +150,7 @@ internal fun HomeMapsMapEffectContent(
         map.setMapColorScheme(if (isDarkMap) MapColorScheme.DARK else MapColorScheme.LIGHT)
     }
 
-    LaunchedEffect(googleMap, mapPadding, hasLocationPermission, vehiclePuckIcon) {
+    LaunchedEffect(googleMap, mapPadding, hasLocationPermission) {
         val map = googleMap ?: return@LaunchedEffect
         map.setPadding(
             mapPadding.left,
@@ -173,7 +159,9 @@ internal fun HomeMapsMapEffectContent(
             mapPadding.bottom,
         )
         map.isBuildingsEnabled = true
-        map.isMyLocationEnabled = hasLocationPermission && vehiclePuckIcon == null
+        // 自車位置は NavigationView（followMyLocation）に委譲するため自前 puck は描画しない。
+        // MyLocation レイヤを有効にしておくことで SDK の chevron が自車として描画される。
+        map.isMyLocationEnabled = hasLocationPermission
         map.uiSettings.apply {
             isCompassEnabled = false
             isMapToolbarEnabled = false
@@ -195,16 +183,23 @@ internal fun HomeMapsMapEffectContent(
         )
     }
 
-    LaunchedEffect(googleMap, currentLocation, currentBearing, vehiclePuckIcon, hasLocationPermission, cameraFollowSpec) {
+    // カメラの自動追従は NavigationView（GoogleMap.followMyLocation）に委譲する。
+    // これにより、ナビ中は交差点自動拡大などの SDK 組み込み挙動が得られ、
+    // 自前の ValueAnimator + moveCamera が animateCamera を上書きする不具合も解消する。
+    // 追従解除の明示 API は存在しないため、現在位置を再指定する moveCamera を打って
+    // follow モードから抜ける。同一位置のため視覚上の変化は発生しない。
+    LaunchedEffect(googleMap, cameraFollowSpec) {
         val map = googleMap ?: return@LaunchedEffect
-        overlayObjects.updateVehicleMarker(
-            googleMap = map,
-            currentLocation = currentLocation,
-            currentBearing = currentBearing,
-            vehiclePuckIcon = vehiclePuckIcon,
-            hasLocationPermission = hasLocationPermission,
-            cameraFollowSpec = cameraFollowSpec,
-        )
+        if (cameraFollowSpec == null) {
+            if (map.isCameraFollowingMyLocation) {
+                map.moveCamera(CameraUpdateFactory.newCameraPosition(map.cameraPosition))
+            }
+        } else {
+            val options = FollowMyLocationOptions.builder()
+                .setZoomLevel(cameraFollowSpec.zoom)
+                .build()
+            map.followMyLocation(cameraFollowSpec.toCameraPerspective(), options)
+        }
     }
 
     DisposableEffect(lifecycleOwner, mapView) {
@@ -504,26 +499,26 @@ private fun RouteWaypoint.toRoutePoint(): RoutePoint {
     }
 }
 
-private fun Context.createBitmap(drawableRes: Int): Bitmap {
-    val drawable = checkNotNull(AppCompatResources.getDrawable(this, drawableRes))
-    val width = drawable.intrinsicWidth.coerceAtLeast(1)
-    val height = drawable.intrinsicHeight.coerceAtLeast(1)
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    drawable.setBounds(0, 0, canvas.width, canvas.height)
-    drawable.draw(canvas)
-    return bitmap
-}
-
 @Composable
 private fun rememberMapViewWithLifecycle(): NavigationView {
     val context = LocalContext.current
     return remember(context) {
         NavigationView(context).apply {
             onCreate(Bundle())
-            // ナビ UI（ETA カード・ヘッダー・スピードメーター等）は自前描画なので非表示にする。
+            // ナビ UI（ETA カード・ヘッダー・スピードメーター等）は自前描画のため全て非表示にする。
+            // setNavigationUiEnabled(false) だけでは followMyLocation によるナビモード突入時に
+            // 個別 UI 部品が再表示されてしまうため、各 setter も明示的に false にする。
             // ルート上の信号機・一時停止標識のレンダリングは NavigationView のマップ機能として維持される。
             setNavigationUiEnabled(false)
+            setHeaderEnabled(false)
+            setEtaCardEnabled(false)
+            setTripProgressBarEnabled(false)
+            setRecenterButtonEnabled(false)
+            setSpeedLimitIconEnabled(false)
+            setSpeedometerEnabled(false)
+            setTrafficIncidentCardsEnabled(false)
+            setTrafficPromptsEnabled(false)
+            setCalloutInfoDisplayModeOverride(NavigationCalloutDisplayMode.SHOW_NONE)
         }
     }
 }
@@ -532,10 +527,6 @@ private class HomeMapOverlayObjects {
 
     private val routePolylines = mutableListOf<Polyline>()
     private val staticMarkers = mutableListOf<Marker>()
-    private var vehicleMarker: Marker? = null
-    private var vehicleAnimator: ValueAnimator? = null
-    private var lastAppliedPosition: LatLng? = null
-    private var lastAppliedBearing: Float = 0f
 
     fun replaceRoutePolylines(
         googleMap: GoogleMap,
@@ -708,95 +699,16 @@ private class HomeMapOverlayObjects {
         }
     }
 
-    fun updateVehicleMarker(
-        googleMap: GoogleMap,
-        currentLocation: RoutePoint?,
-        currentBearing: Float,
-        vehiclePuckIcon: BitmapDescriptor?,
-        hasLocationPermission: Boolean,
-        cameraFollowSpec: CameraFollowSpec?,
-    ) {
-        googleMap.isMyLocationEnabled = hasLocationPermission && vehiclePuckIcon == null
-
-        if (vehiclePuckIcon == null || currentLocation == null) {
-            vehicleAnimator?.cancel()
-            vehicleAnimator = null
-            vehicleMarker?.remove()
-            vehicleMarker = null
-            lastAppliedPosition = null
-            return
-        }
-
-        val targetPosition = currentLocation.toLatLng()
-        val marker = vehicleMarker
-        if (marker == null) {
-            vehicleMarker = googleMap.addMarker(
-                MarkerOptions()
-                    .position(targetPosition)
-                    .icon(vehiclePuckIcon)
-                    .flat(true)
-                    .anchor(0.5f, 0.5f)
-                    .rotation(currentBearing)
-                    .zIndex(4f),
-            )
-            lastAppliedPosition = targetPosition
-            lastAppliedBearing = currentBearing
-            return
-        }
-
-        marker.setIcon(vehiclePuckIcon)
-
-        val fromPosition = lastAppliedPosition ?: targetPosition
-        val fromBearing = lastAppliedBearing
-        val bearingDelta = shortestBearingDelta(fromBearing, currentBearing)
-        val toBearing = fromBearing + bearingDelta
-
-        vehicleAnimator?.cancel()
-        vehicleAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = VEHICLE_ANIMATION_DURATION_MS
-            interpolator = LinearInterpolator()
-            addUpdateListener { animator ->
-                val fraction = animator.animatedValue as Float
-                val latitude = fromPosition.latitude +
-                    (targetPosition.latitude - fromPosition.latitude) * fraction
-                val longitude = fromPosition.longitude +
-                    (targetPosition.longitude - fromPosition.longitude) * fraction
-                val bearing = fromBearing + (toBearing - fromBearing) * fraction
-                val latLng = LatLng(latitude, longitude)
-
-                marker.position = latLng
-                marker.rotation = bearing
-
-                cameraFollowSpec?.let { spec ->
-                    googleMap.moveCamera(
-                        CameraUpdateFactory.newCameraPosition(
-                            CameraPosition.Builder()
-                                .target(latLng)
-                                .zoom(spec.zoom)
-                                .tilt(spec.tilt)
-                                .bearing(if (spec.useLocationBearing) bearing else 0f)
-                                .build(),
-                        ),
-                    )
-                }
-            }
-            start()
-        }
-
-        lastAppliedPosition = targetPosition
-        lastAppliedBearing = currentBearing
-    }
-
-    companion object {
-        private const val VEHICLE_ANIMATION_DURATION_MS = 1000L
-    }
 }
 
 /**
- * カメラ追従の指定仕様。null ならカメラ追従せず、マーカー補間のみを行う。
+ * カメラ追従の指定仕様。null のときは追従を解除する。
  *
- * @param zoom カメラのズーム
- * @param tilt カメラのチルト
+ * zoom / tilt / useLocationBearing の組み合わせから
+ * [GoogleMap.CameraPerspective] を決定し、NavigationView の `followMyLocation` に委譲する。
+ *
+ * @param zoom カメラのズーム（FollowMyLocationOptions.setZoomLevel で SDK に渡す）
+ * @param tilt カメラのチルト。0f の場合は真上視点扱い
  * @param useLocationBearing true の場合は自車の進行方向、false の場合は常に北を向ける
  */
 @Immutable
@@ -806,6 +718,10 @@ internal data class CameraFollowSpec(
     val useLocationBearing: Boolean,
 )
 
-private fun shortestBearingDelta(from: Float, to: Float): Float {
-    return ((to - from + 540f) % 360f) - 180f
+private fun CameraFollowSpec.toCameraPerspective(): Int {
+    return when {
+        tilt > 0f && useLocationBearing -> GoogleMap.CameraPerspective.TILTED
+        useLocationBearing -> GoogleMap.CameraPerspective.TOP_DOWN_HEADING_UP
+        else -> GoogleMap.CameraPerspective.TOP_DOWN_NORTH_UP
+    }
 }
