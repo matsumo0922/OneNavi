@@ -5,6 +5,7 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -48,6 +49,15 @@ internal class GoogleCloudTtsEngine(
     override val isReady: StateFlow<Boolean> = readyState.asStateFlow()
     override var onUtteranceCompleted: ((String) -> Unit)? = null
 
+    /**
+     * 非同期合成・再生失敗時に、同じ発話内容を別経路 (Android TTS など) で話し直すためのフック。
+     *
+     * `speak()` はキュー投入時点で true を返すため、後続の worker で発生した HTTP / 再生失敗を
+     * 上流の `FallbackTtsEngine` で拾えない。このコールバックがセットされている場合は
+     * 失敗発話を完了扱いにせず、呼び出し側に再分配を委ねる。
+     */
+    var onSynthesisFailed: ((text: String, utteranceId: String) -> Unit)? = null
+
     init {
         if (apiKey.isBlank()) {
             Napier.i(tag = TAG) { "GoogleCloudTtsEngine disabled: apiKey is blank" }
@@ -83,28 +93,35 @@ internal class GoogleCloudTtsEngine(
         readyState.value = false
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun worker() {
         for (utterance in requestChannel) {
             val job = scope.launch {
                 audioFocusManager.request()
                 try {
-                    runCatching {
+                    try {
                         val cached = audioCache.get(utterance.text)
                         val audio = cached ?: api.synthesize(utterance.text).also { result ->
                             audioCache.put(utterance.text, result)
                         }
                         audioPlayer.playAndAwait(audio)
-                    }.onSuccess {
                         resetFailureCount()
-                    }.onFailure { error ->
-                        if (error is CancellationException) throw error
+                        onUtteranceCompleted?.invoke(utterance.id)
+                    } catch (cancel: CancellationException) {
+                        throw cancel
+                    } catch (error: Throwable) {
                         handleFailure(error)
+                        val handler = onSynthesisFailed
+                        if (handler != null) {
+                            handler(utterance.text, utterance.id)
+                        } else {
+                            onUtteranceCompleted?.invoke(utterance.id)
+                        }
                     }
                 } finally {
                     if (requestChannel.isEmpty) {
                         audioFocusManager.abandon()
                     }
-                    onUtteranceCompleted?.invoke(utterance.id)
                 }
             }
             activeJob = job

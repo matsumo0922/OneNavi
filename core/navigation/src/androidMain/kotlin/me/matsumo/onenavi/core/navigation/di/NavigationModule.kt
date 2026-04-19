@@ -18,6 +18,7 @@ import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsApi
 import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsConfig
 import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsEngine
 import me.matsumo.onenavi.core.navigation.tts.PcmAudioPlayer
+import me.matsumo.onenavi.core.navigation.tts.SpeechQueueMode
 import me.matsumo.onenavi.core.navigation.tts.TtsAudioCache
 import me.matsumo.onenavi.core.navigation.tts.TtsEngine
 import me.matsumo.onenavi.core.navigation.tts.fetchSigningCertSha1
@@ -84,5 +85,12 @@ private fun createTtsEngine(
         audioCache = TtsAudioCache(),
         apiKey = apiKey,
     )
+    googleEngine.onSynthesisFailed = { text, utteranceId ->
+        androidEngine.speak(
+            text = text,
+            utteranceId = utteranceId,
+            queueMode = SpeechQueueMode.ADD,
+        )
+    }
     return FallbackTtsEngine(primary = googleEngine, fallback = androidEngine)
 }
