@@ -81,42 +81,12 @@ internal fun HomeMapScreenContent(
     val waypoints by viewModel.waypoints.collectAsStateWithLifecycle()
     val waypointEditResult by viewModel.waypointEditResult.collectAsStateWithLifecycle()
     val currentLocation by viewModel.cameraManager.currentLocation.collectAsStateWithLifecycle()
-    val currentBearing by viewModel.cameraManager.currentBearing.collectAsStateWithLifecycle()
     val navigationCameraState by viewModel.cameraManager.cameraState.collectAsStateWithLifecycle()
     val mapPadding by viewModel.cameraManager.mapPadding.collectAsStateWithLifecycle()
     val isNavigationFollowing3D by viewModel.cameraManager.isFollowing3D.collectAsStateWithLifecycle()
     val arrivalInfo by viewModel.guidanceSessionManager.arrivalInfo.collectAsStateWithLifecycle()
-    val guidanceUiState by viewModel.guidanceSessionManager.guidanceUiState.collectAsStateWithLifecycle()
     val activeRoutes by viewModel.routeManager.routes.collectAsStateWithLifecycle()
     val activeGoogleRoute = activeRoutes.firstOrNull()
-    val hasReroutedSinceStart by viewModel.guidanceSessionManager.hasReroutedSinceStart
-        .collectAsStateWithLifecycle()
-    val distanceRemainingMeters = guidanceUiState.tripProgress.distanceRemainingMeters
-    val distanceToCurrentStepMeters = guidanceUiState.currentManeuver?.distanceMeters
-    val currentManeuverRoadName = guidanceUiState.currentManeuver?.simpleRoadName
-    val nextManeuverRoadName = guidanceUiState.nextManeuver?.simpleRoadName
-
-    val upcomingNavigationCallouts = remember(
-        activeGoogleRoute,
-        distanceRemainingMeters,
-        distanceToCurrentStepMeters,
-        currentManeuverRoadName,
-        nextManeuverRoadName,
-        hasReroutedSinceStart,
-    ) {
-        // SDK が自動再ルーティングすると Routes API 由来の step と実走ルートが乖離するので、
-        // Callout は抑制して誤った案内地点を表示しないようにする。
-        if (hasReroutedSinceStart) {
-            persistentListOf()
-        } else {
-            buildUpcomingNavigationCallouts(
-                activeRoute = activeGoogleRoute,
-                distanceRemainingMeters = distanceRemainingMeters,
-                distanceToCurrentStepMeters = distanceToCurrentStepMeters,
-                upcomingRoadNames = listOf(currentManeuverRoadName, nextManeuverRoadName),
-            )
-        }
-    }
 
     // ナビゲーション中は Navigation SDK が実際に走っているルートで青線を描きたいので、
     // `routeResults` の geometry / congestion を SDK が追従更新している `activeGoogleRoute.geometry`
@@ -302,9 +272,6 @@ internal fun HomeMapScreenContent(
                 screenState = screenState,
                 routeResults = effectiveRouteResults,
                 selectedRouteIndex = effectiveSelectedRouteIndex,
-                currentLocation = currentLocation,
-                currentBearing = currentBearing,
-                upcomingNavigationCallouts = upcomingNavigationCallouts,
                 cameraManager = viewModel.cameraManager,
                 cameraFollowSpec = cameraFollowSpec,
                 isDarkMap = isDarkMap,
