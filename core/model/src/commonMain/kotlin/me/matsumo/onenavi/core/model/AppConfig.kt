@@ -9,6 +9,7 @@ data class AppConfig(
     val versionCode: Int,
     val developerPin: String,
     val googleApiKey: String,
+    val googleCloudTtsApiKey: String,
     val adMobAppId: String,
     val adMobInterstitialAdUnitId: String,
     val adMobBannerAdUnitId: String,
