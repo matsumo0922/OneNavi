@@ -1,6 +1,5 @@
 package me.matsumo.onenavi.core.navigation
 
-import android.content.Context
 import androidx.compose.ui.graphics.asImageBitmap
 import com.google.android.libraries.mapsplatform.turnbyturn.model.LaneDirection
 import com.google.android.libraries.mapsplatform.turnbyturn.model.Maneuver
@@ -28,16 +27,15 @@ import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.TripProgressInfo
-import me.matsumo.onenavi.core.navigation.tts.AndroidTtsEngine
-import me.matsumo.onenavi.core.navigation.tts.AudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.SpeechOrchestrator
+import me.matsumo.onenavi.core.navigation.tts.TtsEngine
 import com.google.android.libraries.mapsplatform.turnbyturn.model.DrivingSide as SdkDrivingSide
 
 class GuidanceSessionManager(
-    private val context: Context,
     private val cameraManager: CameraManager,
     private val routeManager: RouteManager,
     private val navigationSdkManager: NavigationSdkManager,
+    private val ttsEngineFactory: () -> TtsEngine,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -53,8 +51,9 @@ class GuidanceSessionManager(
 
     private var guidanceJob: Job? = null
     private var arrivalJob: Job? = null
+    private var ttsReadyJob: Job? = null
     private var speechOrchestrator: SpeechOrchestrator? = null
-    private var ttsEngine: AndroidTtsEngine? = null
+    private var ttsEngine: TtsEngine? = null
 
     private var sessionStartTimeMillis: Long = 0L
     private var activeRoute: GoogleRoute? = null
@@ -79,19 +78,19 @@ class GuidanceSessionManager(
         sessionStartTimeMillis = System.currentTimeMillis()
         lastSpokenStep = null
 
-        val engine = AndroidTtsEngine(
-            context = context,
-            audioFocusManager = AudioFocusManager(context),
-        ).also { createdEngine ->
-            createdEngine.onReadyChanged = { ready ->
-                _guidanceUiState.value = _guidanceUiState.value.copy(isTtsAvailable = ready)
-            }
-        }
+        val engine = ttsEngineFactory()
         ttsEngine = engine
         speechOrchestrator = SpeechOrchestrator(ttsEngine = engine)
 
         _navigationState.value = NavigationState.ActiveGuidance
-        _guidanceUiState.value = GuidanceUiState.Initial.copy(isTtsAvailable = false)
+        _guidanceUiState.value = GuidanceUiState.Initial.copy(isTtsAvailable = engine.isReady.value)
+
+        ttsReadyJob?.cancel()
+        ttsReadyJob = scope.launch {
+            engine.isReady.collect { ready ->
+                _guidanceUiState.value = _guidanceUiState.value.copy(isTtsAvailable = ready)
+            }
+        }
 
         scope.launch {
             navigationSdkManager.startNavigation(route)
@@ -138,6 +137,8 @@ class GuidanceSessionManager(
         guidanceJob = null
         arrivalJob?.cancel()
         arrivalJob = null
+        ttsReadyJob?.cancel()
+        ttsReadyJob = null
         navigationSdkManager.stopNavigation()
         speechOrchestrator?.shutdown()
         speechOrchestrator = null

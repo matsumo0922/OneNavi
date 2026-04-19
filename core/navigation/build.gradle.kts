@@ -20,6 +20,11 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.google.navigation)
             implementation(libs.play.services.location)
+            implementation(libs.ktor.core)
+            implementation(libs.ktor.okhttp)
+            implementation(libs.ktor.content.negotiation)
+            implementation(libs.ktor.serialization.json)
+            implementation(libs.kotlinx.serialization.json)
         }
     }
 }
