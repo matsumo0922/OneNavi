@@ -48,16 +48,6 @@ class NavigationSdkManager(
     private val _isOffRoute = MutableStateFlow(false)
     val isOffRoute: StateFlow<Boolean> = _isOffRoute.asStateFlow()
 
-    /**
-     * 現在のナビゲーションセッション中に Navigation SDK が自動的に再ルーティングしたかを示す。
-     *
-     * true の場合、`activeRoute.steps` / `distanceMeters` は Routes API 由来の古いルート情報のままで、
-     * Navigation SDK が実際に案内しているルートとは乖離している可能性がある。UI 側はこのフラグを見て、
-     * step ベースの表示（Callout 等）を抑制する判断ができる。
-     */
-    private val _hasReroutedSinceStart = MutableStateFlow(false)
-    val hasReroutedSinceStart: StateFlow<Boolean> = _hasReroutedSinceStart.asStateFlow()
-
     private val _arrivalEvents = MutableSharedFlow<NavigationArrivalSnapshot>(extraBufferCapacity = 4)
     val arrivalEvents: SharedFlow<NavigationArrivalSnapshot> = _arrivalEvents.asSharedFlow()
 
@@ -92,7 +82,6 @@ class NavigationSdkManager(
             "Navigator started rerouting. activeRouteId=${activeRoute?.id}"
         }
         _isOffRoute.value = true
-        _hasReroutedSinceStart.value = true
     }
 
     private val remainingListener = Navigator.RemainingTimeOrDistanceChangedListener {
@@ -145,7 +134,6 @@ class NavigationSdkManager(
             ?: error("Navigator is not ready.")
 
         activeRoute = route
-        _hasReroutedSinceStart.value = false
 
         val waypoints = buildWaypoints(route)
         val customRoutesOptions = buildCustomRoutesOptions(route)
@@ -183,7 +171,6 @@ class NavigationSdkManager(
         navigator?.clearDestinations()
         _tripProgress.value = null
         _isOffRoute.value = false
-        _hasReroutedSinceStart.value = false
         activeRoute = null
         TurnByTurnUpdateBus.clear()
     }

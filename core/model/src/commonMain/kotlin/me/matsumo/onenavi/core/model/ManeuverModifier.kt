@@ -30,7 +30,4 @@ enum class ManeuverModifier {
 
     /** U ターン。 */
     UTURN,
-
-    /** 修飾子は存在するが SDK が解釈できなかったケースのフォールバック。 */
-    UNKNOWN,
 }
