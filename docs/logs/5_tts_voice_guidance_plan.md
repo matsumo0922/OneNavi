@@ -1,429 +1,392 @@
-# 独自ボイスガイダンス実装計画
+# 独自ボイスガイダンス実装計画 (rev.2)
 
 - 作成日: 2026-04-20
+- 改訂日: 2026-04-20 (Codex レビュー反映 + 現状コード再調査を反映)
 - 対象モジュール: `core:navigation`, `core:model`, `core:resource`
 - 対象範囲: 日本語のみ（多言語化は対象外）
 - 参照: `docs/note/tts-required-features.md` / `docs/note/drive-supporter-tts-guide.md`
 
 ---
 
-## 1. 目的と現状整理
+## 0. 変更履歴 (rev.2 で変わったポイント)
 
-### 1.1 現状の問題
+初版 (rev.1) に対する Codex レビューと現状コード再調査の結果、以下を反映した。
 
-`GuidanceSessionManager.kt:207-210` で `currentStep.instruction`（Google Navigation SDK の `StepInfo.fullInstructionText`）をそのまま TTS に流している。結果:
+- **[HIGH]** 高速道路案内のスコープを大幅縮小。`GoogleRoutesDataSource.kt:161-188` の `RouteStepInfo` 生成は `highwayInfo=null` / `roadName=""` / `roadRef=null` で固定されており、IC・JCT・料金所・SA の識別情報が一切供給されていない。`#67`「高速入口です」・`#68`「高速出口です」・`#69`「料金所です」・`#569-570`「一般/高速切替」・`#767-768`「有料区間に入ります」などは v1 非対応とし、v2 で datasource 強化とセットで扱う。
+- **[HIGH]** `stepId = (maneuver, roadName, cumulativeDistance)` を廃止。`NavigationStepSnapshot` には index / position / 固有 ID に相当するフィールドが無く、`NavigationUpdatesService` 経由で受け取る `StepInfo` も現状スナップショットに sequence を乗せていない。`GoogleRoute.steps` との逆算も route token 不在時に SDK 側で別ルート計算されうる（`NavigationSdkManager.kt:222-226` のコメント参照）。v1 では **session-local な step transition counter** を採用する（詳細 §4.6）。
+- **[HIGH]** Phase 1/2 を統合。SDK テキスト垂れ流し発話と独自発話の併走期間を設けない。1 つの cutover で置換する。
+- **[HIGH]** `PhraseBuilder.build()` を `suspend` とし、`GuidanceEventDispatcher` を `Channel<GuidanceEvent>` + 単一コルーチンの **直列 actor** に再設計。`scope.launch { dispatch(event) }` の多重起動をやめる。
+- **[HIGH]** 距離バケットを **ユーザー指定通り `2km / 500m / 100m / 50m` に固定**。`1km` / `300m` は廃止。「`100m/50m` = 常に『まもなく、』」という固定ルールも廃止。距離フレーズとタイミング修飾をテーブルで独立に指定できるポリシー形にする。
+- **[MEDIUM]** `GuidanceEvent` は phrasing を持たない `SemanticEvent` に変更。`PhraseComposer` が別工程で segments を生成。`GuidancePlanner` は純関数に保つ。
+- **[MEDIUM]** 連続案内の距離閾値を固定値 200m から「一般道 ≤200m / 高速 ≤500m」へ。ただし v1 の時点では**「その先」連続案内を scope 外**にする（レビュー指摘の連続発話と重複抑制の整合性を次版で詰める）。
+- **[MEDIUM]** バケット下抜けの複数閾値跨ぎに備え、`crossedBuckets(previousDistance, currentDistance)` 形式で複数候補を取得し、**最遠の未発話バケットのみ**を採用（発話は常にルート上で前方に向かって進行するため、近いバケットに飛ばない）。
+- **[MEDIUM]** `#566`「音声案内を継続します」・`#567`「一定時間が経過したため中断」・`#568`「あと5分で中断」・`#690`「案内停止中」は背景タイムアウト機構が未実装のため v1 非対応（スコープ明記）。
+- **[MEDIUM]** 目的地タイプ別フレーズ差し替えは v1 非対応（`RoutePoint` に type が無く、Places API からも種別が流れてきていない）。v1 は `#51`「目的地付近です」+ `#53`「お疲れ様でした」固定。
+- **[MEDIUM]** レーン案内は v1 では **「右側 / 左側 / 中央」の 3 パターン + 常に『お進みください』固定**。「右から N 番目」「中央右側/中央左側」「お入りください」「車線減少」「専用レーン」「合流後/分岐後」は v2 へ。
+- **[LOW]** 新規 data class / sealed class に `@Immutable` を付与する方針を明記。
+- **[LOW]** TTS キャッシュヒット率を下げないため、v1 は動的文字列（IC 名・道路名など）を発話テキストに一切含めない。
 
-- SDK が返す文字列に引きずられ、ドライブサポーター相当の整った言い回し（「右手前方向です。」「左側の車線を、お進みください。」）にならない。
-- 距離段階（2km / 500m / 300m / 100m / 50m）の段階的予告が一切無い。ステップ遷移の瞬間に 1 回だけ喋るため、実用上ナビとして機能しない。
-- 「その先」連続案内、道なり案内、経由地/目的地タイプ別フレーズ、ルート外れ/リルート発話 が未実装。
+---
 
-### 1.2 本計画のスコープ
+## 1. 目的と v1 スコープ
 
-ドキュメントに挙がっている TTS 機能カテゴリのうち、**Google Navigation SDK / Google Routes API から安定して取れる情報で実現可能な範囲**のみを対象とする。
+### 1.1 現状の問題（再掲）
 
-| カテゴリ | 実装対象 | 理由 |
-|---|---|---|
-| #1 基本ターンバイターン案内 | ○ | 本計画の主眼 |
-| #2 高速道路案内（IC/JCT/SA/料金所・合流・分岐・ランプ） | ○ | `RouteStepInfo.highwayInfo` + Maneuver から抽出可能 |
-| #3 レーン案内 | ○ | `NavigationLaneSnapshot` + `isRecommended` から推定 |
-| #5 代替ルート（オフルート / リルート） | ○ | `isOffRoute` + `NavState.REROUTING` + `routeChangedListener` |
-| #15 道なり案内 | ○ | 次ガイドポイントまでの距離で判定 |
-| #16 経由地管理 | ○ | `ArrivalEvent.isFinalDestination` + `RoutePoint.type` |
-| #17 ナビセッション管理 | ○ | 既存の `NavigationState` 遷移に発話を紐づけるだけ |
-| #4 渋滞情報 | × | 渋滞データソース未整備のため |
-| #6 交通規制・事故・障害 | × | 外部 VICS 相当のデータ源なし |
-| #7 気象災害・#8 天気 | × | 気象 API 未統合 |
-| #9 速度警告・#10 踏切・#11 一時停止・#12 カーブ・#13 ゾーン30・#14 景観 | × | 静的安全 DB / 地形データ未整備 |
-| #18 ボイスコントロール | × | 音声認識は独立した別軸 |
+`GuidanceSessionManager.kt:207-210` で `currentStep.instruction`（Google Navigation SDK の `StepInfo.fullInstructionText`）をそのまま TTS に流している。結果、距離予告が無く、ドライブサポーター風の整った言い回しにもならず、連続案内・オフルート・リルート・到着系の発話も無い。
 
-**ユーザー方針で除外**: 気象災害、天気予報、速度、踏切、カーブ、ゾーン30、景観、ボイスコントロール。
+### 1.2 v1 スコープ（実装対象）
 
-### 1.3 採用するアーキテクチャ方針
+**原則**: 現状のデータ供給で**確実に**実現できるものだけを v1 に含める。曖昧なものは一切入れない。
 
-1. SDK テキストの転送をやめ、**構造化スナップショット（`NavigationFeedSnapshot`）から独自にイベントを組み立てる**。
-2. フレーズ本文は `core:resource` の `strings.xml` に集約し、`TtsPhraseId` enum がリソース ID との関連を持つ。
-3. 距離段階は離散バケット（`DistanceBucket`）で扱い、同一ステップ × 同一バケットは一度しか発話しない。
-4. 「その先」連続案内・「道なり」判定・「目的地タイプ別差し替え」など、ドライブサポーターで見られる組み立てルールはイベント→フレーズ列変換の責務に閉じ込める。
-5. 既存の `SpeechOrchestrator` / `FallbackTtsEngine` は変更しない。優先度（`GuidancePriority`）とキューモード（`FLUSH` / `ADD`）で割り込みを制御する。
+| # | ドキュメント章 | v1 対応 | 備考 |
+|---|---|---|---|
+| 1 | 基本ターンバイターン案内（8 方向、距離予告） | ✅ | 信号カウント (#754-755) は除外 |
+| 1 | 右折後 / 左折後 / 通過後 (#764-766) | ❌ v2 | ステップ遷移直後の即時発話は v2 |
+| 2 | 高速道路案内（IC / JCT / 料金所 / SA 入口） | ❌ v2 | `highwayInfo` 未供給 |
+| 2 | 分岐 (#58-60) | ⚠️ 部分 | `Maneuver.FORK_*` を「分岐です。」として発話。高速限定演出は v2 |
+| 2 | 合流 (#62-64) | ⚠️ 部分 | `Maneuver.MERGE_*` + `drivingSide` で「右/左からの合流が有ります。」 |
+| 2 | 一般/高速切替 (#569-570), 有料区間入 (#767-768) | ❌ v2 | 道路種別判定不可 |
+| 3 | レーン案内（右側 / 左側 / 中央 + お進みください） | ⚠️ 部分 | v1 は 3 パターンのみ。N 番目/お入りください等は v2 |
+| 3 | 車線減少 (#733-734), 専用レーン (#73-75) | ❌ v2 | 情報源なし |
+| 4 | 渋滞 | ❌ v2 以降 | データ源未整備 |
+| 5 | オフルート / オンルート復帰 / リルート完了 | ✅ | |
+| 5 | プロアクティブリルート（時間差案内） | ❌ v2 以降 | |
+| 6-14 | 規制・気象・速度・踏切・一時停止・カーブ・ゾーン30・景観 | ❌ ユーザー除外 | |
+| 15 | 道なり案内（しばらく / 5km 以上） | ✅ | |
+| 16 | 経由地接近 | ✅ | 「経由地付近です。」固定 |
+| 16 | 目的地タイプ別差し替え | ❌ v2 | `RoutePoint` に type 無し |
+| 17 | 開始 (#48-49), 目的地到着 (#51 + #53) | ✅ | |
+| 17 | 継続 / 中断 / 停止中 (#566-568, #690) | ❌ v2 | BG タイマー機構なし |
+| 18 | ボイスコントロール | ❌ ユーザー除外 | |
+
+**v1 で追加される発話の種類: 計 6 カテゴリ**
+
+1. セッション開始 / 終了
+2. 基本ターンバイターン（8 方向 × 距離バケット 4 段）
+3. 合流 / 分岐（方向付き or なし）
+4. レーン誘導（右側 / 左側 / 中央）
+5. 道なり（しばらく / 5km 以上）
+6. オフルート / 復帰 / リルート / 経由地到着 / 目的地到着
 
 ---
 
 ## 2. 用語と概念
 
-### 2.1 データ源の再確認
+### 2.1 データ源（現状調査に基づく確定事実）
 
-| 種別 | 取得元 | 主な用途 |
+| 種別 | 取得元 | v1 での用途 |
 |---|---|---|
-| `NavigationFeedSnapshot` | `TurnByTurnUpdateBus` ← `NavInfo` | 現在ステップ・次ステップ・残距離（現ステップまで）・レーン |
-| `NavigationTripProgressSnapshot` | `Navigator.RemainingTimeOrDistanceChangedListener` | ルート全体の残距離・残時間 |
-| `GoogleRoute.steps: ImmutableList<RouteStepInfo>` | `RouteManager.routes` | IC/JCT/料金所（`HighwayInfo`）、事前静的情報 |
+| `NavigationFeedSnapshot.currentStep / remainingSteps` | `TurnByTurnUpdateBus`（SDK の NavInfo 由来、アプリ側周期制御なし） | 現ステップ/次ステップ判定、レーン、driving side |
+| `NavigationFeedSnapshot.distanceToCurrentStepMeters` | 同上 | 距離バケット下抜け検出 |
+| `NavigationTripProgressSnapshot` | `addRemainingTimeOrDistanceChangedListener` (5s / 50m 閾値) | UI 用のみ。発話ロジックでは**使わない**（距離粒度が粗すぎる） |
 | `isOffRoute: StateFlow<Boolean>` | `NavigationSdkManager` | オフルート検出 |
-| `NavigationSdkManager.arrivalEvents: SharedFlow<NavigationArrivalSnapshot>` | `ArrivalListener` | 経由地・最終目的地到着 |
-| `NavigationState` | `GuidanceSessionManager` 内部 | セッション開始/終了遷移 |
+| `arrivalEvents: SharedFlow<NavigationArrivalSnapshot>` | `ArrivalListener` | 経由地/最終到着 |
+| `routeChangedListener` → `RouteManager.routes` 更新 | SDK | リルート検出（Flow の distinctUntilChanged で差分検知） |
 
-### 2.2 距離バケット（`DistanceBucket`）
+### 2.2 v1 で使わないデータ
 
-ドキュメント §1「基本ターンバイターン案内」で列挙されている離散距離から、**一般道と高速道路に応じて発話タイミングを切り替える**運用。
+- `GoogleRoute.steps` — `roadName=""`, `roadRef=null`, `highwayInfo=null` が現状固定であり、v1 の発話ロジックでは参照しない（将来 v2 で datasource 強化時に活用）。
+- `GoogleRoute.intermediateWaypoints` — 名前や種別情報が無いため、v1 では到着順序の数合わせにのみ使う。発話には反映しない。
+- `NavigationArrivalSnapshot.waypointTitle` — 現状は `"経由地1"` / `"目的地"` の固定文字列。発話には使わず、`isFinalDestination` のみで分岐する。
 
-| バケット | 一般道で使うか | 高速で使うか | 備考 |
-|---|---|---|---|
-| `AT_2KM` (〜2000m) | × | ○ | 高速の予告。Nav ドキュメント §2「およそ2km先、サービスエリア入口です」 |
-| `AT_1KM` (〜1000m) | × | ○ | 高速の主予告 |
-| `AT_500M` (〜500m) | ○ | ○ | 一般道の予告。ドキュメント例「およそ500m先、料金所です」 |
-| `AT_300M` (〜300m) | ○ | × | 一般道の主予告 |
-| `AT_100M` (〜100m) | ○ | ○ | 直前予告。「まもなく」タイミング修飾と組合せ |
-| `AT_50M` (〜50m) | ○ | ○ | 最終予告 |
+### 2.3 距離バケット（確定版）
 
-バケット決定ロジック:
+**ユーザー指定通り `2km / 500m / 100m / 50m` の 4 段**。道路種別による切り替えは v1 では行わない（`RoadClass` 判定基盤が未整備のため）。
 
-- 現ステップが高速道路系マニューバ（`ON_RAMP` / `OFF_RAMP` / `MERGE` / `FORK`）または現在地が `RouteStepInfo.highwayInfo != null` の区間を走行中 → 高速側。
-- それ以外 → 一般道側。
-
-各バケット閾値の `lowerBound`/`upperBound` は `DistanceBucket` enum の定数として持つ（§4.2 参照）。「距離が閾値を**下抜け**した瞬間」を発話トリガとして使う。
-
-### 2.3 タイミング修飾（`TimingModifier`）
-
-ドキュメント §1 の #76-79 に対応する文頭修飾。
-
-| enum 値 | フレーズ | 発話条件 |
+| バケット | 閾値 [m] | フレーズ |
 |---|---|---|
-| `IMMINENT` | 「まもなく、」 | 距離バケットが `AT_100M` / `AT_50M` |
-| `UPCOMING` | 「この先、」 | 距離バケットが `AT_2KM`〜`AT_300M` かつ「連続案内」でない |
-| `NEXT` | 「その先、」 | 直前の発話が連続する案内の先頭（読点止め）だった場合の後続 |
-| `FURTHER` | 「更に、」 | 直前の発話が既に `NEXT` だった場合のさらに後続 |
-| `NONE` | （無し） | 距離付きフレーズ（「およそ300m先、」）を冠に置く場合 |
+| `AT_2KM` | 2000 | 「およそ2km先、」 |
+| `AT_500M` | 500 | 「およそ500m先、」 |
+| `AT_100M` | 100 | 「まもなく、」 |
+| `AT_50M` | 50 | 「まもなく、」 |
 
-### 2.4 フレーズ列モデル
+**発話タイミングの組み立てポリシー**:
 
-ドキュメント 5章の「フレーズ組み立ての基本ルール」をそのまま採用する:
+距離バケットは「発話トリガー」と「文頭の形」を別に持つ。
 
-> 1つの `PhraseData` 内の `onlineTtsPhraseData[]` が **1つの案内文** を構成する。配列の各要素が1つのフレーズ断片で、インデックス順に連結再生される。
+| バケット | トリガー距離 | 文頭 | 例 |
+|---|---|---|---|
+| `AT_2KM` | 2000m を下抜け | 「およそ2km先、」 | 「およそ2km先、右方向です。」 |
+| `AT_500M` | 500m を下抜け | 「およそ500m先、」 | 「およそ500m先、左方向です。」 |
+| `AT_100M` | 100m を下抜け | 「まもなく、」 | 「まもなく、斜め右方向です。」 |
+| `AT_50M` | 50m を下抜け | 「まもなく、」 | 「まもなく、U ターンです。」 |
 
-本アプリでは `GuidancePhrase = List<PhraseSegment>` として扱い、発話時には `segments.joinToString(separator = "")` して `SpeechOrchestrator.enqueue()` に渡す。
+- `AT_50M` は `AT_100M` 発話後 **5 秒以内なら抑制**する（重複回避）。
+- 一般道/高速の切替は v2。v1 では上記 4 段を一律に使う。
 
-### 2.5 優先度
+### 2.4 連続案内は v1 では扱わない
 
-`GuidancePriority` を定義し、`SpeechOrchestrator` のキューモード切り替えに利用。
+「その先、分岐です」連続案内は、次ステップの距離評価と重複抑制の整合性が詰まっていないため v1 では見送り。「その先、〜」フレーズ ID (#77) は strings に登録しておくが、v1 の発話ロジックでは呼び出さない。
+
+### 2.5 フレーズ列モデル
+
+```
+GuidancePhrase = ImmutableList<PhraseSegment>
+
+PhraseSegment =
+    | Fixed(phraseId: TtsPhraseId)     // strings.xml の固定文言
+    | Distance(bucket: DistanceBucket) // 「およそ2km先、」等
+```
+
+発話時は `segments.joinToString(separator = "")` して `SpeechOrchestrator.enqueue()` に渡す。
+
+### 2.6 優先度
 
 | 優先度 | 用途 | キューモード |
 |---|---|---|
-| `CRITICAL` | ナビ開始/終了、オフルート、リルート完了 | `FLUSH`（進行中発話を中断） |
-| `HIGH` | 50m / 100m の直前案内、到着案内 | `FLUSH` |
-| `NORMAL` | 300m / 500m / 1km / 2km 予告、レーン案内 | `ADD` |
-| `LOW` | 道なり通知、道路種別切替通知 | `ADD` |
+| `CRITICAL` | セッション開始/終了、オフルート、リルート、到着 | `FLUSH` |
+| `HIGH` | 50m / 100m の直前案内 | `FLUSH` |
+| `NORMAL` | 500m / 2km 予告、レーン案内 | `ADD` |
+| `LOW` | 道なり案内 | `ADD` |
+
+`SpeechOrchestrator.enqueue(flush=true)` は既存の pending を破棄するので、`CRITICAL` が来たらそれまでの通常案内は中断される。ユーザー影響：オフルート中に 2km 予告中断はむしろ望ましい挙動。
 
 ---
 
-## 3. 発話する案内のカタログ
+## 3. 発話カタログ（v1 版）
 
-ドキュメントのフレーズ ID を引用しつつ、OneNavi で実装するフレーズの「言い回し」と組み立てパターンを確定させる。以降の `#NNN` はドライブサポーター TTS DB の ID。
+以降の `#NNN` はドライブサポーター TTS DB の ID。
 
-### 3.1 セッション制御（#17）
+### 3.1 セッション制御
 
-| 案内 | タイミング | フレーズ構成（ID） | 出力例 |
-|---|---|---|---|
-| ナビ開始 | `startSession()` 直後 | #48 + #49 | 「音声案内を開始します。実際の交通規制に従って走行してください。」 |
-| 目的地接近 | `arrivalEvents` with `isFinalDestination=true` & `RoutePoint.type` | `#51` or タイプ別（§3.2） | 「目的地付近です。」 |
-| ナビ終了 | 到着確定時 | #53 | 「お疲れ様でした。」 |
-
-タイプ別差し替え（目的地 waypoint の属性）:
-
-| `RoutePoint.type`（新設または既存 enum） | フレーズ ID |
-|---|---|
-| `GENERIC` | #51 「目的地付近です。」 |
-| `STATION` | 「駅入口付近です。」 |
-| `BUS_STOP` | 「バス停付近です。」 |
-| `AIRPORT` | 「空港付近です。」 |
-| `FERRY_TERMINAL` | 「フェリー乗り場付近です。」 |
-
-※ 現状 `RoutePoint` にタイプがあるかはコード調査で未確認。存在しない場合は本計画では **`GENERIC` のみ対応**とし、タイプ情報の型追加は後続フェーズへ。実装時に現物を確認して判断する。
-
-### 3.2 経由地管理（#16）
-
-| 案内 | タイミング | フレーズ構成 | 出力例 |
-|---|---|---|---|
-| 経由地接近 | `arrivalEvents` with `isFinalDestination=false` | #50 | 「経由地付近です。」 |
-
-`NavigationSdkManager.continueToNextDestination()` は既存のまま。**現状フレーズは発話していない**ので追加する。
-
-### 3.3 代替ルート（#5）
-
-| 案内 | タイミング | フレーズ構成 | 出力例 |
-|---|---|---|---|
-| オフルート | `isOffRoute` false→true | #54 | 「ルートから外れました。」 |
-| オンルート復帰 | `isOffRoute` true→false | #55 | 「ルートに戻りました。」 |
-| リルート完了 | `routeChangedListener` でルート差し替え | #56 + #57 | 「新しいルートが見つかりました。新しいルートで案内します。」 |
-
-### 3.4 基本ターンバイターン（#1）
-
-**8 方向のフレーズ**（ドキュメント §1, #32-47, #689）:
-
-| `ManeuverModifier` | 読点止め（連結用） | 句点止め（文末用） |
+| イベント | 発話 | 優先度 |
 |---|---|---|
-| `STRAIGHT` | 「直進方向、」(#32) | 「直進です。」(#40) / 「直進方向です。」(#689) |
-| `SLIGHT_RIGHT` | 「斜め右方向、」(#33) | 「斜め右方向です。」(#41) |
-| `RIGHT` | 「右方向、」(#34) | 「右方向です。」(#42) |
-| `SHARP_RIGHT` | 「右手前方向、」(#35) | 「右手前方向です。」(#43) |
-| `UTURN` | 「戻る方向、」(#36) | 「戻る方向です。」(#44) |
-| `SHARP_LEFT` | 「左手前方向、」(#37) | 「左手前方向です。」(#45) |
-| `LEFT` | 「左方向、」(#38) | 「左方向です。」(#46) |
-| `SLIGHT_LEFT` | 「斜め左方向、」(#39) | 「斜め左方向です。」(#47) |
+| `startSession()` 成功直後 | 「音声案内を開始します。実際の交通規制に従って走行してください。」(#48 + #49) | CRITICAL |
+| 最終到着 (`arrivalEvents.isFinalDestination=true`) | 「目的地付近です。お疲れ様でした。」(#51 + #53) | CRITICAL |
 
-※ ドライブサポーター基準で `SHARP_RIGHT`/`SHARP_LEFT` を「右手前」「左手前」に割り当てる（急な折り返し＝手前方向のニュアンス）。
+### 3.2 経由地
 
-**距離フレーズ（#3-18）**: 50/100/200/300/400/500/600/700/800/900/1000m、2/3/4/5/10km。
-
-**組み立てパターン**:
-
-```
-[基本] <距離フレーズ> + <方向(文末)>
-例: 「およそ300m先、右方向です。」 (#6 + #42)
-
-[タイミング付] <タイミング修飾> + <方向(文末)>
-例: 「まもなく、左方向です。」 (#78 + #46)
-
-[連続案内] <距離> + <方向(連結)> → <その先 or 更に> + <次の方向(文末)>
-例: 「およそ300m先、右方向、その先、分岐です。」
-```
-
-**距離バケット別の組み立てルール**:
-
-| バケット | タイミング修飾 | 距離フレーズ | 方向 |
-|---|---|---|---|
-| `AT_2KM` | 無し | 「およそ2km先、」 | 文末 |
-| `AT_1KM` | 無し | 「およそ1km先、」 | 文末 |
-| `AT_500M` | 無し | 「およそ500m先、」 | 文末 |
-| `AT_300M` | 無し | 「およそ300m先、」 | 文末 |
-| `AT_100M` | 「まもなく、」 | 無し | 文末 |
-| `AT_50M` | 「まもなく、」 | 無し | 文末 |
-
-`AT_50M` は直前 100m で発話済みの場合は抑制（`DistanceBucket` ごとの重複抑制で自動的に処理）。
-
-### 3.5 高速道路案内（#2）
-
-現ステップまたは次ステップが高速関連のとき、§3.4 の「方向」の代わりに以下を差し込む:
-
-| 条件 | フレーズ ID | 例 |
+| イベント | 発話 | 優先度 |
 |---|---|---|
-| `ManeuverType.ON_RAMP` & `HighwayPointType.INTERCHANGE` | #67「高速入口です。」 | 「およそ1km先、高速入口です。」 |
-| `ManeuverType.OFF_RAMP` & `HighwayPointType.INTERCHANGE` | #68「高速出口です。」 | |
-| `HighwayPointType.TOLL_GATE` | #69「料金所です。」 | 「およそ500m先、料金所です。」 |
-| `ManeuverType.FORK`（高速区間） | #59「分岐です。」 | |
-| 連続分岐（次ステップも FORK で距離が閾値以内） | #60 追加 | 「まもなく、分岐、さらに分岐が続きます。」 |
-| `ManeuverType.MERGE` & driving side = RIGHT | #62「右からの合流が有ります。」 | |
-| `ManeuverType.MERGE` & driving side = LEFT | #63「左からの合流が有ります。」 | |
-| `ManeuverType.MERGE`（side 不明） | #64「合流が有ります。」 | |
-| Entry to toll road / auto-only road（`HighwayInfo` に入る遷移） | #767 / #768 | 「有料区間に入ります。」「自動車専用道に入ります。」 |
+| 中間到着 (`isFinalDestination=false`) | 「経由地付近です。」(#50) | CRITICAL |
 
-IC/JCT/料金所の「名前」（`HighwayInfo.name`）は初期実装では**発話しない**。TTS 合成でキャッシュヒットさせるため固定フレーズで運用する。名前読み上げは後続フェーズ（カスタム TTS が必要）。
+### 3.3 代替ルート
 
-### 3.6 レーン案内（#3）
-
-`NavigationLaneSnapshot.isRecommended` を使って推奨車線を特定する。ドキュメント §3 の 6 種パターンのうち、Google Navigation SDK から得られる情報で表現できるのは次の 3 パターンに限定する。
-
-#### 表現可能なパターン
-
-| パターン | 条件 | フレーズ ID |
+| イベント | 発話 | 優先度 |
 |---|---|---|
-| **右側/左側の車線を** | 推奨車線が右端寄り / 左端寄り | #488 「右側の車線を」/ #489 「左側の車線を」 |
-| **右から/左から N 番目の車線を** | 推奨車線のインデックスが左右端から 2 以上内側 | #502-511 |
-| **中央の車線を** | 全車線数 3 以上で推奨が中央のみ | #512「中央の車線を」 |
+| `isOffRoute` false → true | 「ルートから外れました。」(#54) | CRITICAL |
+| `isOffRoute` true → false | 「ルートに戻りました。」(#55) | CRITICAL |
+| `routeChangedListener` 発火（routes StateFlow が変化） | 「新しいルートが見つかりました。新しいルートで案内します。」(#56 + #57) | CRITICAL |
 
-**「を」→「に」の使い分け**（ドキュメント §3）:
+### 3.4 基本ターンバイターン（8 方向）
 
-- `お進みください。` (#487) → 現レーンで OK のとき（既に推奨レーンに乗っている or 方向が一致）
-- `お入りください。` (#525) → 車線変更を促すとき（推奨レーンが現在と異なる）
+`ManeuverModifier` → 文末フレーズ（句点止め、#40-47, #689）:
 
-Google SDK からは「現在どの車線を走っているか」は取得できないため、**初期実装では常に「お進みください」で統一**し、「お入りください」は後続フェーズに回す。ドキュメントにも「（ユーザー方針で）言い回しはドキュメント通り」と明記されているが、条件判定に必要な入力が足りないので安全側に倒す。
+| `ManeuverModifier` | 文末フレーズ | 例 |
+|---|---|---|
+| `STRAIGHT` | 「直進方向です。」 (#689) | |
+| `SLIGHT_RIGHT` | 「斜め右方向です。」 (#41) | |
+| `RIGHT` | 「右方向です。」 (#42) | |
+| `SHARP_RIGHT` | 「右手前方向です。」 (#43) | |
+| `UTURN` | 「戻る方向です。」 (#44) | |
+| `SHARP_LEFT` | 「左手前方向です。」 (#45) | |
+| `LEFT` | 「左方向です。」 (#46) | |
+| `SLIGHT_LEFT` | 「斜め左方向です。」 (#47) | |
 
-#### レーン案内の発話タイミング
+**対象マニューバ (`ManeuverType`)**: `TURN` / `CONTINUE` / `DEPART` / `END_OF_ROAD` / `NAME_CHANGE`
 
-- 現ステップがターン系マニューバ（`TURN`/`FORK`/`MERGE`/`ON_RAMP`/`OFF_RAMP`）で `lanes` が非空のとき。
-- 距離バケットが `AT_500M`（高速）または `AT_300M`（一般道）になったタイミング一度のみ。
-- `AT_50M`/`AT_100M` の直前予告とは別イベントとして発火し、**基本ターンバイターン案内と異なる発話**になる。
+**ManeuverType が `CONTINUE` の扱い**: 交差点名通知などで `STRAIGHT` を返す。v1 では「直進方向です」だけを発話し、交差点名・信号情報は発話しない。
 
-フレーズ構成例:
+**組み立て**:
 
 ```
-[タイミング] + [車線指示] + [お進みください]
-例: 「この先、左側の車線を、お進みください。」 (#76 + #489 + #487)
-例: 「およそ500m先、右から2番目の車線を、お進みください。」 (#8相当 + #540 + #487)
+[距離(2km/500m) or タイミング(100m/50m)] + [方向(文末)]
 ```
 
-**合流後/分岐後のレーン案内（#563-564）**も対応する:
+- `AT_2KM`: 「およそ2km先、」+ 方向
+- `AT_500M`: 「およそ500m先、」+ 方向
+- `AT_100M` / `AT_50M`: 「まもなく、」+ 方向
 
-- 現ステップの完了直後（= ステップ遷移イベント）、次ステップの推奨レーンが確定していて条件を満たせば発火。
-- 「合流後、」(#563) / 「分岐後、」(#564) + 車線指示 + #487。
+### 3.5 分岐・合流（v1 限定版）
 
-### 3.7 道なり案内（#15）
+`ManeuverType.FORK` の場合、方向の代わりに分岐フレーズを使う:
 
-| 条件 | フレーズ |
+| 条件 | 文末フレーズ |
 |---|---|
-| 次ガイドポイントまで 1000m ≤ dist < 5000m | 「しばらく道なりです。」(#30) |
-| 次ガイドポイントまで 5000m ≤ dist | 「5km以上道なりです。」(#31) |
+| `FORK` 全般 | 「分岐です。」 (#59) |
+| `MERGE` + `drivingSide=RIGHT` | 「右からの合流が有ります。」 (#62) |
+| `MERGE` + `drivingSide=LEFT` | 「左からの合流が有ります。」 (#63) |
+| `MERGE` + `drivingSide` 不明 | 「合流が有ります。」 (#64) |
 
-**重複抑制**: 同一ステップで 1 度のみ発話。ステップ開始直後に次ステップまでの距離を見て判定。
+**発話は距離バケットにしたがう**。たとえば「およそ500m先、分岐です。」。
 
-### 3.8 ナビセッション状態変化（#17 補助）
+### 3.6 ランプ（v1 限定版）
 
-| 遷移 | フレーズ |
+`ManeuverType.ON_RAMP` / `OFF_RAMP` は **v1 では方向フレーズで代替**する。IC/高速入口の語彙は `highwayInfo` 未供給のため使わない。
+
+| `ManeuverType` + `ManeuverModifier` | v1 の発話 |
 |---|---|
-| 一般道 → 高速道 | 「高速道のルートに切り替わりました。」(#570) |
-| 高速道 → 一般道 | 「一般道のルートに切り替わりました。」(#569) |
+| `ON_RAMP` + `LEFT` | 「左方向です。」（通常方向で代用） |
+| `ON_RAMP` + `RIGHT` | 「右方向です。」 |
+| `ON_RAMP` + `STRAIGHT` | 「直進方向です。」 |
+| `OFF_RAMP` + `LEFT` | 「左方向です。」 |
+| …etc | |
 
-**判定**: 現ステップの `highwayInfo` の有無変化。ただし `RouteStepInfo` 側にしか `highwayInfo` が無く、現在走行中のステップを特定する必要があるため、`NavigationFeedSnapshot.currentStep.maneuver` の分類と合わせて判断する。初期実装はこの 2 フレーズを**Phase 2** に回し、Phase 1 では対応しない。
+### 3.7 レーン案内（v1 版）
+
+`NavigationLaneSnapshot.isRecommended=true` の車線インデックス群を `recommendedIndices`、総車線数を `totalLanes` とする。
+
+| 条件 | 車線フレーズ |
+|---|---|
+| `recommendedIndices` が 0 のみ or 0〜1 の最左側集合 | 「左側の車線を」 (#489) |
+| `recommendedIndices` が `totalLanes-1` のみ or 最右側集合 | 「右側の車線を」 (#488) |
+| `totalLanes >= 3` かつ推奨が中央のみ（両端除く） | 「中央の車線を」 (#512) |
+| 上記いずれにも当たらない | **発話しない**（v2 対応） |
+
+**発話タイミング**:
+
+- ターン系マニューバ（`TURN` / `FORK` / `MERGE` / `ON_RAMP` / `OFF_RAMP`）かつ `lanes` 非空のとき
+- `AT_500M` を下抜けたタイミング 1 回のみ
+- 組み立て: `[タイミング] + [車線指示] + 「お進みください。」(#487)`
+  - 例: 「およそ500m先、左側の車線を、お進みください。」
+
+**v1 では常に「お進みください」(#487) 固定**。「お入りください」(#525) は現在車線が取得できないため v2。
+
+### 3.8 道なり案内
+
+| 条件 | 発話 | タイミング |
+|---|---|---|
+| `distanceToCurrentStepMeters >= 5000` | 「5km以上道なりです。」(#31) | ステップ遷移直後に 1 回 |
+| `1000 <= distanceToCurrentStepMeters < 5000` | 「しばらく道なりです。」(#30) | ステップ遷移直後に 1 回 |
+
+**ステップ遷移検出**: `NavigationFeedSnapshot.currentStep` が前回と異なる値になった瞬間（§4.6 の step transition counter で検出）。
 
 ---
 
-## 4. 主要クラス設計
+## 4. 主要クラス設計（rev.2）
 
 ### 4.1 パッケージ構成
 
 ```
 core/navigation/src/androidMain/kotlin/me/matsumo/onenavi/core/navigation/
-  guidance/                                ← 新規
-    GuidanceEvent.kt                      ← sealed interface
-    GuidancePriority.kt                   ← enum
-    DistanceBucket.kt                     ← enum
-    TimingModifier.kt                     ← enum
-    TtsPhraseId.kt                        ← enum (strings.xml との対応)
-    PhraseBuilder.kt                      ← TtsPhraseId/param → 文字列
-    GuidancePlanner.kt                    ← Snapshot → GuidanceEvent[]
-    GuidanceEventDispatcher.kt            ← Event → SpeechOrchestrator
-    RoadClassClassifier.kt                ← 高速/一般道判定
-    SpokenGuideKey.kt                     ← 重複抑制キー
-  GuidanceSessionManager.kt               ← 既存、Planner/Dispatcher を組み込み
+  guidance/                              ← 新規
+    TtsPhraseId.kt                      ← enum、strings.xml との関連
+    DistanceBucket.kt                   ← enum
+    GuidanceEvent.kt                    ← sealed interface（semantic、phrasing を含まない）
+    GuidancePriority.kt                 ← enum
+    GuidancePhrase.kt                   ← data class + PhraseSegment sealed
+    GuidancePlanner.kt                  ← 純関数：入力 snapshot → List<GuidanceEvent>
+    PhraseComposer.kt                   ← GuidanceEvent → GuidancePhrase（suspend: strings 読み込み）
+    SpeechDispatcher.kt                 ← Channel<GuidanceEvent> + 単一 actor
+    SpokenGuideKeyStore.kt              ← ステップ × バケットの重複抑制
+    GuidanceCoordinator.kt              ← 状態保持（前回 snapshot, off-route flag, step counter）
+  GuidanceSessionManager.kt             ← 既存、上記を組み込む
 ```
 
-### 4.2 型定義のスケッチ
+### 4.2 型スケッチ
 
 ```kotlin
-// core:model に配置（UI と共有するため commonMain）
+// core:model / commonMain
+@Immutable
 sealed interface GuidanceEvent {
     val priority: GuidancePriority
-    val phrase: GuidancePhrase
+
+    data class SessionStarted(override val priority: GuidancePriority) : GuidanceEvent
+    data class SessionFinished(override val priority: GuidancePriority) : GuidanceEvent
+    data class ViaWaypointApproach(override val priority: GuidancePriority) : GuidanceEvent
+    data class DestinationApproach(override val priority: GuidancePriority) : GuidanceEvent
+    data class OffRoute(override val priority: GuidancePriority) : GuidanceEvent
+    data class OnRouteRecovered(override val priority: GuidancePriority) : GuidanceEvent
+    data class Rerouted(override val priority: GuidancePriority) : GuidanceEvent
 
     data class Maneuver(
-        val stepId: String,
+        val stepCounter: Int,
         val bucket: DistanceBucket,
         val maneuverType: ManeuverType,
         val modifier: ManeuverModifier?,
-        val roadClass: RoadClass,
-        val continuesTo: ManeuverType?,                  // 連続案内で「その先」に使う
+        val drivingSide: DrivingSide?,
         override val priority: GuidancePriority,
-        override val phrase: GuidancePhrase,
     ) : GuidanceEvent
 
-    data class Lane(...) : GuidanceEvent
-    data class HighwayFacility(...) : GuidanceEvent      // IC/JCT/料金所/SA
-    data class Straightforward(...) : GuidanceEvent      // しばらく道なり
-    data class OffRoute(...) : GuidanceEvent
-    data class OnRouteRecovered(...) : GuidanceEvent
-    data class Rerouted(...) : GuidanceEvent
-    data class ViaWaypointApproach(...) : GuidanceEvent
-    data class DestinationApproach(...) : GuidanceEvent
-    data class SessionStarted(...) : GuidanceEvent
-    data class SessionFinished(...) : GuidanceEvent
+    data class Lane(
+        val stepCounter: Int,
+        val bucket: DistanceBucket,
+        val lanePosition: LanePosition,           // LEFT / RIGHT / CENTER
+        override val priority: GuidancePriority,
+    ) : GuidanceEvent
+
+    data class Straightforward(
+        val stepCounter: Int,
+        val level: StraightforwardLevel,          // SHORT / LONG
+        override val priority: GuidancePriority,
+    ) : GuidanceEvent
 }
 
-data class GuidancePhrase(val segments: ImmutableList<PhraseSegment>)
+@Immutable
+enum class GuidancePriority { CRITICAL, HIGH, NORMAL, LOW }
 
-sealed interface PhraseSegment {
-    data class Fixed(val phraseId: TtsPhraseId) : PhraseSegment
-    data class Distance(val bucket: DistanceBucket) : PhraseSegment  // 「およそ300m先、」
-    // 将来、動的な名称（IC 名など）を入れるならここに追加
-}
-```
-
-`DistanceBucket` の例:
-
-```kotlin
-enum class DistanceBucket(
-    val phraseId: TtsPhraseId,
-    val thresholdMeters: Int,
-) {
-    AT_2KM(TtsPhraseId.DISTANCE_2KM, 2000),
-    AT_1KM(TtsPhraseId.DISTANCE_1KM, 1000),
-    AT_500M(TtsPhraseId.DISTANCE_500M, 500),
-    AT_300M(TtsPhraseId.DISTANCE_300M, 300),
-    AT_100M(TtsPhraseId.DISTANCE_100M, 100),
-    AT_50M(TtsPhraseId.DISTANCE_50M, 50),
+@Immutable
+enum class DistanceBucket(val thresholdMeters: Int) {
+    AT_2KM(2000),
+    AT_500M(500),
+    AT_100M(100),
+    AT_50M(50),
 }
 ```
 
-### 4.3 `GuidancePlanner`
+`GuidanceEvent` は **phrasing を一切持たない**。文字列化は `PhraseComposer` の責務。
 
-責務: `GuidanceSessionUpdate`（既存 `GuidanceUpdate` を拡張）を入力に、このティックで発話すべき `GuidanceEvent` 群を返す。
+### 4.3 `GuidancePlanner`（純関数）
 
 ```kotlin
-internal class GuidancePlanner(
-    private val spokenKeys: SpokenGuideKeyStore,   // 重複抑制用
-    private val classifier: RoadClassClassifier,
-) {
-    fun plan(
-        snapshot: NavigationFeedSnapshot,
-        tripProgress: NavigationTripProgressSnapshot?,
-        isOffRoute: Boolean,
-        route: GoogleRoute,
-    ): List<GuidanceEvent> { ... }
+internal class GuidancePlanner {
+    fun plan(input: GuidancePlannerInput): List<GuidanceEvent>
+}
+
+internal data class GuidancePlannerInput(
+    val previousSnapshot: NavigationFeedSnapshot?,
+    val currentSnapshot: NavigationFeedSnapshot,
+    val previousIsOffRoute: Boolean,
+    val currentIsOffRoute: Boolean,
+    val stepCounter: Int,             // 現ステップの識別子（§4.6）
+    val stepTransitioned: Boolean,    // 今回のティックでステップが変わったか
+    val spokenKeys: Set<SpokenGuideKey>,
+)
+```
+
+`plan()` の責務:
+
+1. ステップ遷移なら `Straightforward` 候補を生成（距離条件満たすとき）
+2. 距離バケット下抜け検出 → `Maneuver` 候補
+3. レーン条件満たすとき → `Lane` 候補
+4. オフルート変化検出 → `OffRoute` / `OnRouteRecovered`
+
+セッション開始/終了、到着、リルートは `GuidancePlanner` には入れない。`GuidanceSessionManager` が直接 `SpeechDispatcher` に流す（これらは snapshot 起点でないイベント）。
+
+**純関数**: `plan()` は `spokenKeys` を入力で受け取り、自身では状態を持たない。呼び出し側（`GuidanceCoordinator`）が結果に応じて `spokenKeys` を更新する。
+
+### 4.4 距離バケット下抜け検出
+
+```kotlin
+// 前回距離 previous と今回距離 current から下抜けしたバケットを返す
+// ルート上は距離が単調減少するので、previous > threshold >= current となるバケットが対象
+private fun crossedBuckets(previous: Int?, current: Int): List<DistanceBucket> {
+    val prev = previous ?: return emptyList()
+    return DistanceBucket.entries
+        .filter { bucket -> prev > bucket.thresholdMeters && current <= bucket.thresholdMeters }
 }
 ```
 
-内部ロジック:
+**複数バケット跨ぎの処置**: `crossedBuckets` が 2 つ以上返った場合、**最も遠いバケット（= 最大 threshold）の未発話のみを採用**する。近いバケット（= より直前の案内）は抑制。理由：距離予告は「より遠くの予告をしておく」方が運転上の価値が高く、近距離バケットは次ティックで再検出される可能性が高い。
 
-1. `currentStep` と `nextStep` から道路種別を決定。
-2. `distanceToCurrentStepMeters` と閾値から、このティックで下抜けしたバケットを算出。
-3. そのバケットについて未発話なら `Maneuver` イベントを生成。連続案内（`distanceFromPreviousMeters(nextStep)` が 200m 未満など）であれば `continuesTo` を埋める。
-4. 高速施設イベント（IC/JCT/料金所/SA）が該当すれば `HighwayFacility` を追加。
-5. レーン条件を満たせば `Lane` を追加。
-6. 道なり条件を満たせば `Straightforward`。
-7. `isOffRoute` 変化、`sessionState` 変化はこのメソッドの外でイベント化（後述）。
+**50m/100m の連続抑制**: `AT_100M` を発話した時刻を記録し、5 秒以内の `AT_50M` は抑制。
 
-### 4.4 `GuidanceEventDispatcher`
-
-役割: `GuidancePlanner` から得た `GuidanceEvent[]` を、`PhraseBuilder` で文字列化し `SpeechOrchestrator` に投入する。優先度でキューモードを選択。
+### 4.5 `PhraseComposer`
 
 ```kotlin
-internal class GuidanceEventDispatcher(
-    private val context: Context,
-    private val orchestrator: SpeechOrchestrator,
-    private val phraseBuilder: PhraseBuilder,
-) {
-    fun dispatch(event: GuidanceEvent) {
-        val text = phraseBuilder.build(event.phrase)
-        val mode = when (event.priority) {
-            GuidancePriority.CRITICAL, GuidancePriority.HIGH -> SpeechQueueMode.FLUSH
-            else -> SpeechQueueMode.ADD
-        }
-        orchestrator.enqueue(text = text, flush = (mode == SpeechQueueMode.FLUSH))
+internal class PhraseComposer {
+    suspend fun compose(event: GuidanceEvent): GuidancePhrase = when (event) {
+        is GuidanceEvent.SessionStarted ->
+            phrase(Fixed(TtsPhraseId.NAVIGATION_STARTED), Fixed(TtsPhraseId.FOLLOW_TRAFFIC_RULES))
+        is GuidanceEvent.DestinationApproach ->
+            phrase(Fixed(TtsPhraseId.DESTINATION_APPROACH), Fixed(TtsPhraseId.NAVIGATION_FINISHED))
+        is GuidanceEvent.Maneuver -> composeManeuver(event)
+        is GuidanceEvent.Lane -> composeLane(event)
+        is GuidanceEvent.Straightforward -> composeStraightforward(event)
+        // ... 他
     }
-}
-```
 
-### 4.5 `PhraseBuilder`
-
-責務: `GuidancePhrase` の各 `PhraseSegment` を `strings.xml` から解決して連結する。
-
-`core:navigation` は Android 専用モジュールなので、解決方法は次のいずれか。
-
-- **案 A**: `Context.getString(R.string.xxx)` を使う。
-  - `core:navigation` に Android `R.string.*` を持たせるか、`core:resource` の Android `res` 側に TTS 用 strings を追加する。
-- **案 B**: Compose Resources の `getString()` を使う（`org.jetbrains.compose.resources.getString`）。`core:resource` の `composeResources/values/strings.xml` にそのまま追加できる。
-  - 非 Composable からの呼び出しは `suspend fun getString(resource: StringResource)` になる。
-  - `SpeechOrchestrator` は `Main` ディスパッチャで動いているため suspend で問題なし。
-
-**採用方針**: **案 B（Compose Resources）**。理由:
-
-1. 既存の strings は全て `core:resource` に集約されており、スタイル統一できる。
-2. iOS に TTS を広げる余地（現計画では対象外だが、将来の可能性）を残す。
-3. Android `R.string` を増やすと `core:resource` と `core:navigation` の二重管理になる。
-
-`PhraseBuilder` の実装例:
-
-```kotlin
-internal class PhraseBuilder {
-    // suspend: Compose Resources の getString() が suspend のため
-    suspend fun build(phrase: GuidancePhrase): String = buildString {
+    suspend fun resolve(phrase: GuidancePhrase): String = buildString {
         phrase.segments.forEach { segment ->
             when (segment) {
                 is PhraseSegment.Fixed -> append(getString(segment.phraseId.resource))
@@ -434,87 +397,180 @@ internal class PhraseBuilder {
 }
 ```
 
-`TtsPhraseId` と `StringResource` の関連は enum に持たせる:
+`compose()` は `GuidanceEvent` → `GuidancePhrase`（segments 組み立て）、`resolve()` は `GuidancePhrase` → `String`（strings.xml 読み込み）。両方 `suspend`。
+
+### 4.6 Step transition counter（セッション限定 ID）
+
+`GoogleRoute.steps` への逆算依存をやめ、セッション中だけ有効な単純カウンタに置き換える。
 
 ```kotlin
-enum class TtsPhraseId(val resource: StringResource) {
-    NAVIGATION_STARTED(Res.string.tts_navigation_started),
-    FOLLOW_TRAFFIC_RULES(Res.string.tts_follow_traffic_rules),
-    DISTANCE_50M(Res.string.tts_distance_50m),
-    DISTANCE_100M(Res.string.tts_distance_100m),
-    DISTANCE_300M(Res.string.tts_distance_300m),
-    DISTANCE_500M(Res.string.tts_distance_500m),
-    DISTANCE_1KM(Res.string.tts_distance_1km),
-    DISTANCE_2KM(Res.string.tts_distance_2km),
-    TIMING_IMMINENT(Res.string.tts_timing_imminent),
-    TIMING_UPCOMING(Res.string.tts_timing_upcoming),
-    TIMING_NEXT(Res.string.tts_timing_next),
-    TIMING_FURTHER(Res.string.tts_timing_further),
-    DIR_STRAIGHT_MID(Res.string.tts_direction_straight_mid),       // 「直進方向、」
-    DIR_STRAIGHT_END(Res.string.tts_direction_straight_end),       // 「直進方向です。」
-    DIR_RIGHT_MID(Res.string.tts_direction_right_mid),             // 「右方向、」
-    DIR_RIGHT_END(Res.string.tts_direction_right_end),             // 「右方向です。」
-    DIR_SHARP_RIGHT_MID(Res.string.tts_direction_sharp_right_mid), // 「右手前方向、」
-    DIR_SHARP_RIGHT_END(Res.string.tts_direction_sharp_right_end),
-    ... // 全 8 方向 × 2
-    LANE_RIGHT_SIDE(Res.string.tts_lane_right_side),
-    LANE_LEFT_SIDE(Res.string.tts_lane_left_side),
-    LANE_CENTER(Res.string.tts_lane_center),
-    LANE_PROCEED(Res.string.tts_lane_proceed),                     // 「お進みください。」
-    LANE_ENTER(Res.string.tts_lane_enter),                         // 「お入りください。」
-    FACILITY_HIGHWAY_ENTRANCE(Res.string.tts_facility_highway_entrance),
-    FACILITY_HIGHWAY_EXIT(Res.string.tts_facility_highway_exit),
-    FACILITY_TOLL_GATE(Res.string.tts_facility_toll_gate),
-    FACILITY_MERGE_RIGHT(Res.string.tts_facility_merge_right),
-    FACILITY_MERGE_LEFT(Res.string.tts_facility_merge_left),
-    FACILITY_MERGE(Res.string.tts_facility_merge),
-    FACILITY_FORK_MID(Res.string.tts_facility_fork_mid),
-    FACILITY_FORK_END(Res.string.tts_facility_fork_end),
-    FACILITY_FORK_CONTINUES(Res.string.tts_facility_fork_continues),
-    STRAIGHT_SHORT(Res.string.tts_straightforward_short),          // 「しばらく道なりです。」
-    STRAIGHT_LONG(Res.string.tts_straightforward_long),            // 「5km以上道なりです。」
-    OFF_ROUTE(Res.string.tts_off_route),
-    ON_ROUTE_RECOVERED(Res.string.tts_on_route_recovered),
-    REROUTED_FOUND(Res.string.tts_rerouted_found),
-    REROUTED_START(Res.string.tts_rerouted_start),
-    WAYPOINT_APPROACH(Res.string.tts_waypoint_approach),
-    DESTINATION_APPROACH(Res.string.tts_destination_approach),
-    NAVIGATION_FINISHED(Res.string.tts_navigation_finished),
-    ;
+internal class StepTransitionTracker {
+    private var counter: Int = 0
+    private var lastStep: NavigationStepSnapshot? = null
+
+    fun update(currentStep: NavigationStepSnapshot?): StepTransitionResult {
+        val last = lastStep
+        val transitioned = when {
+            last == null && currentStep == null -> false
+            last == null && currentStep != null -> {
+                counter = 0
+                true
+            }
+            last != null && currentStep == null -> false  // ENROUTE → REROUTING 等
+            else -> !isSameStep(last!!, currentStep!!)
+        }
+        if (transitioned) counter++
+        lastStep = currentStep
+        return StepTransitionResult(counter = counter, transitioned = transitioned)
+    }
+
+    private fun isSameStep(a: NavigationStepSnapshot, b: NavigationStepSnapshot): Boolean {
+        // maneuver / roadName / drivingSide / roundaboutTurnNumber が全一致なら同一ステップとみなす
+        // 偽陰性（=違うステップを同一扱い）のときは発話が次ステップまで遅れるが、ナビ品質は壊れない
+        // 偽陽性（=同じステップを別扱い）のときは発話重複のリスクがある
+        // → 安全側として少し厳しめの一致条件を使う
+        return a.maneuver == b.maneuver &&
+            a.roadName == b.roadName &&
+            a.simpleRoadName == b.simpleRoadName &&
+            a.drivingSide == b.drivingSide &&
+            a.roundaboutTurnNumber == b.roundaboutTurnNumber
+    }
+
+    fun reset() {
+        counter = 0
+        lastStep = null
+    }
 }
 ```
 
-### 4.6 重複抑制（`SpokenGuideKeyStore`）
+`counter` は `GuidanceEvent.Maneuver` / `Lane` / `Straightforward` の `stepCounter` として使い、`SpokenGuideKey` のキー要素にする。
 
 ```kotlin
-internal class SpokenGuideKeyStore {
-    private val spoken = mutableSetOf<SpokenGuideKey>()
-
-    fun markSpoken(key: SpokenGuideKey): Boolean = spoken.add(key)
-    fun reset() { spoken.clear() }
-    fun forgetStep(stepId: String) { spoken.removeAll { it.stepId == stepId } }
-}
-
+@Immutable
 data class SpokenGuideKey(
-    val stepId: String,
+    val stepCounter: Int,
     val category: Category,
     val bucket: DistanceBucket?,
 ) {
-    enum class Category { MANEUVER, LANE, HIGHWAY_FACILITY, STRAIGHTFORWARD }
+    enum class Category { MANEUVER, LANE, STRAIGHTFORWARD }
 }
 ```
 
-`stepId` は `NavigationStepSnapshot` に無いので、新規にハッシュベースで算出する（`maneuver` + `roadName` + 累積距離の合成キー）。もしくは `NavigationFeedSnapshot.currentStep` の参照 ID を SDK 内部から得る手段があればそれを使う。
+ステップが進むたびに `counter` が増えるので、過去ステップの `SpokenGuideKey` は `forgetStep(counter)` で掃除する（メモリ節約）。
 
-### 4.7 `GuidanceSessionManager` への組み込み
-
-現状の `applyGuidanceUpdate()` (L161-211) を以下のように再編する:
+### 4.7 `SpeechDispatcher`（単一 actor）
 
 ```kotlin
-private fun applyGuidanceUpdate(
-    routeId: String,
-    update: GuidanceUpdate,
+internal class SpeechDispatcher(
+    private val orchestrator: SpeechOrchestrator,
+    private val composer: PhraseComposer,
+    private val scope: CoroutineScope,
 ) {
+    private val channel = Channel<GuidanceEvent>(capacity = Channel.UNLIMITED)
+    private var job: Job? = null
+
+    fun start() {
+        job?.cancel()
+        job = scope.launch {
+            for (event in channel) {
+                runCatching {
+                    val phrase = composer.compose(event)
+                    val text = composer.resolve(phrase)
+                    if (text.isNotBlank()) {
+                        val flush = event.priority == GuidancePriority.CRITICAL ||
+                            event.priority == GuidancePriority.HIGH
+                        orchestrator.enqueue(text = text, flush = flush)
+                    }
+                }.onFailure { throwable ->
+                    Napier.w(tag = TAG, throwable = throwable) { "Failed to dispatch guidance event: $event" }
+                }
+            }
+        }
+    }
+
+    fun send(event: GuidanceEvent) {
+        channel.trySend(event)
+    }
+
+    fun shutdown() {
+        channel.close()
+        job?.cancel()
+        job = null
+    }
+
+    companion object { private const val TAG = "SpeechDispatcher" }
+}
+```
+
+**直列保証**: `Channel` + 単一 collector で順序保証。`suspend` な `compose`/`resolve` もこの actor 内で順次処理されるので、発話の順序ずれが起きない。
+
+**優先度**: `CRITICAL` / `HIGH` のとき `flush=true` で `SpeechOrchestrator` のキューを破棄して割り込む。actor 自体は FIFO だが、`SpeechOrchestrator.enqueue(flush=true)` が実際の再生をリセットするので、割り込みは再生層で起きる。
+
+### 4.8 `GuidanceCoordinator`
+
+`GuidanceSessionManager` が持っていた状態（前回 snapshot / off-route / step tracker / spoken keys）を切り出す。
+
+```kotlin
+internal class GuidanceCoordinator(
+    private val planner: GuidancePlanner,
+    private val dispatcher: SpeechDispatcher,
+) {
+    private val stepTracker = StepTransitionTracker()
+    private val spokenKeys = mutableSetOf<SpokenGuideKey>()
+    private var previousSnapshot: NavigationFeedSnapshot? = null
+    private var previousIsOffRoute = false
+    private var lastImminentAtMs: Long = 0L
+
+    fun onNavigationUpdate(snapshot: NavigationFeedSnapshot, isOffRoute: Boolean) {
+        val step = snapshot.currentStep
+        val transitionResult = stepTracker.update(step)
+        if (transitionResult.transitioned) {
+            forgetOldSteps(transitionResult.counter)
+        }
+
+        val events = planner.plan(
+            GuidancePlannerInput(
+                previousSnapshot = previousSnapshot,
+                currentSnapshot = snapshot,
+                previousIsOffRoute = previousIsOffRoute,
+                currentIsOffRoute = isOffRoute,
+                stepCounter = transitionResult.counter,
+                stepTransitioned = transitionResult.transitioned,
+                spokenKeys = spokenKeys.toSet(),
+            ),
+        )
+        events.forEach { event ->
+            if (markSpokenIfNeeded(event)) {
+                dispatcher.send(event)
+            }
+        }
+
+        previousSnapshot = snapshot
+        previousIsOffRoute = isOffRoute
+    }
+
+    // セッション開始・到着・リルートは snapshot 起点でないので別 API
+    fun emit(event: GuidanceEvent) { dispatcher.send(event) }
+
+    fun reset() {
+        stepTracker.reset()
+        spokenKeys.clear()
+        previousSnapshot = null
+        previousIsOffRoute = false
+        lastImminentAtMs = 0L
+    }
+
+    private fun markSpokenIfNeeded(event: GuidanceEvent): Boolean { /* ... */ }
+    private fun forgetOldSteps(currentCounter: Int) { /* ... */ }
+}
+```
+
+### 4.9 `GuidanceSessionManager` の再編
+
+既存の `applyGuidanceUpdate()` を以下に置換:
+
+```kotlin
+private fun applyGuidanceUpdate(routeId: String, update: GuidanceUpdate) {
     if (activeRoute?.id != routeId) return
 
     val navInfo = update.navInfo
@@ -525,109 +581,98 @@ private fun applyGuidanceUpdate(
     // UI state 更新（従来通り）
     updateGuidanceUiState(navInfo, tripProgress, isOffRoute)
 
-    // イベント生成 → 発話
-    if (navInfo != null && navState == NavState.ENROUTE) {
-        val events = guidancePlanner.plan(
-            snapshot = navInfo,
-            tripProgress = tripProgress,
-            isOffRoute = isOffRoute,
-            route = activeRoute ?: return,
-        )
-        events.forEach { event ->
-            scope.launch { dispatcher.dispatch(event) }
-        }
-    }
-
-    // オフルート/復帰検出は前回値との比較で
-    handleOffRouteTransition(isOffRoute)
+    if (navInfo == null || navState != NavState.ENROUTE) return
+    coordinator.onNavigationUpdate(navInfo, isOffRoute)
 }
 ```
 
-- `isOffRouteTransition` 検出で `OffRoute` / `OnRouteRecovered` イベントを生成。
-- `routeChangedListener`（`NavigationSdkManager` 側）で `Rerouted` イベントを `_guidanceEvents` に流す。
-- セッション開始/終了は既存の `startSession()`/`stopSession()` 冒頭でイベント発火。
-- 到着は `arrivalEvents.collect` に追加するだけ。
+セッション開始時:
 
-### 4.8 UI との共有（後続余地）
+```kotlin
+fun startSession() {
+    // ... 既存初期化
+    dispatcher.start()
+    coordinator.reset()
+    coordinator.emit(GuidanceEvent.SessionStarted(priority = GuidancePriority.CRITICAL))
+    // ...
+}
+```
 
-`GuidanceEvent` は `core:model` に配置することで、将来 UI（バナー表示、振動、音のみの通知）にも流せる。現計画では TTS 発火のみを実装する。
+到着時 (`arrivalEvents.collect`):
+
+```kotlin
+navigationSdkManager.arrivalEvents.collect { arrival ->
+    if (activeRoute?.id != route.id) return@collect
+    if (arrival.isFinalDestination) {
+        coordinator.emit(GuidanceEvent.DestinationApproach(priority = GuidancePriority.CRITICAL))
+        onFinalDestinationArrival(activeRoute)
+    } else {
+        coordinator.emit(GuidanceEvent.ViaWaypointApproach(priority = GuidancePriority.CRITICAL))
+        navigationSdkManager.continueToNextDestination()
+    }
+}
+```
+
+リルート検出: `routeManager.routes` の `distinctUntilChanged { old, new -> old.firstOrNull()?.routeToken == new.firstOrNull()?.routeToken }` で変化検知して emit。
+
+`stopSession()`:
+
+```kotlin
+fun stopSession() {
+    dispatcher.shutdown()
+    coordinator.reset()
+    // ... 既存終了処理
+}
+```
+
+**重要**: rev.1 で Phase 1/2 を分けていた「SDK テキスト発話残しつつ併走」は廃止。この `applyGuidanceUpdate()` の書き換えと同時に `speak(currentStep.instruction)` 行を削除する。すなわち **cutover は 1 コミットで実施**。
 
 ---
 
-## 5. `strings.xml` 追加内容
+## 5. strings.xml 追加内容（v1 確定版）
 
-`core/resource/src/commonMain/composeResources/values/strings.xml` に追加するキーを以下に列挙する。**プレフィックスは `tts_`** で統一する。
+`core/resource/src/commonMain/composeResources/values/strings.xml` に追加。プレフィックスは `tts_`。
 
 ```xml
-<!-- TTS Navigation Session -->
+<!-- TTS Session -->
 <string name="tts_navigation_started">音声案内を開始します。</string>
 <string name="tts_follow_traffic_rules">実際の交通規制に従って走行してください。</string>
 <string name="tts_navigation_finished">お疲れ様でした。</string>
 
 <!-- TTS Distance -->
-<string name="tts_distance_50m">およそ50m先、</string>
-<string name="tts_distance_100m">およそ100m先、</string>
-<string name="tts_distance_300m">およそ300m先、</string>
-<string name="tts_distance_500m">およそ500m先、</string>
-<string name="tts_distance_1km">およそ1km先、</string>
 <string name="tts_distance_2km">およそ2km先、</string>
+<string name="tts_distance_500m">およそ500m先、</string>
 
 <!-- TTS Timing -->
 <string name="tts_timing_imminent">まもなく、</string>
-<string name="tts_timing_upcoming">この先、</string>
-<string name="tts_timing_next">その先、</string>
-<string name="tts_timing_further">更に、</string>
 
-<!-- TTS Direction (mid = 読点止め, end = 句点止め) -->
-<string name="tts_direction_straight_mid">直進方向、</string>
+<!-- TTS Direction (句点止め = 文末) -->
 <string name="tts_direction_straight_end">直進方向です。</string>
-<string name="tts_direction_slight_right_mid">斜め右方向、</string>
 <string name="tts_direction_slight_right_end">斜め右方向です。</string>
-<string name="tts_direction_right_mid">右方向、</string>
 <string name="tts_direction_right_end">右方向です。</string>
-<string name="tts_direction_sharp_right_mid">右手前方向、</string>
 <string name="tts_direction_sharp_right_end">右手前方向です。</string>
-<string name="tts_direction_uturn_mid">戻る方向、</string>
 <string name="tts_direction_uturn_end">戻る方向です。</string>
-<string name="tts_direction_sharp_left_mid">左手前方向、</string>
 <string name="tts_direction_sharp_left_end">左手前方向です。</string>
-<string name="tts_direction_left_mid">左方向、</string>
 <string name="tts_direction_left_end">左方向です。</string>
-<string name="tts_direction_slight_left_mid">斜め左方向、</string>
 <string name="tts_direction_slight_left_end">斜め左方向です。</string>
 
-<!-- TTS Highway Facility -->
-<string name="tts_facility_highway_entrance">高速入口です。</string>
-<string name="tts_facility_highway_exit">高速出口です。</string>
-<string name="tts_facility_toll_gate">料金所です。</string>
-<string name="tts_facility_service_area">サービスエリア入口です。</string>
-<string name="tts_facility_merge_right">右からの合流が有ります。</string>
-<string name="tts_facility_merge_left">左からの合流が有ります。</string>
-<string name="tts_facility_merge">合流が有ります。</string>
-<string name="tts_facility_fork_mid">分岐、</string>
-<string name="tts_facility_fork_end">分岐です。</string>
-<string name="tts_facility_fork_continues">さらに分岐が続きます。</string>
+<!-- TTS Fork / Merge -->
+<string name="tts_fork_end">分岐です。</string>
+<string name="tts_merge_right">右からの合流が有ります。</string>
+<string name="tts_merge_left">左からの合流が有ります。</string>
+<string name="tts_merge">合流が有ります。</string>
 
 <!-- TTS Lane -->
 <string name="tts_lane_right_side">右側の車線を</string>
 <string name="tts_lane_left_side">左側の車線を</string>
 <string name="tts_lane_center">中央の車線を</string>
-<string name="tts_lane_first_right">1番右の車線を</string>
-<string name="tts_lane_first_left">1番左の車線を</string>
-<string name="tts_lane_nth_from_right_2">右から2番目の車線を</string>
-<string name="tts_lane_nth_from_right_3">右から3番目の車線を</string>
-<string name="tts_lane_nth_from_left_2">左から2番目の車線を</string>
-<string name="tts_lane_nth_from_left_3">左から3番目の車線を</string>
 <string name="tts_lane_proceed">お進みください。</string>
-<string name="tts_lane_enter">お入りください。</string>
-<string name="tts_lane_after_merge">合流後、</string>
-<string name="tts_lane_after_fork">分岐後、</string>
 
 <!-- TTS Straightforward -->
 <string name="tts_straightforward_short">しばらく道なりです。</string>
 <string name="tts_straightforward_long">5km以上道なりです。</string>
 
-<!-- TTS Off Route / Reroute -->
+<!-- TTS Route -->
 <string name="tts_off_route">ルートから外れました。</string>
 <string name="tts_on_route_recovered">ルートに戻りました。</string>
 <string name="tts_rerouted_found">新しいルートが見つかりました。</string>
@@ -638,116 +683,197 @@ private fun applyGuidanceUpdate(
 <string name="tts_destination_approach">目的地付近です。</string>
 ```
 
-合計約 55 件。ドキュメントの 768 件のうち、本計画の対象範囲に絞っての最小セット。
+合計 **27 件**（rev.1 の 55 件から v1 スコープ絞り込みで半減）。
+
+**`TtsPhraseId` enum**:
+
+```kotlin
+enum class TtsPhraseId(val resource: StringResource) {
+    NAVIGATION_STARTED(Res.string.tts_navigation_started),
+    FOLLOW_TRAFFIC_RULES(Res.string.tts_follow_traffic_rules),
+    NAVIGATION_FINISHED(Res.string.tts_navigation_finished),
+
+    DISTANCE_2KM(Res.string.tts_distance_2km),
+    DISTANCE_500M(Res.string.tts_distance_500m),
+    TIMING_IMMINENT(Res.string.tts_timing_imminent),
+
+    DIR_STRAIGHT_END(Res.string.tts_direction_straight_end),
+    DIR_SLIGHT_RIGHT_END(Res.string.tts_direction_slight_right_end),
+    DIR_RIGHT_END(Res.string.tts_direction_right_end),
+    DIR_SHARP_RIGHT_END(Res.string.tts_direction_sharp_right_end),
+    DIR_UTURN_END(Res.string.tts_direction_uturn_end),
+    DIR_SHARP_LEFT_END(Res.string.tts_direction_sharp_left_end),
+    DIR_LEFT_END(Res.string.tts_direction_left_end),
+    DIR_SLIGHT_LEFT_END(Res.string.tts_direction_slight_left_end),
+
+    FORK_END(Res.string.tts_fork_end),
+    MERGE_RIGHT(Res.string.tts_merge_right),
+    MERGE_LEFT(Res.string.tts_merge_left),
+    MERGE(Res.string.tts_merge),
+
+    LANE_RIGHT_SIDE(Res.string.tts_lane_right_side),
+    LANE_LEFT_SIDE(Res.string.tts_lane_left_side),
+    LANE_CENTER(Res.string.tts_lane_center),
+    LANE_PROCEED(Res.string.tts_lane_proceed),
+
+    STRAIGHT_SHORT(Res.string.tts_straightforward_short),
+    STRAIGHT_LONG(Res.string.tts_straightforward_long),
+
+    OFF_ROUTE(Res.string.tts_off_route),
+    ON_ROUTE_RECOVERED(Res.string.tts_on_route_recovered),
+    REROUTED_FOUND(Res.string.tts_rerouted_found),
+    REROUTED_START(Res.string.tts_rerouted_start),
+
+    WAYPOINT_APPROACH(Res.string.tts_waypoint_approach),
+    DESTINATION_APPROACH(Res.string.tts_destination_approach),
+    ;
+}
+```
+
+`DistanceBucket` から `TtsPhraseId` へのマッピングは enum で持つ:
+
+```kotlin
+enum class DistanceBucket(val thresholdMeters: Int, val phraseId: TtsPhraseId?) {
+    AT_2KM(2000, TtsPhraseId.DISTANCE_2KM),
+    AT_500M(500, TtsPhraseId.DISTANCE_500M),
+    AT_100M(100, TtsPhraseId.TIMING_IMMINENT),
+    AT_50M(50, TtsPhraseId.TIMING_IMMINENT),
+}
+```
 
 ---
 
-## 6. 実装フェーズ
+## 6. 実装フェーズ（rev.2）
 
-時間をかけて緻密に、という指示に従い小さく分割する。各フェーズは独立してビルド可能・単体で PR 化できる粒度。
+### Phase 0 — 基盤整備（動作変化なし、cutover 無し）
 
-### Phase 0 — 基盤整備（動作変化なし）
+目標: 型・リソース・ビルド通過。既存発話ロジックは**変更しない**。
 
-1. `core:resource` の `strings.xml` に §5 の全キーを追加。
-2. `core:model` に以下を追加:
-   - `GuidanceEvent` sealed interface
+1. `strings.xml` に §5 の 27 件を追加。
+2. `core:model` に追加:
+   - `GuidanceEvent` sealed interface（`@Immutable`）
    - `GuidancePriority` enum
    - `DistanceBucket` enum
-   - `TimingModifier` enum
-   - `RoadClass` enum (`LOCAL` / `HIGHWAY`)
-   - `GuidancePhrase` / `PhraseSegment`
-3. `core:navigation/androidMain` に以下の骨組みを追加:
-   - `guidance/TtsPhraseId.kt`
-   - `guidance/PhraseBuilder.kt`（まだ `GuidanceSessionManager` からは呼ばない）
-   - `guidance/SpokenGuideKeyStore.kt`
-4. ビルド通過確認 + detekt パス。
+   - `LanePosition` enum
+   - `StraightforwardLevel` enum
+   - `GuidancePhrase` / `PhraseSegment`（`@Immutable`）
+3. `core:navigation/androidMain/guidance/` に骨組み追加（空実装で可）:
+   - `TtsPhraseId`
+   - `PhraseComposer`
+   - `SpokenGuideKeyStore`
+   - `StepTransitionTracker`
+   - `SpeechDispatcher`
+   - `GuidancePlanner`（`emptyList()` を返す空実装）
+   - `GuidanceCoordinator`
+4. `PhraseComposer` は単体テストで主要ブランチを検証（JVM test）。
+5. `./gradlew assembleDebug --no-configuration-cache` / `make detekt` 通過確認。
 
-### Phase 1 — セッション/オフルート/リルートの発話を独自化
+**PR サイズ目安**: 300 行前後。
 
-現状 SDK テキストをそのまま喋っているロジックは**残したまま**、追加イベントだけ差し込む。既存発話と重ならないように、Phase 1 の間は SDK テキスト直接発話は維持し、並行動作を確認する。
+### Phase 1 — セッション系・到着・オフルート・リルートの cutover
 
-1. `GuidanceEventDispatcher` 実装。
-2. `GuidanceSessionManager.startSession()` 冒頭で `SessionStarted` イベント発火（#48 + #49）。
-3. `onFinalDestinationArrival()` で `DestinationApproach` + `SessionFinished` を発火。
-4. `arrivalEvents` で `isFinalDestination=false` のとき `ViaWaypointApproach` を発火。
-5. `isOffRoute` 遷移検出。`OffRoute` / `OnRouteRecovered` を発火。
-6. `routeChangedListener` で `Rerouted` を発火。
+目標: ナビ開始直後 / 到着 / オフルート / リルートの発話を独自化。ただし **この時点では基本ターンバイターンも従来の SDK テキスト発話は維持** する（ステップ単位の 1 回発話）。SDK テキスト発話と衝突するのは「起動時」「ルート逸脱直後」など一瞬のみで、`CRITICAL` の `flush=true` で割り込むため実害が小さい。
 
-検証: 実機で起動→到着まで、SDK テキストと独自フレーズが両方喋られる状態を許容しつつ、独自フレーズが意図通りに発火することを確認。
+1. `GuidanceSessionManager.startSession()` に `dispatcher.start()` + `SessionStarted` emit を追加。
+2. `stopSession()` に `dispatcher.shutdown()` + `reset()` を追加。
+3. `arrivalEvents.collect` に `ViaWaypointApproach` / `DestinationApproach` emit を追加。
+4. `isOffRoute` の変化を監視して `OffRoute` / `OnRouteRecovered` emit。
+5. `routeManager.routes` の変化を監視して `Rerouted` emit。
+6. `PhraseComposer` の対応イベント型を実装。
 
-### Phase 2 — 基本ターンバイターンの発話を独自化（SDK テキスト廃止）
+**検証項目**:
+- 起動直後に「音声案内を開始します。実際の交通規制に従って走行してください。」が流れる。
+- 経由地到着時に「経由地付近です。」。
+- 最終到着時に「目的地付近です。お疲れ様でした。」。
+- ルート逸脱時に「ルートから外れました。」、復帰時に「ルートに戻りました。」。
+- 新ルート適用時に「新しいルートが見つかりました。新しいルートで案内します。」。
 
-**このフェーズで `currentStep.instruction` をそのまま speak する行を削除する**。
+### Phase 2 — 基本ターンバイターン + 分岐/合流（cutover 本番）
 
-1. `RoadClassClassifier` 実装（現ステップの maneuver + `activeRoute.steps` の `highwayInfo` から `RoadClass` を返す）。
-2. `GuidancePlanner` の `Maneuver` イベント生成ロジック実装。
-   - 距離バケットの下抜け検出（前回の `distanceToCurrentStepMeters` と今回値を比較）。
-   - `DistanceBucket.fromDistance(distance, roadClass)`。
-   - 連続案内判定（`remainingSteps[0].distanceFromPreviousMeters` が 200m 以下で `continuesTo` を埋める）。
-3. `PhraseBuilder` で §3.4 の組み立てパターンを実装。
-4. `GuidanceSessionManager.applyGuidanceUpdate()` の `currentStep.instruction` 発話を削除し、`dispatcher.dispatch(event)` に置換。
-5. `SpokenGuideKey` による重複抑制をステップ遷移時にリセット。
+目標: SDK テキストの直接発話を**削除**し、独自発話に置換。
 
-検証: 実機で一般道・高速道・IC 乗降を含むルートで、距離段階ごとに発話されること。発話内容が §3.4 のパターンに一致すること。
+1. `GuidanceSessionManager.applyGuidanceUpdate()` の `speak(currentStep.instruction)` 行を削除。
+2. `GuidanceCoordinator.onNavigationUpdate()` を同ロジック末尾で呼び出し。
+3. `GuidancePlanner.plan()` で `Maneuver` イベント生成を実装:
+   - `StepTransitionTracker` でステップ遷移判定
+   - `crossedBuckets()` で距離下抜け検出
+   - 最遠未発話バケットを 1 つ選択
+   - `SpokenGuideKey` で重複抑制
+   - `AT_100M` / `AT_50M` の連続抑制（5 秒ウィンドウ）
+4. `PhraseComposer.composeManeuver()` で距離フレーズ + 方向フレーズ連結。
+5. `ManeuverType.FORK` → `FORK_END`、`MERGE` → 左右/不明の分岐。
 
-### Phase 3 — 高速道路案内と道なり案内
+**検証項目**:
+- 右折 2km / 500m / 100m / 50m 手前で発話。
+- U ターン「戻る方向です。」。
+- 合流「右からの合流が有ります。」。
+- 分岐「分岐です。」。
+- 100m 発話直後の 50m 抑制が効く。
 
-1. `RouteStepInfo.highwayInfo` の `HighwayPointType` を元に `HighwayFacility` イベントを生成。
-2. 合流（`MERGE`）/分岐（`FORK`）で左右判定（`drivingSide` + `maneuverModifier`）。
-3. 連続分岐（`#60 さらに分岐が続きます`）判定: 次ステップも `FORK` かつ距離 200m 以内なら追加。
-4. 道なり判定: `currentStep.distanceFromPreviousMeters` ではなく、現在地から `currentStep` までの残距離が大きく、かつ直前ステップ通過直後に発話。
-5. SA 入口（#726）は `HighwayPointType` に `SERVICE_AREA` が現状無いため、後続フェーズに回す（メモとして issue 化）。
+### Phase 3 — レーン誘導 + 道なり
 
-### Phase 4 — レーン案内
+目標: 体験の質向上。
 
-1. `NavigationLaneSnapshot` の配列から推奨車線インデックスを算出。
-2. §3.6 の 3 パターン（右側/左側・N 番目・中央）を `Lane` イベントとして生成。
-3. 「合流後」「分岐後」バリエーションは現ステップ完了直後（ステップ遷移）に発火。
-4. 「お入りください」は現状データ不足で非対応と明記し、イベント生成側で常に `LANE_PROCEED` を選ぶ。
+1. `GuidancePlanner` で `Lane` イベント生成（`AT_500M` のみ、ターン系マニューバのみ）。
+2. 推奨車線位置判定（LEFT / RIGHT / CENTER のみ、該当しない場合はイベント非生成）。
+3. `Straightforward` イベント生成（ステップ遷移時に 1 回）。
+4. `PhraseComposer.composeLane()` / `composeStraightforward()` 実装。
 
-### Phase 5 — テストと微調整
+**検証項目**:
+- 推奨が最左のみなら「およそ500m先、左側の車線を、お進みください。」。
+- 次ステップまで 3km の直進区間で「しばらく道なりです。」。
+- 次ステップまで 7km なら「5km以上道なりです。」。
 
-1. `GuidancePlanner` の単体テスト（JVM test）:
-   - 各距離バケット下抜けで期待イベントが 1 回だけ生成される。
-   - 連続案内で `continuesTo` が埋まる。
-   - オフルート→オンルート遷移でイベントが発火する。
-2. `PhraseBuilder` の単体テスト:
-   - 各 `GuidanceEvent` から期待フレーズ文字列が得られる。
-3. 実機リグレッションテストのチェックリスト作成（`docs/logs/` に追加）。
+### Phase 4 — 回帰テスト + 調整
+
+目標: 実機での発話タイミングと抑制挙動の微調整。
+
+1. 実機で複数ルート（市街地・郊外・高速混じり）を走破し、発話ログを取って期待テーブルと突き合わせ。
+2. 距離バケット下抜けの取りこぼし実測。必要に応じて `PROGRESS_DISTANCE_THRESHOLD_METERS` の引き下げを検討（現 50m）。
+3. `SpokenGuideKey` のメモリリーク有無確認（長時間ナビ後の `spokenKeys` サイズ）。
+4. `SpeechDispatcher` の Channel バックプレッシャ確認。
 
 ---
 
 ## 7. ケーススタディ（発話例）
 
-### 7.1 一般道で右折 300m 手前
+### 7.1 一般道で右折 500m 手前〜 50m 手前
 
-入力: `currentStep` が `TURN_RIGHT`、`distanceToCurrentStepMeters=305`、`roadClass=LOCAL`、次ティックで `distance=295`。
+前提: `currentStep.maneuver=TURN_RIGHT`, `distanceToCurrentStepMeters` が 505 → 95 → 45 と遷移。
 
-1. 前回 > 300 → 今回 ≤ 300 で `AT_300M` を下抜け。
-2. `GuidancePlanner.plan()` が `Maneuver(bucket=AT_300M, modifier=RIGHT, continuesTo=null)` を返す。
-3. `PhraseBuilder.build()`:
-   - `PhraseSegment.Distance(AT_300M)` → 「およそ300m先、」
-   - `PhraseSegment.Fixed(DIR_RIGHT_END)` → 「右方向です。」
-4. 最終: **「およそ300m先、右方向です。」**
-5. その後 100m で「まもなく、右方向です。」、50m でさらに「まもなく、右方向です。」（ただし `AT_50M` は `AT_100M` から 10 秒以内なら抑制する運用も検討可）。
+| ティック | prev | curr | 下抜けバケット | 発話 |
+|---|---|---|---|---|
+| t0 | null | 505 | - | - |
+| t1 | 505 | 495 | `AT_500M` | 「およそ500m先、右方向です。」 |
+| t2 | 495 | 105 | - | - |
+| t3 | 105 | 95 | `AT_100M` | 「まもなく、右方向です。」 |
+| t4 | 95 | 45 | `AT_50M` | （`AT_100M` 発話から 5s 未満なら抑制） |
 
-### 7.2 高速入口 1km 手前
+### 7.2 合流（左から）
 
-1. `AT_1KM` を下抜け。`ManeuverType=ON_RAMP`、`HighwayInfo.type=INTERCHANGE`。
-2. イベント: `HighwayFacility(bucket=AT_1KM, facility=HIGHWAY_ENTRANCE)`。
-3. フレーズ: **「およそ1km先、高速入口です。」**
+`maneuver=MERGE_LEFT`, `drivingSide=LEFT`。`AT_500M` 到達:
 
-### 7.3 連続案内（右折 → 分岐）
+発話: 「およそ500m先、左からの合流が有ります。」
 
-1. 現ステップ `TURN_RIGHT`、次ステップ `FORK_LEFT`、距離差 180m。
-2. `continuesTo=FORK` が埋まる。
-3. フレーズ: **「およそ300m先、右方向、その先、分岐です。」**
-   - segments = [`Distance(AT_300M)`, `Fixed(DIR_RIGHT_MID)`, `Fixed(TIMING_NEXT)`, `Fixed(FACILITY_FORK_END)`]
+### 7.3 分岐
 
-### 7.4 ルート外れて復帰
+`maneuver=FORK_RIGHT`。`AT_500M` 到達:
 
-1. `isOffRoute` が false→true → `OffRoute`: **「ルートから外れました。」** (`CRITICAL`, FLUSH)
-2. `routeChangedListener` 発火 → `Rerouted`: **「新しいルートが見つかりました。新しいルートで案内します。」** (`CRITICAL`, FLUSH)
+発話: 「およそ500m先、分岐です。」（※ v1 では分岐の左右区別はしない）
+
+### 7.4 オフルート → リルート
+
+1. `isOffRoute` false → true → `OffRoute` (CRITICAL, flush=true) → 「ルートから外れました。」
+2. `routeChangedListener` 発火 → `routes` StateFlow 変化 → `Rerouted` (CRITICAL, flush=true) → 「新しいルートが見つかりました。新しいルートで案内します。」
+3. `isOffRoute` true → false → `OnRouteRecovered` (CRITICAL, flush=true) → 「ルートに戻りました。」
+
+発話順序は SDK の発火順に依存する。実機で確認して、不要に思える場合は `OnRouteRecovered` を `Rerouted` があった直後のみ抑制する等のチューニングを Phase 4 で行う。
+
+### 7.5 長距離直進（道なり）
+
+ステップ遷移直後、次ステップまで 7200m の区間:
+
+発話: 「5km以上道なりです。」（LOW, flush=false）
 
 ---
 
@@ -755,20 +881,45 @@ private fun applyGuidanceUpdate(
 
 | リスク | 影響 | 対応方針 |
 |---|---|---|
-| `distanceToCurrentStepMeters` の更新粒度（`PROGRESS_DISTANCE_THRESHOLD_METERS=50m`）が粗い | 距離バケット下抜けが取りこぼされる可能性 | `registerServiceForNavUpdates` の NavInfo は別経路で頻度が高い。実機で更新頻度を実測し、不足なら `RemainingTimeOrDistanceChangedListener` の閾値を下げる |
-| `NavigationStepSnapshot` に固有 ID が無い | ステップ識別が曖昧 | `(maneuver, roadName, 累積距離)` の合成キーで代替 |
-| `isRecommended` が不安定 / 空のことがある | レーン案内が出ない | レーン案内は欠落許容。欠落しても主経路は壊れない設計 |
-| Compose Resources の `getString()` 呼び出しが `suspend` | `GuidancePlanner` の副作用が増える | `PhraseBuilder` のみ suspend、`Planner` は純粋関数に保つ |
-| SDK テキスト廃止後に発話が重複 | 「右方向です」が 2 回など | Phase 2 の置換と同時に `currentStep.instruction` 発話を削除するコミットを 1 単位で行う |
-| `RoutePoint` にタイプ（駅/空港など）情報が無い | §3.1 タイプ別差し替え不可 | 初期実装は `GENERIC` のみ。型追加は後続フェーズ |
-| 高速/一般道の切替検出が不完全 | #569/#570 が誤発話 | Phase 1-4 ではこの 2 フレーズを発話しない |
+| NavInfo の更新頻度が実機で遅いと距離バケット下抜けが取りこぼされる | 500m 発話が出ない等 | Phase 4 で実測。必要なら `registerServiceForNavUpdates` の NumNextStepsToPreview / `PROGRESS_DISTANCE_THRESHOLD_METERS` を調整 |
+| `StepTransitionTracker` の `isSameStep` 判定が誤検出（偽陽性） | 重複発話、カウンタずれ | 判定フィールドを厳しめに（maneuver + roadName + drivingSide + roundabout）。Phase 4 で実機確認 |
+| `StepTransitionTracker` の偽陰性（実際は別ステップなのに同一扱い） | 発話が次ステップまで遅れる | 実害小。優先度低 |
+| routeToken なしルートで SDK が別ルート計算 | ステップ情報と事前 `GoogleRoute.steps` の乖離 | v1 では `GoogleRoute.steps` を発話ロジックで使わないため影響小 |
+| Phase 1 期間中の SDK テキスト発話との重複 | 短時間の二重発話 | `CRITICAL` の flush=true で割り込む。重複の体感が強ければ Phase 1-2 を結合して一括 cutover |
+| Google Cloud TTS キャッシュヒット率低下 | コスト増・レイテンシ増 | v1 は固定フレーズのみ。動的文字列は含まない |
+| `SpeechDispatcher` Channel のバックプレッシャ | キュー溢れ | `Channel.UNLIMITED` を採用。実測でメモリ懸念あれば `CONFLATED` 等に変更 |
+| `flush=true` で LOW/NORMAL 発話が頻繁に破棄される | 情報損失 | `CRITICAL`/`HIGH` を連発するシナリオは稀。Phase 4 で確認 |
 
 ---
 
-## 9. このあとの進め方
+## 9. v2 以降のバックログ
 
-1. この計画書のレビュー（お兄ちゃんの確認）。
-2. Phase 0 着手 → PR 化。
-3. Phase 1 → Phase 2 の順に進行。Phase 2 完了時点で「ナビとして実用的な独自発話」が揃う。
-4. Phase 3-5 は体験の質向上。
-5. 将来対象外領域（渋滞・気象・安全 DB）は別計画書で立ち上げ。
+v1 完了後に順次実装する機能を明示。
+
+| 項目 | 前提 |
+|---|---|
+| 高速道路案内（IC / JCT / 料金所 / SA 入口） | `GoogleRoutesDataSource` で `highwayInfo` / `roadName` / `roadRef` を埋める必要がある |
+| 一般/高速切替通知 (#569/#570) | 同上 |
+| 有料区間・自動車専用道通知 (#767/#768) | 同上 |
+| 「その先」連続案内 | 連続案内の距離ポリシー確定 + 複数発話の順序保証設計 |
+| 右折後 / 左折後 / 通過後 (#764-766) | ステップ遷移直後の即時発話設計 |
+| 信号カウント (#754-755, #757-758) | 信号機データソース必要 |
+| 車線 N 番目 / 中央右側/左側 / お入りください / 合流後/分岐後 | 現在走行車線の取得が必要 |
+| 車線減少 / 専用レーン | 情報源必要 |
+| 目的地タイプ別フレーズ (#51 → 駅/空港/バス停など) | `RoutePoint` に type 追加 + Places API から種別伝播 |
+| 経由地/目的地スポット名読み上げ | `NavigationArrivalSnapshot.waypointTitle` にスポット名を入れる + TTS キャッシュ戦略見直し |
+| 音声継続/中断 (#566-568, #690) | BG タイマー + セッション中断機構 |
+| 渋滞 / 規制 / 気象 / 災害 / 天気 / 速度 / 踏切 / 一時停止 / カーブ / ゾーン30 / 景観 | 各データ源の統合 |
+| ボイスコントロール | 音声認識エンジン統合 |
+
+---
+
+## 10. このあとの進め方
+
+1. この計画書 (rev.2) のレビュー。
+2. Phase 0 着手 → PR 化（型追加と strings 追加のみ、動作変化なし）。
+3. Phase 1（セッション/到着/オフルート/リルート）。
+4. Phase 2（基本 TBT + 分岐/合流の cutover）。SDK テキスト発話を削除するのはここ。
+5. Phase 3（レーン + 道なり）。
+6. Phase 4（実機調整）。
+7. v1 完了後、v2 として「高速道路案内」着手（datasource 強化を伴う）。
