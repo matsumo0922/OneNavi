@@ -42,7 +42,6 @@ class CameraManager(
     private var collectJob: Job? = null
     private var attachedProvider: RoadSnappedLocationProvider? = null
 
-    private var lastBearing: Float = 0f
     private var followingPadding = MapPadding()
     private var overviewPadding = MapPadding()
 
@@ -54,9 +53,6 @@ class CameraManager(
 
     private val _currentLocation = MutableStateFlow<RoutePoint?>(null)
     val currentLocation: StateFlow<RoutePoint?> = _currentLocation.asStateFlow()
-
-    private val _currentBearing = MutableStateFlow(0f)
-    val currentBearing: StateFlow<Float> = _currentBearing.asStateFlow()
 
     private val _mapPadding = MutableStateFlow(MapPadding())
     val mapPadding: StateFlow<MapPadding> = _mapPadding.asStateFlow()
@@ -133,10 +129,6 @@ class CameraManager(
     }
 
     private fun onLocationUpdated(location: Location) {
-        if (location.hasBearing()) {
-            lastBearing = location.bearing
-            _currentBearing.value = lastBearing
-        }
         _currentLocation.value = RoutePoint(
             latitude = location.latitude,
             longitude = location.longitude,

@@ -6,7 +6,6 @@ import com.google.android.libraries.mapsplatform.turnbyturn.model.LaneDirection
 import com.google.android.libraries.mapsplatform.turnbyturn.model.Maneuver
 import com.google.android.libraries.mapsplatform.turnbyturn.model.NavState
 import io.github.aakira.napier.Napier
-import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,12 +50,6 @@ class GuidanceSessionManager(
 
     private val _arrivalInfo = MutableStateFlow<ArrivalInfo?>(null)
     val arrivalInfo: StateFlow<ArrivalInfo?> = _arrivalInfo.asStateFlow()
-
-    /**
-     * Navigation SDK が現セッション中に自動再ルーティングしたかを示す。UI 側はこの値を見て、
-     * Routes API 由来の step 表示（Callout 等）が信頼できるかを判断する。
-     */
-    val hasReroutedSinceStart: StateFlow<Boolean> = navigationSdkManager.hasReroutedSinceStart
 
     private var guidanceJob: Job? = null
     private var arrivalJob: Job? = null
@@ -201,17 +194,13 @@ class GuidanceSessionManager(
         _guidanceUiState.value = _guidanceUiState.value.copy(
             currentManeuver = currentManeuver,
             nextManeuver = nextManeuver,
-            upcomingSteps = persistentListOf(),
             tripProgress = TripProgressInfo(
                 distanceRemainingMeters = distanceRemaining,
                 durationRemainingSeconds = durationRemaining,
                 estimatedArrivalTimeMillis = System.currentTimeMillis() + (durationRemaining * 1000).toLong(),
             ),
-            currentRoadName = currentManeuver?.roadName
-                ?: currentStep?.roadName?.takeIf { it.isNotBlank() },
             isOffRoute = false,
             isTtsAvailable = ttsEngine?.isReady?.value == true,
-            isLocationStale = false,
         )
 
         if (currentStep != null && currentStep != lastSpokenStep) {

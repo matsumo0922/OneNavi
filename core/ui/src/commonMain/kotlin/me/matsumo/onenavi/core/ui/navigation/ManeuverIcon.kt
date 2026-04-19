@@ -34,13 +34,6 @@ import me.matsumo.onenavi.core.resource.direction_fork_right
 import me.matsumo.onenavi.core.resource.direction_fork_slight_left
 import me.matsumo.onenavi.core.resource.direction_fork_slight_right
 import me.matsumo.onenavi.core.resource.direction_fork_straight
-import me.matsumo.onenavi.core.resource.direction_invalid
-import me.matsumo.onenavi.core.resource.direction_invalid_left
-import me.matsumo.onenavi.core.resource.direction_invalid_right
-import me.matsumo.onenavi.core.resource.direction_invalid_slight_left
-import me.matsumo.onenavi.core.resource.direction_invalid_slight_right
-import me.matsumo.onenavi.core.resource.direction_invalid_straight
-import me.matsumo.onenavi.core.resource.direction_invalid_uturn
 import me.matsumo.onenavi.core.resource.direction_merge_left
 import me.matsumo.onenavi.core.resource.direction_merge_right
 import me.matsumo.onenavi.core.resource.direction_merge_slight_left
@@ -53,13 +46,6 @@ import me.matsumo.onenavi.core.resource.direction_new_name_sharp_right
 import me.matsumo.onenavi.core.resource.direction_new_name_slight_left
 import me.matsumo.onenavi.core.resource.direction_new_name_slight_right
 import me.matsumo.onenavi.core.resource.direction_new_name_straight
-import me.matsumo.onenavi.core.resource.direction_notification_left
-import me.matsumo.onenavi.core.resource.direction_notification_right
-import me.matsumo.onenavi.core.resource.direction_notification_sharp_left
-import me.matsumo.onenavi.core.resource.direction_notification_sharp_right
-import me.matsumo.onenavi.core.resource.direction_notification_slight_left
-import me.matsumo.onenavi.core.resource.direction_notification_slight_right
-import me.matsumo.onenavi.core.resource.direction_notification_straight
 import me.matsumo.onenavi.core.resource.direction_off_ramp
 import me.matsumo.onenavi.core.resource.direction_off_ramp_left
 import me.matsumo.onenavi.core.resource.direction_off_ramp_right
@@ -73,7 +59,6 @@ import me.matsumo.onenavi.core.resource.direction_on_ramp_sharp_right
 import me.matsumo.onenavi.core.resource.direction_on_ramp_slight_left
 import me.matsumo.onenavi.core.resource.direction_on_ramp_slight_right
 import me.matsumo.onenavi.core.resource.direction_on_ramp_straight
-import me.matsumo.onenavi.core.resource.direction_ramp
 import me.matsumo.onenavi.core.resource.direction_rotary
 import me.matsumo.onenavi.core.resource.direction_rotary_left
 import me.matsumo.onenavi.core.resource.direction_rotary_right
@@ -190,15 +175,6 @@ private fun exactDirectionIcon(type: ManeuverType, modifier: ManeuverModifier?):
             ManeuverModifier.STRAIGHT -> Res.drawable.direction_fork_straight
             else -> null
         }
-        ManeuverType.INVALID -> when (modifier) {
-            ManeuverModifier.LEFT -> Res.drawable.direction_invalid_left
-            ManeuverModifier.RIGHT -> Res.drawable.direction_invalid_right
-            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_invalid_slight_left
-            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_invalid_slight_right
-            ManeuverModifier.STRAIGHT -> Res.drawable.direction_invalid_straight
-            ManeuverModifier.UTURN -> Res.drawable.direction_invalid_uturn
-            else -> null
-        }
         ManeuverType.MERGE -> when (modifier) {
             ManeuverModifier.LEFT -> Res.drawable.direction_merge_left
             ManeuverModifier.RIGHT -> Res.drawable.direction_merge_right
@@ -215,16 +191,6 @@ private fun exactDirectionIcon(type: ManeuverType, modifier: ManeuverModifier?):
             ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_new_name_slight_left
             ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_new_name_slight_right
             ManeuverModifier.STRAIGHT -> Res.drawable.direction_new_name_straight
-            else -> null
-        }
-        ManeuverType.NOTIFICATION -> when (modifier) {
-            ManeuverModifier.LEFT -> Res.drawable.direction_notification_left
-            ManeuverModifier.RIGHT -> Res.drawable.direction_notification_right
-            ManeuverModifier.SHARP_LEFT -> Res.drawable.direction_notification_sharp_left
-            ManeuverModifier.SHARP_RIGHT -> Res.drawable.direction_notification_sharp_right
-            ManeuverModifier.SLIGHT_LEFT -> Res.drawable.direction_notification_slight_left
-            ManeuverModifier.SLIGHT_RIGHT -> Res.drawable.direction_notification_slight_right
-            ManeuverModifier.STRAIGHT -> Res.drawable.direction_notification_straight
             else -> null
         }
         ManeuverType.OFF_RAMP -> when (modifier) {
@@ -281,9 +247,7 @@ private fun exactDirectionIcon(type: ManeuverType, modifier: ManeuverModifier?):
             ManeuverModifier.STRAIGHT -> Res.drawable.direction_turn_straight
             else -> null
         }
-        ManeuverType.UTURN,
-        ManeuverType.RAMP,
-        -> null
+        ManeuverType.UTURN -> null
     }
 }
 
@@ -293,10 +257,8 @@ private fun typeOnlyDirectionIcon(type: ManeuverType): DrawableResource? {
         ManeuverType.CONTINUE -> Res.drawable.direction_continue
         ManeuverType.DEPART -> Res.drawable.direction_depart
         ManeuverType.FORK -> Res.drawable.direction_fork
-        ManeuverType.INVALID -> Res.drawable.direction_invalid
         ManeuverType.OFF_RAMP -> Res.drawable.direction_off_ramp
         ManeuverType.ON_RAMP -> Res.drawable.direction_on_ramp
-        ManeuverType.RAMP -> Res.drawable.direction_ramp
         ManeuverType.ROTARY -> Res.drawable.direction_rotary
         ManeuverType.ROUNDABOUT -> Res.drawable.direction_roundabout
         ManeuverType.TRAFFIC_CIRCLE -> Res.drawable.direction_traffic_circle
@@ -305,7 +267,6 @@ private fun typeOnlyDirectionIcon(type: ManeuverType): DrawableResource? {
         ManeuverType.END_OF_ROAD,
         ManeuverType.MERGE,
         ManeuverType.NAME_CHANGE,
-        ManeuverType.NOTIFICATION,
         -> null
     }
 }
