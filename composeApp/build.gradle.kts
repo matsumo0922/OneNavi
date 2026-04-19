@@ -145,6 +145,7 @@ buildkonfig {
 
         setField("DEVELOPER_PIN", "1234")
         setField("GOOGLE_API_KEY")
+        setField("GOOGLE_CLOUD_TTS_API_KEY")
         setField("PURCHASE_ANDROID_API_KEY")
         setField("PURCHASE_IOS_API_KEY")
 
