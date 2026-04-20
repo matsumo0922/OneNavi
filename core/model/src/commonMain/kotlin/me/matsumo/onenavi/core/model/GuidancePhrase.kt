@@ -38,4 +38,14 @@ sealed interface PhraseSegment {
         val bucket: DistanceBucket,
         val isStandalone: Boolean = false,
     ) : PhraseSegment
+
+    /**
+     * 連続案内（followup）の距離バケット由来のフレーズ。
+     *
+     * 主ターン発話に続けて「およそ XXm で」と次ターンまでの距離を読み上げる。
+     */
+    @Immutable
+    data class FollowupDistance(
+        val bucket: FollowupDistanceBucket,
+    ) : PhraseSegment
 }

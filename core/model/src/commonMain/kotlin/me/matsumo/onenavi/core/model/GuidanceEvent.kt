@@ -65,6 +65,8 @@ sealed interface GuidanceEvent {
      * @property drivingSide 合流時の流入側判定などに使用する走行側。
      * @property isStandaloneAt50m `AT_50M` 単独発話モードか（`AT_100M` 未発話のまま 50m 以下に入った場合）。
      *   true のときは `PhraseComposer` が「この先すぐ、」文頭に切り替える。
+     * @property followup 連続案内（次ステップが近接する場合の追加予告）。
+     *   `AT_100M` バケット発話時にのみセットされる。null のときは単独フレーズで発話する。
      */
     @Immutable
     data class Maneuver(
@@ -74,6 +76,7 @@ sealed interface GuidanceEvent {
         val modifier: ManeuverModifier?,
         val drivingSide: DrivingSide?,
         val isStandaloneAt50m: Boolean,
+        val followup: FollowupManeuver?,
         override val priority: GuidancePriority,
     ) : GuidanceEvent
 

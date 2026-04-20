@@ -11,8 +11,15 @@ import me.matsumo.onenavi.core.resource.tts_direction_slight_left_end
 import me.matsumo.onenavi.core.resource.tts_direction_slight_right_end
 import me.matsumo.onenavi.core.resource.tts_direction_straight_end
 import me.matsumo.onenavi.core.resource.tts_direction_uturn_end
+import me.matsumo.onenavi.core.resource.tts_conjunction_beyond
 import me.matsumo.onenavi.core.resource.tts_distance_2km
 import me.matsumo.onenavi.core.resource.tts_distance_500m
+import me.matsumo.onenavi.core.resource.tts_distance_approx_100m_at
+import me.matsumo.onenavi.core.resource.tts_distance_approx_200m_at
+import me.matsumo.onenavi.core.resource.tts_distance_approx_300m_at
+import me.matsumo.onenavi.core.resource.tts_distance_approx_400m_at
+import me.matsumo.onenavi.core.resource.tts_distance_approx_500m_at
+import me.matsumo.onenavi.core.resource.tts_distance_approx_50m_at
 import me.matsumo.onenavi.core.resource.tts_follow_traffic_rules
 import me.matsumo.onenavi.core.resource.tts_fork_end
 import me.matsumo.onenavi.core.resource.tts_lane_center
@@ -51,6 +58,14 @@ enum class TtsPhraseId(val resource: StringResource) {
     DISTANCE_500M(Res.string.tts_distance_500m),
     TIMING_IMMINENT(Res.string.tts_timing_imminent),
     TIMING_VERY_IMMINENT(Res.string.tts_timing_very_imminent),
+
+    CONJUNCTION_BEYOND(Res.string.tts_conjunction_beyond),
+    DISTANCE_APPROX_50M_AT(Res.string.tts_distance_approx_50m_at),
+    DISTANCE_APPROX_100M_AT(Res.string.tts_distance_approx_100m_at),
+    DISTANCE_APPROX_200M_AT(Res.string.tts_distance_approx_200m_at),
+    DISTANCE_APPROX_300M_AT(Res.string.tts_distance_approx_300m_at),
+    DISTANCE_APPROX_400M_AT(Res.string.tts_distance_approx_400m_at),
+    DISTANCE_APPROX_500M_AT(Res.string.tts_distance_approx_500m_at),
 
     DIR_STRAIGHT_END(Res.string.tts_direction_straight_end),
     DIR_SLIGHT_RIGHT_END(Res.string.tts_direction_slight_right_end),

@@ -1,7 +1,9 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import me.matsumo.onenavi.core.model.DrivingSide
+import me.matsumo.onenavi.core.model.FollowupManeuver
 import me.matsumo.onenavi.core.model.GuidanceEvent
 import me.matsumo.onenavi.core.model.GuidancePhrase
 import me.matsumo.onenavi.core.model.LanePosition
@@ -62,6 +64,9 @@ class PhraseComposer {
                     }
                     append(getString(phraseId.resource))
                 }
+                is PhraseSegment.FollowupDistance -> {
+                    append(getString(segment.bucket.phraseId.resource))
+                }
             }
         }
     }
@@ -72,7 +77,22 @@ class PhraseComposer {
             isStandalone = event.isStandaloneAt50m,
         )
         val tail = PhraseSegment.Fixed(resolveManeuverTail(event))
-        return phrase(head, tail)
+        val followupSegments = event.followup?.let { followup -> composeFollowupSegments(followup) }
+        return if (followupSegments == null) {
+            phrase(head, tail)
+        } else {
+            GuidancePhrase(
+                segments = (listOf<PhraseSegment>(head, tail) + followupSegments).toPersistentList(),
+            )
+        }
+    }
+
+    private fun composeFollowupSegments(followup: FollowupManeuver): List<PhraseSegment> {
+        return listOf(
+            PhraseSegment.Fixed(TtsPhraseId.CONJUNCTION_BEYOND),
+            PhraseSegment.FollowupDistance(bucket = followup.distanceBucket),
+            PhraseSegment.Fixed(modifierToDirectionEnd(followup.modifier)),
+        )
     }
 
     private fun composeLane(event: GuidanceEvent.Lane): GuidancePhrase {
