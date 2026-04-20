@@ -28,10 +28,6 @@ internal class GuidanceCoordinator(
     private var previousSnapshot: NavigationFeedSnapshot? = null
     private var previousIsOffRoute: Boolean = false
 
-    private companion object {
-        private const val TAG = "GuidanceCoordinator"
-    }
-
     fun onNavigationUpdate(snapshot: NavigationFeedSnapshot) {
         val transition = stepTracker.update(
             currentStep = snapshot.currentStep,
@@ -132,11 +128,14 @@ internal class GuidanceCoordinator(
     /**
      * ステップ遷移直後の catch-up。
      *
-     * 新ステップの開始距離が既にバケット閾値以下なら「通過済み」として spokenKeys に事前登録し、
-     * 以降のティックで遠距離バケットが誤って下抜け検出されないようにする。
+     * 新ステップの開始距離が既に遠距離バケット（[AT_2KM][DistanceBucket.AT_2KM] /
+     * [AT_500M][DistanceBucket.AT_500M]）の閾値以下なら「通過済み」として spokenKeys に事前登録する。
+     * 近距離バケット（[AT_100M][DistanceBucket.AT_100M] / [AT_50M][DistanceBucket.AT_50M]）は
+     * catch-up の対象外とし、実走での下抜け検出に任せる。これにより短距離連続ターン時の無音を防ぐ。
      */
     private fun markAlreadyPassedBuckets(stepCounter: Int, currentDistance: Int) {
         DistanceBucket.entries
+            .filter { bucket -> bucket in CATCH_UP_TARGETS }
             .filter { bucket -> currentDistance <= bucket.thresholdMeters }
             .forEach { bucket ->
                 spokenKeys.add(
@@ -147,5 +146,10 @@ internal class GuidanceCoordinator(
                     ),
                 )
             }
+    }
+
+    private companion object {
+        private const val TAG = "GuidanceCoordinator"
+        private val CATCH_UP_TARGETS = setOf(DistanceBucket.AT_2KM, DistanceBucket.AT_500M)
     }
 }
