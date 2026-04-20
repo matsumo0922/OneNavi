@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
+import me.matsumo.onenavi.core.model.DistanceBucket
 import me.matsumo.onenavi.core.model.GuidanceEvent
 import me.matsumo.onenavi.core.model.GuidancePriority
 import me.matsumo.onenavi.core.navigation.NavigationFeedSnapshot
@@ -33,6 +34,10 @@ internal class GuidanceCoordinator(
         )
         if (transition.transitioned) {
             spokenKeys.forgetBefore(transition.counter)
+            val currentDistance = snapshot.distanceToCurrentStepMeters
+            if (currentDistance != null) {
+                markAlreadyPassedBuckets(transition.counter, currentDistance)
+            }
         }
 
         val events = planner.plan(
@@ -82,8 +87,53 @@ internal class GuidanceCoordinator(
         previousIsOffRoute = false
     }
 
-    @Suppress("UNUSED_PARAMETER", "FunctionOnlyReturningConstant")
+    /**
+     * 発話対象イベントに対応する [SpokenGuideKey] を登録する。
+     *
+     * 既に同一キーが記録されている場合は false を返して dispatch をスキップする。
+     * 状態を持たないセッション制御系・ルート系イベントは常に true を返す。
+     */
     private fun markSpokenIfNeeded(event: GuidanceEvent): Boolean {
+        val key = when (event) {
+            is GuidanceEvent.Maneuver -> SpokenGuideKey(
+                stepCounter = event.stepCounter,
+                category = SpokenGuideKey.Category.MANEUVER,
+                bucket = event.bucket,
+            )
+            is GuidanceEvent.Lane -> SpokenGuideKey(
+                stepCounter = event.stepCounter,
+                category = SpokenGuideKey.Category.LANE,
+                bucket = event.bucket,
+            )
+            is GuidanceEvent.Straightforward -> SpokenGuideKey(
+                stepCounter = event.stepCounter,
+                category = SpokenGuideKey.Category.STRAIGHTFORWARD,
+                bucket = null,
+            )
+            else -> return true
+        }
+        if (spokenKeys.contains(key)) return false
+        spokenKeys.add(key)
         return true
+    }
+
+    /**
+     * ステップ遷移直後の catch-up。
+     *
+     * 新ステップの開始距離が既にバケット閾値以下なら「通過済み」として spokenKeys に事前登録し、
+     * 以降のティックで遠距離バケットが誤って下抜け検出されないようにする。
+     */
+    private fun markAlreadyPassedBuckets(stepCounter: Int, currentDistance: Int) {
+        DistanceBucket.entries
+            .filter { bucket -> currentDistance <= bucket.thresholdMeters }
+            .forEach { bucket ->
+                spokenKeys.add(
+                    SpokenGuideKey(
+                        stepCounter = stepCounter,
+                        category = SpokenGuideKey.Category.MANEUVER,
+                        bucket = bucket,
+                    ),
+                )
+            }
     }
 }

@@ -71,7 +71,6 @@ class GuidanceSessionManager(
 
     private var sessionStartTimeMillis: Long = 0L
     private var activeRoute: GoogleRoute? = null
-    private var lastSpokenStep: NavigationStepSnapshot? = null
 
     fun register() {
         // no-op
@@ -90,7 +89,6 @@ class GuidanceSessionManager(
 
         activeRoute = route
         sessionStartTimeMillis = System.currentTimeMillis()
-        lastSpokenStep = null
 
         val engine = ttsEngineFactory()
         ttsEngine = engine
@@ -109,7 +107,7 @@ class GuidanceSessionManager(
         dispatcher = sessionDispatcher
         coordinator = sessionCoordinator
 
-        sessionDispatcher.setEnabled(false)
+        sessionDispatcher.setEnabled(true)
         sessionDispatcher.start()
         sessionCoordinator.reset()
         sessionCoordinator.emit(GuidanceEvent.SessionStarted(priority = GuidancePriority.CRITICAL))
@@ -199,7 +197,6 @@ class GuidanceSessionManager(
 
         _guidanceUiState.value = GuidanceUiState.Initial
         _arrivalInfo.value = null
-        lastSpokenStep = null
     }
 
     fun returnToBrowsing() {
@@ -259,10 +256,7 @@ class GuidanceSessionManager(
             isTtsAvailable = ttsEngine?.isReady?.value == true,
         )
 
-        if (currentStep != null && currentStep != lastSpokenStep) {
-            lastSpokenStep = currentStep
-            speak(currentStep.instruction)
-        }
+        coordinator?.onNavigationUpdate(navInfo)
     }
 
     /**
@@ -316,14 +310,6 @@ class GuidanceSessionManager(
         )
     }.toImmutableList()
 
-    private fun speak(text: String) {
-        if (text.isBlank()) return
-        val spoken = speechOrchestrator?.enqueue(text = text) ?: false
-        if (!spoken) {
-            Napier.d(tag = TAG) { "TTS skipped: $text" }
-        }
-    }
-
     /**
      * Navigation SDK からの 3 系統の Flow を一度に受け取るための中間ホルダー。
      *
@@ -342,7 +328,7 @@ class GuidanceSessionManager(
     }
 }
 
-private fun Int.toManeuverType(): ManeuverType {
+internal fun Int.toManeuverType(): ManeuverType {
     return when (this) {
         Maneuver.DEPART -> ManeuverType.DEPART
         Maneuver.DESTINATION,
@@ -411,7 +397,7 @@ private fun Int.toManeuverType(): ManeuverType {
 }
 
 @Suppress("CyclomaticComplexMethod")
-private fun Int.toManeuverModifier(): ManeuverModifier? {
+internal fun Int.toManeuverModifier(): ManeuverModifier? {
     return when (this) {
         Maneuver.DESTINATION_LEFT,
         Maneuver.TURN_LEFT,
@@ -484,7 +470,7 @@ private fun Int.toManeuverModifier(): ManeuverModifier? {
     }
 }
 
-private fun Int.toDrivingSide(): DrivingSide? {
+internal fun Int.toDrivingSide(): DrivingSide? {
     return when (this) {
         SdkDrivingSide.LEFT -> DrivingSide.LEFT
         SdkDrivingSide.RIGHT -> DrivingSide.RIGHT
