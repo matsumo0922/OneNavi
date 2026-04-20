@@ -169,4 +169,53 @@
     <string name="paywall_privacy">プライバシーポリシー</string>
     <string name="paywall_error_purchase_failed">購入処理に失敗しました。</string>
     <string name="paywall_error_no_subscription_to_restore">復元可能な購入情報が見つかりませんでした。</string>
+
+    <!-- TTS Session -->
+    <string name="tts_navigation_started">音声案内を開始します。</string>
+    <string name="tts_follow_traffic_rules">実際の交通規制に従って走行してください。</string>
+    <string name="tts_navigation_finished">お疲れ様でした。</string>
+
+    <!-- TTS Distance -->
+    <string name="tts_distance_2km">およそ2km先、</string>
+    <string name="tts_distance_500m">およそ500m先、</string>
+
+    <!-- TTS Timing -->
+    <string name="tts_timing_imminent">まもなく、</string>
+    <string name="tts_timing_very_imminent">この先すぐ、</string>
+
+    <!-- TTS Direction (句点止め = 文末) -->
+    <string name="tts_direction_straight_end">直進方向です。</string>
+    <string name="tts_direction_slight_right_end">斜め右方向です。</string>
+    <string name="tts_direction_right_end">右方向です。</string>
+    <string name="tts_direction_sharp_right_end">右手前方向です。</string>
+    <string name="tts_direction_uturn_end">戻る方向です。</string>
+    <string name="tts_direction_sharp_left_end">左手前方向です。</string>
+    <string name="tts_direction_left_end">左方向です。</string>
+    <string name="tts_direction_slight_left_end">斜め左方向です。</string>
+
+    <!-- TTS Fork / Merge -->
+    <string name="tts_fork_end">分岐です。</string>
+    <string name="tts_merge_right">右からの合流が有ります。</string>
+    <string name="tts_merge_left">左からの合流が有ります。</string>
+    <string name="tts_merge">合流が有ります。</string>
+
+    <!-- TTS Lane -->
+    <string name="tts_lane_right_side">右側の車線を</string>
+    <string name="tts_lane_left_side">左側の車線を</string>
+    <string name="tts_lane_center">中央の車線を</string>
+    <string name="tts_lane_proceed">お進みください。</string>
+
+    <!-- TTS Straightforward -->
+    <string name="tts_straightforward_short">しばらく道なりです。</string>
+    <string name="tts_straightforward_long">5km以上道なりです。</string>
+
+    <!-- TTS Route -->
+    <string name="tts_off_route">ルートから外れました。</string>
+    <string name="tts_on_route_recovered">ルートに戻りました。</string>
+    <string name="tts_rerouted_found">新しいルートが見つかりました。</string>
+    <string name="tts_rerouted_start">新しいルートで案内します。</string>
+
+    <!-- TTS Waypoint / Destination -->
+    <string name="tts_waypoint_approach">経由地付近です。</string>
+    <string name="tts_destination_approach">目的地付近です。</string>
 </resources>
