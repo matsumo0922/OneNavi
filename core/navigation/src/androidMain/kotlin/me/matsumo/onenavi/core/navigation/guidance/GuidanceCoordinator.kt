@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
+import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.core.model.DistanceBucket
 import me.matsumo.onenavi.core.model.GuidanceEvent
 import me.matsumo.onenavi.core.model.GuidancePriority
@@ -27,11 +28,22 @@ internal class GuidanceCoordinator(
     private var previousSnapshot: NavigationFeedSnapshot? = null
     private var previousIsOffRoute: Boolean = false
 
+    private companion object {
+        private const val TAG = "GuidanceCoordinator"
+    }
+
     fun onNavigationUpdate(snapshot: NavigationFeedSnapshot) {
         val transition = stepTracker.update(
             currentStep = snapshot.currentStep,
             currentDistance = snapshot.distanceToCurrentStepMeters,
         )
+        Napier.d(tag = TAG) {
+            "[P4] TICK step=${transition.counter} " +
+                "prev=${previousSnapshot?.distanceToCurrentStepMeters} " +
+                "curr=${snapshot.distanceToCurrentStepMeters} " +
+                "transitioned=${transition.transitioned} " +
+                "spokenKeysSize=${spokenKeys.size}"
+        }
         if (transition.transitioned) {
             spokenKeys.forgetBefore(transition.counter)
             val currentDistance = snapshot.distanceToCurrentStepMeters

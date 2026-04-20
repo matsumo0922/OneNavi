@@ -264,14 +264,29 @@ class GuidanceSessionManager(
      * routeToken が両方ある場合はそれで比較し、ない場合は id / geometry.size / 距離 / 所要時間の複合キーで代替する。
      */
     private fun isSameRoute(old: GoogleRoute?, new: GoogleRoute?): Boolean {
-        if (old == null || new == null) return old === new
-        if (old.routeToken != null && new.routeToken != null) {
-            return old.routeToken == new.routeToken
+        if (old == null || new == null) {
+            val result = old === new
+            Napier.d(tag = TAG) { "[P4] ROUTE_CMP old=$old new=$new -> same=$result (nullcheck)" }
+            return result
         }
-        return old.id == new.id &&
+        if (old.routeToken != null && new.routeToken != null) {
+            val result = old.routeToken == new.routeToken
+            Napier.d(tag = TAG) {
+                "[P4] ROUTE_CMP oldToken=${old.routeToken} newToken=${new.routeToken} -> same=$result (token)"
+            }
+            return result
+        }
+        val result = old.id == new.id &&
             old.geometry.size == new.geometry.size &&
             old.distanceMeters == new.distanceMeters &&
             old.durationSeconds == new.durationSeconds
+        Napier.d(tag = TAG) {
+            "[P4] ROUTE_CMP oldId=${old.id} newId=${new.id} " +
+                "geomEq=${old.geometry.size == new.geometry.size} " +
+                "distEq=${old.distanceMeters == new.distanceMeters} " +
+                "durEq=${old.durationSeconds == new.durationSeconds} -> same=$result (composite)"
+        }
+        return result
     }
 
     private fun onFinalDestinationArrival(route: GoogleRoute?) {

@@ -10,6 +10,8 @@ internal class SpokenGuideKeyStore {
 
     private val keys: MutableSet<SpokenGuideKey> = mutableSetOf()
 
+    val size: Int get() = keys.size
+
     fun snapshot(): Set<SpokenGuideKey> = keys.toSet()
 
     fun contains(key: SpokenGuideKey): Boolean = key in keys

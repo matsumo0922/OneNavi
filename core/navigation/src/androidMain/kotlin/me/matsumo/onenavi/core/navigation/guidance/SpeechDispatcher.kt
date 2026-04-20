@@ -62,6 +62,7 @@ internal class SpeechDispatcher(
                     if (text.isNotBlank()) {
                         val flush = event.priority == GuidancePriority.CRITICAL ||
                             event.priority == GuidancePriority.HIGH
+                        Napier.i(tag = TAG) { "[P4] SPOKE event=$event text=\"$text\" flush=$flush" }
                         orchestrator.enqueue(text = text, flush = flush)
                     }
                 }.onFailure { throwable ->
