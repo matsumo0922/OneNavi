@@ -175,6 +175,16 @@
     <string name="tts_follow_traffic_rules">実際の交通規制に従って走行してください。</string>
     <string name="tts_navigation_finished">お疲れ様でした。</string>
 
+    <!-- TTS Depart (出発時の方角案内。セッション中 1 回のみ) -->
+    <string name="tts_depart_north">北方向に進みます。</string>
+    <string name="tts_depart_northeast">北東方向に進みます。</string>
+    <string name="tts_depart_east">東方向に進みます。</string>
+    <string name="tts_depart_southeast">南東方向に進みます。</string>
+    <string name="tts_depart_south">南方向に進みます。</string>
+    <string name="tts_depart_southwest">南西方向に進みます。</string>
+    <string name="tts_depart_west">西方向に進みます。</string>
+    <string name="tts_depart_northwest">北西方向に進みます。</string>
+
     <!-- TTS Distance -->
     <string name="tts_distance_2km">およそ2km先、</string>
     <string name="tts_distance_500m">およそ500m先、</string>

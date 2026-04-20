@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
 import kotlinx.coroutines.test.runTest
+import me.matsumo.onenavi.core.model.CompassDirection
 import me.matsumo.onenavi.core.model.DistanceBucket
 import me.matsumo.onenavi.core.model.DrivingSide
 import me.matsumo.onenavi.core.model.FollowupDistanceBucket
@@ -319,6 +320,34 @@ class PhraseComposerTest {
         )
         assertEquals(
             listOf(PhraseSegment.Fixed(TtsPhraseId.STRAIGHT_LONG)),
+            phrase.segments.toList(),
+        )
+    }
+
+    @Test
+    fun `Depart WEST emits depart_west fixed phrase`() = runTest {
+        val phrase = composer.compose(
+            GuidanceEvent.Depart(
+                direction = CompassDirection.WEST,
+                priority = GuidancePriority.NORMAL,
+            ),
+        )
+        assertEquals(
+            listOf(PhraseSegment.Fixed(TtsPhraseId.DEPART_WEST)),
+            phrase.segments.toList(),
+        )
+    }
+
+    @Test
+    fun `Depart NORTHEAST emits depart_northeast fixed phrase`() = runTest {
+        val phrase = composer.compose(
+            GuidanceEvent.Depart(
+                direction = CompassDirection.NORTHEAST,
+                priority = GuidancePriority.NORMAL,
+            ),
+        )
+        assertEquals(
+            listOf(PhraseSegment.Fixed(TtsPhraseId.DEPART_NORTHEAST)),
             phrase.segments.toList(),
         )
     }

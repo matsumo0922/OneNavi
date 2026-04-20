@@ -19,6 +19,20 @@ sealed interface GuidanceEvent {
         override val priority: GuidancePriority,
     ) : GuidanceEvent
 
+    /**
+     * 出発時（DEPART ステップ）の方角案内。
+     *
+     * SDK の `fullInstructionText` から [CompassDirection.parse] で方角を抽出し、
+     * 「〇〇方向に進みます。」の固定フレーズで発話する。セッション中 1 回のみ発火する運用。
+     *
+     * @property direction 抽出した方角。
+     */
+    @Immutable
+    data class Depart(
+        val direction: CompassDirection,
+        override val priority: GuidancePriority,
+    ) : GuidanceEvent
+
     /** セッション終了時の締めくくりアナウンス。 */
     @Immutable
     data class SessionFinished(

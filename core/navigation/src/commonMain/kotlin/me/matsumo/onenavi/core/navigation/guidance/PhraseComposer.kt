@@ -2,6 +2,7 @@ package me.matsumo.onenavi.core.navigation.guidance
 
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
+import me.matsumo.onenavi.core.model.CompassDirection
 import me.matsumo.onenavi.core.model.DrivingSide
 import me.matsumo.onenavi.core.model.FollowupManeuver
 import me.matsumo.onenavi.core.model.GuidanceEvent
@@ -26,6 +27,9 @@ class PhraseComposer {
         is GuidanceEvent.SessionStarted -> phrase(
             PhraseSegment.Fixed(TtsPhraseId.NAVIGATION_STARTED),
             PhraseSegment.Fixed(TtsPhraseId.FOLLOW_TRAFFIC_RULES),
+        )
+        is GuidanceEvent.Depart -> phrase(
+            PhraseSegment.Fixed(departPhraseId(event.direction)),
         )
         is GuidanceEvent.SessionFinished -> phrase(
             PhraseSegment.Fixed(TtsPhraseId.NAVIGATION_FINISHED),
@@ -142,5 +146,16 @@ class PhraseComposer {
 
     private fun phrase(vararg segments: PhraseSegment): GuidancePhrase {
         return GuidancePhrase(segments = persistentListOf(*segments))
+    }
+
+    private fun departPhraseId(direction: CompassDirection): TtsPhraseId = when (direction) {
+        CompassDirection.NORTH -> TtsPhraseId.DEPART_NORTH
+        CompassDirection.NORTHEAST -> TtsPhraseId.DEPART_NORTHEAST
+        CompassDirection.EAST -> TtsPhraseId.DEPART_EAST
+        CompassDirection.SOUTHEAST -> TtsPhraseId.DEPART_SOUTHEAST
+        CompassDirection.SOUTH -> TtsPhraseId.DEPART_SOUTH
+        CompassDirection.SOUTHWEST -> TtsPhraseId.DEPART_SOUTHWEST
+        CompassDirection.WEST -> TtsPhraseId.DEPART_WEST
+        CompassDirection.NORTHWEST -> TtsPhraseId.DEPART_NORTHWEST
     }
 }

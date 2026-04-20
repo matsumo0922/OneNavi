@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
 import androidx.compose.runtime.Immutable
+import me.matsumo.onenavi.core.model.CompassDirection
 import me.matsumo.onenavi.core.model.DistanceBucket
 import me.matsumo.onenavi.core.model.FollowupDistanceBucket
 import me.matsumo.onenavi.core.model.FollowupManeuver
@@ -28,10 +29,30 @@ class GuidancePlanner {
 
     fun plan(input: GuidancePlannerInput): List<GuidanceEvent> {
         val events = mutableListOf<GuidanceEvent>()
+        planDepart(input)?.let { events.add(it) }
         planStraightforward(input)?.let { events.add(it) }
         planManeuver(input)?.let { events.add(it) }
         planLane(input)?.let { events.add(it) }
         return events
+    }
+
+    /**
+     * 現ステップが [ManeuverType.DEPART] で、SDK instruction から方角を抽出できたら出発案内を発火する。
+     *
+     * 発火判定に `stepTransitioned` や `spokenKeys` は使わない。GPS 揺れによる偽の step 遷移で
+     * 再発火しないよう、セッション中 1 回限りのスロットリングは [GuidanceCoordinator] の
+     * `departAnnounced` フラグで担保する。Planner 側は毎ティック候補を出し、
+     * `input.departAnnounced == true` のときは即 null を返す。
+     */
+    private fun planDepart(input: GuidancePlannerInput): GuidanceEvent.Depart? {
+        if (input.departAnnounced) return null
+        val currentStep = input.currentSnapshot.currentStep ?: return null
+        if (currentStep.maneuver.toManeuverType() != ManeuverType.DEPART) return null
+        val direction = CompassDirection.parse(currentStep.instruction) ?: return null
+        return GuidanceEvent.Depart(
+            direction = direction,
+            priority = GuidancePriority.NORMAL,
+        )
     }
 
     private fun planManeuver(input: GuidancePlannerInput): GuidanceEvent.Maneuver? {
@@ -75,10 +96,14 @@ class GuidancePlanner {
      *
      * 条件:
      * - 次ステップが存在する（`nextStep != null`）
-     * - `currentDistance + nextStep.distanceFromPreviousMeters <= 500m`
+     * - `currentDistance + nextStep.distanceFromPreviousMeters <= 500m`（発火判定）
      * - 次ステップが方向を持つターン系（modifier が null でなく、道なり・分岐・合流・ランプでないこと）
      *
      * いずれか満たさなければ null。
+     *
+     * 発話距離バケットには `gapToNext`（現ステップ終点から次ステップ終点までの区間長）を渡す。
+     * これは NAVITIME 仕様「その先、およそ XXm で〇〇方向」の XX が
+     * 「次の曲がり角 → 次の次の曲がり角」の距離を指すため。
      */
     private fun resolveFollowup(
         currentDistance: Int,
@@ -94,7 +119,7 @@ class GuidancePlanner {
         val modifier = step.maneuver.toManeuverModifier() ?: return null
 
         return FollowupManeuver(
-            distanceBucket = FollowupDistanceBucket.fromMeters(totalDistance),
+            distanceBucket = FollowupDistanceBucket.fromMeters(gapToNext),
             maneuverType = maneuverType,
             modifier = modifier,
         )
@@ -235,6 +260,8 @@ class GuidancePlanner {
  * @property stepCounter `StepTransitionTracker` が払い出した現在ステップ識別子。
  * @property stepTransitioned 今回のティックでステップが変わったか。
  * @property spokenKeys 既発話キーのスナップショット。副作用を持たないよう読み取り専用 Set で渡す。
+ * @property departAnnounced 当該セッションで既に出発案内を発話済みか。true のとき Planner は
+ *   DEPART イベントを生成しない（GPS 揺れによる再発火の防止）。
  */
 @Immutable
 data class GuidancePlannerInput(
@@ -243,4 +270,5 @@ data class GuidancePlannerInput(
     val stepCounter: Int,
     val stepTransitioned: Boolean,
     val spokenKeys: Set<SpokenGuideKey>,
+    val departAnnounced: Boolean,
 )

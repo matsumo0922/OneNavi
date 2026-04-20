@@ -27,6 +27,7 @@ internal class GuidanceCoordinator(
     private val spokenKeys = SpokenGuideKeyStore()
     private var previousSnapshot: NavigationFeedSnapshot? = null
     private var previousIsOffRoute: Boolean = false
+    private var departAnnounced: Boolean = false
 
     fun onNavigationUpdate(snapshot: NavigationFeedSnapshot) {
         val transition = stepTracker.update(
@@ -55,10 +56,16 @@ internal class GuidanceCoordinator(
                 stepCounter = transition.counter,
                 stepTransitioned = transition.transitioned,
                 spokenKeys = spokenKeys.snapshot(),
+                departAnnounced = departAnnounced,
             ),
         )
         events.forEach { event ->
-            if (markSpokenIfNeeded(event)) {
+            if (event is GuidanceEvent.Depart) {
+                if (!departAnnounced) {
+                    departAnnounced = true
+                    dispatcher.send(event)
+                }
+            } else if (markSpokenIfNeeded(event)) {
                 dispatcher.send(event)
             }
         }
@@ -93,6 +100,7 @@ internal class GuidanceCoordinator(
         spokenKeys.clear()
         previousSnapshot = null
         previousIsOffRoute = false
+        departAnnounced = false
     }
 
     /**

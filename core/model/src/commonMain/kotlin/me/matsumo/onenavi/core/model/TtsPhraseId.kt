@@ -12,6 +12,14 @@ import me.matsumo.onenavi.core.resource.tts_direction_slight_right_end
 import me.matsumo.onenavi.core.resource.tts_direction_straight_end
 import me.matsumo.onenavi.core.resource.tts_direction_uturn_end
 import me.matsumo.onenavi.core.resource.tts_conjunction_beyond
+import me.matsumo.onenavi.core.resource.tts_depart_east
+import me.matsumo.onenavi.core.resource.tts_depart_north
+import me.matsumo.onenavi.core.resource.tts_depart_northeast
+import me.matsumo.onenavi.core.resource.tts_depart_northwest
+import me.matsumo.onenavi.core.resource.tts_depart_south
+import me.matsumo.onenavi.core.resource.tts_depart_southeast
+import me.matsumo.onenavi.core.resource.tts_depart_southwest
+import me.matsumo.onenavi.core.resource.tts_depart_west
 import me.matsumo.onenavi.core.resource.tts_distance_2km
 import me.matsumo.onenavi.core.resource.tts_distance_500m
 import me.matsumo.onenavi.core.resource.tts_distance_approx_100m_at
@@ -53,6 +61,15 @@ enum class TtsPhraseId(val resource: StringResource) {
     NAVIGATION_STARTED(Res.string.tts_navigation_started),
     FOLLOW_TRAFFIC_RULES(Res.string.tts_follow_traffic_rules),
     NAVIGATION_FINISHED(Res.string.tts_navigation_finished),
+
+    DEPART_NORTH(Res.string.tts_depart_north),
+    DEPART_NORTHEAST(Res.string.tts_depart_northeast),
+    DEPART_EAST(Res.string.tts_depart_east),
+    DEPART_SOUTHEAST(Res.string.tts_depart_southeast),
+    DEPART_SOUTH(Res.string.tts_depart_south),
+    DEPART_SOUTHWEST(Res.string.tts_depart_southwest),
+    DEPART_WEST(Res.string.tts_depart_west),
+    DEPART_NORTHWEST(Res.string.tts_depart_northwest),
 
     DISTANCE_2KM(Res.string.tts_distance_2km),
     DISTANCE_500M(Res.string.tts_distance_500m),
