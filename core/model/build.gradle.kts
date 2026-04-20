@@ -18,5 +18,9 @@ kotlin {
 
             implementation(libs.ktor.core)
         }
+
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
     }
 }
