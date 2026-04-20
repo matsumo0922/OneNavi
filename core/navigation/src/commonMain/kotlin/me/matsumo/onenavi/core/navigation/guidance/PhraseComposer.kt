@@ -82,32 +82,45 @@ class PhraseComposer {
         )
         val tail = PhraseSegment.Fixed(resolveManeuverTail(event))
         val followupSegments = event.followup?.let { followup -> composeFollowupSegments(followup) }
-        return if (followupSegments == null) {
-            phrase(head, tail)
-        } else {
-            GuidancePhrase(
-                segments = (listOf<PhraseSegment>(head, tail) + followupSegments).toPersistentList(),
-            )
+        val laneSegments = event.lanePosition?.let { position -> composeLaneSegments(position) }
+        val segments = buildList {
+            add(head)
+            add(tail)
+            if (followupSegments != null) addAll(followupSegments)
+            if (laneSegments != null) addAll(laneSegments)
         }
+        return GuidancePhrase(segments = segments.toPersistentList())
     }
 
     private fun composeFollowupSegments(followup: FollowupManeuver): List<PhraseSegment> {
+        val directionEnd = when (followup.maneuverType) {
+            ManeuverType.OFF_RAMP,
+            ManeuverType.ON_RAMP,
+            -> rampModifierToDirectionEnd(followup.modifier)
+            else -> modifierToDirectionEnd(followup.modifier)
+        }
         return listOf(
             PhraseSegment.Fixed(TtsPhraseId.CONJUNCTION_BEYOND),
             PhraseSegment.FollowupDistance(bucket = followup.distanceBucket),
-            PhraseSegment.Fixed(modifierToDirectionEnd(followup.modifier)),
+            PhraseSegment.Fixed(directionEnd),
         )
     }
 
     private fun composeLane(event: GuidanceEvent.Lane): GuidancePhrase {
-        val position = when (event.lanePosition) {
+        return phrase(
+            PhraseSegment.Distance(bucket = event.bucket),
+            *composeLaneSegments(event.lanePosition).toTypedArray(),
+        )
+    }
+
+    private fun composeLaneSegments(position: LanePosition): List<PhraseSegment> {
+        val positionPhraseId = when (position) {
             LanePosition.LEFT -> TtsPhraseId.LANE_LEFT_SIDE
             LanePosition.RIGHT -> TtsPhraseId.LANE_RIGHT_SIDE
             LanePosition.CENTER -> TtsPhraseId.LANE_CENTER
         }
-        return phrase(
-            PhraseSegment.Distance(bucket = event.bucket),
-            PhraseSegment.Fixed(position),
+        return listOf(
+            PhraseSegment.Fixed(positionPhraseId),
             PhraseSegment.Fixed(TtsPhraseId.LANE_PROCEED),
         )
     }
@@ -128,8 +141,23 @@ class PhraseComposer {
                 DrivingSide.LEFT -> TtsPhraseId.MERGE_LEFT
                 null -> TtsPhraseId.MERGE
             }
+            ManeuverType.OFF_RAMP,
+            ManeuverType.ON_RAMP,
+            -> rampModifierToDirectionEnd(event.modifier)
             else -> modifierToDirectionEnd(event.modifier)
         }
+    }
+
+    /**
+     * ランプ（OFF_RAMP / ON_RAMP）の方向修飾子をフレーズへ射影する。
+     *
+     * ランプは本線から分岐・合流する斜め方向の案内が自然なため、LEFT/RIGHT は斜め系に寄せる。
+     * それ以外の修飾子（斜め系・直進・U ターン）は通常マッピングをそのまま使う。
+     */
+    private fun rampModifierToDirectionEnd(modifier: ManeuverModifier?): TtsPhraseId = when (modifier) {
+        ManeuverModifier.LEFT -> TtsPhraseId.DIR_SLIGHT_LEFT_END
+        ManeuverModifier.RIGHT -> TtsPhraseId.DIR_SLIGHT_RIGHT_END
+        else -> modifierToDirectionEnd(modifier)
     }
 
     private fun modifierToDirectionEnd(modifier: ManeuverModifier?): TtsPhraseId = when (modifier) {

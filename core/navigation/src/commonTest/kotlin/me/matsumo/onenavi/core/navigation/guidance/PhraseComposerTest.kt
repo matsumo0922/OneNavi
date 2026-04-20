@@ -104,6 +104,7 @@ class PhraseComposerTest {
                 drivingSide = DrivingSide.LEFT,
                 isStandaloneAt50m = false,
                 followup = null,
+                lanePosition = null,
                 priority = GuidancePriority.NORMAL,
             ),
         )
@@ -127,6 +128,7 @@ class PhraseComposerTest {
                 drivingSide = null,
                 isStandaloneAt50m = false,
                 followup = null,
+                lanePosition = null,
                 priority = GuidancePriority.HIGH,
             ),
         )
@@ -150,6 +152,7 @@ class PhraseComposerTest {
                 drivingSide = null,
                 isStandaloneAt50m = true,
                 followup = null,
+                lanePosition = null,
                 priority = GuidancePriority.HIGH,
             ),
         )
@@ -173,6 +176,7 @@ class PhraseComposerTest {
                 drivingSide = null,
                 isStandaloneAt50m = false,
                 followup = null,
+                lanePosition = null,
                 priority = GuidancePriority.HIGH,
             ),
         )
@@ -190,6 +194,7 @@ class PhraseComposerTest {
                 drivingSide = DrivingSide.LEFT,
                 isStandaloneAt50m = false,
                 followup = null,
+                lanePosition = null,
                 priority = GuidancePriority.NORMAL,
             ),
         )
@@ -225,6 +230,7 @@ class PhraseComposerTest {
                 drivingSide = null,
                 isStandaloneAt50m = false,
                 followup = null,
+                lanePosition = null,
                 priority = GuidancePriority.NORMAL,
             ),
         )
@@ -246,6 +252,7 @@ class PhraseComposerTest {
                     maneuverType = ManeuverType.TURN,
                     modifier = ManeuverModifier.LEFT,
                 ),
+                lanePosition = null,
                 priority = GuidancePriority.HIGH,
             ),
         )
@@ -352,6 +359,99 @@ class PhraseComposerTest {
         )
     }
 
+    @Test
+    fun `Maneuver with ON_RAMP followup + RIGHT maps to slight_right_end in followup`() = runTest {
+        val phrase = composer.compose(
+            GuidanceEvent.Maneuver(
+                stepCounter = 1,
+                bucket = DistanceBucket.AT_100M,
+                maneuverType = ManeuverType.TURN,
+                modifier = ManeuverModifier.LEFT,
+                drivingSide = DrivingSide.LEFT,
+                isStandaloneAt50m = false,
+                followup = FollowupManeuver(
+                    distanceBucket = FollowupDistanceBucket.AT_200M,
+                    maneuverType = ManeuverType.ON_RAMP,
+                    modifier = ManeuverModifier.RIGHT,
+                ),
+                lanePosition = null,
+                priority = GuidancePriority.HIGH,
+            ),
+        )
+        assertEquals(
+            listOf(
+                PhraseSegment.Distance(bucket = DistanceBucket.AT_100M, isStandalone = false),
+                PhraseSegment.Fixed(TtsPhraseId.DIR_LEFT_END),
+                PhraseSegment.Fixed(TtsPhraseId.CONJUNCTION_BEYOND),
+                PhraseSegment.FollowupDistance(bucket = FollowupDistanceBucket.AT_200M),
+                PhraseSegment.Fixed(TtsPhraseId.DIR_SLIGHT_RIGHT_END),
+            ),
+            phrase.segments.toList(),
+        )
+    }
+
+    @Test
+    fun `Maneuver OFF_RAMP + LEFT maps to slight_left_end`() = runTest {
+        val phrase = composer.compose(
+            GuidanceEvent.Maneuver(
+                stepCounter = 1,
+                bucket = DistanceBucket.AT_500M,
+                maneuverType = ManeuverType.OFF_RAMP,
+                modifier = ManeuverModifier.LEFT,
+                drivingSide = DrivingSide.LEFT,
+                isStandaloneAt50m = false,
+                followup = null,
+                lanePosition = null,
+                priority = GuidancePriority.NORMAL,
+            ),
+        )
+        assertEquals(TtsPhraseId.DIR_SLIGHT_LEFT_END, (phrase.segments.last() as PhraseSegment.Fixed).phraseId)
+    }
+
+    @Test
+    fun `Maneuver ON_RAMP + RIGHT maps to slight_right_end`() = runTest {
+        val phrase = composer.compose(
+            GuidanceEvent.Maneuver(
+                stepCounter = 1,
+                bucket = DistanceBucket.AT_500M,
+                maneuverType = ManeuverType.ON_RAMP,
+                modifier = ManeuverModifier.RIGHT,
+                drivingSide = DrivingSide.LEFT,
+                isStandaloneAt50m = false,
+                followup = null,
+                lanePosition = null,
+                priority = GuidancePriority.NORMAL,
+            ),
+        )
+        assertEquals(TtsPhraseId.DIR_SLIGHT_RIGHT_END, (phrase.segments.last() as PhraseSegment.Fixed).phraseId)
+    }
+
+    @Test
+    fun `Maneuver with lanePosition appends lane segments after direction`() = runTest {
+        val phrase = composer.compose(
+            GuidanceEvent.Maneuver(
+                stepCounter = 1,
+                bucket = DistanceBucket.AT_500M,
+                maneuverType = ManeuverType.OFF_RAMP,
+                modifier = ManeuverModifier.LEFT,
+                drivingSide = DrivingSide.LEFT,
+                isStandaloneAt50m = false,
+                followup = null,
+                lanePosition = LanePosition.LEFT,
+                priority = GuidancePriority.NORMAL,
+            ),
+        )
+        assertEquals(
+            listOf(
+                PhraseSegment.Distance(bucket = DistanceBucket.AT_500M, isStandalone = false),
+                PhraseSegment.Fixed(TtsPhraseId.DIR_SLIGHT_LEFT_END),
+                PhraseSegment.Fixed(TtsPhraseId.LANE_LEFT_SIDE),
+                PhraseSegment.Fixed(TtsPhraseId.LANE_PROCEED),
+            ),
+            phrase.segments.toList(),
+        )
+    }
+
     private fun mergeEvent(drivingSide: DrivingSide?): GuidanceEvent.Maneuver {
         return GuidanceEvent.Maneuver(
             stepCounter = 1,
@@ -361,6 +461,7 @@ class PhraseComposerTest {
             drivingSide = drivingSide,
             isStandaloneAt50m = false,
             followup = null,
+            lanePosition = null,
             priority = GuidancePriority.NORMAL,
         )
     }
