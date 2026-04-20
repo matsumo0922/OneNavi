@@ -81,6 +81,9 @@ sealed interface GuidanceEvent {
      *   true のときは `PhraseComposer` が「この先すぐ、」文頭に切り替える。
      * @property followup 連続案内（次ステップが近接する場合の追加予告）。
      *   `AT_100M` バケット発話時にのみセットされる。null のときは単独フレーズで発話する。
+     * @property lanePosition 同一バケット（`AT_500M`）で推奨車線案内も発話する場合の車線位置。
+     *   `GuidancePlanner` が `Maneuver` と `Lane` を 1 発話へマージする際にセットする。
+     *   null のときは車線案内を含まない。followup とは併用しない（バケットが排他のため）。
      */
     @Immutable
     data class Maneuver(
@@ -91,6 +94,7 @@ sealed interface GuidanceEvent {
         val drivingSide: DrivingSide?,
         val isStandaloneAt50m: Boolean,
         val followup: FollowupManeuver?,
+        val lanePosition: LanePosition?,
         override val priority: GuidancePriority,
     ) : GuidanceEvent
 

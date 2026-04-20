@@ -2,15 +2,6 @@ package me.matsumo.onenavi.core.model
 
 import androidx.compose.runtime.Immutable
 import me.matsumo.onenavi.core.resource.Res
-import me.matsumo.onenavi.core.resource.tts_destination_approach
-import me.matsumo.onenavi.core.resource.tts_direction_left_end
-import me.matsumo.onenavi.core.resource.tts_direction_right_end
-import me.matsumo.onenavi.core.resource.tts_direction_sharp_left_end
-import me.matsumo.onenavi.core.resource.tts_direction_sharp_right_end
-import me.matsumo.onenavi.core.resource.tts_direction_slight_left_end
-import me.matsumo.onenavi.core.resource.tts_direction_slight_right_end
-import me.matsumo.onenavi.core.resource.tts_direction_straight_end
-import me.matsumo.onenavi.core.resource.tts_direction_uturn_end
 import me.matsumo.onenavi.core.resource.tts_conjunction_beyond
 import me.matsumo.onenavi.core.resource.tts_depart_east
 import me.matsumo.onenavi.core.resource.tts_depart_north
@@ -20,6 +11,15 @@ import me.matsumo.onenavi.core.resource.tts_depart_south
 import me.matsumo.onenavi.core.resource.tts_depart_southeast
 import me.matsumo.onenavi.core.resource.tts_depart_southwest
 import me.matsumo.onenavi.core.resource.tts_depart_west
+import me.matsumo.onenavi.core.resource.tts_destination_approach
+import me.matsumo.onenavi.core.resource.tts_direction_left_end
+import me.matsumo.onenavi.core.resource.tts_direction_right_end
+import me.matsumo.onenavi.core.resource.tts_direction_sharp_left_end
+import me.matsumo.onenavi.core.resource.tts_direction_sharp_right_end
+import me.matsumo.onenavi.core.resource.tts_direction_slight_left_end
+import me.matsumo.onenavi.core.resource.tts_direction_slight_right_end
+import me.matsumo.onenavi.core.resource.tts_direction_straight_end
+import me.matsumo.onenavi.core.resource.tts_direction_uturn_end
 import me.matsumo.onenavi.core.resource.tts_distance_2km
 import me.matsumo.onenavi.core.resource.tts_distance_500m
 import me.matsumo.onenavi.core.resource.tts_distance_approx_100m_at

@@ -31,8 +31,18 @@ class GuidancePlanner {
         val events = mutableListOf<GuidanceEvent>()
         planDepart(input)?.let { events.add(it) }
         planStraightforward(input)?.let { events.add(it) }
-        planManeuver(input)?.let { events.add(it) }
-        planLane(input)?.let { events.add(it) }
+
+        val maneuver = planManeuver(input)
+        val lane = planLane(input)
+        if (maneuver != null && lane != null &&
+            maneuver.stepCounter == lane.stepCounter &&
+            maneuver.bucket == lane.bucket
+        ) {
+            events.add(maneuver.copy(lanePosition = lane.lanePosition))
+        } else {
+            maneuver?.let { events.add(it) }
+            lane?.let { events.add(it) }
+        }
         return events
     }
 
@@ -87,6 +97,7 @@ class GuidancePlanner {
             drivingSide = currentStep.drivingSide.toDrivingSide(),
             isStandaloneAt50m = isStandaloneAt50m,
             followup = followup,
+            lanePosition = null,
             priority = priorityFor(bucket),
         )
     }
@@ -242,12 +253,16 @@ class GuidancePlanner {
             ManeuverType.OFF_RAMP,
         )
 
-        // v1 では方向を持つターン系のみ followup 対象。分岐・合流・ランプ・道なりは除外。
+        // followup 対象は方向を持つマニューバ（ターン系 + ランプ）。
+        // 分岐（FORK）・合流（MERGE）は方向以外の固定フレーズを要するため現状は除外。
+        // ランプは `PhraseComposer` 側で LEFT/RIGHT を斜め系に射影する。
         private val FOLLOWUP_SUPPORTED_TYPES = setOf(
             ManeuverType.TURN,
             ManeuverType.NAME_CHANGE,
             ManeuverType.END_OF_ROAD,
             ManeuverType.UTURN,
+            ManeuverType.OFF_RAMP,
+            ManeuverType.ON_RAMP,
         )
     }
 }
