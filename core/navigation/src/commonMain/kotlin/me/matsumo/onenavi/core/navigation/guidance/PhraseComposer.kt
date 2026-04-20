@@ -18,7 +18,7 @@ import org.jetbrains.compose.resources.getString
  * [compose] はフレーズ段組みのみを行う純関数相当の suspend 関数（現状 suspend 不要だが、将来の動的フレーズに備えて suspend を保持）。
  * [resolve] は strings.xml を参照して最終的な発話文字列を生成する。
  */
-internal class PhraseComposer {
+class PhraseComposer {
 
     suspend fun compose(event: GuidanceEvent): GuidancePhrase = when (event) {
         is GuidanceEvent.SessionStarted -> phrase(

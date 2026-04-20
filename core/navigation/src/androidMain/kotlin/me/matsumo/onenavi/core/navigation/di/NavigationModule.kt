@@ -11,6 +11,8 @@ import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
 import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.core.navigation.RouteManager
+import me.matsumo.onenavi.core.navigation.guidance.GuidancePlanner
+import me.matsumo.onenavi.core.navigation.guidance.PhraseComposer
 import me.matsumo.onenavi.core.navigation.tts.AndroidTtsEngine
 import me.matsumo.onenavi.core.navigation.tts.AudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.FallbackTtsEngine
@@ -48,12 +50,16 @@ actual val navigationModule: Module = module {
             }
         }
     }
+    single { PhraseComposer() }
+    single { GuidancePlanner() }
     single {
         val context = androidContext()
         GuidanceSessionManager(
             cameraManager = get(),
             routeManager = get(),
             navigationSdkManager = get(),
+            phraseComposer = get(),
+            guidancePlanner = get(),
             ttsEngineFactory = {
                 createTtsEngine(context, get(), get(qualifier = org.koin.core.qualifier.named("googleCloudTts")))
             },
