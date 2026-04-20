@@ -14,12 +14,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.DrivingSide
 import me.matsumo.onenavi.core.model.GoogleRoute
+import me.matsumo.onenavi.core.model.GuidanceEvent
+import me.matsumo.onenavi.core.model.GuidancePriority
 import me.matsumo.onenavi.core.model.GuidanceUiState
 import me.matsumo.onenavi.core.model.LaneInfo
 import me.matsumo.onenavi.core.model.ManeuverInfo
@@ -27,6 +32,10 @@ import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.TripProgressInfo
+import me.matsumo.onenavi.core.navigation.guidance.GuidanceCoordinator
+import me.matsumo.onenavi.core.navigation.guidance.GuidancePlanner
+import me.matsumo.onenavi.core.navigation.guidance.PhraseComposer
+import me.matsumo.onenavi.core.navigation.guidance.SpeechDispatcher
 import me.matsumo.onenavi.core.navigation.tts.SpeechOrchestrator
 import me.matsumo.onenavi.core.navigation.tts.TtsEngine
 import com.google.android.libraries.mapsplatform.turnbyturn.model.DrivingSide as SdkDrivingSide
@@ -35,6 +44,8 @@ class GuidanceSessionManager(
     private val cameraManager: CameraManager,
     private val routeManager: RouteManager,
     private val navigationSdkManager: NavigationSdkManager,
+    private val phraseComposer: PhraseComposer,
+    private val guidancePlanner: GuidancePlanner,
     private val ttsEngineFactory: () -> TtsEngine,
 ) {
 
@@ -51,13 +62,15 @@ class GuidanceSessionManager(
 
     private var guidanceJob: Job? = null
     private var arrivalJob: Job? = null
+    private var rerouteJob: Job? = null
     private var ttsReadyJob: Job? = null
     private var speechOrchestrator: SpeechOrchestrator? = null
     private var ttsEngine: TtsEngine? = null
+    private var dispatcher: SpeechDispatcher? = null
+    private var coordinator: GuidanceCoordinator? = null
 
     private var sessionStartTimeMillis: Long = 0L
     private var activeRoute: GoogleRoute? = null
-    private var lastSpokenStep: NavigationStepSnapshot? = null
 
     fun register() {
         // no-op
@@ -76,11 +89,28 @@ class GuidanceSessionManager(
 
         activeRoute = route
         sessionStartTimeMillis = System.currentTimeMillis()
-        lastSpokenStep = null
 
         val engine = ttsEngineFactory()
         ttsEngine = engine
-        speechOrchestrator = SpeechOrchestrator(ttsEngine = engine)
+        val orchestrator = SpeechOrchestrator(ttsEngine = engine)
+        speechOrchestrator = orchestrator
+
+        val sessionDispatcher = SpeechDispatcher(
+            orchestrator = orchestrator,
+            composer = phraseComposer,
+            scope = scope,
+        )
+        val sessionCoordinator = GuidanceCoordinator(
+            planner = guidancePlanner,
+            dispatcher = sessionDispatcher,
+        )
+        dispatcher = sessionDispatcher
+        coordinator = sessionCoordinator
+
+        sessionDispatcher.setEnabled(true)
+        sessionDispatcher.start()
+        sessionCoordinator.reset()
+        sessionCoordinator.emit(GuidanceEvent.SessionStarted(priority = GuidancePriority.CRITICAL))
 
         _navigationState.value = NavigationState.ActiveGuidance
         _guidanceUiState.value = GuidanceUiState.Initial.copy(isTtsAvailable = engine.isReady.value)
@@ -107,12 +137,26 @@ class GuidanceSessionManager(
                 if (activeRoute?.id != route.id) return@collect
 
                 if (arrival.isFinalDestination) {
+                    coordinator?.emit(
+                        GuidanceEvent.DestinationApproach(priority = GuidancePriority.CRITICAL),
+                    )
                     onFinalDestinationArrival(activeRoute)
                 } else {
+                    coordinator?.emit(
+                        GuidanceEvent.ViaWaypointApproach(priority = GuidancePriority.CRITICAL),
+                    )
                     navigationSdkManager.continueToNextDestination()
                 }
             }
         }
+
+        rerouteJob?.cancel()
+        rerouteJob = routeManager.routes
+            .map { routes -> routes.firstOrNull() }
+            .distinctUntilChanged { old, new -> isSameRoute(old, new) }
+            .drop(1)
+            .onEach { coordinator?.onRerouted() }
+            .launchIn(scope)
 
         cameraManager.requestCameraFollowing(pitch3D = true)
 
@@ -137,9 +181,15 @@ class GuidanceSessionManager(
         guidanceJob = null
         arrivalJob?.cancel()
         arrivalJob = null
+        rerouteJob?.cancel()
+        rerouteJob = null
         ttsReadyJob?.cancel()
         ttsReadyJob = null
         navigationSdkManager.stopNavigation()
+        dispatcher?.shutdown()
+        dispatcher = null
+        coordinator?.reset()
+        coordinator = null
         speechOrchestrator?.shutdown()
         speechOrchestrator = null
         ttsEngine = null
@@ -147,7 +197,6 @@ class GuidanceSessionManager(
 
         _guidanceUiState.value = GuidanceUiState.Initial
         _arrivalInfo.value = null
-        lastSpokenStep = null
     }
 
     fun returnToBrowsing() {
@@ -168,6 +217,9 @@ class GuidanceSessionManager(
         val tripProgress = update.tripProgress
         val navState = navInfo?.navState
         val isOffRoute = update.isOffRouteRaw || navState == NavState.REROUTING
+
+        // OffRoute は navState に依らず常に監視する（REROUTING 中でも発火させる）。
+        coordinator?.onOffRouteChanged(isOffRoute)
 
         // NavInfo のマニューバ関連フィールドは navState == ENROUTE の時だけ有効。
         // REROUTING / STOPPED / UNKNOWN では前回値を維持し、補助フラグのみ更新する。
@@ -204,10 +256,37 @@ class GuidanceSessionManager(
             isTtsAvailable = ttsEngine?.isReady?.value == true,
         )
 
-        if (currentStep != null && currentStep != lastSpokenStep) {
-            lastSpokenStep = currentStep
-            speak(currentStep.instruction)
+        coordinator?.onNavigationUpdate(navInfo)
+    }
+
+    /**
+     * リルート検出のためのルート同一性判定。
+     * routeToken が両方ある場合はそれで比較し、ない場合は id / geometry.size / 距離 / 所要時間の複合キーで代替する。
+     */
+    private fun isSameRoute(old: GoogleRoute?, new: GoogleRoute?): Boolean {
+        if (old == null || new == null) {
+            val result = old === new
+            Napier.d(tag = TAG) { "[P4] ROUTE_CMP old=$old new=$new -> same=$result (nullcheck)" }
+            return result
         }
+        if (old.routeToken != null && new.routeToken != null) {
+            val result = old.routeToken == new.routeToken
+            Napier.d(tag = TAG) {
+                "[P4] ROUTE_CMP oldToken=${old.routeToken} newToken=${new.routeToken} -> same=$result (token)"
+            }
+            return result
+        }
+        val result = old.id == new.id &&
+            old.geometry.size == new.geometry.size &&
+            old.distanceMeters == new.distanceMeters &&
+            old.durationSeconds == new.durationSeconds
+        Napier.d(tag = TAG) {
+            "[P4] ROUTE_CMP oldId=${old.id} newId=${new.id} " +
+                "geomEq=${old.geometry.size == new.geometry.size} " +
+                "distEq=${old.distanceMeters == new.distanceMeters} " +
+                "durEq=${old.durationSeconds == new.durationSeconds} -> same=$result (composite)"
+        }
+        return result
     }
 
     private fun onFinalDestinationArrival(route: GoogleRoute?) {
@@ -246,14 +325,6 @@ class GuidanceSessionManager(
         )
     }.toImmutableList()
 
-    private fun speak(text: String) {
-        if (text.isBlank()) return
-        val spoken = speechOrchestrator?.enqueue(text = text) ?: false
-        if (!spoken) {
-            Napier.d(tag = TAG) { "TTS skipped: $text" }
-        }
-    }
-
     /**
      * Navigation SDK からの 3 系統の Flow を一度に受け取るための中間ホルダー。
      *
@@ -272,7 +343,7 @@ class GuidanceSessionManager(
     }
 }
 
-private fun Int.toManeuverType(): ManeuverType {
+internal fun Int.toManeuverType(): ManeuverType {
     return when (this) {
         Maneuver.DEPART -> ManeuverType.DEPART
         Maneuver.DESTINATION,
@@ -341,7 +412,7 @@ private fun Int.toManeuverType(): ManeuverType {
 }
 
 @Suppress("CyclomaticComplexMethod")
-private fun Int.toManeuverModifier(): ManeuverModifier? {
+internal fun Int.toManeuverModifier(): ManeuverModifier? {
     return when (this) {
         Maneuver.DESTINATION_LEFT,
         Maneuver.TURN_LEFT,
@@ -414,7 +485,7 @@ private fun Int.toManeuverModifier(): ManeuverModifier? {
     }
 }
 
-private fun Int.toDrivingSide(): DrivingSide? {
+internal fun Int.toDrivingSide(): DrivingSide? {
     return when (this) {
         SdkDrivingSide.LEFT -> DrivingSide.LEFT
         SdkDrivingSide.RIGHT -> DrivingSide.RIGHT
