@@ -1,7 +1,7 @@
-# 独自ボイスガイダンス実装計画 (rev.5)
+# 独自ボイスガイダンス実装計画 (rev.8)
 
 - 作成日: 2026-04-20
-- 改訂日: 2026-04-20 (Codex 4 回目レビュー反映)
+- 改訂日: 2026-04-20 (Phase 4 実機追試 2 周目反映)
 - 対象モジュール: `core:navigation`, `core:model`, `core:resource`
 - 対象範囲: 日本語のみ（多言語化は対象外）
 - 参照: `docs/note/tts-required-features.md` / `docs/note/drive-supporter-tts-guide.md`
@@ -9,6 +9,19 @@
 ---
 
 ## 0. 変更履歴
+
+### rev.8（Phase 4 実機追試 2 周目反映）
+
+- **[HIGH]** 出発案内（DEPART）の再発火バグを修正。GPS 揺れで `StepTransitionTracker.isSameStep()` の距離急増判定が true → step transition が偽発火し、Depart が複数回喋られる問題を確認。対策として **セッションレベルの `departAnnounced` フラグ**で 1 回限りの発火に制約。`stepTransitioned` / `SpokenGuideKey` への依存を削除。§2.7 / §4.3 修正。
+- **[HIGH]** SDK の `fullInstructionText`（例:「北に進む」）がぶっきらぼうで TTS 発話に耐えないため、**8 方位の固定フレーズ**に置き換え。`CompassDirection.parse()` で SDK テキストから方角を抽出し、`DEPART_NORTH` ... `DEPART_NORTHWEST` の 8 種類の `TtsPhraseId`（例:「北方向に進みます。」）へマップする。方角が抽出できないときは発話しない（`SessionStarted` がフォールバックとして機能）。§2.7 / §3.1 / §5 修正。
+- **[MEDIUM]** `PhraseSegment.RawText` を **削除**。rev.7 で追加した動的文字列セグメントは DEPART 専用だったため、方角フレーズ化で不要となった。将来動的テキストが再び必要になったら同名で復活させる想定。§2.5 修正。
+- **[LOW]** `SpokenGuideKey.Category.DEPART` を削除（`departAnnounced` フラグに置換）。
+
+### rev.7（Phase 4 実機追試反映）
+
+- **[HIGH]** `followup` の発話距離バケットに渡す値を **`currentDistance + gapToNext`（=totalDistance）から `gapToNext`（=現ステップ終点から次ステップ終点までの区間長）に修正**。NAVITIME 仕様「その先、およそ XXm で〇〇方向」の XX は「次の曲がり角 → 次の次の曲がり角」の区間長であり、現在地からの合計距離ではないため。発火条件（`currentDistance + gapToNext <= 500`）は維持。§2.4 / §4.3 修正。
+- **[HIGH]** **出発時案内（DEPART ステップ）を v1 に追加**。Google Navigation SDK の `fullInstructionText`（例:「西に進みます」）をそのまま発話する暫定実装。将来は方角ベースのカスタムフレーズに置き換える余地を残す。§2.7 追加、§3.5 追加、§4.3 修正、§5 追記。
+- **[MEDIUM]** `PhraseSegment` に **`RawText(text: String)`** を追加。SDK 由来の可変文字列を発話させるための一時的セグメント。`TtsPhraseId` で網羅できない動的テキストの受け皿。§2.5 修正。
 
 ### rev.6（Phase 4 実機ログ反映）
 
@@ -185,10 +198,12 @@
 | 次ターンまでの距離 | 「およそ XXmで」（50m 刻みで 50〜500m の 10 段階） |
 | 次ターンの文末 | 方向/分岐/合流文末（句点止め） |
 
+**距離フレーズに渡す値（rev.7 で修正）**: 「およそ XXm で」の XX は **`nextStep.distanceFromPreviousMeters`（= 次ステップの区間長 = 次の曲がり角から次の次の曲がり角までの距離）** を `FollowupDistanceBucket.fromMeters()` でスナップした値を使う。`currentDistance + gapToNext` の合計距離ではない。NAVITIME 仕様の XX が「次の曲がり角 → 次の次の曲がり角」の区間長を指すため。
+
 **トリガー条件**:
 
 - 現ステップの `AT_100M` を下抜けた瞬間のみ。`AT_50M` / `AT_500M` / `AT_2KM` では followup を付けない。
-- `currentDistance + nextStep.distanceFromPreviousMeters <= 500` のとき。
+- `currentDistance + nextStep.distanceFromPreviousMeters <= 500` のとき（発火判定のみ、発話値には使わない）。
 - 次ステップが存在し（`remainingSteps.firstOrNull() != null`）、道なり系（`CONTINUE` のみの `maneuverType`）ではないこと。
 
 **`AT_50M` に付けない理由**: 操作直前の明瞭さを優先。連結で情報量が増えると主案内が薄れる。
@@ -203,11 +218,14 @@
 GuidancePhrase = ImmutableList<PhraseSegment>
 
 PhraseSegment =
-    | Fixed(phraseId: TtsPhraseId)     // strings.xml の固定文言
-    | Distance(bucket: DistanceBucket) // 「およそ2km先、」等
+    | Fixed(phraseId: TtsPhraseId)                     // strings.xml の固定文言
+    | Distance(bucket: DistanceBucket)                 // 「およそ2km先、」等
+    | FollowupDistance(bucket: FollowupDistanceBucket) // 「およそ 300m で」等
 ```
 
 発話時は `segments.joinToString(separator = "")` して `SpeechOrchestrator.enqueue()` に渡す。
+
+v1 の動的文字列（道路名・交差点名等）は対象外。すべての発話は `TtsPhraseId` 経由の固定フレーズで組み立てる。
 
 ### 2.6 優先度
 
@@ -220,6 +238,28 @@ PhraseSegment =
 
 `SpeechOrchestrator.enqueue(flush=true)` は既存の pending を破棄するので、`CRITICAL` が来たらそれまでの通常案内は中断される。ユーザー影響：オフルート中に 2km 予告中断はむしろ望ましい挙動。
 
+### 2.7 出発案内（DEPART、rev.8 で方角フレーズ化）
+
+ルート開始直後、最初のステップが `ManeuverType.DEPART` の場合、SDK の `fullInstructionText` から方角を抽出し、8 方位の固定フレーズで発話する。
+
+**発話パターン**: `CompassDirection` は `{ 北 / 北東 / 東 / 南東 / 南 / 南西 / 西 / 北西 }` の 8 種類。
+
+```
+「北方向に進みます。」
+「北東方向に進みます。」
+...
+```
+
+**方角抽出**: `CompassDirection.parse(instruction)` が先に複合方位（「北東」等）を照合し、見つからなければ単一方位（「北」等）を照合する。該当が無ければ null で、このときは発話しない（`SessionStarted` のフォールバックに任せる）。
+
+**トリガー条件と 1 回限りの保証（rev.8 で改訂）**:
+
+- 現ステップが `DEPART` かつ `CompassDirection.parse()` が方角を返すこと。
+- セッション中 1 回のみ。`GuidanceCoordinator.departAnnounced` フラグで保証し、`reset()` でクリア、`onRerouted()` ではクリアしない（走行中の再告知を避けるため）。
+- `stepTransitioned` には依存しない。GPS 揺れで `StepTransitionTracker.isSameStep()` の距離急増判定が偽発火する事例を Phase 4 で確認したため、step 遷移は Depart のトリガーに使わない。
+
+**優先度**: `NORMAL`。`SessionStarted`（CRITICAL）の直後にキューに入り、flush されずに順次発話される。
+
 ---
 
 ## 3. 発話カタログ（v1 版）
@@ -231,6 +271,7 @@ PhraseSegment =
 | イベント | 発話 | 優先度 |
 |---|---|---|
 | `startSession()` 成功直後 | 「音声案内を開始します。実際の交通規制に従って走行してください。」(#48 + #49) | CRITICAL |
+| 最初のステップが DEPART（rev.8） | 方角フレーズ（例:「西方向に進みます。」）セッション 1 回 | NORMAL |
 | 最終到着 (`arrivalEvents.isFinalDestination=true`) | 「目的地付近です。お疲れ様でした。」(#51 + #53) | CRITICAL |
 
 ### 3.2 経由地
