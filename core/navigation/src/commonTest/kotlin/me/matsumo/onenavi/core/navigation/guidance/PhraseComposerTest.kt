@@ -3,6 +3,8 @@ package me.matsumo.onenavi.core.navigation.guidance
 import kotlinx.coroutines.test.runTest
 import me.matsumo.onenavi.core.model.DistanceBucket
 import me.matsumo.onenavi.core.model.DrivingSide
+import me.matsumo.onenavi.core.model.FollowupDistanceBucket
+import me.matsumo.onenavi.core.model.FollowupManeuver
 import me.matsumo.onenavi.core.model.GuidanceEvent
 import me.matsumo.onenavi.core.model.GuidancePriority
 import me.matsumo.onenavi.core.model.LanePosition
@@ -100,6 +102,7 @@ class PhraseComposerTest {
                 modifier = ManeuverModifier.RIGHT,
                 drivingSide = DrivingSide.LEFT,
                 isStandaloneAt50m = false,
+                followup = null,
                 priority = GuidancePriority.NORMAL,
             ),
         )
@@ -122,6 +125,7 @@ class PhraseComposerTest {
                 modifier = ManeuverModifier.LEFT,
                 drivingSide = null,
                 isStandaloneAt50m = false,
+                followup = null,
                 priority = GuidancePriority.HIGH,
             ),
         )
@@ -144,6 +148,7 @@ class PhraseComposerTest {
                 modifier = ManeuverModifier.RIGHT,
                 drivingSide = null,
                 isStandaloneAt50m = true,
+                followup = null,
                 priority = GuidancePriority.HIGH,
             ),
         )
@@ -166,6 +171,7 @@ class PhraseComposerTest {
                 modifier = ManeuverModifier.UTURN,
                 drivingSide = null,
                 isStandaloneAt50m = false,
+                followup = null,
                 priority = GuidancePriority.HIGH,
             ),
         )
@@ -182,6 +188,7 @@ class PhraseComposerTest {
                 modifier = ManeuverModifier.RIGHT,
                 drivingSide = DrivingSide.LEFT,
                 isStandaloneAt50m = false,
+                followup = null,
                 priority = GuidancePriority.NORMAL,
             ),
         )
@@ -216,10 +223,41 @@ class PhraseComposerTest {
                 modifier = null,
                 drivingSide = null,
                 isStandaloneAt50m = false,
+                followup = null,
                 priority = GuidancePriority.NORMAL,
             ),
         )
         assertEquals(TtsPhraseId.DIR_STRAIGHT_END, (phrase.segments.last() as PhraseSegment.Fixed).phraseId)
+    }
+
+    @Test
+    fun `Maneuver with followup appends conjunction + followup distance + followup direction`() = runTest {
+        val phrase = composer.compose(
+            GuidanceEvent.Maneuver(
+                stepCounter = 1,
+                bucket = DistanceBucket.AT_100M,
+                maneuverType = ManeuverType.TURN,
+                modifier = ManeuverModifier.RIGHT,
+                drivingSide = DrivingSide.LEFT,
+                isStandaloneAt50m = false,
+                followup = FollowupManeuver(
+                    distanceBucket = FollowupDistanceBucket.AT_300M,
+                    maneuverType = ManeuverType.TURN,
+                    modifier = ManeuverModifier.LEFT,
+                ),
+                priority = GuidancePriority.HIGH,
+            ),
+        )
+        assertEquals(
+            listOf(
+                PhraseSegment.Distance(bucket = DistanceBucket.AT_100M, isStandalone = false),
+                PhraseSegment.Fixed(TtsPhraseId.DIR_RIGHT_END),
+                PhraseSegment.Fixed(TtsPhraseId.CONJUNCTION_BEYOND),
+                PhraseSegment.FollowupDistance(bucket = FollowupDistanceBucket.AT_300M),
+                PhraseSegment.Fixed(TtsPhraseId.DIR_LEFT_END),
+            ),
+            phrase.segments.toList(),
+        )
     }
 
     @Test
@@ -293,6 +331,7 @@ class PhraseComposerTest {
             modifier = null,
             drivingSide = drivingSide,
             isStandaloneAt50m = false,
+            followup = null,
             priority = GuidancePriority.NORMAL,
         )
     }

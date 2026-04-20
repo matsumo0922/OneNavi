@@ -2,6 +2,8 @@ package me.matsumo.onenavi.core.navigation.guidance
 
 import androidx.compose.runtime.Immutable
 import me.matsumo.onenavi.core.model.DistanceBucket
+import me.matsumo.onenavi.core.model.FollowupDistanceBucket
+import me.matsumo.onenavi.core.model.FollowupManeuver
 import me.matsumo.onenavi.core.model.GuidanceEvent
 import me.matsumo.onenavi.core.model.GuidancePriority
 import me.matsumo.onenavi.core.model.LanePosition
@@ -9,6 +11,7 @@ import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.StraightforwardLevel
 import me.matsumo.onenavi.core.navigation.NavigationFeedSnapshot
 import me.matsumo.onenavi.core.navigation.NavigationLaneSnapshot
+import me.matsumo.onenavi.core.navigation.NavigationStepSnapshot
 import me.matsumo.onenavi.core.navigation.toDrivingSide
 import me.matsumo.onenavi.core.navigation.toManeuverModifier
 import me.matsumo.onenavi.core.navigation.toManeuverType
@@ -46,6 +49,15 @@ class GuidancePlanner {
 
         val isStandaloneAt50m = bucket == DistanceBucket.AT_50M && !at100mSpoken
 
+        val followup = if (bucket == DistanceBucket.AT_100M) {
+            resolveFollowup(
+                currentDistance = currentDistance,
+                nextStep = input.currentSnapshot.remainingSteps.firstOrNull(),
+            )
+        } else {
+            null
+        }
+
         return GuidanceEvent.Maneuver(
             stepCounter = input.stepCounter,
             bucket = bucket,
@@ -53,7 +65,38 @@ class GuidancePlanner {
             modifier = currentStep.maneuver.toManeuverModifier(),
             drivingSide = currentStep.drivingSide.toDrivingSide(),
             isStandaloneAt50m = isStandaloneAt50m,
+            followup = followup,
             priority = priorityFor(bucket),
+        )
+    }
+
+    /**
+     * 次ステップが近接しているとき、連続案内（followup）の内容を組み立てる。
+     *
+     * 条件:
+     * - 次ステップが存在する（`nextStep != null`）
+     * - `currentDistance + nextStep.distanceFromPreviousMeters <= 500m`
+     * - 次ステップが方向を持つターン系（modifier が null でなく、道なり・分岐・合流・ランプでないこと）
+     *
+     * いずれか満たさなければ null。
+     */
+    private fun resolveFollowup(
+        currentDistance: Int,
+        nextStep: NavigationStepSnapshot?,
+    ): FollowupManeuver? {
+        val step = nextStep ?: return null
+        val gapToNext = step.distanceFromPreviousMeters ?: return null
+        val totalDistance = currentDistance + gapToNext
+        if (totalDistance > FOLLOWUP_MAX_DISTANCE_METERS) return null
+
+        val maneuverType = step.maneuver.toManeuverType()
+        if (maneuverType !in FOLLOWUP_SUPPORTED_TYPES) return null
+        val modifier = step.maneuver.toManeuverModifier() ?: return null
+
+        return FollowupManeuver(
+            distanceBucket = FollowupDistanceBucket.fromMeters(totalDistance),
+            maneuverType = maneuverType,
+            modifier = modifier,
         )
     }
 
@@ -164,6 +207,7 @@ class GuidancePlanner {
         private const val STRAIGHT_SHORT_THRESHOLD_METERS = 1000
         private const val STRAIGHT_LONG_THRESHOLD_METERS = 5000
         private const val CENTER_MIN_LANES = 3
+        private const val FOLLOWUP_MAX_DISTANCE_METERS = 500
 
         private val LANE_TRIGGER_TYPES = setOf(
             ManeuverType.TURN,
@@ -171,6 +215,14 @@ class GuidancePlanner {
             ManeuverType.MERGE,
             ManeuverType.ON_RAMP,
             ManeuverType.OFF_RAMP,
+        )
+
+        // v1 では方向を持つターン系のみ followup 対象。分岐・合流・ランプ・道なりは除外。
+        private val FOLLOWUP_SUPPORTED_TYPES = setOf(
+            ManeuverType.TURN,
+            ManeuverType.NAME_CHANGE,
+            ManeuverType.END_OF_ROAD,
+            ManeuverType.UTURN,
         )
     }
 }
