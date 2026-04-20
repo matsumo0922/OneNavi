@@ -10,7 +10,15 @@
 
 ## 0. 変更履歴
 
-### rev.5（本改訂、Codex 4 回目レビュー反映）
+### rev.6（Phase 4 実機ログ反映）
+
+- **[HIGH]** 実機走行ログで短距離連続ターン時に無音が発生することを確認。原因は 2 つ:
+  - **A**: ステップ遷移時 catch-up が近距離バケット（`AT_100M` / `AT_50M`）まで潰してしまい、新ステップ開始距離が 100m 以下のケースで以降の発話が全部抑制される。→ **catch-up の対象を `AT_2KM` / `AT_500M` のみに限定**。§2.3 / §4.4 修正。
+  - **B**: 連続ターン（右折→短距離→左折など）で次ターンの予告が出ない。v2 バックログ扱いだった連続案内（followup）を v1 に繰り上げる。NAVITIME ドライブサポーター方式（『その先、およそ 300m で左方向です。』）を採用。§2.4 / §3.4 / §4.3 修正、§9 から該当削除。
+- **[MEDIUM]** followup は **`AT_100M` 発話時のみ** に付与。`AT_50M` は操作直前のため明瞭さを優先し単独フレーズを維持。§3.4b 追記。
+- **[MEDIUM]** followup の距離閾値を **500m** とする（`currentDistance + nextStep.distanceFromPreviousMeters <= 500`）。上限扱いで、実走で冗長なら 300〜400m へ下げる余地あり。Codex レビューに基づき 1 手先までに限定。§4.3 修正。
+
+### rev.5（Codex 4 回目レビュー反映）
 
 - **[HIGH]** `SpeechDispatcher` の CRITICAL 優先保証を明文化。plain `select` の clause 順 bias は Kotlin coroutines の仕様上保証されないため、**`criticalChannel.tryReceive()` で先読み → 成功なら即処理、失敗時に `select` で両チャンネル待機** の pattern に変更。§4.7 書き換え。
 - **[MEDIUM]** `start` / `shutdown` / `send` 間のライフサイクル境界の挙動を明文化。`shutdown()` は drain せず、`send()` 時 channel が null なら drop（CRITICAL は error log 付き）、停止後のイベントは基本捨てる方針を §4.7 に追記。
@@ -143,19 +151,51 @@
 
 60km/h で 50m は約 3 秒の猶予しかない。`AT_100M` 未発話で `AT_50M` 到達するのは「距離ジャンプ」または「NavInfo 遅延」で本来の予告が出なかった取りこぼし時のみ。この場合に 100m と同じ「まもなく、」では直前性が足りないため、**専用の強い文頭「この先すぐ、」** を使う。ドライブサポーター基準の #76-77 相当の語彙を流用。
 
-**初回観測時の catch-up ポリシー（遠距離バケット欠落の明示的許容）**:
+**初回観測時の catch-up ポリシー（rev.6 で範囲限定）**:
 
-セッション開始時やリルート直後など、最初に受信した `distanceToCurrentStepMeters` がバケット閾値以下の場合、そのバケットは**意図的にスキップ**する（`spokenKeys` に発話済みフラグを事前登録）。
+セッション開始時やステップ遷移直後など、最初に受信した `distanceToCurrentStepMeters` が遠距離バケット（`AT_2KM` / `AT_500M`）の閾値以下の場合、そのバケットは**意図的にスキップ**する（`spokenKeys` に発話済みフラグを事前登録）。
 
-例: セッション開始時に `distance=1800m` なら `AT_2KM` は「既に通過済み」と見なし、スキップ登録。その後 500m を下抜けた時に `AT_500M` は正常発話される。
+**近距離バケット（`AT_100M` / `AT_50M`）は catch-up の対象外**。これらは「このステップ内で必ず通過する直前タイミング」のため、catch-up で潰すと短距離連続ターン時に無音になる（Phase 4 実機ログで確認）。近距離は実走下抜け検出に任せ、遡及発話の抑制は遠距離バケットに限定する。
 
-理由: 既に閾値より内側に入った区間で遠距離予告（「およそ2km先」）を喋るのは運転上ノイズ。**直前案内の精度を優先**し、遠距離バケットの欠落は仕様として許容する。
+例:
+- セッション開始時に `distance=1800m` → `AT_2KM` スキップ登録、その後 500m 下抜けで `AT_500M` 正常発話。
+- ステップ遷移時に `distance=58m` → 遠距離 2 つを catch-up 登録、`AT_100M` / `AT_50M` は非登録。その後 50m を実走で下抜ければ `AT_50M` 単独モード（「この先すぐ、」）が発話される。
+
+理由: 既に閾値より内側に入った区間で遠距離予告（「およそ2km先」）を喋るのは運転上ノイズだが、直前案内まで潰すと肝心のタイミングで沈黙する。**直前案内は必ず鳴らす、遠距離欠落は許容** というトレードオフ。
 
 同様に、ジャンプで複数バケットを同時跨ぎした場合も最近接のみ採用（§4.4）。遠距離バケットは永久に発話されないが、これは意図された挙動。
 
-### 2.4 連続案内は v1 では扱わない
+### 2.4 連続案内（followup、rev.6 で v1 繰り上げ）
 
-「その先、分岐です」連続案内は、次ステップの距離評価と重複抑制の整合性が詰まっていないため v1 では見送り。「その先、〜」フレーズ ID (#77) は strings に登録しておくが、v1 の発話ロジックでは呼び出さない。
+連続ターン（右折→短距離→左折など）の場合、`AT_100M` 発話時に次ステップのターン予告を載せる。NAVITIME ドライブサポーター方式（`docs/note/drive-supporter-tts-guide.md` §5 連続案内）を踏襲する。
+
+**発話パターン（例: 右折の AT_100M で次ステップ＝左折が 300m 先にあるとき）**:
+
+```
+「まもなく、右方向です。その先、およそ 300m で左方向です。」
+```
+
+**組み立てルール**:
+
+| セグメント | 素材 |
+|---|---|
+| 主ターンの文頭 | `AT_100M` の文頭フレーズ（「まもなく、」） |
+| 主ターンの文末 | 既存の方向/分岐/合流文末（句点止め） |
+| 接続詞 | 「その先、」 |
+| 次ターンまでの距離 | 「およそ XXmで」（50m 刻みで 50〜500m の 10 段階） |
+| 次ターンの文末 | 方向/分岐/合流文末（句点止め） |
+
+**トリガー条件**:
+
+- 現ステップの `AT_100M` を下抜けた瞬間のみ。`AT_50M` / `AT_500M` / `AT_2KM` では followup を付けない。
+- `currentDistance + nextStep.distanceFromPreviousMeters <= 500` のとき。
+- 次ステップが存在し（`remainingSteps.firstOrNull() != null`）、道なり系（`CONTINUE` のみの `maneuverType`）ではないこと。
+
+**`AT_50M` に付けない理由**: 操作直前の明瞭さを優先。連結で情報量が増えると主案内が薄れる。
+
+**1 手先まで**: 連結対象は次ステップ 1 つのみ。2 手以上先は付けない（3 連続短 step での二重連結を避ける）。
+
+**リルート時の扱い**: `GuidanceCoordinator.onRerouted()` で `previousSnapshot` / `spokenKeys` クリア済みのため、followup 陳腐化リスクは発生しない。
 
 ### 2.5 フレーズ列モデル
 
@@ -387,8 +427,10 @@ internal data class GuidancePlannerInput(
 `plan()` の責務（ENROUTE 時に発生するイベントのみ）:
 
 1. ステップ遷移なら `Straightforward` 候補を生成（距離条件満たすとき）
-2. 距離バケット下抜け検出 → `Maneuver` 候補
+2. 距離バケット下抜け検出 → `Maneuver` 候補（`AT_100M` 発話時は rev.6 の followup 生成も試みる）
 3. レーン条件満たすとき → `Lane` 候補
+
+**followup 生成（rev.6）**: Maneuver が `AT_100M` バケットで発話され、`currentDistance + nextStep.distanceFromPreviousMeters <= 500` かつ次ステップが存在し道なり系でない場合、`FollowupManeuver`（次ターン距離＋方向等）を組み立てて `Maneuver.followup` に載せる。距離は 50m 刻みで最も近い値にスナップする。`AT_50M` / `AT_500M` / `AT_2KM` では followup を生成しない。
 
 **`OffRoute` / `OnRouteRecovered` は Planner の責務外**。理由: `applyGuidanceUpdate()` は `navState != ENROUTE` で早期 return するが、オフルート時はまさに `navState=REROUTING` になるため、Planner 経由では検出できない。OffRoute は `GuidanceCoordinator.onOffRouteChanged()` 専用経路を用意し、`isOffRoute` StateFlow の変化だけを監視して emit する（§4.8 参照）。
 
@@ -408,7 +450,7 @@ private fun crossedBuckets(previous: Int?, current: Int): List<DistanceBucket> {
 }
 ```
 
-**初回観測時の catch-up**: ステップ遷移直後や `previousSnapshot == null` のとき、`current` がバケット閾値以下のバケットを **「通過済み」として spokenKeys に事前登録**する。これにより以降の tick でそのバケットが下抜け検出されず、遠距離バケットの取りこぼしが仕様として明示される。
+**初回観測時の catch-up（rev.6 で範囲限定）**: ステップ遷移直後や `previousSnapshot == null` のとき、`current` が**遠距離バケット（`AT_2KM` / `AT_500M`）** の閾値以下のバケットを「通過済み」として spokenKeys に事前登録する。近距離バケット（`AT_100M` / `AT_50M`）は catch-up 対象から除外し、実走での下抜け検出に任せる（理由は §2.3）。
 
 ```kotlin
 // ステップ遷移時に呼ぶ
@@ -418,11 +460,14 @@ private fun markAlreadyPassedBuckets(
     spokenKeys: MutableSet<SpokenGuideKey>,
 ) {
     DistanceBucket.entries
+        .filter { bucket -> bucket in CATCH_UP_TARGETS }
         .filter { bucket -> currentDistance <= bucket.thresholdMeters }
         .forEach { bucket ->
             spokenKeys.add(SpokenGuideKey(stepCounter, Category.MANEUVER, bucket))
         }
 }
+
+private val CATCH_UP_TARGETS = setOf(DistanceBucket.AT_2KM, DistanceBucket.AT_500M)
 ```
 
 **複数バケット跨ぎの処置**: `crossedBuckets` が 2 つ以上返った場合、**最も近いバケット（= 最小 threshold）の未発話のみを採用**する。
@@ -1197,7 +1242,6 @@ v1 完了後に順次実装する機能を明示。
 | 高速道路案内（IC / JCT / 料金所 / SA 入口） | `GoogleRoutesDataSource` で `highwayInfo` / `roadName` / `roadRef` を埋める必要がある |
 | 一般/高速切替通知 (#569/#570) | 同上 |
 | 有料区間・自動車専用道通知 (#767/#768) | 同上 |
-| 「その先」連続案内 | 連続案内の距離ポリシー確定 + 複数発話の順序保証設計 |
 | 右折後 / 左折後 / 通過後 (#764-766) | ステップ遷移直後の即時発話設計 |
 | 信号カウント (#754-755, #757-758) | 信号機データソース必要 |
 | 車線 N 番目 / 中央右側/左側 / お入りください / 合流後/分岐後 | 現在走行車線の取得が必要 |
