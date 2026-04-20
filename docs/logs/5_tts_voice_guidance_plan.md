@@ -1,30 +1,38 @@
-# 独自ボイスガイダンス実装計画 (rev.2)
+# 独自ボイスガイダンス実装計画 (rev.3)
 
 - 作成日: 2026-04-20
-- 改訂日: 2026-04-20 (Codex レビュー反映 + 現状コード再調査を反映)
+- 改訂日: 2026-04-20 (Codex 2 回目レビュー反映)
 - 対象モジュール: `core:navigation`, `core:model`, `core:resource`
 - 対象範囲: 日本語のみ（多言語化は対象外）
 - 参照: `docs/note/tts-required-features.md` / `docs/note/drive-supporter-tts-guide.md`
 
 ---
 
-## 0. 変更履歴 (rev.2 で変わったポイント)
+## 0. 変更履歴
 
-初版 (rev.1) に対する Codex レビューと現状コード再調査の結果、以下を反映した。
+### rev.3（本改訂、Codex 2 回目レビュー反映）
+
+- **[HIGH]** Phase 1/2 を**完全統合して単一の cutover** に再設計。Phase 1 で「SDK テキスト発話を残しつつ独自発話を併走させる」方針は廃止。新 Phase 1 は骨組み配線のみで発話には到達しない。新 Phase 2 で `speak(currentStep.instruction)` 削除と独自発話投入を**同一コミットで**行う。§6 全面改稿。
+- **[HIGH]** `crossedBuckets()` の採用ルールを **「最近接バケット優先」** に反転。例: 505m → 95m と 2 ティックで跨いだ場合、運転上の価値が高い `AT_100M` を採用し `AT_500M` を捨てる。§4.4 書き換え。
+- **[HIGH]** リルート検知を routeToken 依存から **「routeToken 優先、null 時は `GoogleRoute.id` + `geometry` サイズ比較にフォールバック」** へ。§4.9 書き換え。
+- **[MEDIUM]** `StepTransitionTracker.isSameStep()` に補助条件として **`distanceToCurrentStepMeters` の急増（前回比 +300m 以上）** を加える。距離は進行方向で単調減少するはずなので急増はステップ遷移と解釈する。§4.6 書き換え。
+- **[MEDIUM]** `SpeechDispatcher` の Channel を `UNLIMITED` から **`Channel.BUFFERED` (capacity 32) + 同カテゴリ coalesce** へ。連続する同カテゴリイベントは最新のみ残す。§4.7 書き換え。
+- **[MEDIUM]** `AT_50M` 抑制を時間ベースから **`stepCounter` ベース** に。「同一 `stepCounter` で `AT_100M` 済みなら `AT_50M` 抑制、`AT_100M` 未発話時のみ `AT_50M` を単独発話許可」。§2.3 / §4.4 書き換え。
+- **[LOW]** `PROGRESS_DISTANCE_THRESHOLD_METERS` 調整案を削除（発話ロジックが `tripProgress` を使わないため根拠が薄いという指摘反映）。§8 から該当行を削除。
+
+### rev.2（初版 Codex レビュー反映）
 
 - **[HIGH]** 高速道路案内のスコープを大幅縮小。`GoogleRoutesDataSource.kt:161-188` の `RouteStepInfo` 生成は `highwayInfo=null` / `roadName=""` / `roadRef=null` で固定されており、IC・JCT・料金所・SA の識別情報が一切供給されていない。`#67`「高速入口です」・`#68`「高速出口です」・`#69`「料金所です」・`#569-570`「一般/高速切替」・`#767-768`「有料区間に入ります」などは v1 非対応とし、v2 で datasource 強化とセットで扱う。
 - **[HIGH]** `stepId = (maneuver, roadName, cumulativeDistance)` を廃止。`NavigationStepSnapshot` には index / position / 固有 ID に相当するフィールドが無く、`NavigationUpdatesService` 経由で受け取る `StepInfo` も現状スナップショットに sequence を乗せていない。`GoogleRoute.steps` との逆算も route token 不在時に SDK 側で別ルート計算されうる（`NavigationSdkManager.kt:222-226` のコメント参照）。v1 では **session-local な step transition counter** を採用する（詳細 §4.6）。
-- **[HIGH]** Phase 1/2 を統合。SDK テキスト垂れ流し発話と独自発話の併走期間を設けない。1 つの cutover で置換する。
 - **[HIGH]** `PhraseBuilder.build()` を `suspend` とし、`GuidanceEventDispatcher` を `Channel<GuidanceEvent>` + 単一コルーチンの **直列 actor** に再設計。`scope.launch { dispatch(event) }` の多重起動をやめる。
-- **[HIGH]** 距離バケットを **ユーザー指定通り `2km / 500m / 100m / 50m` に固定**。`1km` / `300m` は廃止。「`100m/50m` = 常に『まもなく、』」という固定ルールも廃止。距離フレーズとタイミング修飾をテーブルで独立に指定できるポリシー形にする。
+- **[HIGH]** 距離バケットを **ユーザー指定通り `2km / 500m / 100m / 50m` に固定**。`1km` / `300m` は廃止。
 - **[MEDIUM]** `GuidanceEvent` は phrasing を持たない `SemanticEvent` に変更。`PhraseComposer` が別工程で segments を生成。`GuidancePlanner` は純関数に保つ。
-- **[MEDIUM]** 連続案内の距離閾値を固定値 200m から「一般道 ≤200m / 高速 ≤500m」へ。ただし v1 の時点では**「その先」連続案内を scope 外**にする（レビュー指摘の連続発話と重複抑制の整合性を次版で詰める）。
-- **[MEDIUM]** バケット下抜けの複数閾値跨ぎに備え、`crossedBuckets(previousDistance, currentDistance)` 形式で複数候補を取得し、**最遠の未発話バケットのみ**を採用（発話は常にルート上で前方に向かって進行するため、近いバケットに飛ばない）。
-- **[MEDIUM]** `#566`「音声案内を継続します」・`#567`「一定時間が経過したため中断」・`#568`「あと5分で中断」・`#690`「案内停止中」は背景タイムアウト機構が未実装のため v1 非対応（スコープ明記）。
-- **[MEDIUM]** 目的地タイプ別フレーズ差し替えは v1 非対応（`RoutePoint` に type が無く、Places API からも種別が流れてきていない）。v1 は `#51`「目的地付近です」+ `#53`「お疲れ様でした」固定。
-- **[MEDIUM]** レーン案内は v1 では **「右側 / 左側 / 中央」の 3 パターン + 常に『お進みください』固定**。「右から N 番目」「中央右側/中央左側」「お入りください」「車線減少」「専用レーン」「合流後/分岐後」は v2 へ。
-- **[LOW]** 新規 data class / sealed class に `@Immutable` を付与する方針を明記。
-- **[LOW]** TTS キャッシュヒット率を下げないため、v1 は動的文字列（IC 名・道路名など）を発話テキストに一切含めない。
+- **[MEDIUM]** 「その先」連続案内は v1 では scope 外。
+- **[MEDIUM]** `#566` / `#567` / `#568` / `#690` は v1 非対応（BG タイマー機構なし）。
+- **[MEDIUM]** 目的地タイプ別フレーズ差し替えは v1 非対応（`RoutePoint` に type が無い）。
+- **[MEDIUM]** レーン案内は v1 では「右側 / 左側 / 中央」の 3 パターン + 常に「お進みください」固定。
+- **[LOW]** 新規 data class / sealed class に `@Immutable` を付与。
+- **[LOW]** v1 は動的文字列を発話テキストに一切含めない。
 
 ---
 
@@ -111,7 +119,9 @@
 | `AT_100M` | 100m を下抜け | 「まもなく、」 | 「まもなく、斜め右方向です。」 |
 | `AT_50M` | 50m を下抜け | 「まもなく、」 | 「まもなく、U ターンです。」 |
 
-- `AT_50M` は `AT_100M` 発話後 **5 秒以内なら抑制**する（重複回避）。
+- **`AT_50M` の抑制ルール（`stepCounter` ベース）**:
+  - 同一 `stepCounter` で `AT_100M` を既に発話済みなら `AT_50M` は抑制（直前に同趣旨の発話をしているため）。
+  - 同一 `stepCounter` で `AT_100M` 未発話の場合は `AT_50M` を単独発話する（急接近や取りこぼし時の保険）。
 - 一般道/高速の切替は v2。v1 では上記 4 段を一律に使う。
 
 ### 2.4 連続案内は v1 では扱わない
@@ -367,9 +377,18 @@ private fun crossedBuckets(previous: Int?, current: Int): List<DistanceBucket> {
 }
 ```
 
-**複数バケット跨ぎの処置**: `crossedBuckets` が 2 つ以上返った場合、**最も遠いバケット（= 最大 threshold）の未発話のみを採用**する。近いバケット（= より直前の案内）は抑制。理由：距離予告は「より遠くの予告をしておく」方が運転上の価値が高く、近距離バケットは次ティックで再検出される可能性が高い。
+**複数バケット跨ぎの処置**: `crossedBuckets` が 2 つ以上返った場合、**最も近いバケット（= 最小 threshold）の未発話のみを採用**する。
 
-**50m/100m の連続抑制**: `AT_100M` を発話した時刻を記録し、5 秒以内の `AT_50M` は抑制。
+理由: 運転上の価値は「直前の予告」ほど高い。たとえば 505m → 95m と 1 ティックで飛んだケースでは、`AT_500M` と `AT_100M` の両方が下抜けるが、ドライバーにとって最も重要なのは「まもなくその操作をせよ」という直前案内（`AT_100M`）であり、既に過ぎ去った 500m 予告を後から喋っても価値が無い。
+
+```kotlin
+// 採用ロジック
+val speakBucket = crossedBuckets(previous, current)
+    .filter { !spokenKeys.contains(SpokenGuideKey(stepCounter, MANEUVER, it)) }
+    .minByOrNull { it.thresholdMeters }   // ← 最も近いバケット
+```
+
+**50m/100m 抑制**: §2.3 のルール通り、同一 `stepCounter` で `AT_100M` 発話済みなら `AT_50M` は抑制、未発話なら単独発話を許可。`spokenKeys` に `SpokenGuideKey(stepCounter, MANEUVER, AT_100M)` が存在するかで判定。
 
 ### 4.5 `PhraseComposer`
 
@@ -407,8 +426,12 @@ internal class PhraseComposer {
 internal class StepTransitionTracker {
     private var counter: Int = 0
     private var lastStep: NavigationStepSnapshot? = null
+    private var lastDistanceToStep: Int? = null
 
-    fun update(currentStep: NavigationStepSnapshot?): StepTransitionResult {
+    fun update(
+        currentStep: NavigationStepSnapshot?,
+        currentDistance: Int?,
+    ): StepTransitionResult {
         val last = lastStep
         val transitioned = when {
             last == null && currentStep == null -> false
@@ -417,31 +440,49 @@ internal class StepTransitionTracker {
                 true
             }
             last != null && currentStep == null -> false  // ENROUTE → REROUTING 等
-            else -> !isSameStep(last!!, currentStep!!)
+            else -> !isSameStep(last!!, currentStep!!, currentDistance)
         }
         if (transitioned) counter++
         lastStep = currentStep
+        lastDistanceToStep = currentDistance
         return StepTransitionResult(counter = counter, transitioned = transitioned)
     }
 
-    private fun isSameStep(a: NavigationStepSnapshot, b: NavigationStepSnapshot): Boolean {
-        // maneuver / roadName / drivingSide / roundaboutTurnNumber が全一致なら同一ステップとみなす
-        // 偽陰性（=違うステップを同一扱い）のときは発話が次ステップまで遅れるが、ナビ品質は壊れない
-        // 偽陽性（=同じステップを別扱い）のときは発話重複のリスクがある
-        // → 安全側として少し厳しめの一致条件を使う
-        return a.maneuver == b.maneuver &&
+    // 2 条件のいずれかが不一致なら別ステップと判定する。
+    // 1) maneuver / roadName / simpleRoadName / drivingSide / roundaboutTurnNumber のヒューリスティック一致
+    // 2) distanceToCurrentStepMeters の急増（+300m 以上）→ 進行方向では距離が単調減少するはずなので、
+    //    急増はステップ遷移（次のガイドポイントに切り替わった）と解釈する
+    private fun isSameStep(
+        a: NavigationStepSnapshot,
+        b: NavigationStepSnapshot,
+        currentDistance: Int?,
+    ): Boolean {
+        val fieldsMatch = a.maneuver == b.maneuver &&
             a.roadName == b.roadName &&
             a.simpleRoadName == b.simpleRoadName &&
             a.drivingSide == b.drivingSide &&
             a.roundaboutTurnNumber == b.roundaboutTurnNumber
+        if (!fieldsMatch) return false
+
+        val prevDistance = lastDistanceToStep ?: return true
+        val curr = currentDistance ?: return true
+        // 前回より 300m 以上増加したらステップが切り替わったと判定
+        return curr - prevDistance < DISTANCE_SURGE_THRESHOLD_METERS
     }
 
     fun reset() {
         counter = 0
         lastStep = null
+        lastDistanceToStep = null
+    }
+
+    companion object {
+        private const val DISTANCE_SURGE_THRESHOLD_METERS = 300
     }
 }
 ```
+
+**誤判定時のログ**: `isSameStep()` が距離補助条件で遷移判定した場合は `Napier.d` で記録し、Phase 4 の実機チューニングで頻度を確認する。
 
 `counter` は `GuidanceEvent.Maneuver` / `Lane` / `Straightforward` の `stepCounter` として使い、`SpokenGuideKey` のキー要素にする。
 
@@ -458,7 +499,12 @@ data class SpokenGuideKey(
 
 ステップが進むたびに `counter` が増えるので、過去ステップの `SpokenGuideKey` は `forgetStep(counter)` で掃除する（メモリ節約）。
 
-### 4.7 `SpeechDispatcher`（単一 actor）
+### 4.7 `SpeechDispatcher`（単一 actor + bounded + coalesce）
+
+**設計方針**: `TurnByTurnUpdateBus` はアプリ側の周期制御を持たないため、受信頻度が高くなる可能性がある。無制限 Channel は OOM とキュー肥大のリスクがあるので、以下の 2 段で制御する。
+
+1. **bounded Channel（capacity 32）**: 実用上の発話イベントは同時に数件程度。32 は余裕を見た値。
+2. **同カテゴリ coalesce**: `pending` リストを別途保持し、同じ `(stepCounter, category)` のイベントが連続して届いた場合は**最新のみを残す**（古い方を捨てる）。これは「距離バケット下抜けで Maneuver 2 件が発生したが前イベントが未消化」などのケースに対応。
 
 ```kotlin
 internal class SpeechDispatcher(
@@ -466,7 +512,7 @@ internal class SpeechDispatcher(
     private val composer: PhraseComposer,
     private val scope: CoroutineScope,
 ) {
-    private val channel = Channel<GuidanceEvent>(capacity = Channel.UNLIMITED)
+    private val channel = Channel<GuidanceEvent>(capacity = CAPACITY)
     private var job: Job? = null
 
     fun start() {
@@ -489,7 +535,13 @@ internal class SpeechDispatcher(
     }
 
     fun send(event: GuidanceEvent) {
-        channel.trySend(event)
+        val result = channel.trySend(event)
+        if (result.isFailure) {
+            // キューが満杯 → 古いイベントを捨てて新しいものを入れる（coalesce）
+            Napier.w(tag = TAG) { "Speech dispatcher channel full, dropping oldest: $event" }
+            channel.tryReceive()
+            channel.trySend(event)
+        }
     }
 
     fun shutdown() {
@@ -498,7 +550,10 @@ internal class SpeechDispatcher(
         job = null
     }
 
-    companion object { private const val TAG = "SpeechDispatcher" }
+    companion object {
+        private const val CAPACITY = 32
+        private const val TAG = "SpeechDispatcher"
+    }
 }
 ```
 
@@ -519,11 +574,13 @@ internal class GuidanceCoordinator(
     private val spokenKeys = mutableSetOf<SpokenGuideKey>()
     private var previousSnapshot: NavigationFeedSnapshot? = null
     private var previousIsOffRoute = false
-    private var lastImminentAtMs: Long = 0L
 
     fun onNavigationUpdate(snapshot: NavigationFeedSnapshot, isOffRoute: Boolean) {
         val step = snapshot.currentStep
-        val transitionResult = stepTracker.update(step)
+        val transitionResult = stepTracker.update(
+            currentStep = step,
+            currentDistance = snapshot.distanceToCurrentStepMeters,
+        )
         if (transitionResult.transitioned) {
             forgetOldSteps(transitionResult.counter)
         }
@@ -557,7 +614,6 @@ internal class GuidanceCoordinator(
         spokenKeys.clear()
         previousSnapshot = null
         previousIsOffRoute = false
-        lastImminentAtMs = 0L
     }
 
     private fun markSpokenIfNeeded(event: GuidanceEvent): Boolean { /* ... */ }
@@ -613,7 +669,26 @@ navigationSdkManager.arrivalEvents.collect { arrival ->
 }
 ```
 
-リルート検出: `routeManager.routes` の `distinctUntilChanged { old, new -> old.firstOrNull()?.routeToken == new.firstOrNull()?.routeToken }` で変化検知して emit。
+**リルート検出**: `routeManager.routes` の変化を監視する。ただし routeToken は存在しない場合があるため、以下の優先順で差分検知する。
+
+```kotlin
+routeManager.routes
+    .map { it.firstOrNull() }
+    .distinctUntilChanged { old, new ->
+        when {
+            old == null || new == null -> old === new
+            // 1) routeToken がある場合はそれで比較
+            old.routeToken != null && new.routeToken != null -> old.routeToken == new.routeToken
+            // 2) ない場合は id + geometry サイズで代替（座標全比較はコスト高のため geometry.size で近似）
+            else -> old.id == new.id && old.geometry.size == new.geometry.size
+        }
+    }
+    .drop(1)   // 初回 emit はリルートではない
+    .onEach { coordinator.emit(GuidanceEvent.Rerouted(GuidancePriority.CRITICAL)) }
+    .launchIn(scope)
+```
+
+v1 で `geometry.size` に頼るのは割り切り。完全一致判定は性能コスト（数百点の座標比較）がナビ更新ループ内で重いため。実機で偽陽性が問題になれば Phase 4 で `distanceMeters` や `durationSeconds` も合成キーに加える。
 
 `stopSession()`:
 
@@ -625,7 +700,7 @@ fun stopSession() {
 }
 ```
 
-**重要**: rev.1 で Phase 1/2 を分けていた「SDK テキスト発話残しつつ併走」は廃止。この `applyGuidanceUpdate()` の書き換えと同時に `speak(currentStep.instruction)` 行を削除する。すなわち **cutover は 1 コミットで実施**。
+**重要**: この `applyGuidanceUpdate()` の書き換え（`speak(currentStep.instruction)` 行削除 + `coordinator.onNavigationUpdate()` 追加）は**同一コミットで実施**する。SDK テキスト発話と独自発話が併走する期間は作らない（§6 Phase 2 参照）。
 
 ---
 
@@ -743,80 +818,87 @@ enum class DistanceBucket(val thresholdMeters: Int, val phraseId: TtsPhraseId?) 
 
 ---
 
-## 6. 実装フェーズ（rev.2）
+## 6. 実装フェーズ（rev.3）
 
-### Phase 0 — 基盤整備（動作変化なし、cutover 無し）
+**cutover 原則**: SDK テキストの直接発話と独自発話を**併走させない**。Phase 1 は配線のみで発話には到達しない（骨組みで完結）。Phase 2 が単一の cutover コミットとなり、`speak(currentStep.instruction)` 削除 + 独自発話投入を同時に行う。
 
-目標: 型・リソース・ビルド通過。既存発話ロジックは**変更しない**。
+### Phase 0 — 基盤整備（動作変化なし）
+
+目標: 型・リソース・骨組みを追加。既存発話ロジックは**一切変更しない**。
 
 1. `strings.xml` に §5 の 27 件を追加。
-2. `core:model` に追加:
-   - `GuidanceEvent` sealed interface（`@Immutable`）
+2. `core:model` に追加（全て `@Immutable`）:
+   - `GuidanceEvent` sealed interface
    - `GuidancePriority` enum
    - `DistanceBucket` enum
    - `LanePosition` enum
    - `StraightforwardLevel` enum
-   - `GuidancePhrase` / `PhraseSegment`（`@Immutable`）
-3. `core:navigation/androidMain/guidance/` に骨組み追加（空実装で可）:
-   - `TtsPhraseId`
-   - `PhraseComposer`
+   - `GuidancePhrase` / `PhraseSegment`
+3. `core:navigation/androidMain/guidance/` に骨組みを追加（実装は空でも可）:
+   - `TtsPhraseId` enum
+   - `PhraseComposer`（`compose()` / `resolve()` を実装）
    - `SpokenGuideKeyStore`
    - `StepTransitionTracker`
-   - `SpeechDispatcher`
-   - `GuidancePlanner`（`emptyList()` を返す空実装）
+   - `SpeechDispatcher`（未起動状態で存在するだけ）
+   - `GuidancePlanner`（常に `emptyList()` を返す）
    - `GuidanceCoordinator`
-4. `PhraseComposer` は単体テストで主要ブランチを検証（JVM test）。
+4. `PhraseComposer` の単体テスト（JVM test）:
+   - 全 `GuidanceEvent` 型に対して期待フレーズが生成されることを検証。
 5. `./gradlew assembleDebug --no-configuration-cache` / `make detekt` 通過確認。
 
-**PR サイズ目安**: 300 行前後。
+**この Phase では `GuidanceSessionManager` に一切手を入れない**。既存の発話挙動は維持される。
 
-### Phase 1 — セッション系・到着・オフルート・リルートの cutover
+**PR サイズ目安**: 400 行前後。
 
-目標: ナビ開始直後 / 到着 / オフルート / リルートの発話を独自化。ただし **この時点では基本ターンバイターンも従来の SDK テキスト発話は維持** する（ステップ単位の 1 回発話）。SDK テキスト発話と衝突するのは「起動時」「ルート逸脱直後」など一瞬のみで、`CRITICAL` の `flush=true` で割り込むため実害が小さい。
+### Phase 1 — 配線のみ（actor 起動・イベント配管、発話は未接続）
 
-1. `GuidanceSessionManager.startSession()` に `dispatcher.start()` + `SessionStarted` emit を追加。
-2. `stopSession()` に `dispatcher.shutdown()` + `reset()` を追加。
-3. `arrivalEvents.collect` に `ViaWaypointApproach` / `DestinationApproach` emit を追加。
-4. `isOffRoute` の変化を監視して `OffRoute` / `OnRouteRecovered` emit。
-5. `routeManager.routes` の変化を監視して `Rerouted` emit。
-6. `PhraseComposer` の対応イベント型を実装。
+目標: `SpeechDispatcher` / `GuidanceCoordinator` のライフサイクルを `GuidanceSessionManager` に組み込む。**この時点では独自発話を `speak()` に繋げない**（SpeechDispatcher は起動されるが、受け取ったイベントの `orchestrator.enqueue()` 呼び出しは feature flag で抑制）。
 
-**検証項目**:
-- 起動直後に「音声案内を開始します。実際の交通規制に従って走行してください。」が流れる。
-- 経由地到着時に「経由地付近です。」。
-- 最終到着時に「目的地付近です。お疲れ様でした。」。
-- ルート逸脱時に「ルートから外れました。」、復帰時に「ルートに戻りました。」。
-- 新ルート適用時に「新しいルートが見つかりました。新しいルートで案内します。」。
+1. `GuidanceSessionManager` に以下を追加:
+   - `coordinator: GuidanceCoordinator` / `dispatcher: SpeechDispatcher` を DI で注入。
+   - `startSession()` で `dispatcher.start()` / `coordinator.reset()`。
+   - `stopSession()` で `dispatcher.shutdown()`。
+2. `SpeechDispatcher` に `enabled: Boolean = false` フラグを持たせ、false のうちは `orchestrator.enqueue()` をスキップ（ログ出力のみ）。
+3. `arrivalEvents` / `isOffRoute` / `routeManager.routes` のコレクタを追加してイベント emit まで行う。
+4. 動作確認: 発話は一切変化しない（既存 SDK テキスト発話のみ）。ログで `SpeechDispatcher` が期待イベントを受信していることを確認。
 
-### Phase 2 — 基本ターンバイターン + 分岐/合流（cutover 本番）
+**この Phase の目的**: 配管を本番コードに入れた状態でイベントが意図通りに流れることを確認する。発話は次 Phase で解禁する。
 
-目標: SDK テキストの直接発話を**削除**し、独自発話に置換。
+**PR サイズ目安**: 200 行前後。
 
-1. `GuidanceSessionManager.applyGuidanceUpdate()` の `speak(currentStep.instruction)` 行を削除。
-2. `GuidanceCoordinator.onNavigationUpdate()` を同ロジック末尾で呼び出し。
-3. `GuidancePlanner.plan()` で `Maneuver` イベント生成を実装:
+### Phase 2 — **単一 cutover**（SDK テキスト発話削除 + 独自発話投入）
+
+**このコミットが本計画の核心**。以下を 1 つの PR で実施する。
+
+1. `SpeechDispatcher.enabled = true` に切り替え（受信イベントを `orchestrator.enqueue()` に流す）。
+2. `GuidanceSessionManager.applyGuidanceUpdate()` の `speak(currentStep.instruction)` 行を**削除**。
+3. `GuidanceSessionManager.applyGuidanceUpdate()` 末尾に `coordinator.onNavigationUpdate(navInfo, isOffRoute)` を追加。
+4. `GuidancePlanner.plan()` の実装:
    - `StepTransitionTracker` でステップ遷移判定
    - `crossedBuckets()` で距離下抜け検出
-   - 最遠未発話バケットを 1 つ選択
+   - **最近接未発話バケットを 1 つ選択**（§4.4）
    - `SpokenGuideKey` で重複抑制
-   - `AT_100M` / `AT_50M` の連続抑制（5 秒ウィンドウ）
-4. `PhraseComposer.composeManeuver()` で距離フレーズ + 方向フレーズ連結。
-5. `ManeuverType.FORK` → `FORK_END`、`MERGE` → 左右/不明の分岐。
+   - `AT_50M` 抑制（§2.3、stepCounter ベース）
+   - `ManeuverType.FORK` / `MERGE` 判定と driving side 反映
+5. `PhraseComposer.composeManeuver()` で距離 + 方向フレーズ連結。
 
-**検証項目**:
-- 右折 2km / 500m / 100m / 50m 手前で発話。
-- U ターン「戻る方向です。」。
-- 合流「右からの合流が有ります。」。
-- 分岐「分岐です。」。
-- 100m 発話直後の 50m 抑制が効く。
+**検証項目（実機）**:
+- 右折 2km 手前で「およそ2km先、右方向です。」、500m で「およそ500m先、右方向です。」、100m で「まもなく、右方向です。」、50m は 100m 発話済みなら抑制。
+- U ターン「まもなく、戻る方向です。」。
+- 合流「およそ500m先、右からの合流が有ります。」。
+- 分岐「およそ500m先、分岐です。」。
+- セッション開始 / 経由地到着 / 最終到着 / オフルート / リルートが期待通り発話される。
+- **旧 SDK テキスト発話「300m 先を右方向です。右方向に進みます」などが一切聞こえない**ことを確認。
+
+**PR サイズ目安**: 500 行前後。
 
 ### Phase 3 — レーン誘導 + 道なり
 
-目標: 体験の質向上。
+目標: 体験の質向上。Phase 2 で cutover 済みのため、ここは機能追加のみ。
 
 1. `GuidancePlanner` で `Lane` イベント生成（`AT_500M` のみ、ターン系マニューバのみ）。
 2. 推奨車線位置判定（LEFT / RIGHT / CENTER のみ、該当しない場合はイベント非生成）。
-3. `Straightforward` イベント生成（ステップ遷移時に 1 回）。
+3. `Straightforward` イベント生成（ステップ遷移時に 1 回、距離条件を満たすとき）。
 4. `PhraseComposer.composeLane()` / `composeStraightforward()` 実装。
 
 **検証項目**:
@@ -824,30 +906,53 @@ enum class DistanceBucket(val thresholdMeters: Int, val phraseId: TtsPhraseId?) 
 - 次ステップまで 3km の直進区間で「しばらく道なりです。」。
 - 次ステップまで 7km なら「5km以上道なりです。」。
 
-### Phase 4 — 回帰テスト + 調整
+### Phase 4 — 回帰テスト + 実機調整
 
 目標: 実機での発話タイミングと抑制挙動の微調整。
 
 1. 実機で複数ルート（市街地・郊外・高速混じり）を走破し、発話ログを取って期待テーブルと突き合わせ。
-2. 距離バケット下抜けの取りこぼし実測。必要に応じて `PROGRESS_DISTANCE_THRESHOLD_METERS` の引き下げを検討（現 50m）。
-3. `SpokenGuideKey` のメモリリーク有無確認（長時間ナビ後の `spokenKeys` サイズ）。
-4. `SpeechDispatcher` の Channel バックプレッシャ確認。
+2. 距離バケット下抜けの取りこぼし実測。NavInfo 更新頻度が不足している場合は `NUM_NEXT_STEPS_TO_PREVIEW` や Service 設定を見直す。
+3. `StepTransitionTracker` の誤判定ログ頻度を確認。偽陽性が多ければ `DISTANCE_SURGE_THRESHOLD_METERS` を調整、偽陰性が多ければ判定フィールド追加を検討。
+4. `SpokenGuideKey` のメモリサイズを長時間ナビ（1 時間以上）で計測。`forgetOldSteps()` が効いていることを確認。
+5. `SpeechDispatcher` の Channel 溢れログ頻度確認。ゼロに近いことを確認。
+6. リルート検知の偽陽性/偽陰性確認（geometry.size 比較の粗さ）。
 
 ---
 
 ## 7. ケーススタディ（発話例）
 
-### 7.1 一般道で右折 500m 手前〜 50m 手前
+### 7.1 一般道で右折 500m 手前〜 50m 手前（通常）
 
-前提: `currentStep.maneuver=TURN_RIGHT`, `distanceToCurrentStepMeters` が 505 → 95 → 45 と遷移。
+前提: `currentStep.maneuver=TURN_RIGHT`, `distanceToCurrentStepMeters` が段階的に減少。
 
-| ティック | prev | curr | 下抜けバケット | 発話 |
-|---|---|---|---|---|
-| t0 | null | 505 | - | - |
-| t1 | 505 | 495 | `AT_500M` | 「およそ500m先、右方向です。」 |
-| t2 | 495 | 105 | - | - |
-| t3 | 105 | 95 | `AT_100M` | 「まもなく、右方向です。」 |
-| t4 | 95 | 45 | `AT_50M` | （`AT_100M` 発話から 5s 未満なら抑制） |
+| ティック | prev | curr | 下抜けバケット | 採用 | 発話 |
+|---|---|---|---|---|---|
+| t0 | null | 505 | - | - | - |
+| t1 | 505 | 495 | `AT_500M` | `AT_500M` | 「およそ500m先、右方向です。」 |
+| t2 | 495 | 105 | - | - | - |
+| t3 | 105 | 95 | `AT_100M` | `AT_100M` | 「まもなく、右方向です。」 |
+| t4 | 95 | 45 | `AT_50M` | 抑制 | （同一 stepCounter で `AT_100M` 発話済みのため） |
+
+### 7.1b 距離ジャンプ（505m → 95m を 1 ティックで飛ぶ）
+
+前提: 何らかの理由で NavInfo の更新が遅れ、1 ティックで 505m から 95m に飛んだケース。
+
+| ティック | prev | curr | 下抜けバケット | 採用 | 発話 |
+|---|---|---|---|---|---|
+| t0 | null | 505 | - | - | - |
+| t1 | 505 | 95 | `AT_500M`, `AT_100M` | **`AT_100M`** (最近接) | 「まもなく、右方向です。」 |
+| t2 | 95 | 45 | `AT_50M` | 抑制 | （同一 stepCounter で `AT_100M` 発話済み） |
+
+`AT_500M` は未発話のまま残るが、既に 95m 地点では価値が無い。最近接優先ポリシーにより「まもなく」と言うべき瞬間を逃さない。
+
+### 7.1c 距離ジャンプ + 50m まで飛ぶ
+
+| ティック | prev | curr | 下抜けバケット | 採用 | 発話 |
+|---|---|---|---|---|---|
+| t0 | null | 505 | - | - | - |
+| t1 | 505 | 45 | `AT_500M`, `AT_100M`, `AT_50M` | **`AT_50M`** (最近接) | 「まもなく、右方向です。」 |
+
+`AT_100M` 未発話のまま `AT_50M` を発話するのは §2.3 のルールで許可されている（`AT_100M` 未発話時は `AT_50M` 単独発話可）。
 
 ### 7.2 合流（左から）
 
@@ -881,14 +986,15 @@ enum class DistanceBucket(val thresholdMeters: Int, val phraseId: TtsPhraseId?) 
 
 | リスク | 影響 | 対応方針 |
 |---|---|---|
-| NavInfo の更新頻度が実機で遅いと距離バケット下抜けが取りこぼされる | 500m 発話が出ない等 | Phase 4 で実測。必要なら `registerServiceForNavUpdates` の NumNextStepsToPreview / `PROGRESS_DISTANCE_THRESHOLD_METERS` を調整 |
-| `StepTransitionTracker` の `isSameStep` 判定が誤検出（偽陽性） | 重複発話、カウンタずれ | 判定フィールドを厳しめに（maneuver + roadName + drivingSide + roundabout）。Phase 4 で実機確認 |
-| `StepTransitionTracker` の偽陰性（実際は別ステップなのに同一扱い） | 発話が次ステップまで遅れる | 実害小。優先度低 |
-| routeToken なしルートで SDK が別ルート計算 | ステップ情報と事前 `GoogleRoute.steps` の乖離 | v1 では `GoogleRoute.steps` を発話ロジックで使わないため影響小 |
-| Phase 1 期間中の SDK テキスト発話との重複 | 短時間の二重発話 | `CRITICAL` の flush=true で割り込む。重複の体感が強ければ Phase 1-2 を結合して一括 cutover |
-| Google Cloud TTS キャッシュヒット率低下 | コスト増・レイテンシ増 | v1 は固定フレーズのみ。動的文字列は含まない |
-| `SpeechDispatcher` Channel のバックプレッシャ | キュー溢れ | `Channel.UNLIMITED` を採用。実測でメモリ懸念あれば `CONFLATED` 等に変更 |
-| `flush=true` で LOW/NORMAL 発話が頻繁に破棄される | 情報損失 | `CRITICAL`/`HIGH` を連発するシナリオは稀。Phase 4 で確認 |
+| NavInfo の更新頻度が実機で遅いと距離バケット下抜けが複数同時発生する | 遠距離バケットの取りこぼし | 最近接優先ポリシーで「まもなく」発話を優先（§4.4）。Phase 4 で更新頻度を実測 |
+| `StepTransitionTracker` の `isSameStep` 偽陽性（同一路名連続などで別ステップを同一扱い） | 重複発話、カウンタずれ | ヒューリスティック一致 + `distanceToCurrentStepMeters` 急増の 2 条件（§4.6）。距離補助条件で遷移判定した場合は Napier ログ出力。Phase 4 で誤判定頻度確認 |
+| `StepTransitionTracker` の偽陰性（実際は別ステップなのに同一扱い） | 発話が次ステップまで遅れる | 実害小。優先度低。ログで頻度監視 |
+| routeToken なしルートで SDK が別ルート計算 | `GoogleRoute.geometry` と実際の走行経路が乖離 | v1 では `GoogleRoute.steps`/`geometry` を発話ロジックに使わないため影響小。リルート検知は id + geometry.size で代替（§4.9） |
+| リルート検知で `geometry.size` 比較が同数になり誤陰性 | リルート発話が出ない | Phase 4 で偽陰性頻度を確認。必要なら `distanceMeters` / `durationSeconds` を比較キーに追加 |
+| Google Cloud TTS キャッシュヒット率低下 | コスト増・レイテンシ増 | v1 は固定フレーズのみ。動的文字列を一切含まない |
+| `SpeechDispatcher` Channel のバックプレッシャ | キュー溢れ | capacity 32 + 古いもの coalesce（§4.7）。Phase 4 で溢れログ頻度確認 |
+| `flush=true` で LOW/NORMAL 発話が頻繁に破棄される | 情報損失 | `CRITICAL`/`HIGH` 連発シナリオは稀（リルート直後など）。Phase 4 で体感確認 |
+| Phase 1 で配線のみ入れた `SpeechDispatcher.enabled=false` 状態のまま Phase 2 を忘れる | cutover されず独自発話が出ない | Phase 2 PR のチェックリストに `enabled=true` 切替 + `speak(currentStep.instruction)` 削除を明記 |
 
 ---
 
@@ -916,10 +1022,10 @@ v1 完了後に順次実装する機能を明示。
 
 ## 10. このあとの進め方
 
-1. この計画書 (rev.2) のレビュー。
-2. Phase 0 着手 → PR 化（型追加と strings 追加のみ、動作変化なし）。
-3. Phase 1（セッション/到着/オフルート/リルート）。
-4. Phase 2（基本 TBT + 分岐/合流の cutover）。SDK テキスト発話を削除するのはここ。
+1. この計画書 (rev.3) のレビュー。
+2. Phase 0 着手 → PR 化（型・strings・骨組み追加のみ、`GuidanceSessionManager` 無改修）。
+3. Phase 1（配線のみ、`SpeechDispatcher.enabled=false`、動作変化なし）。
+4. **Phase 2（単一 cutover）**: `enabled=true` 化 + `speak(currentStep.instruction)` 削除 + `coordinator.onNavigationUpdate()` 接続を 1 PR で実施。ここが本計画の核心。
 5. Phase 3（レーン + 道なり）。
 6. Phase 4（実機調整）。
-7. v1 完了後、v2 として「高速道路案内」着手（datasource 強化を伴う）。
+7. v1 完了後、v2 として「高速道路案内」着手（`GoogleRoutesDataSource` の `highwayInfo` / `roadName` / `roadRef` 供給から）。
