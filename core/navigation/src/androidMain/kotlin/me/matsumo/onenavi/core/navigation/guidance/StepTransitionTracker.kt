@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.navigation.guidance
 
 import androidx.compose.runtime.Immutable
+import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.core.navigation.NavigationStepSnapshot
 
 /**
@@ -68,11 +69,18 @@ internal class StepTransitionTracker {
 
         val previousDistance = lastDistanceToStep ?: return true
         val currentDistanceMeters = currentDistance ?: return true
-        return currentDistanceMeters - previousDistance < DISTANCE_SURGE_THRESHOLD_METERS
+        val surgeDetected = currentDistanceMeters - previousDistance >= DISTANCE_SURGE_THRESHOLD_METERS
+        if (surgeDetected) {
+            Napier.d(tag = TAG) {
+                "[P4] STEP_SURGE prev=$previousDistance curr=$currentDistanceMeters fieldsMatch=true -> transitioned"
+            }
+        }
+        return !surgeDetected
     }
 
     companion object {
         private const val DISTANCE_SURGE_THRESHOLD_METERS = 300
+        private const val TAG = "StepTransitionTracker"
     }
 }
 
