@@ -1,5 +1,28 @@
 {
   "enabledPlugins": {
     "mapbox@mapbox-agent-skills": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew *compileDebugKotlinAndroid*)",
+      "Bash(./gradlew *compileDebugKotlin *)",
+      "Bash(./gradlew *detekt*)",
+      "Bash(./gradlew *testDebugUnitTest*)",
+      "Bash(./gradlew *allTests*)",
+      "Bash(./gradlew *testUnit*)",
+      "Bash(./gradlew *testLive*)",
+      "Bash(./gradlew *help*)",
+      "Bash(adb logcat *)",
+      "Bash(adb -s * logcat *)",
+      "Bash(adb -s * shell \"dumpsys *)",
+      "Bash(adb -s * shell \"pm *)",
+      "Bash(adb devices)",
+      "Bash(~/Library/Android/sdk/build-tools/*/aapt2 dump *)",
+      "Bash($ANDROID_HOME/build-tools/*/aapt2 dump *)",
+      "Bash(rtk rg *)",
+      "Bash(rtk ls *)",
+      "Bash(rtk fd *)",
+      "Bash(rtk git log *)"
+    ]
   }
 }
