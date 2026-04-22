@@ -179,4 +179,3 @@ data class ExtNavProgressSnapshot(
     /** 進行方向に残っている GuidancePoint の並び。発話スケジューラが消費する */
     val upcomingGuidancePoints: List<GuidancePoint>,
 )
-

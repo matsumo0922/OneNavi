@@ -52,7 +52,7 @@ class ExtNavAuthGateway(
         is ApiFailure.Network,
         is ApiFailure.EmptyResponse,
         is ApiFailure.Http,
-            -> true
+        -> true
         else -> false
     }
 }

@@ -61,7 +61,6 @@ actual val navigationModule: Module = module {
     single {
         ExtNavClientProvider(
             context = androidContext(),
-            appConfig = get(),
             appSettingDataSource = get(),
             logLevel = LogLevel.HEADERS,
         )

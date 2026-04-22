@@ -76,7 +76,7 @@ class ExtNavAnnouncementScheduler(
         GuidanceCategory.WrongWayDriving,
         GuidanceCategory.WrongEntry,
         GuidanceCategory.Zone30,
-            -> AnnouncementPriority.CRITICAL
+        -> AnnouncementPriority.CRITICAL
 
         GuidanceCategory.IntersectionGuide,
         GuidanceCategory.IntersectionGuideSoon,
@@ -84,7 +84,7 @@ class ExtNavAnnouncementScheduler(
         GuidanceCategory.Merge,
         GuidanceCategory.MergeAttention,
         GuidanceCategory.HighwayLaneReduction,
-            -> AnnouncementPriority.HIGH
+        -> AnnouncementPriority.HIGH
 
         else -> AnnouncementPriority.NORMAL
     }

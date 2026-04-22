@@ -8,15 +8,14 @@ import me.matsumo.drive.supporter.api.DriveSupporterConfig
 import me.matsumo.drive.supporter.api.core.model.DeviceUuid
 import me.matsumo.drive.supporter.api.core.model.LogLevel
 import me.matsumo.onenavi.core.datasource.AppSettingDataSource
-import me.matsumo.onenavi.core.model.AppConfig
 
 /**
  * drive-supporter-api の [DriveSupporterClient] を lazy singleton として組み立てるプロバイダ。
- * DeviceUuid は [AppSettingDataSource] から取得 / 生成し、BuildKonfig credential は [AppConfig] 経由。
+ * DeviceUuid は [AppSettingDataSource] から取得 / 生成する。credential は
+ * [ExtNavAuthGateway] 側で `signInWithCredentials` に流すため本クラスでは受け取らない。
  */
 class ExtNavClientProvider(
     private val context: Context,
-    private val appConfig: AppConfig,
     private val appSettingDataSource: AppSettingDataSource,
     private val logLevel: LogLevel = LogLevel.NONE,
 ) {

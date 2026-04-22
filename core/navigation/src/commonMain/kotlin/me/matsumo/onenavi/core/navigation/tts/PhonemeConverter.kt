@@ -19,6 +19,8 @@ object PhonemeConverter {
         options = setOf(RegexOption.IGNORE_CASE),
     )
 
+    private val OTHER_TAGS_REGEX = Regex("<[^>]+>")
+
     /**
      * Google Cloud TTS 向けに SSML 全体を整形する。
      *
@@ -34,7 +36,7 @@ object PhonemeConverter {
             val ph = match.groupValues[2]
             val body = match.groupValues[3]
             if (alphabet == "x-toshiba-ruby" && ph.isNotEmpty()) {
-                "<sub alias=\"${escapeXml(ph)}\">${body}</sub>"
+                "<sub alias=\"${escapeXml(ph)}\">$body</sub>"
             } else {
                 match.value
             }
@@ -58,8 +60,6 @@ object PhonemeConverter {
         }
         return replaced.replace(OTHER_TAGS_REGEX, "").trim()
     }
-
-    private val OTHER_TAGS_REGEX = Regex("<[^>]+>")
 
     private fun escapeXml(value: String): String = value
         .replace("&", "&amp;")
