@@ -25,6 +25,7 @@ kotlin {
             implementation(libs.ktor.content.negotiation)
             implementation(libs.ktor.serialization.json)
             implementation(libs.kotlinx.serialization.json)
+            implementation("me.matsumo.drive.supporter:drive-supporter-api")
         }
 
         commonTest.dependencies {
