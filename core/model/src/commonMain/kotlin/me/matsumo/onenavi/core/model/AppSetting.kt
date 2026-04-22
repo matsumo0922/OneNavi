@@ -13,6 +13,7 @@ data class AppSetting(
     val seedColor: Color,
     val plusMode: Boolean,
     val developerMode: Boolean,
+    val extNavDeviceUuid: String,
 ) {
     val hasPrivilege get() = plusMode || developerMode
 
@@ -24,6 +25,7 @@ data class AppSetting(
             seedColor = Color(0xFF7FD0FF),
             plusMode = false,
             developerMode = false,
+            extNavDeviceUuid = "",
         )
     }
 }

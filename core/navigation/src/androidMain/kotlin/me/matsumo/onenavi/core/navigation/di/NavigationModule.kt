@@ -6,11 +6,16 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import me.matsumo.drive.supporter.api.core.model.LogLevel
+import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.model.AppConfig
 import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
 import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.core.navigation.RouteManager
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavAuthGateway
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavClientProvider
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.guidance.GuidancePlanner
 import me.matsumo.onenavi.core.navigation.guidance.PhraseComposer
 import me.matsumo.onenavi.core.navigation.tts.AndroidTtsEngine
@@ -52,6 +57,26 @@ actual val navigationModule: Module = module {
     }
     single { PhraseComposer() }
     single { GuidancePlanner() }
+    single {
+        ExtNavClientProvider(
+            context = androidContext(),
+            appConfig = get(),
+            appSettingDataSource = get(),
+            logLevel = LogLevel.HEADERS,
+        )
+    }
+    single {
+        ExtNavAuthGateway(
+            clientProvider = get(),
+            appConfig = get(),
+        )
+    }
+    single<RouteDataSource> {
+        ExtNavRouteDataSource(
+            clientProvider = get(),
+            authGateway = get(),
+        )
+    }
     single {
         val context = androidContext()
         GuidanceSessionManager(

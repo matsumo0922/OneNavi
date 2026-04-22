@@ -94,4 +94,16 @@ class AppSettingDataSource(
             it[booleanPreferencesKey(AppSetting::developerMode.name)] = developerMode
         }
     }
+
+    @OptIn(ExperimentalUuidApi::class)
+    suspend fun getOrCreateExtNavDeviceUuid(): String = withContext(ioDispatcher) {
+        val current = setting.first().extNavDeviceUuid
+        if (current.isNotBlank()) return@withContext current
+
+        val uuid = Uuid.random().toString().uppercase()
+        preference.edit {
+            it[stringPreferencesKey(AppSetting::extNavDeviceUuid.name)] = uuid
+        }
+        uuid
+    }
 }
