@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.core.navigation.extnav
 
+import io.github.aakira.napier.Napier
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.SsmlPhrase
@@ -61,6 +62,11 @@ class ExtNavAnnouncementScheduler(
                     } else {
                         SpeechQueueMode.ADD
                     }
+                    Napier.i(tag = TAG) {
+                        "[NAVDBG] speak: gp=${gp.index} cat=${phrase.category.id} " +
+                            "trigger=${phrase.distanceMetres}m distToGp=${distanceToGp.toInt()}m " +
+                            "priority=$priority"
+                    }
                     speaker.speakSsml(
                         ssml = phrase.ssml,
                         utteranceId = utteranceId,
@@ -96,6 +102,7 @@ class ExtNavAnnouncementScheduler(
     )
 
     companion object {
+        private const val TAG = "ExtNavAnnouncementScheduler"
         internal const val DEFAULT_HYSTERESIS_METRES: Double = 15.0
         internal const val LOOKAHEAD_GP_COUNT: Int = 5
         internal const val MAX_OVERSHOOT_METRES: Double = 50.0

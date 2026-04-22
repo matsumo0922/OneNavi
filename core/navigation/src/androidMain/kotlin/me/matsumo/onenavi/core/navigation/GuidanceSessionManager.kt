@@ -105,6 +105,14 @@ class GuidanceSessionManager(
         activeRoute = route
         sessionStartTimeMillis = System.currentTimeMillis()
 
+        Napier.i(tag = TAG) {
+            "[NAVDBG] startSession: route=${route.id} " +
+                "intersections=${payload.guidance.intersections.size} " +
+                "gps=${payload.guidance.guidancePoints.size} " +
+                "polyline=${payload.guidance.polyline.size} " +
+                "totalMetres=${payload.guidance.summary.distanceMetres}"
+        }
+
         val sessionTracker = extNavTrackerProvider().also { tracker = it }
         val sessionScheduler = extNavSchedulerProvider().also { scheduler = it }
         val sessionDetector = extNavRerouteDetectorProvider().also { rerouteDetector = it }
@@ -146,6 +154,15 @@ class GuidanceSessionManager(
         locationJob = scope.launch {
             sessionTracker.state.collectLatest { snapshot ->
                 if (snapshot == null) return@collectLatest
+                Napier.i(tag = TAG) {
+                    "[NAVDBG] snapshot: progressed=${snapshot.progressedMetres.toInt()}m " +
+                        "remaining=${snapshot.remainingMetres.toInt()}m " +
+                        "nearestIdx=${snapshot.nearestIntersectionIndex} " +
+                        "nearestDist=${snapshot.nearestIntersectionDistanceMetres.toInt()}m " +
+                        "nextGpIdx=${snapshot.nextGuidancePoint?.index} " +
+                        "distToGp=${snapshot.distanceToNextGuidancePointMetres?.toInt()}m " +
+                        "upcomingGps=${snapshot.upcomingGuidancePoints.size}"
+                }
                 applyProgress(snapshot)
                 scheduler?.onProgress(snapshot)
                 rerouteDetector?.onProgress(snapshot) {
@@ -195,6 +212,9 @@ class GuidanceSessionManager(
                 detachLocationListener()
                 attachedProvider = provider
                 provider?.addLocationListener(locationListener)
+                Napier.i(tag = TAG) {
+                    "[NAVDBG] attachLocationListener: provider=${provider != null}"
+                }
             }
         }
     }
@@ -204,7 +224,17 @@ class GuidanceSessionManager(
         attachedProvider = null
     }
 
+    private var locationUpdateCount: Int = 0
+
     private fun onLocationUpdated(location: Location) {
+        locationUpdateCount++
+        if (locationUpdateCount <= 5 || locationUpdateCount % 20 == 0) {
+            Napier.i(tag = TAG) {
+                "[NAVDBG] onLocationUpdated #$locationUpdateCount: " +
+                    "lat=${location.latitude} lng=${location.longitude} " +
+                    "acc=${location.accuracy} speed=${location.speed}"
+            }
+        }
         tracker?.onLocation(location.latitude, location.longitude)
     }
 

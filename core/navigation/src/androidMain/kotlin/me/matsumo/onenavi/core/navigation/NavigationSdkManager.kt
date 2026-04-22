@@ -75,14 +75,17 @@ class NavigationSdkManager(
                     this@NavigationSdkManager.navigator = navigator
                     _isNavigatorReady.value = true
                     _initializationErrorCode.value = null
-                    _roadSnappedLocationProvider.value =
-                        NavigationApi.getRoadSnappedLocationProvider(application)
+                    val provider = NavigationApi.getRoadSnappedLocationProvider(application)
+                    _roadSnappedLocationProvider.value = provider
+                    Napier.i(tag = TAG) {
+                        "[NAVDBG] onNavigatorReady: provider=${provider != null}"
+                    }
                 }
 
                 override fun onError(errorCode: Int) {
                     navigatorInitializing = false
                     _initializationErrorCode.value = errorCode
-                    Napier.e(tag = TAG) { "Navigator init failed. errorCode=$errorCode" }
+                    Napier.e(tag = TAG) { "[NAVDBG] Navigator init failed. errorCode=$errorCode" }
                 }
             },
         )
