@@ -13,19 +13,22 @@ import me.matsumo.drive.supporter.api.route.domain.Route
 import me.matsumo.drive.supporter.api.route.domain.RouteSearchCriteria
 import me.matsumo.drive.supporter.api.route.domain.RouteWaypoint
 import me.matsumo.onenavi.core.datasource.RouteDataSource
+import me.matsumo.onenavi.core.model.GoogleRoute
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteResult
 
 /**
  * drive-supporter-api を使ったルート検索データソース。
- * `RouteClient.search` と `GuidanceClient.resolveGuidance` を並列に発行して [ExtNavRoutePayload] を組み立てる。
+ * `RouteClient.search` と `GuidanceClient.resolveGuidance` を並列に発行し、既存の [GoogleRoute]
+ * モデルに射影する。ExtNav 固有情報 ([ExtNavRoutePayload]) は [ExtNavRouteRegistry] に保持する。
  *
  * Phase 1 では `priority=Recommended` 固定、候補 1 本のみ。
  */
 class ExtNavRouteDataSource(
     private val clientProvider: ExtNavClientProvider,
     private val authGateway: ExtNavAuthGateway,
+    private val registry: ExtNavRouteRegistry,
 ) : RouteDataSource {
 
     override suspend fun searchRoutes(
@@ -59,35 +62,71 @@ class ExtNavRouteDataSource(
         val primaryRoute = routes.firstOrNull()
             ?: error("route.search returned no routes")
 
-        val geometry = guidance.intersections
-            .map { intersection ->
-                RoutePoint(intersection.position.latDegrees, intersection.position.lonDegrees)
-            }
+        val originPoint = RoutePoint(originLatitude, originLongitude)
+        val destinationPoint = RoutePoint(destinationLatitude, destinationLongitude)
+        val intermediates = intermediateWaypoints
+            .map { (lat, lng) -> RoutePoint(lat, lng) }
             .toImmutableList()
 
+        val geometry = buildGeometry(guidance, originPoint, destinationPoint)
+
         val tollYen = guidance.summary.tollYen.takeIf { it > 0 }
+        val distanceMetres = guidance.summary.distanceMetres.toDouble()
+        val timeSeconds = guidance.summary.timeSeconds.toDouble()
+
+        val googleRoute = GoogleRoute(
+            id = primaryRoute.id,
+            routeToken = null,
+            origin = originPoint,
+            destination = destinationPoint,
+            intermediateWaypoints = intermediates,
+            geometry = geometry,
+            distanceMeters = distanceMetres,
+            durationSeconds = timeSeconds,
+            steps = persistentListOf(),
+        )
+
+        registry.put(
+            ExtNavRoutePayload(
+                id = primaryRoute.id,
+                route = primaryRoute,
+                guidance = guidance,
+            ),
+        )
 
         val item = RouteItem(
-            durationSeconds = guidance.summary.timeSeconds.toDouble(),
-            distanceMeters = guidance.summary.distanceMetres.toDouble(),
+            durationSeconds = timeSeconds,
+            distanceMeters = distanceMetres,
             geometry = geometry,
             viaRoadNames = persistentListOf(),
             hasTolls = tollYen != null && tollYen > 0,
             tollFee = tollYen,
         )
 
-        val payload = ExtNavRoutePayload(
-            id = primaryRoute.id,
-            route = primaryRoute,
-            guidance = guidance,
-        )
-
         listOf(
             RouteResult(
                 item = item,
-                platformRoute = payload,
+                platformRoute = googleRoute,
             ),
         )
+    }
+
+    private fun buildGeometry(
+        guidance: Guidance,
+        originPoint: RoutePoint,
+        destinationPoint: RoutePoint,
+    ): kotlinx.collections.immutable.ImmutableList<RoutePoint> {
+        val raw = guidance.intersections.map { intersection ->
+            RoutePoint(intersection.position.latDegrees, intersection.position.lonDegrees)
+        }
+        if (raw.isEmpty()) {
+            return listOf(originPoint, destinationPoint).toImmutableList()
+        }
+        return buildList {
+            if (raw.first() != originPoint) add(originPoint)
+            addAll(raw)
+            if (raw.last() != destinationPoint) add(destinationPoint)
+        }.toImmutableList()
     }
 
     private fun <T> ApiResult<T>.unwrap(hint: String): T = when (this) {
@@ -97,8 +136,8 @@ class ExtNavRouteDataSource(
 }
 
 /**
- * [RouteResult.platformRoute] に詰めるための Android 固有ペイロード。
- * drive-supporter-api の [Route] + [Guidance] を UI / ナビ層へ受け渡す。
+ * ExtNav 由来の [Route] + [Guidance] ペア。セッション管理層が [ExtNavRouteRegistry]
+ * 経由で取得する。
  */
 @Immutable
 data class ExtNavRoutePayload(
