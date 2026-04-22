@@ -13,11 +13,12 @@ internal data class SynthesizeRequest(
 )
 
 /**
- * 合成対象となる入力テキスト。現状プレーンテキストのみ対応。
+ * 合成対象となる入力テキスト。`text` と `ssml` は排他。片方のみ埋める。
  */
 @Serializable
 internal data class SynthesisInput(
-    val text: String,
+    val text: String? = null,
+    val ssml: String? = null,
 )
 
 /**

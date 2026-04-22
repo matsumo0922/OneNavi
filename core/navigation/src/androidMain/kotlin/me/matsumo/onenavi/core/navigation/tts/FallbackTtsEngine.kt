@@ -52,17 +52,23 @@ internal class FallbackTtsEngine(
         text: String,
         utteranceId: String,
         queueMode: SpeechQueueMode,
+    ): Boolean = speak(TtsInput.Plain(text), utteranceId, queueMode)
+
+    override fun speak(
+        input: TtsInput,
+        utteranceId: String,
+        queueMode: SpeechQueueMode,
     ): Boolean {
         if (primary.isReady.value) {
             val spoken = primary.speak(
-                text = text,
+                input = input,
                 utteranceId = utteranceId,
                 queueMode = queueMode,
             )
             if (spoken) return true
         }
         return fallback.speak(
-            text = text,
+            input = input,
             utteranceId = utteranceId,
             queueMode = queueMode,
         )

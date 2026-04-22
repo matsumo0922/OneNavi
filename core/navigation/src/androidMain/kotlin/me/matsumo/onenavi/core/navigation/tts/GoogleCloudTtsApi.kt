@@ -27,9 +27,13 @@ internal class GoogleCloudTtsApi(
      *
      * @throws GoogleCloudTtsException HTTP 非 2xx または body 不正時
      */
-    suspend fun synthesize(text: String): ByteArray {
+    suspend fun synthesize(input: TtsInput): ByteArray {
+        val synthesisInput = when (input) {
+            is TtsInput.Plain -> SynthesisInput(text = input.text)
+            is TtsInput.Ssml -> SynthesisInput(ssml = input.ssml)
+        }
         val request = SynthesizeRequest(
-            input = SynthesisInput(text = text),
+            input = synthesisInput,
             voice = VoiceSelectionParams(
                 languageCode = config.languageCode,
                 name = config.voiceName,
