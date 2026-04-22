@@ -116,8 +116,15 @@ class ExtNavRouteDataSource(
         originPoint: RoutePoint,
         destinationPoint: RoutePoint,
     ): kotlinx.collections.immutable.ImmutableList<RoutePoint> {
-        val raw = guidance.intersections.map { intersection ->
-            RoutePoint(intersection.position.latDegrees, intersection.position.lonDegrees)
+        // ROUTE バイナリ由来の dense polyline を最優先で使う (74.4km に 960 点 ≒ 77m 間隔)。
+        // ROUTE 欠落 / decode 失敗時のみ intersection 連結 (≒ 500m 間隔) にフォールバック。
+        val dense = guidance.polyline.map { coord ->
+            RoutePoint(coord.latDegrees, coord.lonDegrees)
+        }
+        val raw = dense.ifEmpty {
+            guidance.intersections.map { intersection ->
+                RoutePoint(intersection.position.latDegrees, intersection.position.lonDegrees)
+            }
         }
         if (raw.isEmpty()) {
             return listOf(originPoint, destinationPoint).toImmutableList()

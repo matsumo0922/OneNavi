@@ -17,9 +17,15 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
+import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
+import me.matsumo.drive.supporter.api.guidance.domain.Intersection
+import me.matsumo.drive.supporter.api.guidance.domain.plainText
 import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.GoogleRoute
 import me.matsumo.onenavi.core.model.GuidanceUiState
+import me.matsumo.onenavi.core.model.ManeuverInfo
+import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.TripProgressInfo
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavAnnouncementScheduler
@@ -208,7 +214,12 @@ class GuidanceSessionManager(
         val distanceRemaining = snapshot.remainingMetres
         val durationRemaining = snapshot.remainingSeconds
 
+        val currentManeuver = buildCurrentManeuver(snapshot)
+        val nextManeuver = buildNextManeuver(snapshot)
+
         _guidanceUiState.value = _guidanceUiState.value.copy(
+            currentManeuver = currentManeuver,
+            nextManeuver = nextManeuver,
             tripProgress = TripProgressInfo(
                 distanceRemainingMeters = distanceRemaining,
                 durationRemainingSeconds = durationRemaining,
@@ -221,6 +232,54 @@ class GuidanceSessionManager(
         if (distanceRemaining <= ARRIVAL_THRESHOLD_METRES) {
             onFinalDestinationArrival(route)
         }
+    }
+
+    private fun buildCurrentManeuver(snapshot: ExtNavProgressSnapshot): ManeuverInfo? {
+        val guidancePoint = snapshot.nextGuidancePoint ?: return null
+        val distance = snapshot.distanceToNextGuidancePointMetres ?: return null
+        return toManeuverInfo(
+            guidancePoint = guidancePoint,
+            intersection = snapshot.nextIntersection,
+            distanceMeters = distance,
+        )
+    }
+
+    private fun buildNextManeuver(snapshot: ExtNavProgressSnapshot): ManeuverInfo? {
+        val nextNextGp = snapshot.upcomingGuidancePoints.getOrNull(1) ?: return null
+        return toManeuverInfo(
+            guidancePoint = nextNextGp,
+            intersection = null,
+            distanceMeters = 0.0,
+        )
+    }
+
+    private fun toManeuverInfo(
+        guidancePoint: GuidancePoint,
+        intersection: Intersection?,
+        distanceMeters: Double,
+    ): ManeuverInfo {
+        val primaryPhrase = guidancePoint.phrases.firstOrNull()
+        val category = primaryPhrase?.category ?: GuidanceCategory.Unspecified
+        val instruction = intersection?.name
+            ?.takeIf { it.isNotBlank() }
+            ?: primaryPhrase?.plainText().orEmpty()
+        return ManeuverInfo(
+            type = category.toManeuverType(),
+            modifier = null,
+            distanceMeters = distanceMeters,
+            instruction = instruction,
+            roadName = intersection?.roadName?.takeIf { it.isNotBlank() },
+            destinations = intersection?.directionSignA?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    private fun GuidanceCategory.toManeuverType(): ManeuverType = when (this) {
+        GuidanceCategory.Merge,
+        GuidanceCategory.MergeAttention,
+        -> ManeuverType.MERGE
+        GuidanceCategory.AutoExpresswayEntry -> ManeuverType.ON_RAMP
+        GuidanceCategory.TunnelBranch -> ManeuverType.FORK
+        else -> ManeuverType.TURN
     }
 
     private fun isSameRoute(old: GoogleRoute?, new: GoogleRoute?): Boolean {

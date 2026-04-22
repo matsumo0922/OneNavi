@@ -101,6 +101,16 @@ internal fun HomeMapScreenCameraEffect(
         )
     }
 
+    // Navigating への遷移時に一度だけ FOLLOWING を張る。
+    // 上の LaunchedEffect は navigationCameraState を key に含むため、
+    // ジェスチャで IDLE に落ちた瞬間に再発火 → FOLLOWING に戻してしまう。
+    // ユーザー操作で IDLE を維持できるよう、Navigating エントリだけをここに分離する。
+    LaunchedEffect(screenState is HomeMapScreenState.Navigating) {
+        if (screenState is HomeMapScreenState.Navigating) {
+            cameraManager.requestCameraFollowing(pitch3D = true)
+        }
+    }
+
     LaunchedEffect(viewportState) {
         effects.collect { effect ->
             handleEffect(
@@ -157,7 +167,8 @@ private suspend fun restoreCamera(
         }
 
         is HomeMapScreenState.Navigating -> {
-            cameraManager.requestCameraFollowing(pitch3D = true)
+            // Navigating への初回遷移は上位の LaunchedEffect が担う。
+            // ここで requestCameraFollowing を呼ぶと IDLE → FOLLOWING にループで戻ってしまう。
         }
 
         else -> {

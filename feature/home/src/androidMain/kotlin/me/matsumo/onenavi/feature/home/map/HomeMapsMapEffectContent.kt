@@ -187,10 +187,9 @@ internal fun HomeMapsMapEffectContent(
     }
 
     // カメラの自動追従は NavigationView（GoogleMap.followMyLocation）に委譲する。
-    // これにより、ナビ中は交差点自動拡大などの SDK 組み込み挙動が得られ、
-    // 自前の ValueAnimator + moveCamera が animateCamera を上書きする不具合も解消する。
+    // これにより、コンパス切替などのアニメーションを含め SDK 組み込みの挙動が得られる。
     // 追従解除の明示 API は存在しないため、現在位置を再指定する moveCamera を打って
-    // follow モードから抜ける。同一位置のため視覚上の変化は発生しない。
+    // follow モードから抜ける。自車アイコン（chevron）は follow を抜けても維持される。
     LaunchedEffect(googleMap, cameraFollowSpec) {
         val map = googleMap ?: return@LaunchedEffect
         if (cameraFollowSpec == null) {
