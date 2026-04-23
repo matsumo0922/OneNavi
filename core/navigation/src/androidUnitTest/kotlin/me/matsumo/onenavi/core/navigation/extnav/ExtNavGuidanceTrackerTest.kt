@@ -8,6 +8,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.Guidance
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection
+import me.matsumo.drive.supporter.api.guidance.domain.ManeuverDirection
 import me.matsumo.drive.supporter.api.guidance.domain.SsmlPhrase
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -258,12 +259,16 @@ class ExtNavGuidanceTrackerTest {
         name = "point-$id",
         nameRuby = "",
         roadName = "",
+        roadNameOfficial = "",
+        roadNumberSign = "",
         directionSignA = "",
         directionSignAKana = "",
         directionSignB = "",
         directionSignBKana = "",
         position = Coord.fromDegrees(lat, lng),
-        approachAngle = 0,
+        angleIn = 0,
+        angleOut = 0,
+        direction = ManeuverDirection.Unknown,
         imageRefs = persistentListOf(),
     )
 
@@ -282,5 +287,6 @@ class ExtNavGuidanceTrackerTest {
             }
             .toImmutableList(),
         imageRefs = persistentListOf(),
+        maneuver = null,
     )
 }

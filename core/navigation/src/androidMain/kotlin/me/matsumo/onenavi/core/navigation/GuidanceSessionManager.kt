@@ -20,10 +20,13 @@ import kotlinx.coroutines.launch
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection
+import me.matsumo.drive.supporter.api.guidance.domain.ManeuverDirection
+import me.matsumo.drive.supporter.api.guidance.domain.MergeSide
 import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.GoogleRoute
 import me.matsumo.onenavi.core.model.GuidanceUiState
 import me.matsumo.onenavi.core.model.ManeuverInfo
+import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.TripProgressInfo
@@ -302,12 +305,53 @@ class GuidanceSessionManager(
         val instruction = intersection?.name?.takeIf { it.isNotBlank() }.orEmpty()
         return ManeuverInfo(
             type = category.toManeuverType(),
-            modifier = null,
+            modifier = resolveManeuverModifier(category, guidancePoint, intersection),
             distanceMeters = distanceMeters,
             instruction = instruction,
             roadName = intersection?.roadName?.takeIf { it.isNotBlank() },
             destinations = intersection?.directionSignA?.takeIf { it.isNotBlank() },
         )
+    }
+
+    /**
+     * マニューバアイコン用の方向修飾子を決定する。
+     *
+     * - 合流系 (`Merge` / `MergeAttention`) は `ManeuverHint.mergeSide` (GuidePointFlags.f3.c 由来)
+     *   を左右の正本にする。合流 GP では angle_in/out がほぼ等しく direction は Straight になるため。
+     * - それ以外は `ManeuverHint.direction` (angle_in/angle_out 差から算出) を優先。
+     * - `ManeuverHint` が null の場合は `Intersection.direction` にフォールバック (同じ計算結果)。
+     * - 両方とも `Unknown` / null なら null を返し、呼び出し側で従来どおり「直進」フォールバックへ。
+     *
+     * 詳細は `docs/spec/21_ext_nav_guide_proto_and_announcement.md` §4 参照。
+     */
+    private fun resolveManeuverModifier(
+        category: GuidanceCategory,
+        guidancePoint: GuidancePoint,
+        intersection: Intersection?,
+    ): ManeuverModifier? {
+        val hint = guidancePoint.maneuver
+        if (category == GuidanceCategory.Merge || category == GuidanceCategory.MergeAttention) {
+            hint?.mergeSide?.let { return it.toManeuverModifier() }
+        }
+        val direction = hint?.direction ?: intersection?.direction
+        return direction?.toManeuverModifier()
+    }
+
+    private fun ManeuverDirection.toManeuverModifier(): ManeuverModifier? = when (this) {
+        ManeuverDirection.Straight -> ManeuverModifier.STRAIGHT
+        ManeuverDirection.UTurn -> ManeuverModifier.UTURN
+        ManeuverDirection.Left -> ManeuverModifier.LEFT
+        ManeuverDirection.SlantLeft -> ManeuverModifier.SLIGHT_LEFT
+        ManeuverDirection.ThisSideLeft -> ManeuverModifier.SHARP_LEFT
+        ManeuverDirection.Right -> ManeuverModifier.RIGHT
+        ManeuverDirection.SlantRight -> ManeuverModifier.SLIGHT_RIGHT
+        ManeuverDirection.ThisSideRight -> ManeuverModifier.SHARP_RIGHT
+        ManeuverDirection.Unknown -> null
+    }
+
+    private fun MergeSide.toManeuverModifier(): ManeuverModifier = when (this) {
+        MergeSide.LEFT -> ManeuverModifier.LEFT
+        MergeSide.RIGHT -> ManeuverModifier.RIGHT
     }
 
     private fun GuidanceCategory.toManeuverType(): ManeuverType = when (this) {

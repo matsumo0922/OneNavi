@@ -22,7 +22,30 @@
       "Bash(rtk rg *)",
       "Bash(rtk ls *)",
       "Bash(rtk fd *)",
-      "Bash(rtk git log *)"
+      "Bash(rtk git log *)",
+      "Bash(rtk proxy rg *)",
+      "Bash(rtk proxy grep *)",
+      "Bash(rtk proxy ls *)",
+      "Bash(rtk proxy find *)",
+      "Bash(rtk proxy git log *)",
+      "Bash(rtk proxy git status *)",
+      "Bash(rtk proxy git diff *)",
+      "Bash(./gradlew assembleDebug *)",
+      "Bash(./gradlew :feature:home:assembleDebug *)",
+      "Bash(./gradlew :composeApp:assembleDebug *)",
+      "Bash(./gradlew build *)",
+      "Bash(javap *)",
+      "Bash(sqlite3 *)",
+      "Bash(xxd *)",
+      "Bash(jar tf *)",
+      "mcp__plugin_context7_context7__query-docs",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_mapbox_mapbox-docs__search_mapbox_docs_tool",
+      "mcp__plugin_mapbox_mapbox-docs__get_document_tool",
+      "Bash(rtk git *)",
+      "Bash(rtk proxy git *)",
+      "Bash(./gradlew *kspCommonMainKotlinMetadata*)",
+      "Bash(./gradlew *kspCommonMainKotlinMetadata *)"
     ]
   }
 }
