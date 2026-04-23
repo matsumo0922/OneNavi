@@ -1,7 +1,7 @@
 # 20. NavigationView 外部ルート橋渡し調査
 
 > **作成日:** 2026-04-23
-> **ステータス:** ドラフト
+> **ステータス:** ドラフト（実装・POC 併走）
 > **対象:** Google Navigation SDK `NavigationView` を、Google 側でルート探索を行わず、**外部ナビ API** のルート/案内データだけで駆動できるかの技術調査
 > **関連:** `16_turn_by_turn_navigation_flow.md`, `17_callout_redesign.md`, `18_external_nav_api_migration_plan.md`
 
@@ -630,6 +630,13 @@ ExtNav route/guidance list
 ---
 
 ## 10. 次にやること
+
+ここからは「調査だけを継続する」フェーズではなく、**実装しながら未確定点を観測で潰す**フェーズとして扱う。
+
+- 静的調査で残っている論点は、`交差点自動拡大` の最終起動条件と `kg.j` / `hl.g` の実運用上の最小整合に絞られている
+- これ以上の広い逆解析より、Android process 内 POC の方が情報価値が高い
+- したがって以後は `NavigationViewReflectionBridge` と synthetic route/state mapper を実装し、その結果を見ながら本書を随時更新する
+- 失敗した箇所だけを追加で狭く逆解析する
 
 ここからは調査ではなく実装計画である。  
 優先順位順に書く。

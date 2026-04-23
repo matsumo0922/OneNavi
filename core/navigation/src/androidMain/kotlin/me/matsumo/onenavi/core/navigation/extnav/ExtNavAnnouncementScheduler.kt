@@ -48,20 +48,35 @@ class ExtNavAnnouncementScheduler(
     /**
      * tracker からの進捗更新ごとに呼ぶ。
      * まだ発話していない phrase のうち、距離条件に達したものをキューに投入する。
+     *
+     * ### 発火対象の GP
+     *
+     * `upcomingGuidancePoints` は距離順に並んでいるため、prealarm / immediate スロットは
+     * **先頭 (= 現在最も近い未到達 GP) だけ** を対象にする。後続 GP の prealarm が遠方で
+     * 先に条件を満たしても、現在対象の GP の immediate が鳴るまでは待たせる。
+     *
+     * これをしないと「gp=0 の 500m 前振り」と「gp=2 の 2000m 前振り」が同時刻に連続発話
+     * されたり、「gp=4 の 1000m 前振り」が「gp=2 の直前発話」より先に出たりして、案内の
+     * 時系列整合が壊れる。
+     *
+     * CRITICAL (安全系) のみ全 lookahead GP を個別 dedupe で即時発話対象にする。
      */
     fun onProgress(snapshot: ExtNavProgressSnapshot) {
         val candidates = snapshot.upcomingGuidancePoints.take(LOOKAHEAD_GP_COUNT)
-        for (gp in candidates) {
+        candidates.forEachIndexed { position, gp ->
             val distanceToGp = gp.distanceFromStartMetres - snapshot.progressedMetres
-            if (distanceToGp < -MAX_OVERSHOOT_METRES) continue
-            processGuidancePoint(gp, distanceToGp)
+            if (distanceToGp < -MAX_OVERSHOOT_METRES) return@forEachIndexed
+            // CRITICAL は全 GP について個別 dedupe で即時発話。
+            fireCriticalPhrases(gp, distanceToGp)
+            // prealarm / immediate のスロット発話は「現在最も近い未到達 GP」だけに限定し、
+            // 後続 GP に追い越し発話をさせない。
+            if (position == 0) {
+                processGuidancePointSlots(gp, distanceToGp)
+            }
         }
     }
 
-    private fun processGuidancePoint(gp: GuidancePoint, distanceToGp: Double) {
-        // CRITICAL は 2 スロット抑制の外側。従来通り (gp, cat, distance) dedupe で 1 回ずつ発話する。
-        fireCriticalPhrases(gp, distanceToGp)
-
+    private fun processGuidancePointSlots(gp: GuidancePoint, distanceToGp: Double) {
         val slotCandidates = gp.phrases.filter { phrase ->
             phrase.category !in SUPPRESSED_SPEECH_CATEGORIES &&
                 priorityOf(phrase.category) != AnnouncementPriority.CRITICAL
