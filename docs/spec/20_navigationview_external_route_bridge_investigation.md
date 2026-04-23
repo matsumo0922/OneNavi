@@ -18,6 +18,7 @@
 - 最も有力な seam は `NavigationView` 内部の `vd.f -> te.d -> tn.o` に **synthetic `to.a` (navigation UI state)** を渡す経路
 - route line と alternative route 表示はかなり現実的
 - 交差点自動拡大と案内地点 CallOut も狙えるが、**step の位置合わせ精度**が成否を分ける
+- `bb.e.a(bv.h)` は lower-level overlay seam として有効だが、**これ単独では immediate camera fit までは届かない可能性が高い**
 - `we.et.e(br.az)` のような一見使えそうな hidden method は見つかったが、これは**任意 route 注入ではなく既存 loaded route の選択切替**に過ぎず、本件の主経路にはならない
 
 つまり、本件は「Google の navigator をだます」のではなく、**Google の map/navigation UI controller が期待する内部モデルを外部ナビ API から再構築する**問題だと整理できる。
@@ -130,16 +131,71 @@
 
 - callback 側 (`bo.k`) には `bs.a.b` の camera target が渡っている
 - ただし実際に `bo.m.e(as, ...)` で camera を動かすのは internal flag `bo.m.m` が `true` のときだけ
-- この `bo.m.m` を立てる上流条件はまだ未特定
+- `bb.e.a(bv.h)` の実装本体である `bo.m.a(...)` は、`bo.ac.q(...)` に入る直前に必ず `m=false` を書き込む
+- 現時点で確認できた `bo.m.m` の参照/代入は `bo.m` 自身と `bo.k` だけであり、`bb.e.a(...)` の direct call だけで immediate camera fit まで到達する経路は見えていない
 
 したがって seam B 単独で期待できることは次のように整理する。
 
 - route line / route overlay: 確度が高い
-- camera update: 可能性はあるが条件付き
+- camera target の計算: 行われる
+- camera fit の即時発火: 低確度
 - current-step CallOut の full fidelity: seam A より不利
 
 ただし、`to.a` 丸ごとの遷移よりは coverage が狭い。  
 したがって **「標準 UI を広く使いたい」なら seam A、route 表示だけ早く出したいなら seam B** という整理になる。
+
+#### 4.2.a `tn.o` から `bb.e` への実際の呼び分け
+
+`seam A` を使う場合でも、最終的に route overlay 側へは `tn.o` から `bb.e` が呼ばれる。
+
+追加調査で確定した呼び分けは次のとおり。
+
+- inactive -> active guidance へ入る遷移では、まず `bb.e.d()` が呼ばれる
+- 通常の navigation UI state 更新では、`tn.o` が `bv.h` を組み立てて `bb.e.a(bv.h)` を呼ぶ
+- current progress が `null` のときは `bb.e.b()` で overlay を落とす
+- `sm.h.h == true` の分岐では `bb.e.a(...)` を通らず、別の destination/pin 更新経路へ入る
+
+つまり、`vd.f.i(to.a, prev)` は広い意味では primary seam だが、**route line を実際に map へ出す最後の段は `bb.e`** である。
+
+#### 4.2.b `bo.ac.q(...)` の生成パイプライン
+
+`bo.ac.q(...)` 自体は decompile しきれない巨大 method だったが、bytecode 追跡で次のパイプラインまでは確定できた。
+
+1. `bo.ac.q(bv.h, ..., bo.k)` は `bo.v` callback を作る
+2. 内部 executor 上で `bo.aj` が走り、`bv.b` から `bs.a` を組み立てる
+3. `bo.aj` は route 数と texture type 数の一致を前提に route overlay 用の入力を作る
+4. `bo.aj` は `ac.I = bs.a` を保持したうえで `bo.z.a(bs.a)` を非同期実行する
+5. `bo.v.a(bs.a)` は still-current callback であることを確認した後、`bq.ag` 群、optional `bq.z`、optional `bq.o` を作る
+6. それらを `bo.aa(bq.e, routeOverlays, bq.z, ...)` に包み、`ac.U` へ差し替える
+7. `bo.w` が old/new `bo.aa` の swap を行い、最後に `bo.k.a(bv.h, bs.a)` が map 側の route overlay / camera target 反映を行う
+
+この順序の意味は重要で、**`bb.e.a(bv.h)` は単なる「線を引く」 API ではなく、内部では overlay session を丸ごと作り直す**。
+
+補足として、ここでいう texture type は `bp.e` で、実体は次の 4 種だった。
+
+- `SELECTED_WITH_TRAFFIC`
+- `UNSELECTED_WITH_TRAFFIC`
+- `SELECTED_UNIFORM`
+- `UNSELECTED_UNIFORM`
+
+したがって seam B を direct に叩く最小 POC でも、`bv.h.b()` 側には **route 本数ぶんの `bp.e` list** を揃える必要がある。
+
+#### 4.2.c `bq.o` は `kg.j` 系の別キュー
+
+`bq.e` の optional field `c` には `bq.o` が入ることがある。これは `bo.v` 内で `az.d.ca.a.kg.j` 由来の list から構築されていた。
+
+ここで確定した事実:
+
+- `bq.o` は `acn.ej` list を距離順に sort して保持する
+- 実際に消費しているのは `ej.b == 31` の entry で、payload は `acn.eh`
+- `ct.b` は `eh.b.b` を route 上の距離として `az.K(distance)` に投影し、`eh.c` の enum を decoration type として使う
+- 初期化時 (`bq.t`) に先頭 3 件までを preload する
+- live progress 更新時 (`bq.e.e(br.bg)`) に `bq.o.c` へ現在距離が入り、`bq.q` が threshold を見て queue を進める
+- queue 内の要素は `ob.k` / `ns.i` などの map decoration object として生成・破棄される
+
+これは `bl` の text cue とは別系統であり、**交差点 preview / 画像付き案内 / 先読みデコレーション系の内部パイプライン**である可能性が高い。  
+ただし exact semantics は未確定なので、現時点では「`kg.j` を埋めると `bq.o` 系が有効になる可能性がある」という整理に留める。  
+少なくとも **image ref だけでは足りず、距離 along route と decoration kind の対応付けが別途必要**である。
 
 ### 4.3 `we.et.e(br.az)` は使えそうで使えない
 
@@ -260,6 +316,16 @@ current route 上の progress は `rf.a/b` で表現される。
 CallOut 自体は current step と cue 情報に依存している。  
 最低限、step text だけでも何らかの CallOut は出せる可能性が高いが、標準に近い見た目を得るには cue の質が重要。
 
+追加調査で、CallOut/案内表現には少なくとも 2 系統あることが見えている。
+
+- `br.bl` + cue 群を `tv.g` / `tv.a` が整形する **text/header 系**
+- `az.d.ca.a.kg.j -> bq.o` から生成される **preview/decor 系**
+
+このため、OneNavi 側でまず狙うべき順序は次のとおり。
+
+1. `bl` / cue 群だけで text CallOut を成立させる
+2. その後で必要なら `kg.j` 系を synthetic に構築し、preview 系の fidelity を上げる
+
 必要なもの:
 
 - `br.bl` の primary text
@@ -303,6 +369,10 @@ CallOut 自体は current step と cue 情報に依存している。
 | origin/destination/waypoints | `aw.f`, `aw.g` (`ce` list) | overview, route endpoints | 中 |
 | lane marker | 未 surfacing | lane guidance | 低 |
 | image refs | custom overlay か後続の internal popup 調査対象 | image CallOut | 低 |
+
+別系統の可能性として、`az.d.ca.a.kg.j` を埋めると `bq.o` キューが有効になり、`bl` の text cue だけでは出せない preview/decor 系 UI を再利用できる余地がある。  
+これはまだ **推定** だが、image refs / intersection image を標準寄りに見せる上では最も有望な hidden path である。  
+一方で `bq.o` が実際に要求しているのは「画像 ID」そのものより **距離 along route + decoration kind** に近く、外部ナビ API の `imageRefs` をそのまま 1:1 で写せる保証はない。
 
 ### 7.1 一番重要な変換は `step -> polyline vertex offset`
 
@@ -554,8 +624,11 @@ POC 手順:
 1. `NavigationView` を表示する debug screen を作る
 2. `NavigationViewReflectionBridge` で type ベースに `vd.f`, `bb.e` を取得する
 3. まず `bb.e.a(bv.h)` で minimal route 表示が出るか確認する
-4. 次に `vd.f.a()` + `vd.f.i(to.a, prev)` で full UI state を注入する
-5. synthetic current step を動かして CallOut と camera が反応するか確認する
+4. その際、`bb.e.a(...)` 単独では camera fit が動かない前提で結果を評価する
+5. 次に `vd.f.a()` + `vd.f.i(to.a, prev)` で full UI state を注入する
+6. `bl` cue だけで text CallOut が出るかを確認する
+7. 余力があれば `kg.j` 系を minimal に埋めた synthetic route でもう一度試す
+8. synthetic current step を動かして CallOut と camera が反応するか確認する
 
 ここで確認したい観測点:
 
@@ -563,6 +636,8 @@ POC 手順:
 - `showRouteOverview()` が synthetic route に対して効くか
 - current step 更新で CallOut が出るか
 - 交差点接近で camera が切り替わるか
+- `bb.e.a(...)` 単独と `vd.f.i(...)` 経由で挙動差が出るか
+- `kg.j` 未設定時と設定時で preview/decor 系 UI が変わるか
 
 ### 10.5 Step 5: `GuidanceSessionManager` と live 接続する
 
