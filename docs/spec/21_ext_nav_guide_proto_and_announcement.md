@@ -1,7 +1,7 @@
 # 21. 外部ナビ API GUIDE proto 拡張とマニューバ / 音声発話設計
 
 > **作成日:** 2026-04-23
-> **ステータス:** Phase A (proto 拡張 + 調査) 完了 / Phase B (実装) 着手予定
+> **ステータス:** Phase A / Phase B 完了、Phase C (追加調査) 完了、Phase D (実機検証 + アイコン実装) 残
 > **対象:** 外部ナビ API ライブラリの GUIDE protobuf から取得できる情報を最大限活用し、OneNavi 側の turn-by-turn UI / TTS 発話スケジュールを改善する
 > **関連:** `16_turn_by_turn_navigation_flow.md`, `18_external_nav_api_migration_plan.md`, `19_drive_supporter_api_integration_plan.md`, `20_navigationview_external_route_bridge_investigation.md`
 
@@ -349,15 +349,35 @@ state per gp.index:
 
 ---
 
-## 6. 次ラウンドで解決すべき未解明事項
+## 6. Phase C 追加調査結果
 
-| # | 項目 | 現状 | 次のアプローチ |
-|---|---|---|---|
-| Q-1 | 「左側/右側の車線が減ります」の proto encoding | `f3` が揺れる (`(31,0,0)` or `(1,2,0)`)。決定的 field 未特定 | 同一 GP で lane_reduction category を持つものを全て洗い出し、flags_group / props_* の差分を比較 |
-| Q-2 | 「N 側の車線に お進みください」(推奨レーン誘導) の side 決定 | `lane_markers` は存在するが side 情報は markers 配列の位置から導出 (左寄り多数=左側推奨) | markers の 1/2 分布を端からスキャンして左寄り/中央/右寄りを判定するヒューリスティクスを実装 + サンプル検証 |
-| Q-3 | `GuidePointFlags.f3.a` が合流以外で何を示すか | サンプルで `f3.a ∈ {7, 1, 31}` を観測 | 各値が出る GP の共通点 (category / 属性) を分析 |
-| Q-4 | `GuidePointAttr.unknown_108` の意味 | ほぼ 0、推奨レーン GP で 3 観測 | 推奨レーン判定の補助 field 候補。lane_markers との相関を調査 |
-| Q-5 | 速度ソース | LocationSource.speed が信頼できるか | 実機ログで GPS speed と車速が合うか検証 |
+全 4 ルート (tokyo-gotemba / tokyo-nagoya-hiroshima / shakuji-tsukuba / hiroshima-ferry-beppu)
+のサンプル DSR を `PhaseCEncodingInvestigation` で走査し、Q-1..Q-4 を確認。実行方法と出力
+形式は `../drive-supporter-api/drive-supporter-api/src/test/kotlin/.../PhaseCEncodingInvestigation.kt`
+を参照。
+
+### 6.1 各 Q の結論
+
+| # | 結論 | Phase D アクション |
+|---|---|---|
+| **Q-1** 車線減少左右 | `template_ref` は左右共通で `415` 「高速道レーン減少案内」単一。`AnnouncementType.kind_*` も全 `0`。`GuidePointFlags.f3` は `(31,0,0)` 最頻・両側共通、稀に `(1,2,0) / (1,1,0) / (7,0,1)` が左右両方で出現し分離不能。→ **左右は `AnnouncementContent.text` の `左側` / `右側` 文字列が正本**。 | UI でレーン減少アイコンを出すなら text 抽出で分類。phrase text からの抽出は proto-ID 経由ではないが、template 粒度に加えテキストの直接消費で問題ない (template ID + 展開テキストの組を使う) |
+| **Q-2** 推奨レーン side | 発話 block の `pos_mid_b` と `lane_markers` を持つ GP は **数百m〜数十km** 離れる。`lane_markers` は料金所 / 分岐の物理 GP に付与、誘導 announcement はそれ以前の block から出る構造。`template_ref` は `303` 「高速推奨レーン」 / `104` 「交差点案内(まもなく)」の 2 種で左右非依存。`markers.a ∈ {1,2}` は「推奨 / 非推奨」では整合しない実例あり (shakuji-tsukuba GP76 `markers=[1,1,2,2,1,2,2,2]` に対し発話は "右側2車線を" で右側に `a=1` が無い)。→ **side も `AnnouncementContent.text` が正本**。`markers.a` の意味は本 Phase では決定不能 | UI で該当車線ハイライトを出すなら、announcement block の進行方向に存在する `lane_markers` を pos 差 < N メートルで採用するヒューリスティクスが必要。markers の `a` 値の意味 (通行可否 / 合流元 / その他) は Phase D で追加のサンプル (一般道, 料金所込み往復) を増やして再検証 |
+| **Q-3** `f3.a ≠ 7` | 分布: `31` が最頻 (通常道なり)、`7` (合流)、`1` (分岐; `b/f4` と連動)、`10` (高速ランプ系)、`4 / 6 / 19` (レア)。`f3.a=1` の GP は `b ∈ {1, 2, 4}` と `f4` が一致し、分岐タイプの細分化を示唆 | 実装への直接影響なし。将来 category 判定や UI でサブ分類が必要になったときに再訪 |
+| **Q-4** `unknown_108` | 全 4 ルートで `lane_markers` と相関ゼロ。値は `2` / `3` の 2 値で、`f3.a=1` (分岐 GP) と強く共起 → 分岐 GP のサブ分類補助と推定。**推奨レーン判定の補助ではない** | 仕様書記録のみで close。推奨レーン補助の線は消去 |
+| **Q-5** 速度ソース | 実機ログなしのため未検証 | Phase D で実機検証 |
+
+### 6.2 実データサマリ
+
+- 車線減少 announcement hit 数: tokyo-gotemba=4、shakuji-tsukuba=2、tokyo-nagoya-hiroshima=18、hiroshima-ferry-beppu=14
+- 推奨レーン announcement hit 数: tokyo-gotemba=4、shakuji-tsukuba=7、tokyo-nagoya-hiroshima=23、hiroshima-ferry-beppu=2
+- 全ルートの `lane_markers` 保持 GP 数: 各 2-3 個で、料金所 / 都心環状分岐 / JCT など物理的な車線選択点に限定
+- `f3.a=31` (通常道なり) が GP の 50-75%、`f3.a=7` (合流) が 5-18%、`f3.a=1` (分岐系) が 13-15%
+
+### 6.3 未解明 / 次ラウンド
+
+- **markers.a の意味**: `{1, 2}` の意味解釈。推奨 / 非推奨ではないことだけ確定。進行可否、合流元車線、単なる色フラグ等の可能性。サンプルを 10 ルート規模に増やす必要あり
+- **Q-5 速度ソース**: 実機 GPS log + 車速メーター同時録画による検証
+- **unknown_9 / InnerFlags**: `Announcement.unknown_9` と `AnnouncementType.flags` (a/b) は今回未調査。velocity-tuning の hint 候補
 
 ---
 
@@ -379,9 +399,11 @@ Phase B 着手時に最初に読むべき順:
    - `core/navigation/src/androidMain/kotlin/me/matsumo/onenavi/core/navigation/extnav/ExtNavGuidanceTracker.kt` (進捗 snapshot)
    - `core/model/src/commonMain/kotlin/me/matsumo/onenavi/core/model/ManeuverModifier.kt` (UI 側 enum)
    - `core/ui/src/commonMain/kotlin/me/matsumo/onenavi/core/ui/navigation/ManeuverIcon.kt` (アイコンマッピング)
-5. **調査スクリプト (disposable)**: `../drive-supporter-api/drive-supporter-api/src/test/kotlin/me/matsumo/drive/supporter/api/guidance/MergeEncodingInvestigation.kt`
-   - `@Ignore` を外して `./gradlew :drive-supporter-api:drive-supporter-api:testDebugUnitTest --tests "*MergeEncodingInvestigation*"` で実行
-   - 出力は `build/test-results/testDebugUnitTest/TEST-*MergeEncodingInvestigation.xml` の `system-out`
+5. **調査スクリプト (disposable)**:
+   - Phase A: `../drive-supporter-api/drive-supporter-api/src/test/kotlin/me/matsumo/drive/supporter/api/guidance/MergeEncodingInvestigation.kt` (合流左右・推奨レーン基礎調査)
+   - Phase C: `../drive-supporter-api/drive-supporter-api/src/test/kotlin/me/matsumo/drive/supporter/api/guidance/PhaseCEncodingInvestigation.kt` (Q-1 車線減少 / Q-2 推奨レーン側 / Q-3 f3.a / Q-4 u108)
+   - `@Ignore` を外して `./gradlew :drive-supporter-api:drive-supporter-api:testDebugUnitTest --tests "*<Class>*"` で実行
+   - 出力は `drive-supporter-api/drive-supporter-api/build/test-results/testDebugUnitTest/TEST-*.xml` の `<system-out>`
 
 ---
 
@@ -453,3 +475,20 @@ Phase B の Task 3 実装後は 2 発話に減る想定:
 - **D-2105 (2026-04-23):** 「左側/右側の車線が減ります」や「N 側の車線に」の encoding は
   Phase A では確定しなかったため **Phase B では保留** (発話テキストと category でのみ対応し、
   アイコンの左右は出さない)。Phase C で追加調査。
+- **D-2106 (2026-04-23):** Phase B Task 3 の発話スケジューラで、LOOKAHEAD 全 GP に対して
+  prealarm / immediate 発火させていた結果、遠方 GP (gp=N+2) の 2000m 前振りが現 GP (gp=N) の
+  500m 前振りと同時刻に発火、または gp=N+1 の 1000m 前振りが gp=N の immediate より先に
+  発火して時系列整合が壊れていた。修正: スロット発火は **`upcomingGuidancePoints` の先頭
+  (= 現在最も近い未到達 GP) のみ** に限定し、後続 GP は前方 GP の immediate 完了まで
+  待機させる。CRITICAL (WrongWayDriving 等) は従来通り全 GP で個別 dedupe 発話を維持。
+- **D-2107 (2026-04-23):** Phase C 調査で、「左側/右側の車線が減ります」は全サンプルで
+  `template_ref=415` 単一、`AnnouncementType.kind_*` も全 `0`、`GuidePointFlags.f3` も左右で
+  分離不能と判明。→ **左右は `AnnouncementContent.text` の `左側` / `右側` 文字列を正本** と
+  する決定。template の ID は「車線減少大分類」としては使えるが、左右分岐は text を消費する。
+- **D-2108 (2026-04-23):** Phase C 調査で、推奨レーン発話 block と `lane_markers` を持つ GP は
+  数百m〜数十km 離れており、同一 GP に同居しないことが判明。`markers.a ∈ {1,2}` は
+  「推奨 / 非推奨」では整合しない反例あり。→ **推奨レーンの side も `AnnouncementContent.text`
+  を正本** とし、markers の `a` 値の意味は保留 (より多様なサンプルで再検証)。
+- **D-2109 (2026-04-23):** `GuidePointAttr.unknown_108` は `lane_markers` と相関ゼロ、
+  `GuidePointFlags.f3.a=1` (分岐 GP) とだけ共起することを全 4 ルートで確認。→ **推奨レーン判定の
+  補助 field ではない** と確定し、field の用途は分岐 GP のサブ分類候補として仕様書に残す。
