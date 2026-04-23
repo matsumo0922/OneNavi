@@ -7,9 +7,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.guidance.domain.Guidance
+import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker.Companion.BACKWARD_TOLERANCE_METRES
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker.Companion.MANEUVER_INTERSECTION_TOLERANCE_METRES
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker.Companion.SEGMENT_SEARCH_WINDOW
 
 /**
@@ -104,6 +106,17 @@ class ExtNavGuidanceTracker {
             (it.distanceFromStartMetres - monotonicProgress).coerceAtLeast(0.0)
         }
 
+        val upcomingManeuverPoints = upcomingGuidancePoints.filter { guidancePoint ->
+            guidancePoint.phrases.any { phrase -> phrase.category in MANEUVER_CATEGORIES }
+        }
+        val nextManeuverPoint = upcomingManeuverPoints.firstOrNull()
+        val distanceToNextManeuverMetres = nextManeuverPoint?.let {
+            (it.distanceFromStartMetres - monotonicProgress).coerceAtLeast(0.0)
+        }
+        val nextManeuverIntersection = nextManeuverPoint?.let {
+            findIntersectionAt(guide, it.distanceFromStartMetres.toDouble())
+        }
+
         _state.update {
             ExtNavProgressSnapshot(
                 nearestIntersectionIndex = nearestIntersectionIndexForSnapshot,
@@ -115,8 +128,33 @@ class ExtNavGuidanceTracker {
                 nextGuidancePoint = nextGuidancePoint,
                 distanceToNextGuidancePointMetres = distanceToNextGpMetres,
                 upcomingGuidancePoints = upcomingGuidancePoints,
+                nextManeuverPoint = nextManeuverPoint,
+                distanceToNextManeuverPointMetres = distanceToNextManeuverMetres,
+                upcomingManeuverPoints = upcomingManeuverPoints,
+                nextManeuverIntersection = nextManeuverIntersection,
             )
         }
+    }
+
+    /**
+     * 指定のルート進捗 (m) 付近に位置する [Intersection] を探す。
+     *
+     * マニューバ GP は `distanceFromStartMetres` を持つ一方 [Intersection] は 2D 座標しか
+     * 持たないため、事前計算した [intersectionProgressMetres] と [progressMetres] の差が
+     * [MANEUVER_INTERSECTION_TOLERANCE_METRES] 以下で最も近いものを採用する。該当なしなら null。
+     */
+    private fun findIntersectionAt(guidance: Guidance, progressMetres: Double): Intersection? {
+        if (intersectionProgressMetres.isEmpty()) return null
+        var bestIndex = -1
+        var bestDelta = MANEUVER_INTERSECTION_TOLERANCE_METRES
+        for (index in intersectionProgressMetres.indices) {
+            val delta = kotlin.math.abs(intersectionProgressMetres[index] - progressMetres)
+            if (delta <= bestDelta) {
+                bestDelta = delta
+                bestIndex = index
+            }
+        }
+        return if (bestIndex >= 0) guidance.intersections[bestIndex] else null
     }
 
     private fun precomputePolyline(guidance: Guidance) {
@@ -205,7 +243,8 @@ class ExtNavGuidanceTracker {
             // 「まだ通過していない」intersection。PASSED_TOLERANCE 分の通過直後は
             // 引き続き「次」として提示し続け、UI がちらつかないようにする。
             if (intersectionProgressMetres[index] >=
-                progressMetres - INTERSECTION_PASSED_TOLERANCE_METRES) {
+                progressMetres - INTERSECTION_PASSED_TOLERANCE_METRES
+            ) {
                 return index
             }
         }
@@ -244,6 +283,42 @@ class ExtNavGuidanceTracker {
 
         /** upcoming GP を通過後もこの距離までは候補に残す */
         private const val GP_EPSILON_METRES: Double = 5.0
+
+        /** 線分射影計算で分母が 0 とみなせる下限 */
+        private const val EPSILON: Double = 1e-9
+
+        /**
+         * マニューバ GP と [Intersection] を「同じ地点」として紐付ける許容差 (m)。
+         *
+         * マニューバ GP の `distanceFromStartMetres` と intersection の polyline 射影距離の
+         * 差がこの閾値以下なら対応する intersection として扱い、instruction / 道路名 /
+         * 方面名を UI に反映する。閾値を超えると intersection 情報は付けず phrase のみ。
+         */
+        private const val MANEUVER_INTERSECTION_TOLERANCE_METRES: Double = 50.0
+
+        /**
+         * マニューバ UI (方向転換アイコン + 距離) に表示すべき GuidancePoint のカテゴリ。
+         *
+         * 外部ナビ API は 1 物理案内点に対して多数の事前告知 phrase を返してくる。
+         * そのうち「ハンドルを切る / ランプに入る / 分岐する」といった **進路変更**
+         * を伴うものだけを UI の「次のマニューバ」として扱う。
+         *
+         * 警告系 (`HighwayLaneReduction` / `Merge` (= "この先 合流地点" のような事前告知
+         * のみで実マニューバを持たないもの) / `RoadName` / `HighwayRecommendedLane` など)
+         * は発話は流す一方、UI 上の「次の曲がり角」候補からは除外する。混ぜると
+         * "およそ500m先" "右方向です" といった発話断片テキストが UI instruction に
+         * 露出してしまう。
+         *
+         * [GuidanceCategory.IntersectionGuide] (template 100) / [GuidanceCategory.IntersectionGuideSoon]
+         * (template 104) が一般道・高速を問わず本番マニューバ phrase の本体なのでこれらを core に据える。
+         * IC 入口 / トンネル分岐は進路変更を伴うため含めておく。
+         */
+        internal val MANEUVER_CATEGORIES: Set<GuidanceCategory> = setOf(
+            GuidanceCategory.IntersectionGuide,
+            GuidanceCategory.IntersectionGuideSoon,
+            GuidanceCategory.AutoExpresswayEntry,
+            GuidanceCategory.TunnelBranch,
+        )
 
         internal fun haversineMetres(
             lat1: Double,
@@ -298,8 +373,6 @@ class ExtNavGuidanceTracker {
                 t = t,
             )
         }
-
-        private const val EPSILON: Double = 1e-9
     }
 }
 
@@ -326,4 +399,19 @@ data class ExtNavProgressSnapshot(
     val distanceToNextGuidancePointMetres: Double?,
     /** 進行方向に残っている GuidancePoint の並び。発話スケジューラが消費する */
     val upcomingGuidancePoints: List<GuidancePoint>,
+    /**
+     * UI の「次のマニューバ」表示に用いる、方向転換系カテゴリのみで絞った次 GP。
+     * 注意喚起・速度調整などの通過点は含まれない。終端に達していたら null。
+     */
+    val nextManeuverPoint: GuidancePoint?,
+    /** [nextManeuverPoint] までの距離 (m)。next が null なら null */
+    val distanceToNextManeuverPointMetres: Double?,
+    /** 進行方向に残っているマニューバ GP の並び。UI がその先表示を決めるのに使う */
+    val upcomingManeuverPoints: List<GuidancePoint>,
+    /**
+     * [nextManeuverPoint] に対応する [Intersection]。
+     * GP とルート上で近接する intersection がなければ null (遠方の無関係な IC を誤って
+     * 掴まないため)。UI の交差点名・道路名・方面名表示に使う。
+     */
+    val nextManeuverIntersection: Intersection?,
 )

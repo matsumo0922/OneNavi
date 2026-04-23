@@ -5,8 +5,10 @@ import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.guidance.domain.DsrRouteSummary
 import me.matsumo.drive.supporter.api.guidance.domain.Guidance
+import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection
+import me.matsumo.drive.supporter.api.guidance.domain.SsmlPhrase
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -115,6 +117,94 @@ class ExtNavGuidanceTrackerTest {
         assertTrue((later?.index ?: 0) >= 2, "next gp should advance; got=${later?.index}")
     }
 
+    @Test
+    fun `maneuver points skip non-maneuver guidance points`() {
+        val intersections = listOf(
+            intersection(id = 1, lat = 35.6812, lng = 139.7671),
+            intersection(id = 2, lat = 35.7112, lng = 139.7671),
+        ).toImmutableList()
+
+        val polyline = buildList {
+            val steps = 40
+            for (pointIndex in 0..steps) {
+                val ratio = pointIndex.toDouble() / steps
+                val lat = intersections.first().position.latDegrees +
+                    ratio * (
+                        intersections.last().position.latDegrees -
+                            intersections.first().position.latDegrees
+                        )
+                add(Coord.fromDegrees(lat, 139.7671))
+            }
+        }.toImmutableList()
+
+        val guidancePoints = listOf(
+            // SpeedAdjustment のみ → マニューバ扱いしない
+            guidancePoint(
+                index = 0,
+                distanceFromStartMetres = 200,
+                categories = listOf(GuidanceCategory.SpeedAdjustment),
+            ),
+            // 交差点案内 → マニューバ対象
+            guidancePoint(
+                index = 1,
+                distanceFromStartMetres = 1500,
+                categories = listOf(GuidanceCategory.IntersectionGuide),
+            ),
+            // 事故多発 のみ → マニューバ扱いしない (発話側では残る)
+            guidancePoint(
+                index = 2,
+                distanceFromStartMetres = 2500,
+                categories = listOf(GuidanceCategory.AccidentBlackSpot),
+            ),
+            // Merge (事前警告のみ) → マニューバ扱いしない
+            guidancePoint(
+                index = 3,
+                distanceFromStartMetres = 3500,
+                categories = listOf(GuidanceCategory.Merge),
+            ),
+            // 自動車専用道路入口 → マニューバ対象
+            guidancePoint(
+                index = 4,
+                distanceFromStartMetres = 4000,
+                categories = listOf(GuidanceCategory.AutoExpresswayEntry),
+            ),
+        ).toImmutableList()
+
+        val guidance = Guidance(
+            summary = DsrRouteSummary(
+                depth = 1,
+                distanceMetres = 4400,
+                timeSeconds = 600,
+                fuelLitres = 0f,
+                tollYen = 0,
+                tollDetails = persistentListOf(),
+                streets = persistentListOf(),
+                priority = 0,
+                trafficCongestionAvoidanceRate = 0f,
+            ),
+            guidancePoints = guidancePoints,
+            intersections = intersections,
+            imageIds = persistentListOf(),
+            polyline = polyline,
+        )
+
+        val tracker = ExtNavGuidanceTracker()
+        tracker.attach(guidance)
+        tracker.onLocation(
+            guidance.polyline.first().latDegrees,
+            guidance.polyline.first().lonDegrees,
+        )
+
+        val snapshot = assertNotNull(tracker.state.value)
+        assertEquals(5, snapshot.upcomingGuidancePoints.size)
+        assertEquals(2, snapshot.upcomingManeuverPoints.size)
+        assertEquals(1, snapshot.nextManeuverPoint?.index)
+        assertEquals(listOf(1, 4), snapshot.upcomingManeuverPoints.map { it.index })
+        // intersection は polyline 上の 2 点 (先頭 / 末尾) のみで、index=1 のマニューバ GP
+        // (distanceFromStart=1500m) は何れの intersection からも 50m 以上離れるため null
+        assertNull(snapshot.nextManeuverIntersection)
+    }
+
     private fun buildGuidance(): Guidance {
         val intersections = listOf(
             intersection(id = 1, lat = 35.6812, lng = 139.7671),
@@ -129,8 +219,10 @@ class ExtNavGuidanceTrackerTest {
             for (pointIndex in 0..steps) {
                 val ratio = pointIndex.toDouble() / steps
                 val lat = intersections.first().position.latDegrees +
-                    ratio * (intersections.last().position.latDegrees -
-                        intersections.first().position.latDegrees)
+                    ratio * (
+                        intersections.last().position.latDegrees -
+                            intersections.first().position.latDegrees
+                        )
                 add(Coord.fromDegrees(lat, 139.7671))
             }
         }.toImmutableList()
@@ -175,12 +267,20 @@ class ExtNavGuidanceTrackerTest {
         imageRefs = persistentListOf(),
     )
 
-    private fun guidancePoint(index: Int, distanceFromStartMetres: Int): GuidancePoint = GuidancePoint(
+    private fun guidancePoint(
+        index: Int,
+        distanceFromStartMetres: Int,
+        categories: List<GuidanceCategory> = emptyList(),
+    ): GuidancePoint = GuidancePoint(
         index = index,
         gpType = 0,
         distanceFromPrevMetres = 0,
         distanceFromStartMetres = distanceFromStartMetres,
-        phrases = persistentListOf(),
+        phrases = categories
+            .map { category ->
+                SsmlPhrase(ssml = "", distanceMetres = 0, category = category)
+            }
+            .toImmutableList(),
         imageRefs = persistentListOf(),
     )
 }

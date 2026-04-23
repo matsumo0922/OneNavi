@@ -44,6 +44,8 @@ class ExtNavAnnouncementScheduler(
             if (distanceToGp < -MAX_OVERSHOOT_METRES) continue
 
             for (phrase in gp.phrases) {
+                if (phrase.category in SUPPRESSED_SPEECH_CATEGORIES) continue
+
                 val key = SpokenKey(
                     gpIndex = gp.index,
                     categoryId = phrase.category.id,
@@ -65,7 +67,7 @@ class ExtNavAnnouncementScheduler(
                     Napier.i(tag = TAG) {
                         "[NAVDBG] speak: gp=${gp.index} cat=${phrase.category.id} " +
                             "trigger=${phrase.distanceMetres}m distToGp=${distanceToGp.toInt()}m " +
-                            "priority=$priority"
+                            "priority=$priority phrase=\"${phrase.ssml}\""
                     }
                     speaker.speakSsml(
                         ssml = phrase.ssml,
@@ -106,6 +108,18 @@ class ExtNavAnnouncementScheduler(
         internal const val DEFAULT_HYSTERESIS_METRES: Double = 15.0
         internal const val LOOKAHEAD_GP_COUNT: Int = 5
         internal const val MAX_OVERSHOOT_METRES: Double = 50.0
+
+        /**
+         * 発話対象から抑制するカテゴリ。
+         *
+         * [GuidanceCategory.SpeedAdjustment] は外部ナビ API の template 105
+         * (速度に応じたガイダンス発話) で、交差点案内 (id=1/2) と重複する距離前振り
+         * フレーズが通過時点 (distanceMetres=0) で仕掛けられるため、全 GP で連呼されて
+         * しまう。事故多発・オービス・踏切などの注意喚起系はそのまま発話対象に残す。
+         */
+        internal val SUPPRESSED_SPEECH_CATEGORIES: Set<GuidanceCategory> = setOf(
+            GuidanceCategory.SpeedAdjustment,
+        )
     }
 }
 

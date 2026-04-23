@@ -20,7 +20,6 @@ import kotlinx.coroutines.launch
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection
-import me.matsumo.drive.supporter.api.guidance.domain.plainText
 import me.matsumo.onenavi.core.model.ArrivalInfo
 import me.matsumo.onenavi.core.model.GoogleRoute
 import me.matsumo.onenavi.core.model.GuidanceUiState
@@ -77,6 +76,8 @@ class GuidanceSessionManager(
 
     private var sessionStartTimeMillis: Long = 0L
     private var activeRoute: GoogleRoute? = null
+
+    private var locationUpdateCount: Int = 0
 
     private val locationListener = RoadSnappedLocationProvider.LocationListener { location ->
         onLocationUpdated(location)
@@ -161,7 +162,10 @@ class GuidanceSessionManager(
                         "nearestDist=${snapshot.nearestIntersectionDistanceMetres.toInt()}m " +
                         "nextGpIdx=${snapshot.nextGuidancePoint?.index} " +
                         "distToGp=${snapshot.distanceToNextGuidancePointMetres?.toInt()}m " +
-                        "upcomingGps=${snapshot.upcomingGuidancePoints.size}"
+                        "upcomingGps=${snapshot.upcomingGuidancePoints.size} " +
+                        "nextManeuverIdx=${snapshot.nextManeuverPoint?.index} " +
+                        "distToManeuver=${snapshot.distanceToNextManeuverPointMetres?.toInt()}m " +
+                        "upcomingManeuvers=${snapshot.upcomingManeuverPoints.size}"
                 }
                 applyProgress(snapshot)
                 scheduler?.onProgress(snapshot)
@@ -224,8 +228,6 @@ class GuidanceSessionManager(
         attachedProvider = null
     }
 
-    private var locationUpdateCount: Int = 0
-
     private fun onLocationUpdated(location: Location) {
         locationUpdateCount++
         if (locationUpdateCount <= 5 || locationUpdateCount % 20 == 0) {
@@ -265,19 +267,19 @@ class GuidanceSessionManager(
     }
 
     private fun buildCurrentManeuver(snapshot: ExtNavProgressSnapshot): ManeuverInfo? {
-        val guidancePoint = snapshot.nextGuidancePoint ?: return null
-        val distance = snapshot.distanceToNextGuidancePointMetres ?: return null
+        val maneuverPoint = snapshot.nextManeuverPoint ?: return null
+        val distance = snapshot.distanceToNextManeuverPointMetres ?: return null
         return toManeuverInfo(
-            guidancePoint = guidancePoint,
-            intersection = snapshot.nextIntersection,
+            guidancePoint = maneuverPoint,
+            intersection = snapshot.nextManeuverIntersection,
             distanceMeters = distance,
         )
     }
 
     private fun buildNextManeuver(snapshot: ExtNavProgressSnapshot): ManeuverInfo? {
-        val nextNextGp = snapshot.upcomingGuidancePoints.getOrNull(1) ?: return null
+        val nextNextManeuver = snapshot.upcomingManeuverPoints.getOrNull(1) ?: return null
         return toManeuverInfo(
-            guidancePoint = nextNextGp,
+            guidancePoint = nextNextManeuver,
             intersection = null,
             distanceMeters = 0.0,
         )
@@ -288,11 +290,16 @@ class GuidanceSessionManager(
         intersection: Intersection?,
         distanceMeters: Double,
     ): ManeuverInfo {
-        val primaryPhrase = guidancePoint.phrases.firstOrNull()
-        val category = primaryPhrase?.category ?: GuidanceCategory.Unspecified
-        val instruction = intersection?.name
-            ?.takeIf { it.isNotBlank() }
-            ?: primaryPhrase?.plainText().orEmpty()
+        // UI の instruction には常に「地点名」を使う。phrase.plainText にフォールバック
+        // すると "ポーン" / "およそ500m先" などの発話フラグメントが露出してしまうため
+        // 意図的に落とす。intersection が紐付かない場合は空文字で空欄にする
+        // (アイコン + 距離だけ見せる)。
+        val category = guidancePoint.phrases
+            .firstOrNull { it.category in ExtNavGuidanceTracker.MANEUVER_CATEGORIES }
+            ?.category
+            ?: guidancePoint.phrases.firstOrNull()?.category
+            ?: GuidanceCategory.Unspecified
+        val instruction = intersection?.name?.takeIf { it.isNotBlank() }.orEmpty()
         return ManeuverInfo(
             type = category.toManeuverType(),
             modifier = null,
