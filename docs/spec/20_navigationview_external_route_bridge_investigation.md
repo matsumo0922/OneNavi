@@ -121,6 +121,15 @@
 `NavigationView` は別途 `bb.e` 実装も内部に持っており、実体は `bo.m`。  
 `bb.e.a(bv.h)` を呼ぶと、そのまま `bo.ac.q(...)` に入り、callback で overlay と camera target を更新する。
 
+加えて、`bb.e` interface 自体は次の 4 メソッドしか持たない。
+
+- `a(bv.h)`
+- `b()`
+- `c(bc)`
+- `d()`
+
+つまり **lower seam 側には「camera を明示的に動かす public-ish な入口」が無い**。
+
 この経路は次に向いている。
 
 - route line 表示
@@ -132,6 +141,7 @@
 - callback 側 (`bo.k`) には `bs.a.b` の camera target が渡っている
 - ただし実際に `bo.m.e(as, ...)` で camera を動かすのは internal flag `bo.m.m` が `true` のときだけ
 - `bb.e.a(bv.h)` の実装本体である `bo.m.a(...)` は、`bo.ac.q(...)` に入る直前に必ず `m=false` を書き込む
+- decompile/source search で確認できた `bo.m.m` への代入は、少なくとも `bo.m.a(...)` と `bo.m.e(...)` の `false` 書き込みだけだった
 - 現時点で確認できた `bo.m.m` の参照/代入は `bo.m` 自身と `bo.k` だけであり、`bb.e.a(...)` の direct call だけで immediate camera fit まで到達する経路は見えていない
 
 したがって seam B 単独で期待できることは次のように整理する。
@@ -196,6 +206,28 @@
 これは `bl` の text cue とは別系統であり、**交差点 preview / 画像付き案内 / 先読みデコレーション系の内部パイプライン**である可能性が高い。  
 ただし exact semantics は未確定なので、現時点では「`kg.j` を埋めると `bq.o` 系が有効になる可能性がある」という整理に留める。  
 少なくとも **image ref だけでは足りず、距離 along route と decoration kind の対応付けが別途必要**である。
+
+#### 4.2.d `kg.j` は route-relative payload と見てよい
+
+追加調査で、route 切り詰め/再構成側の `rl.g` が `kg.j` を明示的に rebasing していることが分かった。
+
+- selected trip を clone して先頭 path を落とす際、`kg.j` 内の `ej.b == 31` entry を走査する
+- 各 entry の `eh.b.b` から「落とした path の先頭 offset」を減算する
+- 再計算後の距離が `<= 0` の entry は落とし、`> 0` のものだけ新しい `kg.j` に積み直す
+
+この挙動から、`kg.j` は単なる画像 ID の箱ではなく、**route 上の距離基準で管理される preview/decor payload** とみてよい。
+
+実装上の含意:
+
+- `kg.j` を synthetic に作るなら authority は lat/lng ではなく **distance along route**
+- reroute / route trim 時は `kg.j` を差分でいじるより、external route から再構築する方が安全
+- 同じ `rl.g` は `ig` や `kg.y` も route-relative に補正しており、preview/decor まわりは複数の index/distance 系 metadata が相互に整合している可能性が高い
+
+補足:
+
+- top-level proto `hl` にも `g: bz<ej>` が存在し、`br.ac` はこれを `bb.g.c(ej)` へ包んでいる
+- ただし現時点で preview/decor 実経路として確定しているのは `az.d.ca.a.kg.j -> bq.o`
+- よって **初期 POC では `kg.j` を主に埋め、`hl.g` の追加整合が必要かは Android process 観測で判断**するのがよい
 
 ### 4.3 `we.et.e(br.az)` は使えそうで使えない
 
@@ -266,6 +298,28 @@ current route 上の progress は `rf.a/b` で表現される。
 
 つまり、**外部 API の route と current progress を internal model に再構成できれば、標準 UI への橋渡し自体は理屈上可能**である。
 
+### 5.5 proto builder surface は思ったより使える
+
+追加調査で、generated proto 群は obfuscated されていても共通の builder surface を持つことが分かった。
+
+- message は共通基底 `adg.bi`
+- builder は共通基底 `adg.bb`
+- `bi.t()` で空 builder、`bi.u(existing)` で merge 済み builder を得られる
+- builder の `b` は mutable message instance で、個々の proto field は public なものが多い
+
+このため、`ee` / `ef` / `bk` / `ke` のように typed setter がほぼ無い builder でも、次のパターンで最低限は組める。
+
+1. default instance から builder を取る
+2. 必要なら `s()` で mutable copy にする
+3. `builder.b` を具体型へ cast して field と bitmask を直接更新する
+4. build 済み message を取り出して親 proto へ埋める
+
+含意:
+
+- `eh` / `eg` / `bm` / `kf` の minimal synthetic 構築は reflection なしでも届く可能性が高い
+- 実装上の難所は「builder API の不在」より、**どの field/bitmask をどの整合条件で埋めるか** に寄っている
+- `kg.j` 系 POC も、builder class が痩せていること自体は blocker になりにくい
+
 ---
 
 ## 6. 目的機能ごとの実現性評価
@@ -320,6 +374,9 @@ CallOut 自体は current step と cue 情報に依存している。
 
 - `br.bl` + cue 群を `tv.g` / `tv.a` が整形する **text/header 系**
 - `az.d.ca.a.kg.j -> bq.o` から生成される **preview/decor 系**
+
+さらに `cr.as` constructor は `bl` だけで完結しておらず、`az.P()` が返す route-level geo list から `cr.ao` を組み立てている。  
+したがって `aw.f` / `az.m` を dummy の空 list で済ませると、text は出ても **標準 CallOut の viewport/layout 側が痩せる**可能性がある。
 
 このため、OneNavi 側でまず狙うべき順序は次のとおり。
 
@@ -387,7 +444,19 @@ step が route 上のどこにあるかを internal model に伝えるため、`
 
 幸い、現行の `ExtNavGuidanceTracker` は polyline 射影を既に持っているため、新たに geometry engine を起こす必要はない。
 
-### 7.2 `destination step` は optional ではない
+### 7.2 `aw.f` / `az.P()` は CallOut 側でも使われる
+
+`az.P()` は route object が保持する route-level point list を返し、`cr.as` constructor や `bq.e` の overlay composition で `cr.ao(...)` 生成に使われる。
+
+このため synthetic `az` では、`aw.f` / `az.m` を単に validator 通過用のダミーにせず、少なくとも次を満たす方が安全である。
+
+- 空でないこと
+- route endpoints / overview 候補と幾何的に矛盾しないこと
+- external route の origin/destination/waypoints と概ね対応していること
+
+初期 POC では「最小の waypoint list」で済ませてよいが、CallOut/camera を詰める段階では `az.P()` の中身も観測対象に入れるべきである。
+
+### 7.3 `destination step` は optional ではない
 
 追加調査で分かった重要点として、internal route model は **destination step を route 終端の基準点として使う**。
 
@@ -411,7 +480,7 @@ step が route 上のどこにあるかを internal model に伝えるため、`
 
 POC の最小 route でも、**current maneuver step より先に destination step を正しく置く**ことが必須になる。
 
-### 7.3 CallOut の text/cue は `bl` 1 本の文字列ではない
+### 7.4 CallOut の text/cue は `bl` 1 本の文字列ではない
 
 `bl` は単なる `step text` ではなく、複数カテゴリの cue を内部に持つ。
 
@@ -444,7 +513,7 @@ POC の最小 route でも、**current maneuver step より先に destination st
 
 つまり、CallOut は「`bk.i` に文字列を入れれば終わり」ではない。
 
-### 7.4 CallOut 対象 maneuver には SDK 側のフィルタがある
+### 7.5 CallOut 対象 maneuver には SDK 側のフィルタがある
 
 `cr.as.c(bl)` は全 step を対象にしていない。  
 obfuscated enum field を ordinal 順へ引き直すと、少なくとも次の maneuver 群が CallOut 候補に含まれる可能性が高い。
@@ -629,6 +698,8 @@ POC 手順:
 6. `bl` cue だけで text CallOut が出るかを確認する
 7. 余力があれば `kg.j` 系を minimal に埋めた synthetic route でもう一度試す
 8. synthetic current step を動かして CallOut と camera が反応するか確認する
+9. `aw.f` / `az.P()` を空にした場合と埋めた場合で CallOut / viewport の差分を見る
+10. `kg.j` だけで preview/decor が足りるか、追加で `hl.g` 整合が必要かを観測する
 
 ここで確認したい観測点:
 
@@ -638,6 +709,8 @@ POC 手順:
 - 交差点接近で camera が切り替わるか
 - `bb.e.a(...)` 単独と `vd.f.i(...)` 経由で挙動差が出るか
 - `kg.j` 未設定時と設定時で preview/decor 系 UI が変わるか
+- `az.P()` の有無で CallOut / overview の見え方が変わるか
+- `hl.g` を触らなくても `kg.j` だけで preview/decor が成立するか
 
 ### 10.5 Step 5: `GuidanceSessionManager` と live 接続する
 
@@ -716,6 +789,7 @@ POC が通ったら live update へ進む。
 
 - polyline が空でも constructor は `(0,0)` fallback を入れて落ちない
 - ただしこれは crash 回避に過ぎず、route line / camera / destination 判定を正しく出すには不十分
+- `aw.f` / `az.m` は validator 通過だけでなく、`az.P()` 経由で CallOut/viewport 側にも使われる
 
 要するに、**`az` の最小構成は「polyline さえあればよい」ではない**。  
 POC でも route leg 数と waypoint 数の整合を守る synthetic route を作る必要がある。
