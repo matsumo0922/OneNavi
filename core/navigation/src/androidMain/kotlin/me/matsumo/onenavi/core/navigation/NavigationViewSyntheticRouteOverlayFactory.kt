@@ -68,8 +68,8 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
         setField(aw, "k", route.id)
         setField(aw, "C", Collections.emptyList<Any>())
         setField(aw, "D", buildMinimalIj())
-        setField(aw, "f", buildWaypointList())
-        setField(aw, "g", buildWaypointList())
+        setField(aw, "f", buildWaypointList(route, includeOrigin = true))
+        setField(aw, "g", buildWaypointList(route, includeOrigin = false))
 
         return instantiate(
             className = AZ_CLASS,
@@ -122,11 +122,36 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
         return ij
     }
 
-    private fun buildWaypointList(): Any {
+    private fun buildWaypointList(
+        route: GoogleRoute,
+        includeOrigin: Boolean,
+    ): Any {
+        val waypoints = buildList {
+            if (includeOrigin) {
+                add(buildWaypoint(route.origin.latitude, route.origin.longitude, route.id))
+            }
+            add(buildWaypoint(route.destination.latitude, route.destination.longitude, route.id))
+        }
         return invokeStatic(
             className = IMMUTABLE_LIST_CLASS,
-            methodName = "j",
-            args = arrayOf(getStaticField(WAYPOINT_CLASS, "G")),
+            methodName = "p",
+            args = arrayOf(waypoints),
+        )
+    }
+
+    private fun buildWaypoint(
+        latitude: Double,
+        longitude: Double,
+        label: String,
+    ): Any {
+        val latLng = instantiate(
+            className = MAPCORE_LATLNG_CLASS,
+            args = arrayOf(latitude, longitude),
+        )
+        return invokeStatic(
+            className = WAYPOINT_CLASS,
+            methodName = "M",
+            args = arrayOf(label, latLng),
         )
     }
 
@@ -277,6 +302,8 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
             "com.google.android.libraries.navigation.internal.bs.d"
         private const val MAPCORE_POINT_CLASS =
             "com.google.android.libraries.geo.mapcore.api.model.z"
+        private const val MAPCORE_LATLNG_CLASS =
+            "com.google.android.libraries.geo.mapcore.api.model.r"
         private const val MAPCORE_POLYLINE_CLASS =
             "com.google.android.libraries.geo.mapcore.api.model.ai"
         private const val IMMUTABLE_LIST_CLASS =
