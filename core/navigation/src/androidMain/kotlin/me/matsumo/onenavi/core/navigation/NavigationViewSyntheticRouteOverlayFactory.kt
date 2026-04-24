@@ -2,6 +2,7 @@ package me.matsumo.onenavi.core.navigation
 
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
@@ -63,11 +64,12 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
         )
 
         setField(aw, "i", buildPolyline(route))
+        setField(aw, "e", getStaticField(ROUTE_MODE_CLASS, "DRIVE"))
         setField(aw, "k", route.id)
         setField(aw, "C", Collections.emptyList<Any>())
         setField(aw, "D", buildMinimalIj())
-        setField(aw, "f", getStaticField(EMPTY_LIST_CLASS, "a"))
-        setField(aw, "g", getStaticField(EMPTY_LIST_CLASS, "a"))
+        setField(aw, "f", buildWaypointList())
+        setField(aw, "g", buildWaypointList())
 
         return instantiate(
             className = AZ_CLASS,
@@ -120,6 +122,14 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
         return ij
     }
 
+    private fun buildWaypointList(): Any {
+        return invokeStatic(
+            className = IMMUTABLE_LIST_CLASS,
+            methodName = "j",
+            args = arrayOf(getStaticField(WAYPOINT_CLASS, "G")),
+        )
+    }
+
     private fun toMapcoreCoordinate(degrees: Double): Int {
         return (degrees * MAPCORE_SCALE).roundToInt()
     }
@@ -133,7 +143,17 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
             .firstOrNull { it.parameterCount == args.size }
             ?: error("Constructor not found: class=$className args=${args.size}")
         constructor.isAccessible = true
-        return (constructor as Constructor<Any>).newInstance(*args)
+        return runCatching {
+            (constructor as Constructor<Any>).newInstance(*args)
+        }.getOrElse { error ->
+            if (error is InvocationTargetException) {
+                throw IllegalStateException(
+                    "Constructor failed: class=$className cause=${error.targetException.javaClass.name}: ${error.targetException.message}",
+                    error.targetException,
+                )
+            }
+            throw error
+        }
     }
 
     private fun invoke(
@@ -258,5 +278,9 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
             "com.google.android.libraries.navigation.internal.aee.ij"
         private const val HP_CLASS =
             "com.google.android.libraries.navigation.internal.aee.hp"
+        private const val ROUTE_MODE_CLASS =
+            "com.google.android.libraries.navigation.internal.acu.al"
+        private const val WAYPOINT_CLASS =
+            "com.google.android.libraries.navigation.internal.br.ce"
     }
 }
