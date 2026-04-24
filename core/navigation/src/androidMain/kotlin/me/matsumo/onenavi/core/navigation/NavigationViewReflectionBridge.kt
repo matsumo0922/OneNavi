@@ -234,10 +234,13 @@ class NavigationViewReflectionBridge {
                 ),
             )
         }.onFailure { error ->
-            Napier.e(error, tag = TAG) {
-                "[NAVDBG] bridge.resolveHandles failed: " +
-                    "view=${navigationView.javaClass.name} " +
-                    "fields=${describeDeclaredFields(navigationView)}"
+            val message = "[NAVDBG] bridge.resolveHandles failed: " +
+                "view=${navigationView.javaClass.name} " +
+                "fields=${describeDeclaredFields(navigationView)}"
+            if (error is IllegalArgumentException && error.message?.endsWith("field was null") == true) {
+                Napier.w(tag = TAG) { message }
+            } else {
+                Napier.e(error, tag = TAG) { message }
             }
         }.getOrNull()
     }

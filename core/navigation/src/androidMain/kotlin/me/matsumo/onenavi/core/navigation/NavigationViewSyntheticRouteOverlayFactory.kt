@@ -64,7 +64,7 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
         )
 
         setField(aw, "i", buildPolyline(route))
-        setField(aw, "e", getStaticField(ROUTE_MODE_CLASS, "DRIVE"))
+        setField(aw, "e", getEnumConstant(ROUTE_MODE_CLASS, "DRIVE"))
         setField(aw, "k", route.id)
         setField(aw, "C", Collections.emptyList<Any>())
         setField(aw, "D", buildMinimalIj())
@@ -190,6 +190,17 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
             targetClass = declaredClass(className),
             fieldName = fieldName,
         ).get(null)
+    }
+
+    private fun getEnumConstant(
+        className: String,
+        constantName: String,
+    ): Any {
+        val enumClass = declaredClass(className)
+        require(enumClass.isEnum) { "Class is not enum: $className" }
+        return enumClass.enumConstants.firstOrNull { constant ->
+            (constant as Enum<*>).name == constantName
+        } ?: error("Enum constant not found: class=$className constant=$constantName")
     }
 
     private fun setField(
