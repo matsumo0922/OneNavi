@@ -93,10 +93,10 @@ class NavigationViewReflectionBridge {
     private fun maybePrimeSessionLocked() {
         if (!sessionRequested || sessionPrimed) return
 
-        val activeHandles = handles
+        val activeHandles = ensureHandlesLocked(reason = "prime")
         if (activeHandles == null) {
             Napier.w(tag = TAG) {
-                "[NAVDBG] bridge.prime skipped: NavigationView is not attached yet"
+                "[NAVDBG] bridge.prime skipped: handles are not ready yet"
             }
             return
         }
@@ -122,10 +122,10 @@ class NavigationViewReflectionBridge {
         val routes = pendingRoutes
         if (routes.isEmpty()) return
 
-        val activeHandles = handles
+        val activeHandles = ensureHandlesLocked(reason = "routeOverlay")
         if (activeHandles == null) {
             Napier.w(tag = TAG) {
-                "[NAVDBG] bridge.routeOverlay skipped: NavigationView is not attached yet"
+                "[NAVDBG] bridge.routeOverlay skipped: handles are not ready yet"
             }
             return
         }
@@ -152,7 +152,7 @@ class NavigationViewReflectionBridge {
             pendingRoutes = emptyList()
         }
 
-        val activeHandles = handles ?: return
+        val activeHandles = ensureHandlesLocked(reason = "clearOverlay") ?: return
 
         runCatching {
             activeHandles.clearRouteOverlayMethod.invoke(activeHandles.overlayController)
@@ -161,6 +161,23 @@ class NavigationViewReflectionBridge {
         }.onFailure { error ->
             Napier.e(error, tag = TAG) { "[NAVDBG] bridge.routeOverlay clear failed" }
         }
+    }
+
+    private fun ensureHandlesLocked(reason: String): ReflectionHandles? {
+        val existing = handles
+        if (existing != null) return existing
+
+        val navigationView = attachedViewRef?.get() ?: return null
+        val resolved = resolveHandles(navigationView)
+        handles = resolved
+
+        if (resolved != null) {
+            Napier.i(tag = TAG) {
+                "[NAVDBG] bridge.handles resolved on retry: reason=$reason ${resolved.summary()}"
+            }
+        }
+
+        return resolved
     }
 
     private fun resolveHandles(navigationView: NavigationView): ReflectionHandles? {
@@ -218,7 +235,9 @@ class NavigationViewReflectionBridge {
             )
         }.onFailure { error ->
             Napier.e(error, tag = TAG) {
-                "[NAVDBG] bridge.resolveHandles failed"
+                "[NAVDBG] bridge.resolveHandles failed: " +
+                    "view=${navigationView.javaClass.name} " +
+                    "fields=${describeDeclaredFields(navigationView)}"
             }
         }.getOrNull()
     }
@@ -254,11 +273,31 @@ class NavigationViewReflectionBridge {
         methodName: String,
         parameterCount: Int,
     ): Method? {
-        val method = targetClass.declaredMethods.firstOrNull { candidate ->
-            candidate.name == methodName && candidate.parameterTypes.size == parameterCount
-        } ?: return null
-        method.isAccessible = true
-        return method
+        var current: Class<*>? = targetClass
+        while (current != null) {
+            current.declaredMethods.firstOrNull { candidate ->
+                candidate.name == methodName && candidate.parameterTypes.size == parameterCount
+            }?.let { method ->
+                method.isAccessible = true
+                return method
+            }
+            current = current.superclass
+        }
+        return null
+    }
+
+    private fun describeDeclaredFields(target: Any): String {
+        return target.javaClass.declaredFields.joinToString(
+            prefix = "[",
+            postfix = "]",
+        ) { field ->
+            runCatching {
+                field.isAccessible = true
+                "${field.name}:${field.type.name}=${field.get(target) != null}"
+            }.getOrElse {
+                "${field.name}:${field.type.name}=<inaccessible>"
+            }
+        }
     }
 
     private class ReflectionHandles(

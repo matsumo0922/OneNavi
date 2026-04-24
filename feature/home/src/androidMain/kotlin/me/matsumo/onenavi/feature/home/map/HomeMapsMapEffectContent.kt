@@ -232,6 +232,12 @@ internal fun HomeMapsMapEffectContent(
         }
     }
 
+    LaunchedEffect(mapView, googleMap, navigationViewReflectionBridge) {
+        if (googleMap != null) {
+            navigationViewReflectionBridge.attach(mapView)
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
