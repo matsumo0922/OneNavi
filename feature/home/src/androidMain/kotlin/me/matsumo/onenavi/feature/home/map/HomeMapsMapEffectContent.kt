@@ -53,6 +53,7 @@ import me.matsumo.onenavi.core.model.CongestionSeverity
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.CameraManager
+import me.matsumo.onenavi.core.navigation.NavigationViewReflectionBridge
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_day
 import me.matsumo.onenavi.core.resource.common_unit_hour
@@ -101,6 +102,7 @@ internal fun HomeMapsMapEffectContent(
     routeResults: ImmutableList<RouteResult>,
     selectedRouteIndex: Int,
     cameraManager: CameraManager,
+    navigationViewReflectionBridge: NavigationViewReflectionBridge,
     cameraFollowSpec: CameraFollowSpec?,
     isDarkMap: Boolean,
     onMapLandmarkSelected: (name: String?, latitude: Double, longitude: Double) -> Unit,
@@ -220,6 +222,13 @@ internal fun HomeMapsMapEffectContent(
             lifecycleOwner.lifecycle.removeObserver(observer)
             googleMap?.let(viewportState::clearMap)
             googleMap = null
+        }
+    }
+
+    DisposableEffect(mapView, navigationViewReflectionBridge) {
+        navigationViewReflectionBridge.attach(mapView)
+        onDispose {
+            navigationViewReflectionBridge.detach(mapView)
         }
     }
 

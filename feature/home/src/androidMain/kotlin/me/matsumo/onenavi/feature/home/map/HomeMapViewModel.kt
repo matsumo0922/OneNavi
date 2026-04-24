@@ -31,6 +31,7 @@ import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
+import me.matsumo.onenavi.core.navigation.NavigationViewReflectionBridge
 import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.core.repository.RouteRepository
 import me.matsumo.onenavi.core.repository.SearchRepository
@@ -47,6 +48,7 @@ class HomeMapViewModel(
     internal val routeManager: RouteManager,
     internal val cameraManager: CameraManager,
     internal val guidanceSessionManager: GuidanceSessionManager,
+    internal val navigationViewReflectionBridge: NavigationViewReflectionBridge,
 ) : ViewModel() {
 
     // ── 既存 raw state ──

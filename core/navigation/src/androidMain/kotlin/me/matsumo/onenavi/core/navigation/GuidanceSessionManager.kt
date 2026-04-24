@@ -50,6 +50,7 @@ class GuidanceSessionManager(
     private val cameraManager: CameraManager,
     private val routeManager: RouteManager,
     private val navigationSdkManager: NavigationSdkManager,
+    private val navigationViewReflectionBridge: NavigationViewReflectionBridge,
     private val extNavRouteRegistry: ExtNavRouteRegistry,
     private val extNavTrackerProvider: () -> ExtNavGuidanceTracker,
     private val extNavSchedulerProvider: () -> ExtNavAnnouncementScheduler,
@@ -128,6 +129,8 @@ class GuidanceSessionManager(
 
         _navigationState.value = NavigationState.ActiveGuidance
         _guidanceUiState.value = GuidanceUiState.Initial.copy(isTtsAvailable = true)
+        navigationViewReflectionBridge.requestGuidanceSessionStart()
+        navigationViewReflectionBridge.setRouteOverlayRoutes(routeManager.routes.value)
 
         sessionSpeaker.speakPlain(
             text = "ルート案内を開始します",
@@ -149,6 +152,7 @@ class GuidanceSessionManager(
                 scheduler?.reset()
                 rerouteDetector?.reset()
                 _guidanceUiState.value = _guidanceUiState.value.copy(isOffRoute = false)
+                navigationViewReflectionBridge.setRouteOverlayRoutes(routeManager.routes.value)
             }
             .launchIn(scope)
 
@@ -201,6 +205,7 @@ class GuidanceSessionManager(
         speaker = null
 
         activeRoute = null
+        navigationViewReflectionBridge.requestGuidanceSessionStop()
         _guidanceUiState.value = GuidanceUiState.Initial
         _arrivalInfo.value = null
     }

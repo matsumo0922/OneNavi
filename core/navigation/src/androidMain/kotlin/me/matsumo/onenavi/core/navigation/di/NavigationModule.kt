@@ -12,6 +12,7 @@ import me.matsumo.onenavi.core.model.AppConfig
 import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
 import me.matsumo.onenavi.core.navigation.NavigationSdkManager
+import me.matsumo.onenavi.core.navigation.NavigationViewReflectionBridge
 import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavAnnouncementScheduler
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavAuthGateway
@@ -40,6 +41,7 @@ import org.koin.dsl.module
 actual val navigationModule: Module = module {
     single { RouteManager() }
     single { NavigationSdkManager(androidApplication(), get()) }
+    single { NavigationViewReflectionBridge() }
     single { CameraManager(get()) }
     single<HttpClient>(qualifier = org.koin.core.qualifier.named("googleCloudTts")) {
         HttpClient(OkHttp) {
@@ -96,6 +98,7 @@ actual val navigationModule: Module = module {
             cameraManager = get(),
             routeManager = get(),
             navigationSdkManager = get(),
+            navigationViewReflectionBridge = get(),
             extNavRouteRegistry = get(),
             extNavTrackerProvider = { get() },
             extNavSchedulerProvider = { get() },

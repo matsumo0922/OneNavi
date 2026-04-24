@@ -273,6 +273,7 @@ internal fun HomeMapScreenContent(
                 routeResults = effectiveRouteResults,
                 selectedRouteIndex = effectiveSelectedRouteIndex,
                 cameraManager = viewModel.cameraManager,
+                navigationViewReflectionBridge = viewModel.navigationViewReflectionBridge,
                 cameraFollowSpec = cameraFollowSpec,
                 isDarkMap = isDarkMap,
                 onMapLandmarkSelected = viewModel::onMapLandmarkSelected,
