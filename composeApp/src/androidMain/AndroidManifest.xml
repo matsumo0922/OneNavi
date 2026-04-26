@@ -59,8 +59,5 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="${GOOGLE_API_KEY}" />
 
-        <service
-            android:name="me.matsumo.onenavi.core.navigation.NavigationUpdatesService"
-            android:exported="false" />
     </application>
 </manifest>

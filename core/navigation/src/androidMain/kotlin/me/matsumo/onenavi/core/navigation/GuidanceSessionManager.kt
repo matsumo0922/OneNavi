@@ -1,11 +1,8 @@
 package me.matsumo.onenavi.core.navigation
 
-import androidx.compose.ui.graphics.asImageBitmap
-import com.google.android.libraries.mapsplatform.turnbyturn.model.LaneDirection
-import com.google.android.libraries.mapsplatform.turnbyturn.model.Maneuver
-import com.google.android.libraries.mapsplatform.turnbyturn.model.NavState
+import android.location.Location
+import com.google.android.libraries.navigation.RoadSnappedLocationProvider
 import io.github.aakira.napier.Napier
-import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -13,40 +10,51 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
+import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
+import me.matsumo.drive.supporter.api.guidance.domain.Intersection
+import me.matsumo.drive.supporter.api.guidance.domain.ManeuverDirection
+import me.matsumo.drive.supporter.api.guidance.domain.MergeSide
 import me.matsumo.onenavi.core.model.ArrivalInfo
-import me.matsumo.onenavi.core.model.DrivingSide
 import me.matsumo.onenavi.core.model.GoogleRoute
-import me.matsumo.onenavi.core.model.GuidanceEvent
-import me.matsumo.onenavi.core.model.GuidancePriority
 import me.matsumo.onenavi.core.model.GuidanceUiState
-import me.matsumo.onenavi.core.model.LaneInfo
 import me.matsumo.onenavi.core.model.ManeuverInfo
 import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.TripProgressInfo
-import me.matsumo.onenavi.core.navigation.guidance.GuidanceCoordinator
-import me.matsumo.onenavi.core.navigation.guidance.GuidancePlanner
-import me.matsumo.onenavi.core.navigation.guidance.PhraseComposer
-import me.matsumo.onenavi.core.navigation.guidance.SpeechDispatcher
-import me.matsumo.onenavi.core.navigation.tts.SpeechOrchestrator
-import me.matsumo.onenavi.core.navigation.tts.TtsEngine
-import com.google.android.libraries.mapsplatform.turnbyturn.model.DrivingSide as SdkDrivingSide
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavAnnouncementScheduler
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavProgressSnapshot
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavSsmlSpeaker
+import kotlin.math.sqrt
 
+/**
+ * drive-supporter-api 由来の案内セッションを制御する。
+ *
+ * - Navigator (`setDestinations` / `startGuidance`) は呼ばない
+ * - `NavigationApi.getNavigator()` は [NavigationSdkManager] 側で初期化済み。
+ *   本クラスは [RoadSnappedLocationProvider] からの map-matched 座標を [ExtNavGuidanceTracker]
+ *   に流して進捗 / 発話スケジューリング / off-route 判定を回す
+ */
 class GuidanceSessionManager(
     private val cameraManager: CameraManager,
     private val routeManager: RouteManager,
     private val navigationSdkManager: NavigationSdkManager,
-    private val phraseComposer: PhraseComposer,
-    private val guidancePlanner: GuidancePlanner,
-    private val ttsEngineFactory: () -> TtsEngine,
+    private val extNavRouteRegistry: ExtNavRouteRegistry,
+    private val extNavTrackerProvider: () -> ExtNavGuidanceTracker,
+    private val extNavSchedulerProvider: () -> ExtNavAnnouncementScheduler,
+    private val extNavRerouteDetectorProvider: () -> ExtNavRerouteDetector,
+    private val speakerProvider: () -> ExtNavSsmlSpeaker,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -60,17 +68,23 @@ class GuidanceSessionManager(
     private val _arrivalInfo = MutableStateFlow<ArrivalInfo?>(null)
     val arrivalInfo: StateFlow<ArrivalInfo?> = _arrivalInfo.asStateFlow()
 
-    private var guidanceJob: Job? = null
-    private var arrivalJob: Job? = null
+    private var locationJob: Job? = null
     private var rerouteJob: Job? = null
-    private var ttsReadyJob: Job? = null
-    private var speechOrchestrator: SpeechOrchestrator? = null
-    private var ttsEngine: TtsEngine? = null
-    private var dispatcher: SpeechDispatcher? = null
-    private var coordinator: GuidanceCoordinator? = null
+
+    private var tracker: ExtNavGuidanceTracker? = null
+    private var scheduler: ExtNavAnnouncementScheduler? = null
+    private var rerouteDetector: ExtNavRerouteDetector? = null
+    private var speaker: ExtNavSsmlSpeaker? = null
+    private var attachedProvider: RoadSnappedLocationProvider? = null
 
     private var sessionStartTimeMillis: Long = 0L
     private var activeRoute: GoogleRoute? = null
+
+    private var locationUpdateCount: Int = 0
+
+    private val locationListener = RoadSnappedLocationProvider.LocationListener { location ->
+        onLocationUpdated(location)
+    }
 
     fun register() {
         // no-op
@@ -86,115 +100,107 @@ class GuidanceSessionManager(
 
     fun startSession() {
         val route = routeManager.routes.value.firstOrNull() ?: return
+        val payload = extNavRouteRegistry.get(route.id)
+        if (payload == null) {
+            Napier.w(tag = TAG) { "No ExtNavRoutePayload for route=${route.id}; session not started" }
+            return
+        }
 
         activeRoute = route
         sessionStartTimeMillis = System.currentTimeMillis()
 
-        val engine = ttsEngineFactory()
-        ttsEngine = engine
-        val orchestrator = SpeechOrchestrator(ttsEngine = engine)
-        speechOrchestrator = orchestrator
+        Napier.i(tag = TAG) {
+            "[NAVDBG] startSession: route=${route.id} " +
+                "intersections=${payload.guidance.intersections.size} " +
+                "gps=${payload.guidance.guidancePoints.size} " +
+                "polyline=${payload.guidance.polyline.size} " +
+                "totalMetres=${payload.guidance.summary.distanceMetres}"
+        }
 
-        val sessionDispatcher = SpeechDispatcher(
-            orchestrator = orchestrator,
-            composer = phraseComposer,
-            scope = scope,
-        )
-        val sessionCoordinator = GuidanceCoordinator(
-            planner = guidancePlanner,
-            dispatcher = sessionDispatcher,
-        )
-        dispatcher = sessionDispatcher
-        coordinator = sessionCoordinator
+        val sessionTracker = extNavTrackerProvider().also { tracker = it }
+        val sessionScheduler = extNavSchedulerProvider().also { scheduler = it }
+        val sessionDetector = extNavRerouteDetectorProvider().also { rerouteDetector = it }
+        val sessionSpeaker = speakerProvider().also { speaker = it }
 
-        sessionDispatcher.setEnabled(true)
-        sessionDispatcher.start()
-        sessionCoordinator.reset()
-        sessionCoordinator.emit(GuidanceEvent.SessionStarted(priority = GuidancePriority.CRITICAL))
+        sessionTracker.attach(payload.guidance)
+        sessionScheduler.reset()
+        sessionDetector.reset()
 
         _navigationState.value = NavigationState.ActiveGuidance
-        _guidanceUiState.value = GuidanceUiState.Initial.copy(isTtsAvailable = engine.isReady.value)
+        _guidanceUiState.value = GuidanceUiState.Initial.copy(isTtsAvailable = true)
 
-        ttsReadyJob?.cancel()
-        ttsReadyJob = scope.launch {
-            engine.isReady.collect { ready ->
-                _guidanceUiState.value = _guidanceUiState.value.copy(isTtsAvailable = ready)
-            }
-        }
+        sessionSpeaker.speakPlain(
+            text = "ルート案内を開始します",
+            utteranceId = "session-start-${System.currentTimeMillis()}",
+        )
 
-        scope.launch {
-            navigationSdkManager.startNavigation(route)
-                .onFailure { throwable ->
-                    Napier.e(tag = TAG, throwable = throwable) {
-                        "Navigation SDK guidance failed to start."
-                    }
-                }
-        }
-
-        arrivalJob?.cancel()
-        arrivalJob = scope.launch {
-            navigationSdkManager.arrivalEvents.collect { arrival ->
-                if (activeRoute?.id != route.id) return@collect
-
-                if (arrival.isFinalDestination) {
-                    coordinator?.emit(
-                        GuidanceEvent.DestinationApproach(priority = GuidancePriority.CRITICAL),
-                    )
-                    onFinalDestinationArrival(activeRoute)
-                } else {
-                    coordinator?.emit(
-                        GuidanceEvent.ViaWaypointApproach(priority = GuidancePriority.CRITICAL),
-                    )
-                    navigationSdkManager.continueToNextDestination()
-                }
-            }
-        }
+        attachLocationListener()
 
         rerouteJob?.cancel()
         rerouteJob = routeManager.routes
             .map { routes -> routes.firstOrNull() }
             .distinctUntilChanged { old, new -> isSameRoute(old, new) }
             .drop(1)
-            .onEach { coordinator?.onRerouted() }
+            .onEach { newRoute ->
+                if (newRoute == null) return@onEach
+                val newPayload = extNavRouteRegistry.get(newRoute.id) ?: return@onEach
+                activeRoute = newRoute
+                tracker?.attach(newPayload.guidance)
+                scheduler?.reset()
+                rerouteDetector?.reset()
+                _guidanceUiState.value = _guidanceUiState.value.copy(isOffRoute = false)
+            }
             .launchIn(scope)
 
         cameraManager.requestCameraFollowing(pitch3D = true)
 
-        guidanceJob?.cancel()
-        guidanceJob = combine(
-            navigationSdkManager.navInfo,
-            navigationSdkManager.tripProgress,
-            navigationSdkManager.isOffRoute,
-        ) { navInfo, tripProgress, isOffRouteRaw ->
-            GuidanceUpdate(
-                navInfo = navInfo,
-                tripProgress = tripProgress,
-                isOffRouteRaw = isOffRouteRaw,
-            )
+        locationJob?.cancel()
+        locationJob = scope.launch {
+            sessionTracker.state.collectLatest { snapshot ->
+                if (snapshot == null) return@collectLatest
+                Napier.i(tag = TAG) {
+                    "[NAVDBG] snapshot: progressed=${snapshot.progressedMetres.toInt()}m " +
+                        "remaining=${snapshot.remainingMetres.toInt()}m " +
+                        "nearestIdx=${snapshot.nearestIntersectionIndex} " +
+                        "nearestDist=${snapshot.nearestIntersectionDistanceMetres.toInt()}m " +
+                        "nextGpIdx=${snapshot.nextGuidancePoint?.index} " +
+                        "distToGp=${snapshot.distanceToNextGuidancePointMetres?.toInt()}m " +
+                        "upcomingGps=${snapshot.upcomingGuidancePoints.size} " +
+                        "nextManeuverIdx=${snapshot.nextManeuverPoint?.index} " +
+                        "distToManeuver=${snapshot.distanceToNextManeuverPointMetres?.toInt()}m " +
+                        "upcomingManeuvers=${snapshot.upcomingManeuverPoints.size}"
+                }
+                applyProgress(snapshot)
+                scheduler?.onProgress(snapshot)
+                rerouteDetector?.onProgress(snapshot) {
+                    Napier.w(tag = TAG) { "Off-route detected; awaiting external rerouter." }
+                    _guidanceUiState.value = _guidanceUiState.value.copy(isOffRoute = true)
+                    sessionSpeaker.speakPlain(
+                        text = "ルートから外れました",
+                        utteranceId = "off-route-${System.currentTimeMillis()}",
+                    )
+                }
+            }
         }
-            .onEach { update -> applyGuidanceUpdate(route.id, update) }
-            .launchIn(scope)
     }
 
     fun stopSession() {
-        guidanceJob?.cancel()
-        guidanceJob = null
-        arrivalJob?.cancel()
-        arrivalJob = null
+        locationJob?.cancel()
+        locationJob = null
         rerouteJob?.cancel()
         rerouteJob = null
-        ttsReadyJob?.cancel()
-        ttsReadyJob = null
-        navigationSdkManager.stopNavigation()
-        dispatcher?.shutdown()
-        dispatcher = null
-        coordinator?.reset()
-        coordinator = null
-        speechOrchestrator?.shutdown()
-        speechOrchestrator = null
-        ttsEngine = null
-        activeRoute = null
+        detachLocationListener()
 
+        tracker?.detach()
+        tracker = null
+        scheduler?.reset()
+        scheduler = null
+        rerouteDetector?.reset()
+        rerouteDetector = null
+        speaker?.stop()
+        speaker = null
+
+        activeRoute = null
         _guidanceUiState.value = GuidanceUiState.Initial
         _arrivalInfo.value = null
     }
@@ -204,45 +210,47 @@ class GuidanceSessionManager(
     }
 
     fun setTtsMuted(muted: Boolean) {
-        speechOrchestrator?.setMuted(muted)
+        if (muted) speaker?.stop()
     }
 
-    private fun applyGuidanceUpdate(
-        routeId: String,
-        update: GuidanceUpdate,
-    ) {
-        if (activeRoute?.id != routeId) return
-
-        val navInfo = update.navInfo
-        val tripProgress = update.tripProgress
-        val navState = navInfo?.navState
-        val isOffRoute = update.isOffRouteRaw || navState == NavState.REROUTING
-
-        // OffRoute は navState に依らず常に監視する（REROUTING 中でも発火させる）。
-        coordinator?.onOffRouteChanged(isOffRoute)
-
-        // NavInfo のマニューバ関連フィールドは navState == ENROUTE の時だけ有効。
-        // REROUTING / STOPPED / UNKNOWN では前回値を維持し、補助フラグのみ更新する。
-        if (navState != NavState.ENROUTE) {
-            _guidanceUiState.value = _guidanceUiState.value.copy(
-                isOffRoute = isOffRoute,
-                isTtsAvailable = ttsEngine?.isReady?.value == true,
-            )
-            return
+    private fun attachLocationListener() {
+        scope.launch {
+            navigationSdkManager.roadSnappedLocationProvider.collectLatest { provider ->
+                detachLocationListener()
+                attachedProvider = provider
+                provider?.addLocationListener(locationListener)
+                Napier.i(tag = TAG) {
+                    "[NAVDBG] attachLocationListener: provider=${provider != null}"
+                }
+            }
         }
+    }
 
-        val currentStep = navInfo.currentStep
-        val nextStep = navInfo.remainingSteps.firstOrNull()
+    private fun detachLocationListener() {
+        attachedProvider?.removeLocationListener(locationListener)
+        attachedProvider = null
+    }
 
-        val currentStepDistance = navInfo.distanceToCurrentStepMeters?.toDouble() ?: 0.0
-        val nextStepDistance = currentStepDistance +
-            (nextStep?.distanceFromPreviousMeters?.toDouble() ?: 0.0)
+    private fun onLocationUpdated(location: Location) {
+        locationUpdateCount++
+        if (locationUpdateCount <= 5 || locationUpdateCount % 20 == 0) {
+            Napier.i(tag = TAG) {
+                "[NAVDBG] onLocationUpdated #$locationUpdateCount: " +
+                    "lat=${location.latitude} lng=${location.longitude} " +
+                    "acc=${location.accuracy} speed=${location.speed}"
+            }
+        }
+        tracker?.onLocation(location.latitude, location.longitude)
+    }
 
-        val currentManeuver = currentStep?.toManeuverInfo(distanceMeters = currentStepDistance)
-        val nextManeuver = nextStep?.toManeuverInfo(distanceMeters = nextStepDistance)
+    private fun applyProgress(snapshot: ExtNavProgressSnapshot) {
+        val route = activeRoute ?: return
 
-        val distanceRemaining = tripProgress?.distanceRemainingMeters?.toDouble() ?: 0.0
-        val durationRemaining = tripProgress?.timeRemainingSeconds?.toDouble() ?: 0.0
+        val distanceRemaining = snapshot.remainingMetres
+        val durationRemaining = snapshot.remainingSeconds
+
+        val currentManeuver = buildCurrentManeuver(snapshot)
+        val nextManeuver = buildNextManeuver(snapshot)
 
         _guidanceUiState.value = _guidanceUiState.value.copy(
             currentManeuver = currentManeuver,
@@ -253,260 +261,148 @@ class GuidanceSessionManager(
                 estimatedArrivalTimeMillis = System.currentTimeMillis() + (durationRemaining * 1000).toLong(),
             ),
             isOffRoute = false,
-            isTtsAvailable = ttsEngine?.isReady?.value == true,
+            isTtsAvailable = true,
         )
 
-        coordinator?.onNavigationUpdate(navInfo)
+        if (distanceRemaining <= ARRIVAL_THRESHOLD_METRES) {
+            onFinalDestinationArrival(route)
+        }
+    }
+
+    private fun buildCurrentManeuver(snapshot: ExtNavProgressSnapshot): ManeuverInfo? {
+        val maneuverPoint = snapshot.nextManeuverPoint ?: return null
+        val distance = snapshot.distanceToNextManeuverPointMetres ?: return null
+        return toManeuverInfo(
+            guidancePoint = maneuverPoint,
+            intersection = snapshot.nextManeuverIntersection,
+            distanceMeters = distance,
+        )
+    }
+
+    private fun buildNextManeuver(snapshot: ExtNavProgressSnapshot): ManeuverInfo? {
+        val nextNextManeuver = snapshot.upcomingManeuverPoints.getOrNull(1) ?: return null
+        return toManeuverInfo(
+            guidancePoint = nextNextManeuver,
+            intersection = null,
+            distanceMeters = 0.0,
+        )
+    }
+
+    private fun toManeuverInfo(
+        guidancePoint: GuidancePoint,
+        intersection: Intersection?,
+        distanceMeters: Double,
+    ): ManeuverInfo {
+        // UI の instruction には常に「地点名」を使う。phrase.plainText にフォールバック
+        // すると "ポーン" / "およそ500m先" などの発話フラグメントが露出してしまうため
+        // 意図的に落とす。intersection が紐付かない場合は空文字で空欄にする
+        // (アイコン + 距離だけ見せる)。
+        val category = guidancePoint.phrases
+            .firstOrNull { it.category in ExtNavGuidanceTracker.MANEUVER_CATEGORIES }
+            ?.category
+            ?: guidancePoint.phrases.firstOrNull()?.category
+            ?: GuidanceCategory.Unspecified
+        val instruction = intersection?.name?.takeIf { it.isNotBlank() }.orEmpty()
+        return ManeuverInfo(
+            type = category.toManeuverType(),
+            modifier = resolveManeuverModifier(category, guidancePoint, intersection),
+            distanceMeters = distanceMeters,
+            instruction = instruction,
+            roadName = intersection?.roadName?.takeIf { it.isNotBlank() },
+            destinations = intersection?.directionSignA?.takeIf { it.isNotBlank() },
+        )
     }
 
     /**
-     * リルート検出のためのルート同一性判定。
-     * routeToken が両方ある場合はそれで比較し、ない場合は id / geometry.size / 距離 / 所要時間の複合キーで代替する。
+     * マニューバアイコン用の方向修飾子を決定する。
+     *
+     * - 合流系 (`Merge` / `MergeAttention`) は `ManeuverHint.mergeSide` (GuidePointFlags.f3.c 由来)
+     *   を左右の正本にする。合流 GP では angle_in/out がほぼ等しく direction は Straight になるため。
+     * - それ以外は `ManeuverHint.direction` (angle_in/angle_out 差から算出) を優先。
+     * - `ManeuverHint` が null の場合は `Intersection.direction` にフォールバック (同じ計算結果)。
+     * - 両方とも `Unknown` / null なら null を返し、呼び出し側で従来どおり「直進」フォールバックへ。
+     *
+     * 詳細は `docs/spec/21_ext_nav_guide_proto_and_announcement.md` §4 参照。
      */
-    private fun isSameRoute(old: GoogleRoute?, new: GoogleRoute?): Boolean {
-        if (old == null || new == null) {
-            val result = old === new
-            Napier.d(tag = TAG) { "[P4] ROUTE_CMP old=$old new=$new -> same=$result (nullcheck)" }
-            return result
+    private fun resolveManeuverModifier(
+        category: GuidanceCategory,
+        guidancePoint: GuidancePoint,
+        intersection: Intersection?,
+    ): ManeuverModifier? {
+        val hint = guidancePoint.maneuver
+        if (category == GuidanceCategory.Merge || category == GuidanceCategory.MergeAttention) {
+            hint?.mergeSide?.let { return it.toManeuverModifier() }
         }
-        if (old.routeToken != null && new.routeToken != null) {
-            val result = old.routeToken == new.routeToken
-            Napier.d(tag = TAG) {
-                "[P4] ROUTE_CMP oldToken=${old.routeToken} newToken=${new.routeToken} -> same=$result (token)"
-            }
-            return result
-        }
-        val result = old.id == new.id &&
-            old.geometry.size == new.geometry.size &&
-            old.distanceMeters == new.distanceMeters &&
-            old.durationSeconds == new.durationSeconds
-        Napier.d(tag = TAG) {
-            "[P4] ROUTE_CMP oldId=${old.id} newId=${new.id} " +
-                "geomEq=${old.geometry.size == new.geometry.size} " +
-                "distEq=${old.distanceMeters == new.distanceMeters} " +
-                "durEq=${old.durationSeconds == new.durationSeconds} -> same=$result (composite)"
-        }
-        return result
+        val direction = hint?.direction ?: intersection?.direction
+        return direction?.toManeuverModifier()
     }
 
-    private fun onFinalDestinationArrival(route: GoogleRoute?) {
-        val arrivedRoute = route ?: return
+    private fun ManeuverDirection.toManeuverModifier(): ManeuverModifier? = when (this) {
+        ManeuverDirection.Straight -> ManeuverModifier.STRAIGHT
+        ManeuverDirection.UTurn -> ManeuverModifier.UTURN
+        ManeuverDirection.Left -> ManeuverModifier.LEFT
+        ManeuverDirection.SlantLeft -> ManeuverModifier.SLIGHT_LEFT
+        ManeuverDirection.ThisSideLeft -> ManeuverModifier.SHARP_LEFT
+        ManeuverDirection.Right -> ManeuverModifier.RIGHT
+        ManeuverDirection.SlantRight -> ManeuverModifier.SLIGHT_RIGHT
+        ManeuverDirection.ThisSideRight -> ManeuverModifier.SHARP_RIGHT
+        ManeuverDirection.Unknown -> null
+    }
+
+    private fun MergeSide.toManeuverModifier(): ManeuverModifier = when (this) {
+        MergeSide.LEFT -> ManeuverModifier.LEFT
+        MergeSide.RIGHT -> ManeuverModifier.RIGHT
+    }
+
+    private fun GuidanceCategory.toManeuverType(): ManeuverType = when (this) {
+        GuidanceCategory.Merge,
+        GuidanceCategory.MergeAttention,
+        -> ManeuverType.MERGE
+        GuidanceCategory.AutoExpresswayEntry -> ManeuverType.ON_RAMP
+        GuidanceCategory.TunnelBranch -> ManeuverType.FORK
+        else -> ManeuverType.TURN
+    }
+
+    private fun isSameRoute(old: GoogleRoute?, new: GoogleRoute?): Boolean {
+        if (old == null || new == null) return old === new
+        return old.id == new.id
+    }
+
+    private fun onFinalDestinationArrival(route: GoogleRoute) {
         val elapsedSeconds = (System.currentTimeMillis() - sessionStartTimeMillis) / 1000.0
         _arrivalInfo.value = ArrivalInfo(
             destinationName = "",
-            totalDistanceMeters = arrivedRoute.distanceMeters,
+            totalDistanceMeters = route.distanceMeters,
             totalDurationSeconds = elapsedSeconds,
         )
         _navigationState.value = NavigationState.Arrival
-    }
 
-    private fun NavigationStepSnapshot.toManeuverInfo(distanceMeters: Double): ManeuverInfo {
-        return ManeuverInfo(
-            type = maneuver.toManeuverType(),
-            modifier = maneuver.toManeuverModifier(),
-            degrees = null,
-            drivingSide = drivingSide.toDrivingSide(),
-            distanceMeters = distanceMeters,
-            instruction = instruction,
-            roadName = roadName?.takeIf { it.isNotBlank() },
-            simpleRoadName = simpleRoadName?.takeIf { it.isNotBlank() },
-            destinations = null,
-            iconBitmap = maneuverBitmap?.asImageBitmap(),
-            lanesBitmap = lanesBitmap?.asImageBitmap(),
-            lanes = toLaneInfos(),
+        speaker?.speakPlain(
+            text = "目的地に到着しました",
+            utteranceId = "arrival-${System.currentTimeMillis()}",
         )
     }
 
-    private fun NavigationStepSnapshot.toLaneInfos() = lanes.map { lane ->
-        LaneInfo(
-            directions = lane.directions.mapNotNull { it.toLaneManeuverModifier() }.toImmutableList(),
-            activeDirection = lane.activeDirection?.toLaneManeuverModifier(),
-            isRecommended = lane.isRecommended,
-        )
-    }.toImmutableList()
-
-    /**
-     * Navigation SDK からの 3 系統の Flow を一度に受け取るための中間ホルダー。
-     *
-     * @param navInfo turn-by-turn feed の最新スナップショット
-     * @param tripProgress SDK が算出する残距離・残時間
-     * @param isOffRouteRaw 経路逸脱フラグ（REROUTING 状態はここで合成される前の生値）
-     */
-    private data class GuidanceUpdate(
-        val navInfo: NavigationFeedSnapshot?,
-        val tripProgress: NavigationTripProgressSnapshot?,
-        val isOffRouteRaw: Boolean,
-    )
+    @Suppress("unused") // Phase 2 以降で使う
+    private fun distanceBetweenMetres(
+        lat1: Double,
+        lng1: Double,
+        lat2: Double,
+        lng2: Double,
+    ): Double {
+        val earthRadius = 6_371_000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLng = Math.toRadians(lng2 - lng1)
+        val a = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
+            kotlin.math.cos(Math.toRadians(lat1)) *
+            kotlin.math.cos(Math.toRadians(lat2)) *
+            kotlin.math.sin(dLng / 2) * kotlin.math.sin(dLng / 2)
+        val c = 2 * kotlin.math.atan2(sqrt(a), sqrt(1 - a))
+        return earthRadius * c
+    }
 
     companion object {
         private const val TAG = "GuidanceSessionManager"
-    }
-}
-
-internal fun Int.toManeuverType(): ManeuverType {
-    return when (this) {
-        Maneuver.DEPART -> ManeuverType.DEPART
-        Maneuver.DESTINATION,
-        Maneuver.DESTINATION_LEFT,
-        Maneuver.DESTINATION_RIGHT,
-        -> ManeuverType.ARRIVE
-        Maneuver.FORK_LEFT,
-        Maneuver.FORK_RIGHT,
-        -> ManeuverType.FORK
-        Maneuver.MERGE_UNSPECIFIED,
-        Maneuver.MERGE_LEFT,
-        Maneuver.MERGE_RIGHT,
-        -> ManeuverType.MERGE
-        Maneuver.ON_RAMP_UNSPECIFIED,
-        Maneuver.ON_RAMP_LEFT,
-        Maneuver.ON_RAMP_RIGHT,
-        Maneuver.ON_RAMP_KEEP_LEFT,
-        Maneuver.ON_RAMP_KEEP_RIGHT,
-        Maneuver.ON_RAMP_SLIGHT_LEFT,
-        Maneuver.ON_RAMP_SLIGHT_RIGHT,
-        Maneuver.ON_RAMP_SHARP_LEFT,
-        Maneuver.ON_RAMP_SHARP_RIGHT,
-        Maneuver.ON_RAMP_U_TURN_CLOCKWISE,
-        Maneuver.ON_RAMP_U_TURN_COUNTERCLOCKWISE,
-        -> ManeuverType.ON_RAMP
-        Maneuver.OFF_RAMP_UNSPECIFIED,
-        Maneuver.OFF_RAMP_LEFT,
-        Maneuver.OFF_RAMP_RIGHT,
-        Maneuver.OFF_RAMP_KEEP_LEFT,
-        Maneuver.OFF_RAMP_KEEP_RIGHT,
-        Maneuver.OFF_RAMP_SLIGHT_LEFT,
-        Maneuver.OFF_RAMP_SLIGHT_RIGHT,
-        Maneuver.OFF_RAMP_SHARP_LEFT,
-        Maneuver.OFF_RAMP_SHARP_RIGHT,
-        Maneuver.OFF_RAMP_U_TURN_CLOCKWISE,
-        Maneuver.OFF_RAMP_U_TURN_COUNTERCLOCKWISE,
-        -> ManeuverType.OFF_RAMP
-        Maneuver.ROUNDABOUT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_COUNTERCLOCKWISE,
-        Maneuver.ROUNDABOUT_STRAIGHT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_STRAIGHT_COUNTERCLOCKWISE,
-        Maneuver.ROUNDABOUT_LEFT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_LEFT_COUNTERCLOCKWISE,
-        Maneuver.ROUNDABOUT_RIGHT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_RIGHT_COUNTERCLOCKWISE,
-        Maneuver.ROUNDABOUT_SLIGHT_LEFT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_SLIGHT_LEFT_COUNTERCLOCKWISE,
-        Maneuver.ROUNDABOUT_SLIGHT_RIGHT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_SLIGHT_RIGHT_COUNTERCLOCKWISE,
-        Maneuver.ROUNDABOUT_SHARP_LEFT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_SHARP_LEFT_COUNTERCLOCKWISE,
-        Maneuver.ROUNDABOUT_SHARP_RIGHT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_SHARP_RIGHT_COUNTERCLOCKWISE,
-        Maneuver.ROUNDABOUT_U_TURN_CLOCKWISE,
-        Maneuver.ROUNDABOUT_U_TURN_COUNTERCLOCKWISE,
-        Maneuver.ROUNDABOUT_EXIT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_EXIT_COUNTERCLOCKWISE,
-        -> ManeuverType.ROUNDABOUT
-        Maneuver.NAME_CHANGE -> ManeuverType.NAME_CHANGE
-        Maneuver.TURN_U_TURN_CLOCKWISE,
-        Maneuver.TURN_U_TURN_COUNTERCLOCKWISE,
-        -> ManeuverType.UTURN
-        Maneuver.STRAIGHT -> ManeuverType.CONTINUE
-        else -> ManeuverType.TURN
-    }
-}
-
-@Suppress("CyclomaticComplexMethod")
-internal fun Int.toManeuverModifier(): ManeuverModifier? {
-    return when (this) {
-        Maneuver.DESTINATION_LEFT,
-        Maneuver.TURN_LEFT,
-        Maneuver.TURN_KEEP_LEFT,
-        Maneuver.MERGE_LEFT,
-        Maneuver.FORK_LEFT,
-        Maneuver.ON_RAMP_LEFT,
-        Maneuver.ON_RAMP_KEEP_LEFT,
-        Maneuver.OFF_RAMP_LEFT,
-        Maneuver.OFF_RAMP_KEEP_LEFT,
-        Maneuver.ROUNDABOUT_LEFT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_LEFT_COUNTERCLOCKWISE,
-        Maneuver.ROUNDABOUT_EXIT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_EXIT_COUNTERCLOCKWISE,
-        -> ManeuverModifier.LEFT
-        Maneuver.DESTINATION_RIGHT,
-        Maneuver.TURN_RIGHT,
-        Maneuver.TURN_KEEP_RIGHT,
-        Maneuver.MERGE_RIGHT,
-        Maneuver.FORK_RIGHT,
-        Maneuver.ON_RAMP_RIGHT,
-        Maneuver.ON_RAMP_KEEP_RIGHT,
-        Maneuver.OFF_RAMP_RIGHT,
-        Maneuver.OFF_RAMP_KEEP_RIGHT,
-        Maneuver.ROUNDABOUT_RIGHT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_RIGHT_COUNTERCLOCKWISE,
-        -> ManeuverModifier.RIGHT
-        Maneuver.TURN_SLIGHT_LEFT,
-        Maneuver.ON_RAMP_SLIGHT_LEFT,
-        Maneuver.OFF_RAMP_SLIGHT_LEFT,
-        Maneuver.ROUNDABOUT_SLIGHT_LEFT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_SLIGHT_LEFT_COUNTERCLOCKWISE,
-        -> ManeuverModifier.SLIGHT_LEFT
-        Maneuver.TURN_SLIGHT_RIGHT,
-        Maneuver.ON_RAMP_SLIGHT_RIGHT,
-        Maneuver.OFF_RAMP_SLIGHT_RIGHT,
-        Maneuver.ROUNDABOUT_SLIGHT_RIGHT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_SLIGHT_RIGHT_COUNTERCLOCKWISE,
-        -> ManeuverModifier.SLIGHT_RIGHT
-        Maneuver.TURN_SHARP_LEFT,
-        Maneuver.ON_RAMP_SHARP_LEFT,
-        Maneuver.OFF_RAMP_SHARP_LEFT,
-        Maneuver.ROUNDABOUT_SHARP_LEFT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_SHARP_LEFT_COUNTERCLOCKWISE,
-        -> ManeuverModifier.SHARP_LEFT
-        Maneuver.TURN_SHARP_RIGHT,
-        Maneuver.ON_RAMP_SHARP_RIGHT,
-        Maneuver.OFF_RAMP_SHARP_RIGHT,
-        Maneuver.ROUNDABOUT_SHARP_RIGHT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_SHARP_RIGHT_COUNTERCLOCKWISE,
-        -> ManeuverModifier.SHARP_RIGHT
-        Maneuver.STRAIGHT,
-        Maneuver.MERGE_UNSPECIFIED,
-        Maneuver.ON_RAMP_UNSPECIFIED,
-        Maneuver.OFF_RAMP_UNSPECIFIED,
-        Maneuver.ROUNDABOUT_STRAIGHT_CLOCKWISE,
-        Maneuver.ROUNDABOUT_STRAIGHT_COUNTERCLOCKWISE,
-        Maneuver.NAME_CHANGE,
-        -> ManeuverModifier.STRAIGHT
-        Maneuver.TURN_U_TURN_CLOCKWISE,
-        Maneuver.TURN_U_TURN_COUNTERCLOCKWISE,
-        Maneuver.ON_RAMP_U_TURN_CLOCKWISE,
-        Maneuver.ON_RAMP_U_TURN_COUNTERCLOCKWISE,
-        Maneuver.OFF_RAMP_U_TURN_CLOCKWISE,
-        Maneuver.OFF_RAMP_U_TURN_COUNTERCLOCKWISE,
-        Maneuver.ROUNDABOUT_U_TURN_CLOCKWISE,
-        Maneuver.ROUNDABOUT_U_TURN_COUNTERCLOCKWISE,
-        -> ManeuverModifier.UTURN
-        else -> null
-    }
-}
-
-internal fun Int.toDrivingSide(): DrivingSide? {
-    return when (this) {
-        SdkDrivingSide.LEFT -> DrivingSide.LEFT
-        SdkDrivingSide.RIGHT -> DrivingSide.RIGHT
-        else -> null
-    }
-}
-
-// LaneDirection.LaneShape の Int 値を ManeuverModifier に射影する。
-// Maneuver の Int 値とは enum 値空間が異なるため、別関数として用意している。
-private fun Int.toLaneManeuverModifier(): ManeuverModifier? {
-    return when (this) {
-        LaneDirection.LaneShape.STRAIGHT -> ManeuverModifier.STRAIGHT
-        LaneDirection.LaneShape.SLIGHT_LEFT -> ManeuverModifier.SLIGHT_LEFT
-        LaneDirection.LaneShape.SLIGHT_RIGHT -> ManeuverModifier.SLIGHT_RIGHT
-        LaneDirection.LaneShape.NORMAL_LEFT -> ManeuverModifier.LEFT
-        LaneDirection.LaneShape.NORMAL_RIGHT -> ManeuverModifier.RIGHT
-        LaneDirection.LaneShape.SHARP_LEFT -> ManeuverModifier.SHARP_LEFT
-        LaneDirection.LaneShape.SHARP_RIGHT -> ManeuverModifier.SHARP_RIGHT
-        LaneDirection.LaneShape.U_TURN_LEFT,
-        LaneDirection.LaneShape.U_TURN_RIGHT,
-        -> ManeuverModifier.UTURN
-        else -> null
+        private const val ARRIVAL_THRESHOLD_METRES: Double = 20.0
     }
 }

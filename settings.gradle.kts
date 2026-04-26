@@ -1,7 +1,6 @@
 @file:Suppress("UnstableApiUsage")
 
 rootProject.name = "OneNavi"
-enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {
     includeBuild("build-logic")
@@ -34,3 +33,5 @@ include(":core:billing")
 include(":feature:home")
 include(":feature:setting")
 include(":feature:billing")
+
+includeBuild("drive-supporter-api")

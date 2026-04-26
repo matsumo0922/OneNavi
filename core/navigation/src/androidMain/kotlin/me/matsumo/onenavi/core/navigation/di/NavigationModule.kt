@@ -6,13 +6,21 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import me.matsumo.drive.supporter.api.core.model.LogLevel
+import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.model.AppConfig
 import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
 import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.core.navigation.RouteManager
-import me.matsumo.onenavi.core.navigation.guidance.GuidancePlanner
-import me.matsumo.onenavi.core.navigation.guidance.PhraseComposer
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavAnnouncementScheduler
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavAuthGateway
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavClientProvider
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavSsmlSpeaker
 import me.matsumo.onenavi.core.navigation.tts.AndroidTtsEngine
 import me.matsumo.onenavi.core.navigation.tts.AudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.FallbackTtsEngine
@@ -21,7 +29,7 @@ import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsConfig
 import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsEngine
 import me.matsumo.onenavi.core.navigation.tts.PcmAudioPlayer
 import me.matsumo.onenavi.core.navigation.tts.SpeechQueueMode
-import me.matsumo.onenavi.core.navigation.tts.TtsAudioCache
+import me.matsumo.onenavi.core.navigation.tts.TtsAudioCache // 将来利用
 import me.matsumo.onenavi.core.navigation.tts.TtsEngine
 import me.matsumo.onenavi.core.navigation.tts.fetchSigningCertSha1
 import org.koin.android.ext.koin.androidApplication
@@ -50,19 +58,49 @@ actual val navigationModule: Module = module {
             }
         }
     }
-    single { PhraseComposer() }
-    single { GuidancePlanner() }
     single {
+        ExtNavClientProvider(
+            context = androidContext(),
+            appSettingDataSource = get(),
+            logLevel = LogLevel.HEADERS,
+        )
+    }
+    single {
+        ExtNavAuthGateway(
+            clientProvider = get(),
+            appConfig = get(),
+        )
+    }
+    single { ExtNavRouteRegistry() }
+    single<RouteDataSource> {
+        ExtNavRouteDataSource(
+            clientProvider = get(),
+            authGateway = get(),
+            registry = get(),
+        )
+    }
+    single<TtsEngine> {
         val context = androidContext()
+        createTtsEngine(
+            context = context,
+            appConfig = get(),
+            httpClient = get(qualifier = org.koin.core.qualifier.named("googleCloudTts")),
+        )
+    }
+    factory { ExtNavGuidanceTracker() }
+    factory { ExtNavSsmlSpeaker(engine = get()) }
+    factory { ExtNavAnnouncementScheduler(speaker = get()) }
+    factory { ExtNavRerouteDetector() }
+    single {
         GuidanceSessionManager(
             cameraManager = get(),
             routeManager = get(),
             navigationSdkManager = get(),
-            phraseComposer = get(),
-            guidancePlanner = get(),
-            ttsEngineFactory = {
-                createTtsEngine(context, get(), get(qualifier = org.koin.core.qualifier.named("googleCloudTts")))
-            },
+            extNavRouteRegistry = get(),
+            extNavTrackerProvider = { get() },
+            extNavSchedulerProvider = { get() },
+            extNavRerouteDetectorProvider = { get() },
+            speakerProvider = { get() },
         )
     }
 }

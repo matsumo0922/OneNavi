@@ -70,14 +70,31 @@ internal class GoogleCloudTtsEngine(
         text: String,
         utteranceId: String,
         queueMode: SpeechQueueMode,
+    ): Boolean = enqueue(TtsInput.Plain(text), utteranceId, queueMode)
+
+    override fun speak(
+        input: TtsInput,
+        utteranceId: String,
+        queueMode: SpeechQueueMode,
+    ): Boolean = enqueue(input, utteranceId, queueMode)
+
+    private fun enqueue(
+        input: TtsInput,
+        utteranceId: String,
+        queueMode: SpeechQueueMode,
     ): Boolean {
         if (!refreshReady()) return false
-        if (text.isBlank()) return false
+        if (input.isBlank()) return false
         if (queueMode == SpeechQueueMode.FLUSH) {
             flushInternal()
         }
-        val sendResult = requestChannel.trySend(Utterance(text = text, id = utteranceId))
+        val sendResult = requestChannel.trySend(Utterance(input = input, id = utteranceId))
         return sendResult.isSuccess
+    }
+
+    private fun TtsInput.isBlank(): Boolean = when (this) {
+        is TtsInput.Plain -> text.isBlank()
+        is TtsInput.Ssml -> ssml.isBlank()
     }
 
     override fun stop() {
@@ -100,9 +117,10 @@ internal class GoogleCloudTtsEngine(
                 audioFocusManager.request()
                 try {
                     try {
-                        val cached = audioCache.get(utterance.text)
-                        val audio = cached ?: api.synthesize(utterance.text).also { result ->
-                            audioCache.put(utterance.text, result)
+                        val cacheKey = utterance.cacheKey()
+                        val cached = audioCache.get(cacheKey)
+                        val audio = cached ?: api.synthesize(utterance.input).also { result ->
+                            audioCache.put(cacheKey, result)
                         }
                         audioPlayer.playAndAwait(audio)
                         resetFailureCount()
@@ -113,7 +131,7 @@ internal class GoogleCloudTtsEngine(
                         handleFailure(error)
                         val handler = onSynthesisFailed
                         if (handler != null) {
-                            handler(utterance.text, utterance.id)
+                            handler(utterance.fallbackText(), utterance.id)
                         } else {
                             onUtteranceCompleted?.invoke(utterance.id)
                         }
@@ -192,9 +210,19 @@ internal class GoogleCloudTtsEngine(
      * 発話キューに積むための 1 件の指示。
      */
     private data class Utterance(
-        val text: String,
+        val input: TtsInput,
         val id: String,
-    )
+    ) {
+        fun cacheKey(): String = when (input) {
+            is TtsInput.Plain -> "plain:${input.text}"
+            is TtsInput.Ssml -> "ssml:${input.ssml}"
+        }
+
+        fun fallbackText(): String = when (input) {
+            is TtsInput.Plain -> input.text
+            is TtsInput.Ssml -> PhonemeConverter.toPlainText(input.ssml)
+        }
+    }
 
     private companion object {
         private const val TAG = "GoogleCloudTtsEngine"

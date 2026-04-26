@@ -16,4 +16,6 @@ data class AppConfig(
     val adMobRewardedAdUnitId: String,
     val purchaseAndroidApiKey: String?,
     val purchaseIosApiKey: String?,
+    val extNavLoginId: String,
+    val extNavPassword: String,
 )

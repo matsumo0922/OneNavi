@@ -162,5 +162,8 @@ buildkonfig {
         setField("ADMOB_IOS_REWARDED_AD_UNIT_ID", rewardAdTestId)
 
         setField("APPLOVIN_SDK_KEY")
+
+        setField("EXT_NAV_LOGIN_ID")
+        setField("EXT_NAV_PASSWORD")
     }
 }
