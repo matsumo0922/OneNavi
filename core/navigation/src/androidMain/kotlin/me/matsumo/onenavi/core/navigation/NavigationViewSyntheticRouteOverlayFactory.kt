@@ -1,13 +1,13 @@
 package me.matsumo.onenavi.core.navigation
 
+import me.matsumo.onenavi.core.model.GoogleRoute
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
-import java.util.Collections
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
-import me.matsumo.onenavi.core.model.GoogleRoute
 
 /**
  * `NavigationView` の lower seam (`bb.e.a(bv.h)`) に渡す synthetic route overlay state を組み立てる。
@@ -308,8 +308,6 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
             "com.google.android.libraries.geo.mapcore.api.model.ai"
         private const val IMMUTABLE_LIST_CLASS =
             "com.google.android.libraries.navigation.internal.yb.er"
-        private const val EMPTY_LIST_CLASS =
-            "com.google.android.libraries.navigation.internal.yb.lr"
         private const val KG_CLASS =
             "com.google.android.libraries.navigation.internal.acn.kg"
         private const val IJ_CLASS =

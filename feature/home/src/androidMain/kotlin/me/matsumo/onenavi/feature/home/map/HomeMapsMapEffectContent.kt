@@ -225,16 +225,15 @@ internal fun HomeMapsMapEffectContent(
         }
     }
 
-    DisposableEffect(mapView, navigationViewReflectionBridge) {
-        navigationViewReflectionBridge.attach(mapView)
-        onDispose {
-            navigationViewReflectionBridge.detach(mapView)
-        }
-    }
-
-    LaunchedEffect(mapView, googleMap, navigationViewReflectionBridge) {
+    // NavigationView 内部 seam (vd.f / bb.e) は getMapAsync の callback 後に populate される
+    // 可能性が高いため、googleMap が non-null になってから attach する。
+    // detach は常に実行 (idempotent) して bridge 内部 state を確実に解放する。
+    DisposableEffect(mapView, googleMap, navigationViewReflectionBridge) {
         if (googleMap != null) {
             navigationViewReflectionBridge.attach(mapView)
+        }
+        onDispose {
+            navigationViewReflectionBridge.detach(mapView)
         }
     }
 

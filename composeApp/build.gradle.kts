@@ -165,5 +165,19 @@ buildkonfig {
 
         setField("EXT_NAV_LOGIN_ID")
         setField("EXT_NAV_PASSWORD")
+
+        // NavigationView 内部 seam への reflection bridge を有効化するか。
+        // production path から bridge を完全に切り離すための kill switch。
+        // local.properties / 環境変数で "true" を渡したときのみ有効になる。
+        val reflectionBridgeFlag = (
+            localProperties.getProperty("EXT_NAV_REFLECTION_BRIDGE_ENABLED")
+                ?: System.getenv("EXT_NAV_REFLECTION_BRIDGE_ENABLED")
+                ?: "false"
+            ).equals("true", ignoreCase = true)
+        buildConfigField(
+            FieldSpec.Type.BOOLEAN,
+            "EXT_NAV_REFLECTION_BRIDGE_ENABLED",
+            reflectionBridgeFlag.toString(),
+        )
     }
 }

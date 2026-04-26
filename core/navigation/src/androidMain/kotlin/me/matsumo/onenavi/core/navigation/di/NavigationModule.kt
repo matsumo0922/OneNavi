@@ -41,7 +41,11 @@ import org.koin.dsl.module
 actual val navigationModule: Module = module {
     single { RouteManager() }
     single { NavigationSdkManager(androidApplication(), get()) }
-    single { NavigationViewReflectionBridge() }
+    single {
+        NavigationViewReflectionBridge(
+            enabled = get<AppConfig>().extNavReflectionBridgeEnabled,
+        )
+    }
     single { CameraManager(get()) }
     single<HttpClient>(qualifier = org.koin.core.qualifier.named("googleCloudTts")) {
         HttpClient(OkHttp) {

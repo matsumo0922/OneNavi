@@ -18,4 +18,5 @@ data class AppConfig(
     val purchaseIosApiKey: String?,
     val extNavLoginId: String,
     val extNavPassword: String,
+    val extNavReflectionBridgeEnabled: Boolean,
 )

@@ -57,6 +57,7 @@ val appModule = module {
             adMobRewardedAdUnitId = adMobRewardedAdUnitId,
             extNavLoginId = BuildKonfig.EXT_NAV_LOGIN_ID,
             extNavPassword = BuildKonfig.EXT_NAV_PASSWORD,
+            extNavReflectionBridgeEnabled = BuildKonfig.EXT_NAV_REFLECTION_BRIDGE_ENABLED,
         )
     }
 
