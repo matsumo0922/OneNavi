@@ -346,7 +346,13 @@ class NavigationViewReflectionBridge(
             message = error.message,
         )
         Napier.e(error, tag = TAG) {
-            "[NAVDBG] bridge.$phase failed; bridge marked broken until next detach/attach"
+            val chain = generateSequence<Throwable>(error) { it.cause }
+                .toList()
+                .joinToString(separator = " -> ") { link ->
+                    "${link.javaClass.simpleName}(${link.message})"
+                }
+            "[NAVDBG] bridge.$phase failed; bridge marked broken until next detach/attach " +
+                "chain=$chain"
         }
     }
 
