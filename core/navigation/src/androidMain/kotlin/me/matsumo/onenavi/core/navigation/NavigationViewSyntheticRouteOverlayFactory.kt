@@ -1,33 +1,42 @@
 package me.matsumo.onenavi.core.navigation
 
+import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.GoogleRoute
+import me.matsumo.onenavi.core.model.RoutePoint
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.roundToInt
 
 /**
- * `NavigationView` の lower seam (`bb.e.a(bv.h)`) に渡す synthetic route overlay state を組み立てる。
+ * `NavigationView` の seam に渡す synthetic state を組み立てる。
  *
- * 現段階では route line / alt route 表示を最優先とし、`aw` / `az` / `be` / `bv.h`
- * の最小グラフだけを反射で構築する。
+ * - lower seam (`bb.e.a(bv.h)`): [buildRouteOverlayState] で `bv.h` を組み立て、
+ *   route polyline 描画パイプラインに直接ルートを流し込む
+ * - upper seam (`vd.f.i(to.a, to.a)`): [buildNavigationUiState] で `to.a` を
+ *   組み立て、SDK 内部の全 `tn.s` listener を駆動する (route line に加えて
+ *   ManeuverPanel / ETA / callout / camera fit 等も SDK 自身に処理させる)
  */
 internal class NavigationViewSyntheticRouteOverlayFactory {
 
     private val classCache = ConcurrentHashMap<String, Class<*>>()
 
+    private data class RouteArtifacts(
+        val azRoute: Any,
+        val syntheticStep: Any,
+    )
+
     fun buildRouteOverlayState(routes: List<GoogleRoute>): Any {
         require(routes.isNotEmpty()) { "routes must not be empty" }
 
-        val syntheticRoutes = routes.map(::buildRoute)
+        val artifacts = routes.map(::buildRouteArtifacts)
         val routeList = requireNotNull(
             invokeStatic(
                 className = ROUTE_LIST_CLASS,
                 methodName = "f",
-                args = arrayOf(0, syntheticRoutes),
+                args = arrayOf(0, artifacts.map { it.azRoute }),
             ),
         ) { "RouteList factory returned null" }
 
@@ -39,22 +48,151 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
             ),
         ) { "Overlay state builder returned null" }
 
-        // bv.h.O() がほぼ全 field をデフォルト値で埋めて返してくれるが、
-        // route 情報 (u/be) と texture config (C/bp.f) は呼び出し側で必ず設定する必要がある。
-        // また field A: xz.br と field B: xz.br (ともに k/l setter) は O() が
-        // field B しか埋めないため、こちらで A 用の Supplier を補う必要がある。
-        // 参考実装: rj/p.java#a()  / tn/o.java
+        // bv.h.O() のデフォルトに加え、SDK 純正 caller (`tn.o.i()` 内 dVarO 構築) を
+        // ほぼ完全に模倣する。これらが揃わないと bo.ac.q -> bo.v.a -> bq.ag pipeline 内で
+        // 「route が selected として認識されない」「DRIVE モードでない」等の理由で
+        // polyline 描画ジョブが skip される。
+        //
+        // 特に重要なのは D(yb.er<bp.e>):
+        //   bo.ac.q は `((bv.b) hVar).b.get(i)` で bp.e (= SELECTED_WITH_TRAFFIC 等) を取得し、
+        //   eVar.e == false なら bs.c (br.av impl) を arrayListE に add しない。
+        //   その結果 bs.a.a が空 → bo.v.a の `for (br.av : list)` が 0 回 iterate
+        //   → bq.ag が一切作られず polyline 描画されない。
+        //   bv.h.O() default は D(lr.a) (空 er) で、tn.o.i() も D() を呼ばないため、
+        //   このゲートは外部からこちらで埋める必要がある。
         invoke(builder, "u", routeList)
-        invoke(
-            builder,
-            "C",
-            getStaticField(TEXTURE_CONFIG_CLASS, "a"),
-        )
+        invoke(builder, "C", getStaticField(TEXTURE_CONFIG_CLASS, "a"))
         invoke(builder, "k", buildShowAllSupplier())
+        invoke(builder, "l", buildTimeSupplier())
+        invoke(builder, "D", buildSelectedRouteEnumList(routes.size))
+        invoke(builder, "m", buildEmptyImmutableList())
+        invoke(builder, "s", getEnumConstant(BV_E_CLASS, "FIRST_DESTINATION"))
+        invoke(builder, "r", getStaticField(OPTIONAL_ABSENT_CLASS, "a"))
+        invoke(builder, "x", true)
+        invoke(builder, "y", true)
+        invoke(builder, "z", true)
+        invoke(builder, "q", true)
+        invoke(builder, "p", true)
+        invoke(builder, "v", true)
+        invoke(builder, "A", false)
+        invoke(builder, "B", true)
+        // 直接フィールド書き込み:
+        // ((bv.a) dVarO).b = blVar (current step, headerStep)
+        // ((bv.a) dVarO).h = anVar (Optional, polylineOverride 由来)
+        // tn.o.i() は両方を直接代入していて setter は存在しない。
+        setField(builder, "b", artifacts.first().syntheticStep)
+        setField(builder, "h", getStaticField(OPTIONAL_ABSENT_CLASS, "a"))
 
         return requireNotNull(invoke(builder, "G")) {
             "Overlay state builder.G() returned null"
         }
+    }
+
+    private fun buildTimeSupplier(): Any {
+        // xz.bv(cr.bc.TIME) — bv.h.O() がデフォルトで設定するもの (l setter, field B)。
+        // mirror 完全性のため再生成して上書きする。
+        return instantiate(
+            className = SUPPLIER_OF_INSTANCE_CLASS,
+            args = arrayOf(getEnumConstant(ROUTE_DETAIL_CLASS, "TIME")),
+        )
+    }
+
+    private fun buildEmptyImmutableList(): Any {
+        return getStaticField(EMPTY_IMMUTABLE_LIST_CLASS, "a")
+    }
+
+    /**
+     * `bp.e.SELECTED_WITH_TRAFFIC` を 1 つ + 残りを `UNSELECTED_WITH_TRAFFIC` で埋めた
+     * `er<bp.e>` を返す。selected index 0 を前提としている (be.f(0, ...) 側と整合)。
+     */
+    private fun buildSelectedRouteEnumList(routeCount: Int): Any {
+        val selected = getEnumConstant(ROUTE_TEXTURE_TYPE_CLASS, "SELECTED_WITH_TRAFFIC")
+        val unselected = getEnumConstant(ROUTE_TEXTURE_TYPE_CLASS, "UNSELECTED_WITH_TRAFFIC")
+        val items = List(routeCount) { index ->
+            if (index == 0) selected else unselected
+        }
+        return requireNotNull(
+            invokeStatic(
+                className = IMMUTABLE_LIST_CLASS,
+                methodName = "p",
+                args = arrayOf(items),
+            ),
+        ) { "ImmutableList.copyOf returned null for bp.e" }
+    }
+
+    /**
+     * Upper seam (`vd.f.i(to.a, to.a)`) に渡す `to.a` を組み立てる。
+     *
+     * SDK 内部 caller (`tn.aa.n()`) と等価な構造を反射で再現することで、
+     * `te.d.i()` 経由で `tn.o.i()` (NavigationMapController) を含む全
+     * `tn.s` listener を駆動する。これにより lower seam 単独では届かない
+     * ManeuverPanel / ETA / callout / camera fit 等の UI 要素も SDK 側の
+     * 描画ロジックがカバーしてくれる。
+     *
+     * グラフ:
+     *   to.a (= sm.h navState を持つ UI state)
+     *     └ sm.h (sm.g builder 経由)
+     *         └ sm.m (sm.l builder 経由)
+     *             ├ br.be routes container (= [buildRouteOverlayState] と同じ az[])
+     *             └ rf.b[] navGuidanceStates (各 az に 1 対 1 対応)
+     *                 └ rf.b.b = az / .c = synthetic bl (current step) / .k = true (isOnRoute)
+     */
+    fun buildNavigationUiState(routes: List<GoogleRoute>): Any {
+        require(routes.isNotEmpty()) { "routes must not be empty" }
+
+        val artifacts = routes.map(::buildRouteArtifacts)
+        val routeContainer = requireNotNull(
+            invokeStatic(
+                className = ROUTE_LIST_CLASS,
+                methodName = "f",
+                args = arrayOf(0, artifacts.map { it.azRoute }),
+            ),
+        ) { "RouteList factory returned null" }
+
+        val navStatesArrayClass = declaredClass(NAV_GUIDANCE_STATE_CLASS)
+        val navStatesArray = java.lang.reflect.Array.newInstance(navStatesArrayClass, artifacts.size)
+        artifacts.forEachIndexed { index, artifact ->
+            java.lang.reflect.Array.set(navStatesArray, index, buildNavGuidanceState(artifact))
+        }
+
+        val smL = instantiate(SM_L_CLASS, emptyArray<Any>())
+        setField(smL, "a", routeContainer)
+        setField(smL, "b", navStatesArray)
+        // c = -1 (betterRouteIndex), d = Long.MAX_VALUE (nextGuidanceTime), e = null (acn.ko) は
+        // sm.l のフィールド初期化子で十分。
+
+        val smM = instantiate(SM_M_CLASS, arrayOf(smL))
+
+        val smG = instantiate(SM_G_CLASS, emptyArray<Any>())
+        setField(smG, "j", smM)
+        // a = null (dh.o myLocation), b = null (currentRoadName), c = true (dataConnectionReady),
+        // d = false (gpsReady) は sm.c のフィールド初期化子で十分。
+        // e〜i (boolean group) も sm.g のデフォルト false で問題ない。
+
+        val smH = instantiate(SM_H_CLASS, arrayOf(smG))
+
+        val toABuilder = instantiate(TO_A_BUILDER_CLASS, emptyArray<Any>())
+        // c() は sm.h を builder.i にセットし、to.b (preserved instance state) が
+        // null の場合はそのまま return する。p (to.b) を渡さない設計なので問題ない。
+        invoke(toABuilder, "c", smH)
+        return requireNotNull(invoke(toABuilder, "a")) {
+            "to.a builder.a() returned null"
+        }
+    }
+
+    private fun shiftRouteForVerification(
+        route: GoogleRoute,
+        longitudeShift: Double,
+    ): GoogleRoute {
+        // 進行方向の真横にズラすため経度方向にシフトする。
+        // 緯度シフトだと進行方向 (= 視野奥) にズレて 3D pitch 表示で見えなくなることがある。
+        fun RoutePoint.shifted() =
+            copy(longitude = longitude + longitudeShift)
+        return route.copy(
+            origin = route.origin.shifted(),
+            destination = route.destination.shifted(),
+            geometry = route.geometry.map { it.shifted() }.toImmutableList(),
+        )
     }
 
     private fun buildShowAllSupplier(): Any {
@@ -66,11 +204,37 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
         )
     }
 
-    private fun buildRoute(route: GoogleRoute): Any {
+    private fun buildRouteArtifacts(originalRoute: GoogleRoute): RouteArtifacts {
+        // 動作確認時は VERIFICATION_LONGITUDE_SHIFT_DEGREES != 0.0 にして、
+        // 注入経路の polyline と自前 polygon を視覚的に分離する。
+        // 確認後は必ず 0.0 に戻すこと。
+        val route = if (VERIFICATION_LONGITUDE_SHIFT_DEGREES != 0.0) {
+            shiftRouteForVerification(originalRoute, VERIFICATION_LONGITUDE_SHIFT_DEGREES)
+        } else {
+            originalRoute
+        }
+
+        val polylinePoints = route.geometry.ifEmpty {
+            listOf(route.origin, route.destination)
+        }
+        val syntheticStep = buildSyntheticStep(
+            destination = polylinePoints.last(),
+            lastVertexIndex = polylinePoints.lastIndex,
+        )
+        val azRoute = buildAzRoute(route, polylinePoints, syntheticStep)
+
+        return RouteArtifacts(azRoute = azRoute, syntheticStep = syntheticStep)
+    }
+
+    private fun buildAzRoute(
+        route: GoogleRoute,
+        polylinePoints: List<RoutePoint>,
+        syntheticStep: Any,
+    ): Any {
         val ca = instantiate(
             className = CA_CLASS,
             args = arrayOf(
-                getStaticField(KG_CLASS, "A"),
+                buildKgWithOneLeg(),
                 false,
             ),
         )
@@ -78,10 +242,6 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
             className = AW_CLASS,
             args = arrayOf(ca),
         )
-
-        val polylinePoints = route.geometry.ifEmpty {
-            listOf(route.origin, route.destination)
-        }
 
         setField(aw, "i", buildPolylineFromPoints(polylinePoints))
         setField(aw, "e", getEnumConstant(ROUTE_MODE_CLASS, "DRIVE"))
@@ -96,10 +256,19 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
         // aw.z は az.M (hv proto) に伝播し、az.W() などで `M.a` (bitmask) が読まれる。
         // proto の default singleton (hv.w) を入れて null 参照を回避する。
         setField(aw, "z", getStaticField(GUIDANCE_TRIP_PROTO_CLASS, "w"))
+        // aw.m は az.E (br.ab abstract) に伝播し、`cq.ay.b(az)` が
+        // `azVar.E.d().toSeconds()` を呼ぶ (m() の leg-loop で `aVarB.h(cq.ay.b(azVar))` 内)。
+        // br.j(Duration a, Duration b) を a=ZERO, b=null で埋めて `d()=a=ZERO` で 0 秒返す。
+        setField(aw, "m", instantiate(BR_J_CLASS, arrayOf(java.time.Duration.ZERO, java.time.Duration.ZERO)))
         // bo.v.a (DRIVE/TWO_WHEELER 経路) は azVar.l().length == azVar.T() - 1 を要求する。
         // azVar.l() は this.i (= aw.h) を bl.d == zo.l.DESTINATION でフィルタした結果。
         // 2 waypoints (origin + destination) なら 1 step が必要。
-        setField(aw, "h", buildSyntheticStepArray(lastVertexIndex = polylinePoints.lastIndex))
+        // upper seam 側でも同じ step instance を rf.b.c (current step) として共有する必要があるため、
+        // 単一インスタンスを array にラップしてからセットする。
+        val stepArrayClass = declaredClass(STEP_CLASS)
+        val stepArray = java.lang.reflect.Array.newInstance(stepArrayClass, 1)
+        java.lang.reflect.Array.set(stepArray, 0, syntheticStep)
+        setField(aw, "h", stepArray)
 
         return instantiate(
             className = AZ_CLASS,
@@ -107,16 +276,39 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
         )
     }
 
+    /**
+     * `rf.b` (NavGuidanceState) を 1 route 分組み立てる。
+     *
+     * - `rf.b.b` = 対応する `az` route
+     * - `rf.b.c` = 同 route の `az.i[0]` と同一インスタンスの synthetic bl
+     *   (`az.U(bl)` identity check が要求するため)
+     * - `rf.b.k` = true (isOnRoute) → `sm.h.b()` が「メッセージ表示中」と判定
+     *   しないようにする
+     * - その他 ab フィールド (i, j) は `rf.a` のコンストラクタが
+     *   Duration.ofSeconds(-1) ベースで埋めてくれる
+     */
+    private fun buildNavGuidanceState(artifacts: RouteArtifacts): Any {
+        val rfA = instantiate(
+            className = NAV_GUIDANCE_BUILDER_CLASS,
+            args = arrayOf(artifacts.azRoute),
+        )
+        setField(rfA, "b", artifacts.syntheticStep)
+        // c (rerouting bool) = false default。
+        // d/e/f/g/h (各種 int = -1) はビルダー初期化子で OK。
+        // k (isOnRoute) を true にしないと sm.h 経由の各種判定が「経路逸脱」扱いになる。
+        findField(rfA.javaClass, "k").setBoolean(rfA, true)
+        // l (routeCompletedSuccessfully) = false default。
+        // m (dh.v location) = null。location なしでも descent パイプラインが許容する想定。
+
+        return instantiate(
+            className = NAV_GUIDANCE_STATE_CLASS,
+            args = arrayOf(rfA),
+        )
+    }
+
     private fun buildPolylineFromPoints(points: List<me.matsumo.onenavi.core.model.RoutePoint>): Any {
-        val mapcorePoints = points.map { point ->
-            instantiate(
-                className = MAPCORE_POINT_CLASS,
-                args = arrayOf(
-                    toMapcoreCoordinate(point.latitude),
-                    toMapcoreCoordinate(point.longitude),
-                ),
-            )
-        }
+        // 各 vertex を Mercator 投影された mapcore.z に変換する (詳細は buildMapcorePoint)。
+        val mapcorePoints = points.map(::buildMapcorePoint)
 
         val encodedPoints = requireNotNull(
             invokeStatic(
@@ -136,40 +328,98 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
     }
 
     /**
-     * `bo.v.a` の DRIVE/TWO_WHEELER 経路で要求される `bl[]` (steps) を 1 要素だけ合成する。
+     * `br.bl` (step) を `br.bk` builder 経由で正規に構築する。
      *
-     * `bl` の通常コンストラクタ (`bk` builder 経由) は zo.l, hq, hs, mapcore.z, list 多数を
-     * 必須とするため、`Unsafe.allocateInstance` でコンストラクタを skip し、
-     * フィルタ (`az.ac`) と marker placement で読まれる field のみを最小限埋める。
+     * 当初は `Unsafe.allocateInstance` でコンストラクタを skip し最小フィールドだけ埋めて
+     * いたが、upper seam (`vd.f.i` → `te.d.i` → `ur.a.i` → `tp.c.b` → `tp.a.<init>` →
+     * `tp.e.<init>` → `tp.a.o`) が `bl.p` (`SpannableString`) など bk ctor でしか
+     * 初期化されない field を `.toString()` で読むため、null 参照で NPE する。
+     *
+     * bk ctor は `q/r/s/t/u/E/F/H` を `lr.a` (空 ImmutableList) で初期化するため
+     * 呼び出し側で個別に埋める必要はない。bl ctor 側で `xz.ar.q(...)` 必須なのは:
+     *   a (zo.l), b (acn.hq), c (acn.hs), f (mapcore.z), i (String) と各 List 群。
      */
-    private fun buildSyntheticStepArray(lastVertexIndex: Int): Any {
-        val stepClass = declaredClass(STEP_CLASS)
-        val step = allocateInstanceUnsafe(stepClass)
-        // az.ac() フィルタが bl.d == zo.l.DESTINATION のみ通すため必須。
-        setField(step, "d", getEnumConstant(MANEUVER_CLASS, "DESTINATION"))
-        // bo.v.a の marker placement で blVarArrL[i].k が listQ (= polyline vertices) の
-        // インデックスとして読まれる。destination は polyline 末端の vertex。
-        setIntField(step, "k", lastVertexIndex)
-        // az.<init> 内で `blVar5.A.isEmpty()` が `O` flag 計算経路で呼ばれるため non-null List 必須。
-        // 同じ List 型の final field (w, x, y, z, B, C, I) も後続 pipeline で
-        // 参照される可能性が高いため、安全側に空リストで埋める。
-        listOf("w", "x", "y", "z", "A", "B", "C", "I").forEach { fieldName ->
-            setField(step, fieldName, Collections.emptyList<Any>())
-        }
-        // bq.ag.<init> が `((lr) blVar.K).c` で size を読むため、er 型 (Guava ImmutableList) を
-        // 空インスタンス (lr.a) で埋める。
-        val emptyImmutableList = getStaticField(EMPTY_IMMUTABLE_LIST_CLASS, "a")
-        setField(step, "K", emptyImmutableList)
+    private fun buildSyntheticStep(
+        destination: RoutePoint,
+        lastVertexIndex: Int,
+    ): Any {
+        val bk = instantiate(STEP_BUILDER_CLASS, emptyArray<Any>())
+        // a: zo.l — bo.v.a (decoration pipeline) の `xz.ar.a(blVarArrL.length == azVar.T()-1)`
+        // assertion (line 125) が DESTINATION step 必須。az.l() は bl.d == DESTINATION のみ通す。
+        // bo.ac.m() (polyline body pipeline) も `azVar.j() != null` 経路に入るため、
+        // kg.g に最低 1 entry の gh leg を持たせて asVarArr.length>=1 にする
+        // (buildKgWithOneLeg を参照)。
+        setField(bk, "a", getEnumConstant(MANEUVER_CLASS, "DESTINATION"))
+        // b/c は実際の guidance では右左折情報。今回は表示用ダミーで unspecified/unknown を入れる。
+        setField(bk, "b", getEnumConstant(MANEUVER_SIDE_CLASS, "SIDE_UNSPECIFIED"))
+        setField(bk, "c", getEnumConstant(MANEUVER_TURN_CLASS, "TURN_UNKNOWN"))
+        // f: mapcore.z — destination の lat/lng。bl.c に伝播し各種 marker placement で使われる。
+        setField(bk, "f", buildMapcorePoint(destination))
+        // i: String — bl.j (description) になり、bl ctor 内で SpannableString(str) として bl.p を作る。
+        // 空文字でも SpannableString("") は valid (length 0)。
+        setField(bk, "i", "")
+        // h: int → bl.k = polyline vertex index。bo.v.a の destination marker placement が読む。
+        setIntField(bk, "h", lastVertexIndex)
+        // g: int → bl.i = step index。az.U(bl) の identity check で `az.i[bl.i] === bl` 比較に使われる。
+        // 単一 step なので 0 (bk.g は int = 0 default で OK だが明示する)。
+        setIntField(bk, "g", 0)
 
-        val array = java.lang.reflect.Array.newInstance(stepClass, 1)
-        java.lang.reflect.Array.set(array, 0, step)
-        return array
+        return instantiate(STEP_CLASS, arrayOf(bk))
+    }
+
+    private fun buildMapcorePoint(point: RoutePoint): Any {
+        // mapcore.z は Mercator 投影された int 座標 (a=mercator x, b=mercator y) を保持する。
+        // `z(int, int)` コンストラクタを直接呼ぶと値が無加工で a/b に入り、レンダラ側で
+        // 完全に座標系が狂う (polyline が画面外として culled される)。
+        // 正しいルート: `z.c(double lat, double lng)` static factory が `s()` → `u()` で
+        // Mercator 変換した上で `q(int, int)` を呼んで a/b に設定する。
+        return requireNotNull(
+            invokeStatic(
+                className = MAPCORE_POINT_CLASS,
+                methodName = "c",
+                args = arrayOf(point.latitude, point.longitude),
+            ),
+        ) { "mapcore.z.c(lat, lng) returned null" }
     }
 
     /**
      * `br.m` (= bh の concrete) の minimal インスタンス。
      * `aw.c` -> `az.u` に伝播し、`cr.e.a` から `.a` (er) が読まれる。
      */
+    /**
+     * 最小構成の `acn.kg` (DirectionsTrip proto) を生成する。
+     *
+     * default singleton `kg.A` は `g` (= List<gh> legs) が empty bz のため、
+     * `br.ca` ctor で `b = new br.as[0]` となり `bo.ac.m()` の leg-loop が
+     * 0 iterate に終わって polyline body 用の `cq.aw` が一切生成されない。
+     *
+     * ここでは
+     *   1. private kg() ctor を reflection で叩いて新 instance を作成
+     *   2. `kg.c()` を呼んで `g` を mutable bz に差し替え (= `bi.F(g)`)
+     *   3. private gh() ctor で default-constructed gh (`gh.a == 0`) を 1 個作って g.add
+     *
+     * gh.a == 0 なので `br.as` ctor の bit-check (16/32/128 等) は全て false に転び、
+     * `as.b()` も false で `bo.ac.m()` line 970 が `alVarB = azVar.g (=DRIVE)` 経路に倒れる。
+     * `as.a()` は null check されて `id.m` default にフォールバックする。
+     *
+     * これで `kg.g.size()==1`, `asVarArr.length==1`, `listP.get(0).d() = aiVar slice` で
+     * `cq.aw.b(aiVarD, DRIVE)` が呼ばれて 1 本の polyline aw が ayVar.i に積まれる。
+     *
+     * az ctor (`br/az.java` 149) のアサーション `d.e() == m.size() - 1` は
+     * d.e()=1, m.size()=2 (origin+dest waypoints) で 1==1 で成立する。
+     */
+    private fun buildKgWithOneLeg(): Any {
+        val kgInstance = instantiate(KG_CLASS, emptyArray<Any>())
+        // kg.g (= dj.a immutable singleton) を `bi.F(g)` で mutable copy に差し替える。
+        invoke(kgInstance, "c")
+        val ghInstance = instantiate(GH_CLASS, emptyArray<Any>())
+        @Suppress("UNCHECKED_CAST")
+        val mutableLegs = findField(kgInstance.javaClass, "g")
+            .get(kgInstance) as MutableList<Any>
+        mutableLegs.add(ghInstance)
+        return kgInstance
+    }
+
     private fun buildEmptyTrafficData(): Any {
         val emptyEr = getStaticField(EMPTY_IMMUTABLE_LIST_CLASS, "a")
         val emptyEz = getStaticField(EMPTY_IMMUTABLE_MAP_CLASS, "b")
@@ -177,19 +427,6 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
             className = TRAFFIC_DATA_CLASS,
             args = arrayOf(emptyEr, emptyEr, emptyEz),
         )
-    }
-
-    private fun allocateInstanceUnsafe(targetClass: Class<*>): Any {
-        val unsafeClass = declaredClass("sun.misc.Unsafe")
-        val theUnsafeField = unsafeClass.getDeclaredField("theUnsafe")
-        theUnsafeField.isAccessible = true
-        val unsafe = requireNotNull(theUnsafeField.get(null)) {
-            "sun.misc.Unsafe.theUnsafe was null"
-        }
-        val allocateInstance = unsafeClass.getMethod("allocateInstance", Class::class.java)
-        return requireNotNull(allocateInstance.invoke(unsafe, targetClass)) {
-            "Unsafe.allocateInstance returned null for ${targetClass.name}"
-        }
     }
 
     private fun buildMinimalIj(): Any {
@@ -244,10 +481,6 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
                 args = arrayOf(label, latLng),
             ),
         ) { "Waypoint factory returned null" }
-    }
-
-    private fun toMapcoreCoordinate(degrees: Double): Int {
-        return (degrees * MAPCORE_SCALE).roundToInt()
     }
 
     private fun instantiate(
@@ -331,10 +564,12 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
         className: String,
         fieldName: String,
     ): Any {
-        return findField(
-            targetClass = declaredClass(className),
-            fieldName = fieldName,
-        ).get(null)
+        return requireNotNull(
+            findField(
+                targetClass = declaredClass(className),
+                fieldName = fieldName,
+            ).get(null),
+        ) { "Static field is null: $className#$fieldName" }
     }
 
     private fun getEnumConstant(
@@ -343,7 +578,10 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
     ): Any {
         val enumClass = declaredClass(className)
         require(enumClass.isEnum) { "Class is not enum: $className" }
-        return enumClass.enumConstants.firstOrNull { constant ->
+        val constants = requireNotNull(enumClass.enumConstants) {
+            "Enum class has no constants: $className"
+        }
+        return constants.firstOrNull { constant ->
             (constant as Enum<*>).name == constantName
         } ?: error("Enum constant not found: class=$className constant=$constantName")
     }
@@ -406,7 +644,14 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
     }
 
     companion object {
-        private const val MAPCORE_SCALE = 10_000_000.0
+        /**
+         * 動作確認用: bridge 経由で注入する route 全体をこの度数だけ東西にシフトする。
+         *
+         * 0.0 で無効。0.001 で約 80m (日本付近)、0.005 で約 400m シフト。
+         * 自前 polyline と bridge 経由 polyline を真横に並べて視覚的に区別するためのデバッグ用。
+         * **本番では必ず 0.0 に戻すこと。**
+         */
+        private const val VERIFICATION_LONGITUDE_SHIFT_DEGREES = 0.0
 
         private const val CA_CLASS =
             "com.google.android.libraries.navigation.internal.br.ca"
@@ -430,6 +675,10 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
             "com.google.android.libraries.navigation.internal.yb.er"
         private const val KG_CLASS =
             "com.google.android.libraries.navigation.internal.acn.kg"
+        private const val GH_CLASS =
+            "com.google.android.libraries.navigation.internal.acn.gh"
+        private const val BR_J_CLASS =
+            "com.google.android.libraries.navigation.internal.br.j"
         private const val IJ_CLASS =
             "com.google.android.libraries.navigation.internal.aee.ij"
         private const val HP_CLASS =
@@ -442,10 +691,24 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
             "com.google.android.libraries.navigation.internal.xz.bv"
         private const val ROUTE_VISIBILITY_CLASS =
             "com.google.android.libraries.navigation.internal.cr.bb"
+        private const val ROUTE_DETAIL_CLASS =
+            "com.google.android.libraries.navigation.internal.cr.bc"
+        private const val ROUTE_TEXTURE_TYPE_CLASS =
+            "com.google.android.libraries.navigation.internal.bp.e"
+        private const val BV_E_CLASS =
+            "com.google.android.libraries.navigation.internal.bv.e"
+        private const val OPTIONAL_ABSENT_CLASS =
+            "com.google.android.libraries.navigation.internal.xz.a"
         private const val STEP_CLASS =
             "com.google.android.libraries.navigation.internal.br.bl"
+        private const val STEP_BUILDER_CLASS =
+            "com.google.android.libraries.navigation.internal.br.bk"
         private const val MANEUVER_CLASS =
             "com.google.android.libraries.navigation.internal.zo.l"
+        private const val MANEUVER_SIDE_CLASS =
+            "com.google.android.libraries.navigation.internal.acn.hq"
+        private const val MANEUVER_TURN_CLASS =
+            "com.google.android.libraries.navigation.internal.acn.hs"
         private const val EMPTY_IMMUTABLE_LIST_CLASS =
             "com.google.android.libraries.navigation.internal.yb.lr"
         private const val EMPTY_IMMUTABLE_MAP_CLASS =
@@ -454,5 +717,19 @@ internal class NavigationViewSyntheticRouteOverlayFactory {
             "com.google.android.libraries.navigation.internal.br.m"
         private const val GUIDANCE_TRIP_PROTO_CLASS =
             "com.google.android.libraries.navigation.internal.aee.hv"
+        private const val NAV_GUIDANCE_BUILDER_CLASS =
+            "com.google.android.libraries.navigation.internal.rf.a"
+        private const val NAV_GUIDANCE_STATE_CLASS =
+            "com.google.android.libraries.navigation.internal.rf.b"
+        private const val SM_L_CLASS =
+            "com.google.android.libraries.navigation.internal.sm.l"
+        private const val SM_M_CLASS =
+            "com.google.android.libraries.navigation.internal.sm.m"
+        private const val SM_G_CLASS =
+            "com.google.android.libraries.navigation.internal.sm.g"
+        private const val SM_H_CLASS =
+            "com.google.android.libraries.navigation.internal.sm.h"
+        private const val TO_A_BUILDER_CLASS =
+            "com.google.android.libraries.navigation.internal.to.a\$a"
     }
 }

@@ -77,6 +77,13 @@ class NavigationViewReflectionBridge(
     private var sessionPrimed: Boolean = false
     private var pendingRoutes: List<GoogleRoute> = emptyList()
     private var bridgeBroken: Boolean = false
+    /**
+     * 直前に upper seam に流した `to.a` を保持する。
+     * `vd.f.i(newState, oldState)` の oldState 引数として再利用し、
+     * SDK 内部 `tn.o.i()` の delta 計算 (新旧比較 → camera fit / panel update) を
+     * 正しく成立させる。最初の注入時は null。
+     */
+    private var lastInjectedNavUiState: Any? = null
 
     private val _health = MutableStateFlow<BridgeHealth>(
         if (enabled) BridgeHealth.NotAttached else BridgeHealth.Disabled,
@@ -102,6 +109,7 @@ class NavigationViewReflectionBridge(
             sessionPrimed = false
             sessionRequested = false
             pendingRoutes = emptyList()
+            lastInjectedNavUiState = null
             // detach は state リセットなので、次回 attach で再試行できるよう broken も降ろす。
             bridgeBroken = false
             if (enabled) {
@@ -131,10 +139,12 @@ class NavigationViewReflectionBridge(
                 sessionRequested = false
                 sessionPrimed = false
                 pendingRoutes = emptyList()
+                lastInjectedNavUiState = null
                 return
             }
             runCatching {
                 clearRouteOverlayLocked(clearPending = true)
+                lastInjectedNavUiState = null
                 sessionRequested = false
                 sessionPrimed = false
                 Napier.i(tag = TAG) { "[NAVDBG] bridge.stopRequested" }
@@ -182,6 +192,10 @@ class NavigationViewReflectionBridge(
             )
         } else {
             _health.value = BridgeHealth.Healthy
+            // bo.ac の async executor を logging proxy で包む。silent な NPE を炙り出す。
+            NavigationViewBridgeDiagnostics.installExecutorLogging(
+                resolvedHandles.overlayController,
+            )
         }
 
         maybePrimeSessionLocked()
@@ -224,6 +238,17 @@ class NavigationViewReflectionBridge(
             return
         }
 
+        // 順序が重要:
+        //  1) upper seam (tn.o.i) を先に走らせる
+        //     → ManeuverPanel / ETA / camera fit など SDK 内部 UI listener が起動。
+        //     → tn.o.i 内部で `bb.e.a(dVarO.G())` が呼ばれ bv.h が一旦投入される。
+        //  2) その後 enhanced lower seam (bp.e[] 含む) で `bb.e.a(bv.h)` を再投入。
+        //     → bo.ac.q は最新の bv.h を読むので、こちらの D() 補強済みが最終勝者になる。
+        //     → tn.o.i 段階では bp.e[] 空のため bo.v.a の `for (br.av : list)` が
+        //       0 回 iterate して polyline 描画されないが、再投入で arrayListE に
+        //       SELECTED な bs.c が入って polyline が出るはず。
+        maybeApplyNavigationUiStateLocked(routes, activeHandles)
+
         runCatching {
             val overlayState = routeOverlayFactory.buildRouteOverlayState(routes)
             activeHandles.renderRouteOverlayMethod.invoke(
@@ -234,7 +259,77 @@ class NavigationViewReflectionBridge(
             Napier.i(tag = TAG) {
                 "[NAVDBG] bridge.routeOverlay applied: routes=${routes.size}"
             }
+            // 1.5s 後に bo.ac.U を覗いて bq.ag 配列の実体を確認する。
+            // 0 → build pipeline で死亡 / >0 → render pipeline 側の問題。
+            NavigationViewBridgeDiagnostics.inspectRenderState(
+                activeHandles.overlayController,
+            )
+            // 1.7s 後に各 ov.ad に対して l() を強制 invoke。
+            // bq.e.b() polyline path で `adVarO2.l()` が抜けている疑いの検証。
+            NavigationViewBridgeDiagnostics.forcePolylineVisibility(
+                activeHandles.overlayController,
+            )
+            // 1.9s 後に bo.ac.q の上流ゲート (ao Optional / be.c() travelMode)
+            // を inspect。polyline body 描画 (bo.ac.m) が呼ばれない原因切り分け用。
+            NavigationViewBridgeDiagnostics.inspectInjectionPipelineGating(
+                activeHandles.overlayController,
+            )
+            // 2.2s 後に bo.ac.m() を直接 reflection 呼び出し、
+            // List<zd.bf>(polyline render Future 群) の size を観測。
+            NavigationViewBridgeDiagnostics.directInvokeM(
+                activeHandles.overlayController,
+            )
+            // 2.5s 後に cq.aw を自前構築して bo.ac.v() を直接呼ぶ。
+            // m() が空 List 返した場合の最終手段で polyline body 描画の force-render。
+            NavigationViewBridgeDiagnostics.directInvokeV(
+                activeHandles.overlayController,
+            )
         }.onFailure { error -> markBrokenLocked(phase = "routeOverlay", error = error) }
+    }
+
+    private fun maybeApplyNavigationUiStateLocked(
+        routes: List<GoogleRoute>,
+        activeHandles: ReflectionHandles,
+    ) {
+        val updateMethod = activeHandles.updateUiStateMethod
+        val target = activeHandles.mapController
+        if (updateMethod == null || target == null) {
+            Napier.w(tag = TAG) {
+                "[NAVDBG] bridge.navUiState skipped: " +
+                    "mapController=${target != null} method=${updateMethod != null}"
+            }
+            return
+        }
+
+        // tn.o.i() の polyline render block (`this.h.a(dVarO.G())`) は
+        // `aw().a()` でゲートされている。これは `tn.o` 親クラス `tn.q.a` (= we.bg) の
+        // `boolean a` フィールドを返すもので、本来は host-started observable
+        // (ng.m<Boolean>, dj.h) の値が反映される。
+        //
+        // bridge attach タイミングでは NavigationView の lifecycle が host-started に
+        // 入っていない (= 描画用 GL surface が完全に初期化されていない) ことがあり、
+        // そのままだと render block が常時 skip されて polyline が出ない。
+        // 観測したら必ず true に強制する。
+        ensureHostStartedFlagLocked(target)
+
+        runCatching {
+            val newState = routeOverlayFactory.buildNavigationUiState(routes)
+            // tn.o.i(newState, oldState) を直接呼ぶ。te.d.i() / vd.f.i() 経由で fan-out すると
+            // ur.a (ETA panel listener) が deep proto graph を要求し落ちるため、
+            // route rendering を司る tn.o (NavigationMapController) 単独に絞る。
+            // oldState は前回注入分 (初回は null)。
+            updateMethod.invoke(target, newState, lastInjectedNavUiState)
+            lastInjectedNavUiState = newState
+        }.onSuccess {
+            val firstRoute = routes.first()
+            val vertexCount = firstRoute.geometry.size
+            Napier.i(tag = TAG) {
+                "[NAVDBG] bridge.navUiState applied: routes=${routes.size} " +
+                    "firstRouteVertices=$vertexCount " +
+                    "firstVertex=${firstRoute.geometry.firstOrNull()} " +
+                    "lastVertex=${firstRoute.geometry.lastOrNull()}"
+            }
+        }.onFailure { error -> markBrokenLocked(phase = "navUiState", error = error) }
     }
 
     private fun clearRouteOverlayLocked(clearPending: Boolean) {
@@ -297,10 +392,30 @@ class NavigationViewReflectionBridge(
                 "overlayController field was null"
             }
 
+            // te.d (uiCoordinator) は private final tn.o f を持ち、これが NavigationMapController。
+            // vd.f.i() / te.d.i() 経由で全 tn.s listener に通知すると ur.a (ETA panel) などが
+            // proto graph を要求し ArrayIndexOutOfBoundsException で落ちるため、
+            // tn.o.i() を直接呼んで route rendering 系のみ駆動する。
+            val mapController = findFieldOrNull(
+                targetClass = uiCoordinator.javaClass,
+                typeName = MAP_CONTROLLER_TYPE,
+                fallbackName = "f",
+            )?.get(uiCoordinator)
+            val mapControllerUpdateMethod = if (mapController != null) {
+                findMethodOrNull(
+                    targetClass = mapController.javaClass,
+                    methodName = "i",
+                    parameterCount = 2,
+                )
+            } else {
+                null
+            }
+
             ReflectionHandles(
                 stateController = stateController,
                 uiCoordinator = uiCoordinator,
                 overlayController = overlayController,
+                mapController = mapController,
                 startSessionMethod = findMethod(
                     targetClass = stateController.javaClass,
                     methodName = "a",
@@ -316,11 +431,7 @@ class NavigationViewReflectionBridge(
                     methodName = "b",
                     parameterCount = 0,
                 ),
-                updateUiStateMethod = findMethodOrNull(
-                    targetClass = stateController.javaClass,
-                    methodName = "i",
-                    parameterCount = 2,
-                ),
+                updateUiStateMethod = mapControllerUpdateMethod,
             )
         }.onFailure { error ->
             val message = "[NAVDBG] bridge.resolveHandles failed: " +
@@ -336,6 +447,49 @@ class NavigationViewReflectionBridge(
                 cause = "${error.javaClass.simpleName}: ${error.message}",
             )
         }.getOrNull()
+    }
+
+    /**
+     * `tn.o` 親 (`tn.q`) の `private tn.r a` field を辿って `we.bg.a` (boolean) を強制 true 化する。
+     *
+     * `tn.o.i()` の polyline render block は `aw().a()` (= `we.bg.a()`) でゲートされていて、
+     * これは本来 `ng.m<Boolean>` (= `dj.h`, host-started observable) の値で更新される。
+     * bridge attach 直後はこの observable がまだ true を emit していない場合があり、
+     * そのままでは `bb.e.a(dVarO.G())` 呼び出しが skip され polyline が描画されない。
+     *
+     * ManeuverPanel / ETA callout はこのゲートに依存しない別経路で render されるため
+     * gate が false でも見える、という非対称な状況になる。
+     */
+    private fun ensureHostStartedFlagLocked(mapController: Any) {
+        runCatching {
+            // tn.o は tn.q を継承しており、tn.q.a (private tn.r) を保持する。
+            // tn.r の唯一の実装は we.bg で、その `a` フィールド (boolean) を直接書く。
+            val tnQClass = mapController.javaClass.superclass ?: return
+            val tnQA = tnQClass.declaredFields
+                .firstOrNull { it.name == "a" }
+                ?: return
+            tnQA.isAccessible = true
+            val tnRImpl = tnQA.get(mapController) ?: return
+
+            val flagField = tnRImpl.javaClass.declaredFields
+                .firstOrNull { it.name == "a" && it.type == java.lang.Boolean.TYPE }
+                ?: return
+            flagField.isAccessible = true
+            val previous = flagField.getBoolean(tnRImpl)
+            if (!previous) {
+                flagField.setBoolean(tnRImpl, true)
+            }
+            Napier.i(tag = TAG) {
+                "[NAVDBG] bridge.hostStartedFlag previous=$previous now=true " +
+                    "impl=${tnRImpl.javaClass.name}"
+            }
+        }.onFailure { error ->
+            // gate を上げられなくても致命ではない (polyline が出ない程度)。
+            // 観測のため warn だけにする。
+            Napier.w(error, tag = TAG) {
+                "[NAVDBG] bridge.hostStartedFlag failed; polyline may stay hidden"
+            }
+        }
     }
 
     private fun markBrokenLocked(phase: String, error: Throwable) {
@@ -361,9 +515,18 @@ class NavigationViewReflectionBridge(
         typeName: String,
         fallbackName: String,
     ): Field {
+        return findFieldOrNull(targetClass, typeName, fallbackName)
+            ?: error("Field not found. type=$typeName fallbackName=$fallbackName")
+    }
+
+    private fun findFieldOrNull(
+        targetClass: Class<*>,
+        typeName: String,
+        fallbackName: String,
+    ): Field? {
         val field = targetClass.declaredFields.firstOrNull { it.type.name == typeName }
             ?: targetClass.declaredFields.firstOrNull { it.name == fallbackName }
-            ?: error("Field not found. type=$typeName fallbackName=$fallbackName")
+            ?: return null
         field.isAccessible = true
         return field
     }
@@ -424,6 +587,7 @@ class NavigationViewReflectionBridge(
         val stateController: Any,
         val uiCoordinator: Any,
         val overlayController: Any,
+        val mapController: Any?,
         val startSessionMethod: Method,
         val renderRouteOverlayMethod: Method,
         val clearRouteOverlayMethod: Method,
@@ -437,6 +601,8 @@ class NavigationViewReflectionBridge(
                 append(uiCoordinator.javaClass.name)
                 append(", overlayController=")
                 append(overlayController.javaClass.name)
+                append(", mapController=")
+                append(mapController?.javaClass?.name ?: "<unresolved>")
                 append(", updateUiState=")
                 append(updateUiStateMethod != null)
             }
@@ -452,5 +618,7 @@ class NavigationViewReflectionBridge(
             "com.google.android.libraries.navigation.internal.te.d"
         private const val OVERLAY_CONTROLLER_TYPE =
             "com.google.android.libraries.navigation.internal.bb.e"
+        private const val MAP_CONTROLLER_TYPE =
+            "com.google.android.libraries.navigation.internal.tn.o"
     }
 }

@@ -177,11 +177,14 @@ internal fun HomeMapsMapEffectContent(
 
     LaunchedEffect(googleMap, routeResults, selectedRouteIndex, screenState) {
         val map = googleMap ?: return@LaunchedEffect
-        overlayObjects.replaceRoutePolylines(
-            googleMap = map,
-            routeResults = routeResults,
-            selectedRouteIndex = selectedRouteIndex,
-        )
+        // [DEBUG] 自前 polyline 描画を一時停止して、SDK reflection bridge 経由で
+        // NavigationView が描画する純正 polyline 単独で見えるかを確認する。
+        // 確認後はコメントアウトを外すこと。
+        // overlayObjects.replaceRoutePolylines(
+        //     googleMap = map,
+        //     routeResults = routeResults,
+        //     selectedRouteIndex = selectedRouteIndex,
+        // )
         overlayObjects.replaceStaticMarkers(
             googleMap = map,
             screenState = screenState,
