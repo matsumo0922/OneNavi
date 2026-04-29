@@ -113,6 +113,7 @@ kotlin {
             implementation(project(":core:resource"))
 
             implementation(project(":feature:home"))
+            implementation(project(":feature:map"))
             implementation(project(":feature:setting"))
             implementation(project(":feature:billing"))
         }

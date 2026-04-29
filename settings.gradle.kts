@@ -31,6 +31,7 @@ include(":core:model")
 include(":core:navigation")
 include(":core:billing")
 include(":feature:home")
+include(":feature:map")
 include(":feature:setting")
 include(":feature:billing")
 

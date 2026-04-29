@@ -10,7 +10,7 @@ import me.matsumo.onenavi.core.ui.animation.NavigationTransitions
 import me.matsumo.onenavi.core.ui.screen.Destination
 import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
 import me.matsumo.onenavi.feature.billing.paywallEntry
-import me.matsumo.onenavi.feature.home.homeEntry
+import me.matsumo.onenavi.feature.map.mapEntry
 import me.matsumo.onenavi.feature.setting.oss.settingLicenseEntry
 import me.matsumo.onenavi.feature.setting.settingEntry
 
@@ -27,7 +27,8 @@ internal fun AppNavHost(
             modifier = modifier,
             backStack = navBackStack,
             entryProvider = entryProvider {
-                homeEntry()
+                // homeEntry()
+                mapEntry()
                 paywallEntry()
                 settingEntry()
                 settingLicenseEntry()
