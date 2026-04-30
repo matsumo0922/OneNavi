@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OneNavi Route Compare (debug)</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <div id="panel">
+      <div class="panel-section">
+        <h3>Sample</h3>
+        <select id="sample-select"></select>
+      </div>
+
+      <div class="panel-section">
+        <h3>Layers</h3>
+        <label class="layer-toggle">
+          <input type="checkbox" id="toggle-external" checked />
+          <span class="swatch" style="background:#1e88e5"></span>
+          External polyline (drive-supporter-api)
+        </label>
+        <label class="layer-toggle">
+          <input type="checkbox" id="toggle-google" checked />
+          <span class="swatch" style="background:#e53935"></span>
+          Routes API split polyline
+        </label>
+        <label class="layer-toggle">
+          <input type="checkbox" id="toggle-waypoints" />
+          <span class="swatch" style="background:#fb8c00"></span>
+          All guide points
+        </label>
+        <label class="layer-toggle">
+          <input type="checkbox" id="toggle-sent" checked />
+          <span class="swatch" style="background:#9c27b0"></span>
+          Sent waypoints (with order)
+        </label>
+      </div>
+
+      <div class="panel-section">
+        <h3>Routes API</h3>
+        <div class="row">
+          <label>案内地点</label>
+          <select id="maneuver-sampling">
+            <option value="none">None</option>
+            <option value="all" selected>All</option>
+            <option value="every2">Every 2nd</option>
+            <option value="every4">Every 4th</option>
+            <option value="every8">Every 8th</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>案内地点外</label>
+          <select id="between-sampling">
+            <option value="none">None</option>
+            <option value="all">All</option>
+            <option value="every2">Every 2nd</option>
+            <option value="every4" selected>Every 4th</option>
+            <option value="every8">Every 8th</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>Chunk size</label>
+          <input id="chunk-size" type="number" min="2" max="25" value="25" />
+        </div>
+        <label class="layer-toggle">
+          <input type="checkbox" id="toggle-heading" checked />
+          Set heading (polyline 接線方向で進行方向を Google に強制)
+        </label>
+        <label class="layer-toggle">
+          <input type="checkbox" id="toggle-via" />
+          Use via waypoints (intermediates を pass-through 扱いに)
+        </label>
+        <button id="btn-fetch">Fetch &amp; Render</button>
+      </div>
+
+      <div class="panel-section">
+        <h3>Status</h3>
+        <div id="status">--</div>
+        <div id="metrics"></div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -3,8 +3,9 @@
 SPEED ?= 60
 FAKE_GPS_DIR := dev-tools/fake-gps
 FAKE_GPS_PORT := 5556
+ROUTE_COMPARE_DIR := dev-tools/route-compare
 
-.PHONY: detekt dhu route-demo-1 clean-dhu fake-gps fake-gps-setup fake-gps-dev fake-gps-forward fake-gps-status fake-gps-stop
+.PHONY: detekt dhu route-demo-1 clean-dhu fake-gps fake-gps-setup fake-gps-dev fake-gps-forward fake-gps-status fake-gps-stop route-compare route-compare-setup route-compare-dev
 
 detekt:
 	./gradlew detekt --auto-correct --continue
@@ -43,3 +44,17 @@ fake-gps-status:
 fake-gps-stop:
 	@curl -s --max-time 3 -X POST http://localhost:$(FAKE_GPS_PORT)/stop | python3 -m json.tool 2>/dev/null || echo "[fake-gps] Not connected"
 	-adb forward --remove tcp:$(FAKE_GPS_PORT)
+
+# ── Route Compare (debug) ──
+
+route-compare-setup:
+	cd $(ROUTE_COMPARE_DIR) && npm install
+	@if [ ! -f $(ROUTE_COMPARE_DIR)/.env ]; then \
+		cp $(ROUTE_COMPARE_DIR)/.env.example $(ROUTE_COMPARE_DIR)/.env; \
+		echo "[route-compare] .env created. Set VITE_GOOGLE_API_KEY in $(ROUTE_COMPARE_DIR)/.env"; \
+	fi
+
+route-compare-dev:
+	cd $(ROUTE_COMPARE_DIR) && npx vite
+
+route-compare: route-compare-setup route-compare-dev
