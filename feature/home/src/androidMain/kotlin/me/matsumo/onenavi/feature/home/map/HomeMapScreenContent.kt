@@ -91,21 +91,14 @@ internal fun HomeMapScreenContent(
     // ナビゲーション中は Navigation SDK が実際に走っているルートで青線を描きたいので、
     // `routeResults` の geometry / congestion を SDK が追従更新している `activeGoogleRoute.geometry`
     // に差し替えた擬似リストに置き換える。代替ルートはナビ中には表示しないため、単一要素のリストになる。
-    val effectiveRouteResults = remember(
-        screenState,
-        routeResults,
-        selectedRouteIndex,
-        activeGoogleRoute,
-    ) {
+    val effectiveRouteResults = remember(screenState, routeResults, selectedRouteIndex, activeGoogleRoute) {
         if (screenState is HomeMapScreenState.Navigating && activeGoogleRoute != null) {
-            val original = routeResults.getOrNull(selectedRouteIndex)
-                ?: routeResults.firstOrNull()
+            val original = routeResults.getOrNull(selectedRouteIndex) ?: routeResults.firstOrNull()
             if (original != null) {
                 persistentListOf(
                     original.copy(
                         item = original.item.copy(
                             geometry = activeGoogleRoute.geometry,
-                            // 再ルート後は元の polyline index を前提にした混雑表示は意味を持たなくなるため外す。
                             congestionSegments = persistentListOf(),
                         ),
                         googleRoute = activeGoogleRoute,

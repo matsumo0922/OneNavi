@@ -155,12 +155,7 @@ internal fun HomeMapsMapEffectContent(
 
     LaunchedEffect(googleMap, mapPadding, hasLocationPermission) {
         val map = googleMap ?: return@LaunchedEffect
-        map.setPadding(
-            mapPadding.left,
-            mapPadding.top,
-            mapPadding.right,
-            mapPadding.bottom,
-        )
+        map.setPadding(mapPadding.left, mapPadding.top, mapPadding.right, mapPadding.bottom)
         map.isBuildingsEnabled = true
         // 自車位置は NavigationView（followMyLocation）に委譲するため自前 puck は描画しない。
         // MyLocation レイヤを有効にしておくことで SDK の chevron が自車として描画される。
@@ -275,12 +270,7 @@ internal fun HomeMapsMapEffectContent(
         )
 
         if (screenState is HomeMapScreenState.RoutePreview) {
-            val routeAnchors = remember(
-                routeResults,
-                screenState,
-                googleMap,
-                viewportState.cameraState,
-            ) {
+            val routeAnchors = remember(routeResults, screenState, googleMap, viewportState.cameraState) {
                 val map = googleMap
                 if (map == null) {
                     persistentListOf()

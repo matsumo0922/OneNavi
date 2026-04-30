@@ -99,7 +99,7 @@ class ExtNavRouteDataSource(
             distanceMeters = distanceMetres,
             geometry = geometry,
             viaRoadNames = persistentListOf(),
-            hasTolls = tollYen != null && tollYen > 0,
+            hasTolls = tollYen != null,
             tollFee = tollYen,
         )
 
