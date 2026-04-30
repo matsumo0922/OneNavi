@@ -15,12 +15,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import me.matsumo.onenavi.feature.map.components.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.MapControls
+import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.rememberMapCameraState
+import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 actual fun MapScreen(modifier: Modifier) {
+    val viewModel = koinViewModel<MapViewModel>()
+
     var allowSheetHide by remember { mutableStateOf(false) }
     var sheetPeekHeight by remember { mutableStateOf(0.dp) }
 
@@ -58,5 +63,24 @@ actual fun MapScreen(modifier: Modifier) {
                 cameraState = cameraState,
             )
         }
+    }
+}
+
+@Composable
+private fun MapScreenContent(
+    screenState: MapScreenState,
+    modifier: Modifier = Modifier,
+) {
+    when (screenState) {
+        is MapScreenState.Browsing -> {
+            MapBrowsingContent(
+                modifier = modifier,
+            )
+        }
+        is MapScreenState.PlaceDetails -> TODO()
+        is MapScreenState.SearchResultsList -> TODO()
+        is MapScreenState.RoutePreview -> TODO()
+        is MapScreenState.Navigating -> TODO()
+        is MapScreenState.Arrived -> TODO()
     }
 }
