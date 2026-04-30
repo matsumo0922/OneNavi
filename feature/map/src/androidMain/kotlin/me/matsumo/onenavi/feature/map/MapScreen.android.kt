@@ -30,7 +30,7 @@ import com.google.android.gms.maps.GoogleMap
 import me.matsumo.onenavi.feature.map.components.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.MapControls
 import me.matsumo.onenavi.feature.map.components.MapMarker
-import me.matsumo.onenavi.feature.map.components.bottomsheet.MapSelectedResultSheet
+import me.matsumo.onenavi.feature.map.components.bottomsheet.MapPlaceDetailSheet
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
@@ -180,7 +180,7 @@ private fun MapScreenBottomSheetContent(
     when (screenState) {
         is MapScreenState.Browsing -> Unit
         is MapScreenState.PlaceDetails -> {
-            MapSelectedResultSheet(
+            MapPlaceDetailSheet(
                 modifier = modifier,
                 selectedResult = screenState.place,
                 onUiEvent = onUiEvent,

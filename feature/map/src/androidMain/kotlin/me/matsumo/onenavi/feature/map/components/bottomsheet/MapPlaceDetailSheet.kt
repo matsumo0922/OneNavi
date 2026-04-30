@@ -68,7 +68,7 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun MapSelectedResultSheet(
+internal fun MapPlaceDetailSheet(
     selectedResult: SearchResultItem,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
