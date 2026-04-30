@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -16,21 +19,27 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.libraries.navigation.NavigationView
+import me.matsumo.onenavi.feature.map.state.MapCameraState
 
 @Composable
 internal fun MapItem(
-    googleMap: GoogleMap?,
-    onMapChanged: (GoogleMap?) -> Unit,
+    cameraState: MapCameraState,
     modifier: Modifier = Modifier,
 ) {
     val navigationView = rememberNavigationViewWithLifecycle()
+
+    var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
 
     googleMap?.let {
         MapEffect(
             navigationView = navigationView,
             googleMap = it,
-            onClear = { onMapChanged(null) },
+            onClear = { googleMap = null },
         )
+
+        LaunchedEffect(it) {
+            cameraState.attachMap(it)
+        }
     }
 
     Box(modifier) {
@@ -39,7 +48,7 @@ internal fun MapItem(
             factory = {
                 navigationView.apply {
                     getMapAsync { map ->
-                        onMapChanged(map)
+                        googleMap = map
                     }
                 }
             }
