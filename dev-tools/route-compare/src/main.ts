@@ -373,10 +373,13 @@ async function fetchAndRenderCustom(apiKey: string): Promise<void> {
     fitBoundsTo(currentExternal);
 
     // Step 2: FPS + chunked test
+    // Custom mode 専用 builder を使う。ユーザがクリックした via 点は必ず最終
+    // waypoint 列に含めて、Routes API がそこを必ず通るようにする (普通の
+    // buildSentWaypoints は polyline を均等 FPS してしまうので via が抜ける)。
     setStatus("Step 2/2: FPS + chunked Routes API を実行中...");
-    const waypointsForApi = buildSentWaypoints(
-      elements.maneuverSampling.value,
-      elements.betweenSampling.value,
+    const waypointsForApi = buildCustomSentWaypoints(
+      currentExternal,
+      modeToStride(elements.betweenSampling.value),
       useHeading,
     );
     const sampled: LatLng[] = waypointsForApi.map((wp) => ({ lat: wp.lat, lng: wp.lng }));
@@ -422,6 +425,145 @@ async function fetchAndRenderCustom(apiKey: string): Promise<void> {
   } finally {
     elements.fetchButton.disabled = false;
   }
+}
+
+/**
+ * Custom mode 用 sent waypoint 構築:
+ *   - ユーザの click 点 (origin / via / destination) を**全て強制で**含める
+ *   - 残りの「形状を保つための補助点」は reference polyline 上の頂点を、
+ *     ユーザ点を seed にした farthest-point sampling で追加する
+ *   - heading は polyline 接線方向 (各頂点 i-1 → i+1)
+ *
+ * これによりユーザが意図した経由地で必ず曲がり、それ以外の区間は外部 polyline
+ * の形状を Routes API に追従させる狙い。
+ */
+function buildCustomSentWaypoints(
+  referencePolyline: LatLng[],
+  betweenStride: number,
+  useHeading: boolean,
+): WaypointInput[] {
+  type Tagged = { lat: number; lng: number; heading?: number; cumDist: number; isUserPoint: boolean };
+
+  if (referencePolyline.length < 2 || customInputs.length < 2) {
+    return customInputs.map((point) => ({ lat: point.lat, lng: point.lng }));
+  }
+
+  // (A) reference polyline の頂点ごとの累積距離 (haversine)
+  const polyCum: number[] = [0];
+  for (let pi = 1; pi < referencePolyline.length; pi++) {
+    polyCum.push(polyCum[pi - 1] + haversineMeters(referencePolyline[pi - 1], referencePolyline[pi]));
+  }
+  const totalLength = polyCum[polyCum.length - 1];
+
+  // (B) ユーザ click 点を polyline 上の最近傍頂点に projection
+  //     (本物の foot-of-perpendicular ではなく頂点単位。dev-tools 用なので十分)
+  const userVertexIndices = customInputs.map((point) => findNearestPolylineVertex(point, referencePolyline));
+
+  // (C) 強制 waypoint = ユーザ点。座標はユーザ click そのもの (snap させない)、
+  //     cumDist は projection 先の polyline 累積距離。
+  const collected: Tagged[] = customInputs.map((point, index) => {
+    const vertexIndex = userVertexIndices[index];
+    return {
+      lat: point.lat,
+      lng: point.lng,
+      cumDist: polyCum[vertexIndex],
+      heading: useHeading ? bearingFromPolylineAt(referencePolyline, vertexIndex) : undefined,
+      isUserPoint: true,
+    };
+  });
+
+  // (D) ユーザ点 cumDist を seed に polyline 内側頂点を FPS sampling
+  //     desiredCount は「ユーザ点込みで route 全長を targetGap で覆う」想定。
+  if (betweenStride > 0) {
+    const targetGap = betweenStride * 1000;
+    const userOccupied = new Set(userVertexIndices);
+    const candidates: number[] = [];
+    for (let pi = 1; pi < referencePolyline.length - 1; pi++) {
+      if (!userOccupied.has(pi)) candidates.push(pi);
+    }
+
+    const desiredAdditional = Math.max(
+      0,
+      Math.ceil(totalLength / targetGap) - customInputs.length,
+    );
+    const seeds: number[] = collected.map((wp) => wp.cumDist);
+    const selectedSet = new Set<number>();
+    for (let pick = 0; pick < desiredAdditional; pick++) {
+      let bestIdx = -1;
+      let bestMin = -Infinity;
+      for (const candidate of candidates) {
+        if (selectedSet.has(candidate)) continue;
+        const dist = polyCum[candidate];
+        let minDist = Infinity;
+        for (const seed of seeds) {
+          const diff = Math.abs(dist - seed);
+          if (diff < minDist) minDist = diff;
+        }
+        if (minDist > bestMin) {
+          bestMin = minDist;
+          bestIdx = candidate;
+        }
+      }
+      if (bestIdx < 0) break;
+      if (bestMin < targetGap * 0.4) break;
+      selectedSet.add(bestIdx);
+      seeds.push(polyCum[bestIdx]);
+    }
+
+    for (const vertexIndex of selectedSet) {
+      collected.push({
+        lat: referencePolyline[vertexIndex].lat,
+        lng: referencePolyline[vertexIndex].lng,
+        cumDist: polyCum[vertexIndex],
+        heading: useHeading ? bearingFromPolylineAt(referencePolyline, vertexIndex) : undefined,
+        isUserPoint: false,
+      });
+    }
+  }
+
+  // (E) cumDist 順に並べ、近すぎる隣接 (5m 以内) は user 点優先で 1 つに畳む
+  collected.sort((a, b) => {
+    if (a.cumDist !== b.cumDist) return a.cumDist - b.cumDist;
+    // 同 cumDist なら user 点を前に
+    return (a.isUserPoint ? 0 : 1) - (b.isUserPoint ? 0 : 1);
+  });
+  const deduped: Tagged[] = [];
+  for (const wp of collected) {
+    const last = deduped[deduped.length - 1];
+    if (!last || wp.cumDist - last.cumDist > 5) {
+      deduped.push(wp);
+      continue;
+    }
+    // 至近距離の競合: user 点が居ればそちらを残す
+    if (!last.isUserPoint && wp.isUserPoint) {
+      deduped[deduped.length - 1] = wp;
+    }
+  }
+  return deduped.map((wp) => ({ lat: wp.lat, lng: wp.lng, heading: wp.heading }));
+}
+
+/** point に最も近い polyline 頂点の index を返す。緯度経度を平面近似で比較する簡易実装。 */
+function findNearestPolylineVertex(point: LatLng, polyline: LatLng[]): number {
+  let bestIndex = 0;
+  let bestDistanceSquared = Infinity;
+  for (let pi = 0; pi < polyline.length; pi++) {
+    const dLat = point.lat - polyline[pi].lat;
+    const dLng = point.lng - polyline[pi].lng;
+    const distanceSquared = dLat * dLat + dLng * dLng;
+    if (distanceSquared < bestDistanceSquared) {
+      bestDistanceSquared = distanceSquared;
+      bestIndex = pi;
+    }
+  }
+  return bestIndex;
+}
+
+/** polyline[index] における進行方向 (compass bearing) を i-1 → i+1 のチョードで推定。 */
+function bearingFromPolylineAt(polyline: LatLng[], index: number): number {
+  const prevIndex = Math.max(0, index - 1);
+  const nextIndex = Math.min(polyline.length - 1, index + 1);
+  if (prevIndex === nextIndex) return 0;
+  return computeBearing(polyline[prevIndex], polyline[nextIndex]);
 }
 
 /**
