@@ -17,6 +17,7 @@ kotlin {
             implementation(project(":core:common"))
             implementation(project(":core:model"))
             implementation(project(":core:datasource"))
+            implementation(project(":core:repository"))
         }
 
         androidMain.dependencies {

@@ -29,7 +29,7 @@ import kotlin.math.sqrt
  *
  * [1]: https://en.wikipedia.org/wiki/Farthest-first_traversal
  */
-internal class ExtNavRouteRefiner(
+class ExtNavRouteRefiner(
     private val routesApiClient: RoutesApiClient,
 ) {
 

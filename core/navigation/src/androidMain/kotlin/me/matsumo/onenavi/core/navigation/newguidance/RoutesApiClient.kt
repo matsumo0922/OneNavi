@@ -11,7 +11,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RoutesApiWaypoint
  *
  * 実装は [DefaultRoutesApiClient]。テストでは fake に差し替える。
  */
-internal interface RoutesApiClient {
+interface RoutesApiClient {
 
     /**
      * 1 chunk 分の waypoints を Routes API に投げて polyline と route_token を取得する。
@@ -31,7 +31,7 @@ internal interface RoutesApiClient {
 /**
  * Routes API のレスポンスから取り出した必要最小限のデータ。
  */
-internal data class RoutesApiResponse(
+data class RoutesApiResponse(
     val polyline: List<RoutePoint>,
     val routeToken: String,
     val distanceMeters: Int,
