@@ -1,14 +1,22 @@
 package me.matsumo.onenavi.feature.map.state
 
 import android.animation.ValueAnimator
+import android.os.Looper
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.animation.doOnEnd
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.CameraPosition
@@ -16,8 +24,30 @@ import com.google.android.gms.maps.model.FollowMyLocationOptions
 import com.google.android.gms.maps.model.LatLng
 
 @Composable
-internal fun rememberMapCameraState(): MapCameraState =
-    remember { MapCameraState() }
+internal fun rememberMapCameraState(): MapCameraState {
+    val context = LocalContext.current
+    val state = remember { MapCameraState() }
+
+    DisposableEffect(context) {
+        val client = LocationServices.getFusedLocationProviderClient(context)
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L).build()
+
+        val callback: LocationCallback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                result.lastLocation?.also {
+                    state.updateMyLocation(it.latitude, it.longitude)
+                }
+            }
+        }
+
+        client.requestLocationUpdates(request, callback, Looper.getMainLooper())
+        onDispose {
+            client.removeLocationUpdates(callback)
+        }
+    }
+
+    return state
+}
 
 @Stable
 internal class MapCameraState internal constructor () {
@@ -44,6 +74,13 @@ internal class MapCameraState internal constructor () {
         googleMap.setOnCameraIdleListener {
             updateCameraPosition(googleMap.cameraPosition)
         }
+    }
+
+    fun updateMyLocation(latitude: Double, longitude: Double) {
+        cameraState = cameraState.copy(
+            myLocationLatitude = latitude,
+            myLocationLongitude = longitude,
+        )
     }
 
     fun followMyLocation() {
@@ -168,6 +205,8 @@ internal class MapCameraState internal constructor () {
  *
  * @param latitude カメラ中心の緯度
  * @param longitude カメラ中心の経度
+ * @param myLocationLatitude 自分の位置の緯度
+ * @param myLocationLongitude 自分の位置の経度
  * @param zoom 現在のズーム値
  * @param bearing 現在のカメラの向き
  * @param perspective GoogleMap.CameraPerspective
@@ -177,6 +216,8 @@ internal class MapCameraState internal constructor () {
 data class HomeMapCameraState(
     val latitude: Double = DEFAULT_LATITUDE,
     val longitude: Double = DEFAULT_LONGITUDE,
+    val myLocationLatitude: Double = DEFAULT_LATITUDE,
+    val myLocationLongitude: Double = DEFAULT_LONGITUDE,
     val zoom: Float = DEFAULT_CAMERA_ZOOM,
     val bearing: Double = 0.0,
     val perspective: Int = GoogleMap.CameraPerspective.TILTED,

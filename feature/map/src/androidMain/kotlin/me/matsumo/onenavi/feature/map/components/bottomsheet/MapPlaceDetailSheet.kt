@@ -63,12 +63,14 @@ import me.matsumo.onenavi.core.resource.home_map_search_route
 import me.matsumo.onenavi.core.resource.home_map_street_view
 import me.matsumo.onenavi.core.ui.components.CommonSectionItem
 import me.matsumo.onenavi.core.ui.theme.semiBold
+import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun MapPlaceDetailSheet(
+    cameraState: MapCameraState,
     selectedResult: SearchResultItem,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
@@ -144,8 +146,8 @@ internal fun MapPlaceDetailSheet(
                     onUiEvent(
                         MapUiEvent.OnRouteSearch(
                             item = selectedResult,
-                            latitude = selectedResult.latitude,
-                            longitude = selectedResult.longitude,
+                            latitude = cameraState.cameraState.myLocationLatitude,
+                            longitude = cameraState.cameraState.myLocationLongitude,
                         )
                     )
                 },

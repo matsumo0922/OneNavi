@@ -30,7 +30,9 @@ import com.google.android.gms.maps.GoogleMap
 import me.matsumo.onenavi.feature.map.components.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.MapControls
 import me.matsumo.onenavi.feature.map.components.MapMarker
+import me.matsumo.onenavi.feature.map.components.MapPolyline
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapPlaceDetailSheet
+import me.matsumo.onenavi.feature.map.components.bottomsheet.MapRoutePreviewSheet
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
@@ -163,7 +165,9 @@ private fun MapScreenContent(
             )
         }
 
-        is MapScreenState.RoutePreview -> TODO()
+        is MapScreenState.RoutePreview -> {
+
+        }
         is MapScreenState.Navigating -> TODO()
         is MapScreenState.Arrived -> TODO()
     }
@@ -182,13 +186,21 @@ private fun MapScreenBottomSheetContent(
         is MapScreenState.PlaceDetails -> {
             MapPlaceDetailSheet(
                 modifier = modifier,
+                cameraState = cameraState,
                 selectedResult = screenState.place,
                 onUiEvent = onUiEvent,
             )
         }
 
         is MapScreenState.SearchResultsList -> TODO()
-        is MapScreenState.RoutePreview -> TODO()
+        is MapScreenState.RoutePreview -> {
+            MapRoutePreviewSheet(
+                modifier = modifier,
+                routeResults = screenState.routes,
+                selectedRouteIndex = screenState.selectedRouteIndex,
+                onUiEvent = onUiEvent,
+            )
+        }
         is MapScreenState.Navigating -> TODO()
         is MapScreenState.Arrived -> TODO()
     }
@@ -214,7 +226,9 @@ private fun MapCameraEffect(
             }
 
             is MapScreenState.SearchResultsList -> TODO()
-            is MapScreenState.RoutePreview -> TODO()
+            is MapScreenState.RoutePreview -> {
+
+            }
             is MapScreenState.Navigating -> TODO()
             is MapScreenState.Arrived -> TODO()
         }
@@ -241,7 +255,24 @@ private fun MapEffect(
         }
 
         is MapScreenState.SearchResultsList -> TODO()
-        is MapScreenState.RoutePreview -> TODO()
+        is MapScreenState.RoutePreview -> {
+            if (googleMap != null) {
+                for (waypoint in screenState.waypoints.drop(1)) {
+                    MapMarker(
+                        googleMap = googleMap,
+                        latitude = waypoint.latitude,
+                        longitude = waypoint.longitude,
+                    )
+                }
+
+                for (route in screenState.routes) {
+                    MapPolyline(
+                        googleMap = googleMap,
+                        points = route.item.geometry,
+                    )
+                }
+            }
+        }
         is MapScreenState.Navigating -> TODO()
         is MapScreenState.Arrived -> TODO()
     }
