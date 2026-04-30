@@ -21,6 +21,12 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavSsmlSpeaker
+import me.matsumo.onenavi.core.navigation.newguidance.DefaultRoutesApiClient
+import me.matsumo.onenavi.core.navigation.newguidance.ExtNavRouteRefiner
+import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
+import me.matsumo.onenavi.core.navigation.newguidance.NewNavigationSdkManager
+import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
+import me.matsumo.onenavi.core.navigation.newguidance.RoutesApiClient
 import me.matsumo.onenavi.core.navigation.tts.AndroidTtsEngine
 import me.matsumo.onenavi.core.navigation.tts.AudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.FallbackTtsEngine
@@ -35,12 +41,41 @@ import me.matsumo.onenavi.core.navigation.tts.fetchSigningCertSha1
 import org.koin.android.ext.koin.androidApplication
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 actual val navigationModule: Module = module {
     single { RouteManager() }
     single { NavigationSdkManager(androidApplication(), get()) }
     single { CameraManager(get()) }
+    single<HttpClient>(qualifier = named(NEW_GUIDANCE_HTTP_CLIENT)) {
+        HttpClient(OkHttp) {
+            install(HttpTimeout) {
+                connectTimeoutMillis = 5_000
+                requestTimeoutMillis = 15_000
+                socketTimeoutMillis = 10_000
+            }
+            install(ContentNegotiation) {
+                json(
+                    Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                        explicitNulls = false
+                    },
+                )
+            }
+        }
+    }
+    single<RoutesApiClient> {
+        DefaultRoutesApiClient(
+            httpClient = get(qualifier = named(NEW_GUIDANCE_HTTP_CLIENT)),
+            apiKey = get<AppConfig>().googleApiKey,
+        )
+    }
+    single { ExtNavRouteRefiner(routesApiClient = get()) }
+    single { NewRouteManager(routeRepository = get(), extNavRouteRefiner = get()) }
+    single { NewNavigationSdkManager(application = androidApplication()) }
+    single { NewGuidanceManager(routeRepository = get(), extNavRouteRefiner = get()) }
     single<HttpClient>(qualifier = org.koin.core.qualifier.named("googleCloudTts")) {
         HttpClient(OkHttp) {
             install(HttpTimeout) {
@@ -104,6 +139,9 @@ actual val navigationModule: Module = module {
         )
     }
 }
+
+/** Routes API v2 用 HttpClient の Koin qualifier 名。spec/24 §3.2 で導入。 */
+private const val NEW_GUIDANCE_HTTP_CLIENT = "newGuidanceRoutesApi"
 
 private fun createTtsEngine(
     context: android.content.Context,

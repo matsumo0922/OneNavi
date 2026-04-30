@@ -7,6 +7,7 @@ import com.google.android.libraries.navigation.Navigator
 import com.google.android.libraries.navigation.RoadSnappedLocationProvider
 import com.google.android.libraries.navigation.Waypoint
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,9 +54,10 @@ import kotlin.coroutines.resume
 class NewGuidanceManager(
     private val routeRepository: RouteRepository,
     private val extNavRouteRefiner: ExtNavRouteRefiner,
+    dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 ) {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
     private val _state = MutableStateFlow<GuidanceState>(GuidanceState.Idle)
     val state: StateFlow<GuidanceState> = _state.asStateFlow()
