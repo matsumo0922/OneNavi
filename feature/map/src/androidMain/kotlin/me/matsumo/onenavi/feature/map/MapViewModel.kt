@@ -24,12 +24,18 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.NavigationState
+import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
 import me.matsumo.onenavi.core.navigation.RouteManager
+import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
+import me.matsumo.onenavi.core.navigation.newguidance.NewNavigationSdkManager
+import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
+import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.repository.RouteRepository
 import me.matsumo.onenavi.core.repository.SearchRepository
 import me.matsumo.onenavi.feature.map.state.MapScreenState
@@ -43,6 +49,14 @@ class MapViewModel(
     private val routeRepository: RouteRepository,
     private val routeManager: RouteManager,
     private val guidanceSessionManager: GuidanceSessionManager,
+    /**
+     * spec/24 の新案内系。本 ViewModel では現状 state 公開のみ行い、Preview/Guidance 中の
+     * 実フロー (refine トリガー / startGuidance 呼び出し / polyline 描画) は UI 側で順次
+     * 接続していく。
+     */
+    private val newRouteManager: NewRouteManager,
+    private val newGuidanceManager: NewGuidanceManager,
+    private val newNavigationSdkManager: NewNavigationSdkManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MapUiState())
@@ -54,7 +68,7 @@ class MapViewModel(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = _screenStates.value.last()
+            initialValue = _screenStates.value.last(),
         )
 
     val hasScreenStateStack: StateFlow<Boolean> = _screenStates
@@ -62,7 +76,22 @@ class MapViewModel(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = _screenStates.value.size > 1
+            initialValue = _screenStates.value.size > 1,
+        )
+
+    /** spec/24 §3.3 [RoutePreviewState]。Preview 期に refined route 候補を提供する。 */
+    val newRoutePreviewState: StateFlow<RoutePreviewState> = newRouteManager.state
+
+    /** spec/24 §8 [GuidanceState]。Guidance 期の state machine を提供する。 */
+    val newGuidanceState: StateFlow<GuidanceState> = newGuidanceManager.state
+
+    /** Navigator が ready かどうか (terms accept / 初期化エラーは internal で見る)。 */
+    val newNavigatorReady: StateFlow<Boolean> = newNavigationSdkManager.navigator
+        .map { it != null }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false,
         )
 
     private val uiEventDelegate = UiEventDelegate(
@@ -95,6 +124,63 @@ class MapViewModel(
         _screenStates.update { states ->
             states.dropLast(1)
         }
+    }
+
+    /** Navigation SDK terms 確認 + Navigator 初期化。Activity 取得後に Compose から呼ぶ。 */
+    fun initializeNewSdk(activity: android.app.Activity) {
+        newNavigationSdkManager.initialize(activity)
+    }
+
+    /**
+     * spec/23 ベースの refine を起動する。UI で目的地確定後に並走で呼ぶ想定。
+     * 既存の routeRepository ベースのフローは破壊せず、Preview 用に別系統で refined route を
+     * 用意する。
+     */
+    fun startRouteRefine(
+        originLatitude: Double,
+        originLongitude: Double,
+        destinationLatitude: Double,
+        destinationLongitude: Double,
+    ) {
+        viewModelScope.launch {
+            newRouteManager.searchRoutes(
+                origin = RoutePoint(
+                    latitude = originLatitude,
+                    longitude = originLongitude,
+                ),
+                destination = RoutePoint(
+                    latitude = destinationLatitude,
+                    longitude = destinationLongitude,
+                ),
+            )
+        }
+    }
+
+    /** Preview 中のルート切替を新 manager にも伝える。 */
+    fun selectNewRoute(index: Int) {
+        newRouteManager.selectRoute(index)
+    }
+
+    /** Preview から Guidance に遷移するときに呼ぶ。Navigator が ready でなければ no-op。 */
+    fun startNewGuidance() {
+        val navigator = newNavigationSdkManager.navigator.value ?: return
+        val locationProvider = newNavigationSdkManager.roadSnappedLocationProvider.value ?: return
+        val previewState = newRouteManager.state.value as? RoutePreviewState.Ready ?: return
+        newGuidanceManager.startGuidance(
+            navigator = navigator,
+            route = previewState.selectedRoute,
+            locationProvider = locationProvider,
+        )
+    }
+
+    /** Guidance を停止する。UI 側で「案内停止」ボタンや画面離脱時に呼ぶ。 */
+    fun stopNewGuidance() {
+        newGuidanceManager.stopGuidance()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        newGuidanceManager.release()
     }
 
     companion object {
@@ -161,7 +247,7 @@ private class UiEventDelegate(
                         MapScreenState.SearchResultsList(
                             query = query,
                             results = items.toImmutableList(),
-                        )
+                        ),
                     )
                 }
                 .onFailure {
@@ -183,7 +269,7 @@ private class UiEventDelegate(
                     pushScreenState(
                         MapScreenState.PlaceDetails(
                             place = result,
-                        )
+                        ),
                     )
                 }
                 .onFailure {
@@ -205,7 +291,7 @@ private class UiEventDelegate(
                     pushScreenState(
                         MapScreenState.PlaceDetails(
                             place = result,
-                        )
+                        ),
                     )
                 }
                 .onFailure {
@@ -230,7 +316,7 @@ private class UiEventDelegate(
                 name = item.name,
                 latitude = item.latitude,
                 longitude = item.longitude,
-            )
+            ),
         )
 
         searchRoutesFromWaypoints(waypoints.toImmutableList())
@@ -246,7 +332,7 @@ private class UiEventDelegate(
     private fun handleRouteStart(routeResult: RouteResult) {
         routeManager.setRoutes(listOf(routeResult.googleRoute))
         pushScreenState(
-            MapScreenState.Navigating
+            MapScreenState.Navigating,
         )
     }
 
@@ -306,7 +392,7 @@ private class UiEventDelegate(
                         routes = featureResults.toImmutableList(),
                         selectedRouteIndex = 0,
                         topBarMode = RoutePreviewTopBarMode.Viewing,
-                    )
+                    ),
                 )
             }.onFailure {
                 Napier.e(it, TAG) { "Failed to search routes. waypoints: $waypoints" }
