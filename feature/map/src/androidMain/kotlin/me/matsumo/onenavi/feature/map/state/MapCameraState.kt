@@ -51,8 +51,8 @@ internal class MapCameraState internal constructor () {
     }
 
     fun setPerspective(perspective: Int) {
-        followMyLocation()
         cameraState = cameraState.copy(perspective = perspective)
+        followMyLocation()
     }
 
     fun zoomIn() {
@@ -113,4 +113,4 @@ data class HomeMapCameraState(
 private const val DEFAULT_LATITUDE = 35.681236
 private const val DEFAULT_LONGITUDE = 139.767125
 private const val DEFAULT_CAMERA_ZOOM = 15f
-private const val CAMERA_ANIMATION_DURATION_MS = 600
+private const val CAMERA_ANIMATION_DURATION_MS = 300

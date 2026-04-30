@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
@@ -50,18 +51,21 @@ import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_search_bar_placeholder
+import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun MapTopAppBar(
+    cameraState: MapCameraState,
     suggestions: ImmutableList<SearchSuggestionItem>,
     histories: ImmutableList<SearchHistory>,
     selectedResult: SearchResultItem?,
@@ -81,7 +85,13 @@ internal fun MapTopAppBar(
     }
 
     fun onSearchAction(query: String) {
-        onUiEvent(MapUiEvent.OnSearch(query))
+        onUiEvent(
+            MapUiEvent.OnSearch(
+                query = query,
+                latitude = cameraState.cameraState.latitude,
+                longitude = cameraState.cameraState.longitude
+            )
+        )
     }
 
     NavigationEventHandler(navigationState, isBackEnabled = showSearchResult) {
@@ -98,6 +108,14 @@ internal fun MapTopAppBar(
             textFieldState.setTextAndPlaceCursorAtEnd(selectedResult.name)
             showSearchResult = true
         }
+    }
+
+    LaunchedEffect(textFieldState) {
+        snapshotFlow { textFieldState.text.toString() }
+            .distinctUntilChanged()
+            .collect { query ->
+                onUiEvent(MapUiEvent.OnQueryChanged(query))
+            }
     }
 
     Column(

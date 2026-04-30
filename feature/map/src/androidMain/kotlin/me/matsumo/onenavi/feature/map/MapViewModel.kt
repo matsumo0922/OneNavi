@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.feature.map
 
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.aakira.napier.Napier
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.SearchHistory
+import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.repository.RouteRepository
 import me.matsumo.onenavi.core.repository.SearchRepository
@@ -39,6 +41,7 @@ class MapViewModel(
         scope = viewModelScope,
         uiState = _uiState,
         updateScreenState = {
+            Napier.d(tag = TAG) { "Update screen state: $it" }
             _screenState.value = it
         }
     )
@@ -47,6 +50,10 @@ class MapViewModel(
     val uiState = _uiState.asStateFlow()
 
     fun onUiEvent(event: MapUiEvent) = uiEventDelegate.onUiEvent(event)
+
+    companion object {
+        private const val TAG = "MapViewModel"
+    }
 }
 
 private class UiEventDelegate(
@@ -59,6 +66,12 @@ private class UiEventDelegate(
     private var placeSearchJob: Job? = null
 
     init {
+        scope.launch {
+            searchRepository.histories.collect { histories ->
+                uiState.value = uiState.value.copy(histories = histories.toImmutableList())
+            }
+        }
+
         @OptIn(FlowPreview::class)
         uiState
             .map { it.query }
@@ -70,26 +83,49 @@ private class UiEventDelegate(
 
     fun onUiEvent(event: MapUiEvent) {
         when (event) {
-            is MapUiEvent.OnQueryCleared -> handleQueryCleared()
-            is MapUiEvent.OnSearch -> handleOnSearch(event.query)
+            is MapUiEvent.OnQueryChanged -> handleQueryChanged(event.query)
+            is MapUiEvent.OnQueryCleared -> handleQueryChanged("")
+            is MapUiEvent.OnSearch -> handleOnSearch(event.query, event.latitude, event.longitude)
             is MapUiEvent.OnSuggestionSelected -> handleSuggestionSelected(event.suggestion)
             is MapUiEvent.OnHistorySelected -> handleHistorySelected(event.history)
             is MapUiEvent.OnRemoveHistory -> handleRemoveHistory(event.id)
+            is MapUiEvent.OnRouteSearch -> handleRouteSearch(event.item)
+            is MapUiEvent.OnTopAppBarHeightChanged -> handleTopAppBarHeightChanged(event.height)
+            is MapUiEvent.OnBottomSheetPeekHeightChanged -> handleBottomSheetPeekHeightChanged(event.height)
         }
     }
 
-    private fun handleQueryCleared() {
-        uiState.value = uiState.value.copy(query = "")
+    private fun handleQueryChanged(query: String) {
+        uiState.value = uiState.value.copy(query = query)
     }
 
-    private fun handleOnSearch(query: String) {
-        uiState.value = uiState.value.copy(query = query)
+    private fun handleOnSearch(query: String, latitude: Double?, longitude: Double?) {
+        placeSearchJob?.cancel()
+        placeSearchJob = scope.launch {
+            searchRepository.searchMultiple(query, latitude, longitude)
+                .onSuccess { items ->
+                    updateScreenState(
+                        MapScreenState.SearchResultsList(
+                            query = query,
+                            results = items.toImmutableList(),
+                        )
+                    )
+                }
+                .onFailure {
+                    Napier.e(it, TAG) { "Failed to search. query: $query" }
+                }
+        }
     }
 
     private fun handleSuggestionSelected(suggestion: SearchSuggestionItem) {
         scope.launch {
             searchRepository.select(suggestion.id)
                 .onSuccess { result ->
+                    uiState.value = uiState.value.copy(
+                        query = result.name,
+                        selectedResult = result,
+                    )
+
                     searchRepository.addHistory(result)
                     updateScreenState(
                         MapScreenState.PlaceDetails(
@@ -107,6 +143,11 @@ private class UiEventDelegate(
         scope.launch {
             searchRepository.retrieve(history.id)
                 .onSuccess { result ->
+                    uiState.value = uiState.value.copy(
+                        query = result.name,
+                        selectedResult = result,
+                    )
+
                     searchRepository.addHistory(result)
                     updateScreenState(
                         MapScreenState.PlaceDetails(
@@ -126,10 +167,22 @@ private class UiEventDelegate(
         }
     }
 
+    private fun handleRouteSearch(item: SearchResultItem) {
+
+    }
+
+    private fun handleTopAppBarHeightChanged(height: Float) {
+        uiState.value = uiState.value.copy(topAppBarHeight = height)
+    }
+
+    private fun handleBottomSheetPeekHeightChanged(height: Dp) {
+        uiState.value = uiState.value.copy(bottomSheetPeekHeight = height)
+    }
+
     private fun performSearch(query: String?) {
         placeSearchJob?.cancel()
         placeSearchJob = scope.launch {
-            if (query.isNullOrBlank()) return@launch
+            if (query.isNullOrBlank() || query.length < 3) return@launch
 
             searchRepository.getSuggestions(query)
                 .onSuccess { items ->
@@ -143,7 +196,7 @@ private class UiEventDelegate(
     }
 
     companion object {
-        private const val TAG = "MapUiEventDelegate"
+        private const val TAG = "MapViewModel - UiEventDelegate"
         private const val DEBOUNCE = 300L
     }
 }
