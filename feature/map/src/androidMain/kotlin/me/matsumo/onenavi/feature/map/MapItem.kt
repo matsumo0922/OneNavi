@@ -7,33 +7,29 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.libraries.navigation.NavigationView
 
 @Composable
 internal fun MapItem(
+    googleMap: GoogleMap?,
+    onMapChanged: (GoogleMap?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val navigationView = rememberNavigationViewWithLifecycle()
-
-    var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
 
     googleMap?.let {
         MapEffect(
             navigationView = navigationView,
             googleMap = it,
-            onClear = { googleMap = null },
+            onClear = { onMapChanged(null) },
         )
     }
 
@@ -43,7 +39,7 @@ internal fun MapItem(
             factory = {
                 navigationView.apply {
                     getMapAsync { map ->
-                        googleMap = map
+                        onMapChanged(map)
                     }
                 }
             }
@@ -91,10 +87,6 @@ private fun MapEffect(
             isMapToolbarEnabled = false
             isMyLocationButtonEnabled = false
             isZoomControlsEnabled = false
-        }
-
-        if (googleMap.isCameraFollowingMyLocation) {
-            googleMap.moveCamera(CameraUpdateFactory.newCameraPosition(googleMap.cameraPosition))
         }
     }
 

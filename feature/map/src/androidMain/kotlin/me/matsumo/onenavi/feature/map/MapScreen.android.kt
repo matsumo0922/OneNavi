@@ -15,12 +15,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.google.android.gms.maps.GoogleMap
+import me.matsumo.onenavi.feature.map.state.rememberMapCameraState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 actual fun MapScreen(modifier: Modifier) {
     var allowSheetHide by remember { mutableStateOf(false) }
     var sheetPeekHeight by remember { mutableStateOf(0.dp) }
+    var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
+
+    val cameraState = rememberMapCameraState(googleMap)
 
     val scaffoldState = rememberBottomSheetScaffoldState(
         bottomSheetState = rememberStandardBottomSheetState(
@@ -46,6 +51,8 @@ actual fun MapScreen(modifier: Modifier) {
         ) {
             MapItem(
                 modifier = Modifier.fillMaxSize(),
+                googleMap = googleMap,
+                onMapChanged = { googleMap = it },
             )
         }
     }
