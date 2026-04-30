@@ -4,6 +4,7 @@ plugins {
     id("matsumo.primitive.kmp.android")
     id("matsumo.primitive.kmp.ios")
     id("matsumo.primitive.detekt")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
