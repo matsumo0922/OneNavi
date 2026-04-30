@@ -28,7 +28,6 @@ import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.google.android.gms.maps.GoogleMap
-import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.feature.map.components.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.MapControls
 import me.matsumo.onenavi.feature.map.components.MapMarker
@@ -225,8 +224,6 @@ private fun MapCameraEffect(
         val top = uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }
         val bottom = with(density) { uiState.bottomSheetPeekHeight.toPx() }
         val horizontal = with(density) { 24.dp.toPx() }
-
-        Napier.d { "top: $top, bottom: $bottom, horizontal: $horizontal, topAppBarHeight: ${uiState.topAppBarHeight}, bottomSheetPeekHeight: ${uiState.bottomSheetPeekHeight}" }
 
         cameraState.updatePadding(
             top = top.toInt(),
