@@ -18,6 +18,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationEventHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import me.matsumo.onenavi.feature.map.components.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.MapControls
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapSelectedResultSheet
@@ -34,7 +37,8 @@ actual fun MapScreen(modifier: Modifier) {
     val viewModel = koinViewModel<MapViewModel>()
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val screenState by viewModel.screenState.collectAsStateWithLifecycle()
+    val screenState by viewModel.currentScreenState.collectAsStateWithLifecycle()
+    val hasScreenStateStack by viewModel.hasScreenStateStack.collectAsStateWithLifecycle()
 
     var allowSheetHide by remember { mutableStateOf(false) }
     val shouldShowSheet by remember(screenState) {
@@ -43,8 +47,8 @@ actual fun MapScreen(modifier: Modifier) {
         }
     }
 
+    val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     val cameraState = rememberMapCameraState()
-
     val scaffoldState = rememberBottomSheetScaffoldState(
         bottomSheetState = rememberStandardBottomSheetState(
             initialValue = SheetValue.Hidden,
@@ -55,12 +59,16 @@ actual fun MapScreen(modifier: Modifier) {
         ),
     )
 
+    NavigationEventHandler(navigationState, isBackEnabled = hasScreenStateStack) {
+        viewModel.onBackPressed()
+    }
+
     LaunchedEffect(shouldShowSheet) {
         if (shouldShowSheet) {
-            allowSheetHide = true
+            allowSheetHide = false
             scaffoldState.bottomSheetState.partialExpand()
         } else {
-            allowSheetHide = false
+            allowSheetHide = true
             scaffoldState.bottomSheetState.hide()
         }
     }

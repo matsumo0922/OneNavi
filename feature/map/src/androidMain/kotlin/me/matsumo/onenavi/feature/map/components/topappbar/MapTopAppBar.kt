@@ -47,9 +47,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.navigationevent.NavigationEventInfo
-import androidx.navigationevent.compose.NavigationEventHandler
-import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -72,7 +69,6 @@ internal fun MapTopAppBar(
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     val scope = rememberCoroutineScope()
     val searchBarState = rememberSearchBarState()
     val textFieldState = rememberTextFieldState()
@@ -92,11 +88,6 @@ internal fun MapTopAppBar(
                 longitude = cameraState.cameraState.longitude
             )
         )
-    }
-
-    NavigationEventHandler(navigationState, isBackEnabled = showSearchResult) {
-        textFieldState.clearText()
-        onBackClicked()
     }
 
     LaunchedEffect(Unit) {

@@ -10,12 +10,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -32,8 +36,8 @@ class MapViewModel(
     private val routeRepository: RouteRepository,
 ) : ViewModel() {
 
-    private val _screenState = MutableStateFlow<MapScreenState>(MapScreenState.Browsing)
     private val _uiState = MutableStateFlow(MapUiState())
+    private val _screenStates = MutableStateFlow<List<MapScreenState>>(listOf(MapScreenState.Browsing))
 
     private val uiEventDelegate = UiEventDelegate(
         searchRepository = searchRepository,
@@ -42,14 +46,37 @@ class MapViewModel(
         uiState = _uiState,
         updateScreenState = {
             Napier.d(tag = TAG) { "Update screen state: $it" }
-            _screenState.value = it
+
+            _screenStates.update { states ->
+                states + it
+            }
         }
     )
 
-    val screenState = _screenState.asStateFlow()
     val uiState = _uiState.asStateFlow()
+    val currentScreenState: StateFlow<MapScreenState> = _screenStates
+        .map { it.last() }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = _screenStates.value.last()
+        )
+
+    val hasScreenStateStack: StateFlow<Boolean> = _screenStates
+        .map { it.size > 1 }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = _screenStates.value.size > 1
+        )
 
     fun onUiEvent(event: MapUiEvent) = uiEventDelegate.onUiEvent(event)
+
+    fun onBackPressed() {
+        _screenStates.update { states ->
+            states.dropLast(1)
+        }
+    }
 
     companion object {
         private const val TAG = "MapViewModel"
