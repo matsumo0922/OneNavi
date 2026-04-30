@@ -250,7 +250,7 @@ private class UiEventDelegate(
         )
     }
 
-    private fun handleTopAppBarHeightChanged(height: Float) {
+    private fun handleTopAppBarHeightChanged(height: Int) {
         uiState.value = uiState.value.copy(topAppBarHeight = height)
     }
 

@@ -15,6 +15,6 @@ data class MapUiState(
     val suggestions: ImmutableList<SearchSuggestionItem> = persistentListOf(),
     val histories: ImmutableList<SearchHistory> = persistentListOf(),
     val selectedResult: SearchResultItem? = null,
-    val topAppBarHeight: Float = 0f,
+    val topAppBarHeight: Int = 0,
     val bottomSheetPeekHeight: Dp = 0.dp,
 )

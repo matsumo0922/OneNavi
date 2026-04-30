@@ -31,6 +31,6 @@ sealed interface MapUiEvent {
     data class OnRouteIndexChanged(val index: Int) : MapUiEvent
     data class OnNavigationStart(val routeResult: RouteResult) : MapUiEvent
 
-    data class OnTopAppBarHeightChanged(val height: Float) : MapUiEvent
+    data class OnTopAppBarHeightChanged(val height: Int) : MapUiEvent
     data class OnBottomSheetPeekHeightChanged(val height: Dp) : MapUiEvent
 }

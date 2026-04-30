@@ -83,6 +83,10 @@ internal class MapCameraState internal constructor () {
         )
     }
 
+    fun updatePadding(top: Int, bottom: Int, start: Int, end: Int) {
+        googleMap?.setPadding(start, top, end, bottom)
+    }
+
     fun followMyLocation() {
         val options = FollowMyLocationOptions.builder()
             .setZoomLevel(cameraState.zoom)

@@ -21,12 +21,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.google.android.gms.maps.GoogleMap
+import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.feature.map.components.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.MapControls
 import me.matsumo.onenavi.feature.map.components.MapMarker
@@ -89,6 +91,7 @@ actual fun MapScreen(modifier: Modifier) {
         } else {
             allowSheetHide = true
             scaffoldState.bottomSheetState.hide()
+            viewModel.onUiEvent(MapUiEvent.OnBottomSheetPeekHeightChanged(0.dp))
         }
     }
 
@@ -98,6 +101,7 @@ actual fun MapScreen(modifier: Modifier) {
     )
 
     MapCameraEffect(
+        uiState = uiState,
         screenState = screenState,
         cameraState = cameraState
     )
@@ -208,9 +212,30 @@ private fun MapScreenBottomSheetContent(
 
 @Composable
 private fun MapCameraEffect(
+    uiState: MapUiState,
     screenState: MapScreenState,
     cameraState: MapCameraState,
 ) {
+    val density = LocalDensity.current
+    val statusBarHeightPadding = WindowInsets.navigationBars
+        .asPaddingValues()
+        .calculateTopPadding()
+
+    LaunchedEffect(uiState.bottomSheetPeekHeight, uiState.topAppBarHeight, screenState) {
+        val top = uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }
+        val bottom = with(density) { uiState.bottomSheetPeekHeight.toPx() }
+        val horizontal = with(density) { 24.dp.toPx() }
+
+        Napier.d { "top: $top, bottom: $bottom, horizontal: $horizontal, topAppBarHeight: ${uiState.topAppBarHeight}, bottomSheetPeekHeight: ${uiState.bottomSheetPeekHeight}" }
+
+        cameraState.updatePadding(
+            top = top.toInt(),
+            bottom = bottom.toInt(),
+            start = horizontal.toInt(),
+            end = horizontal.toInt(),
+        )
+    }
+
     LaunchedEffect(screenState) {
         when (screenState) {
             is MapScreenState.Browsing -> {
