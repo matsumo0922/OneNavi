@@ -7,10 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -23,18 +20,18 @@ import me.matsumo.onenavi.feature.map.state.MapCameraState
 
 @Composable
 internal fun MapItem(
+    googleMap: GoogleMap?,
     cameraState: MapCameraState,
+    onMapUpdate: (GoogleMap?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val navigationView = rememberNavigationViewWithLifecycle()
-
-    var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
 
     googleMap?.let {
         MapEffect(
             navigationView = navigationView,
             googleMap = it,
-            onClear = { googleMap = null },
+            onClear = { onMapUpdate(null) },
         )
 
         LaunchedEffect(it) {
@@ -48,7 +45,7 @@ internal fun MapItem(
             factory = {
                 navigationView.apply {
                     getMapAsync { map ->
-                        googleMap = map
+                        onMapUpdate(map)
                     }
                 }
             }

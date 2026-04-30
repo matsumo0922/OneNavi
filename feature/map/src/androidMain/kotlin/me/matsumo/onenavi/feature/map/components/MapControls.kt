@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -37,9 +36,7 @@ internal fun MapControls(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier
-            .systemBarsPadding()
-            .padding(16.dp),
+        modifier = modifier.padding(16.dp),
         contentAlignment = Alignment.BottomEnd,
     ) {
         Column(

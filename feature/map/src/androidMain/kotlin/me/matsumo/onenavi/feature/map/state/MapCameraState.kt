@@ -1,16 +1,19 @@
 package me.matsumo.onenavi.feature.map.state
 
+import android.animation.ValueAnimator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.google.android.gms.maps.CameraUpdate
+import androidx.core.animation.doOnEnd
+import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.FollowMyLocationOptions
+import com.google.android.gms.maps.model.LatLng
 
 @Composable
 internal fun rememberMapCameraState(): MapCameraState =
@@ -18,7 +21,9 @@ internal fun rememberMapCameraState(): MapCameraState =
 
 @Stable
 internal class MapCameraState internal constructor () {
+
     private var googleMap: GoogleMap? = null
+    private var cameraAnimator: ValueAnimator? = null
 
     var cameraState by mutableStateOf(HomeMapCameraState())
         private set
@@ -56,11 +61,22 @@ internal class MapCameraState internal constructor () {
     }
 
     fun zoomIn() {
-        animateZoom(CameraUpdateFactory.zoomIn())
+        changeZoom((cameraState.zoom + 1f).coerceIn(MIN_ZOOM, MAX_ZOOM))
     }
 
     fun zoomOut() {
-        animateZoom(CameraUpdateFactory.zoomOut())
+        changeZoom((cameraState.zoom - 1f).coerceIn(MIN_ZOOM, MAX_ZOOM))
+    }
+
+    fun moveTo(latitude: Double, longitude: Double, zoom: Float = cameraState.zoom) {
+        animateCameraTo(
+            target = CameraPosition.Builder()
+                .target(LatLng(latitude, longitude))
+                .zoom(zoom)
+                .bearing(0f)
+                .tilt(0f)
+                .build(),
+        )
     }
 
     private fun updateCameraPosition(cameraPosition: CameraPosition) {
@@ -72,21 +88,78 @@ internal class MapCameraState internal constructor () {
         )
     }
 
-    private fun animateZoom(update: CameraUpdate) {
+    private fun changeZoom(targetZoom: Float) {
         val map = googleMap ?: return
         val wasTracking = cameraState.isFollowingMyLocation
+        val current = map.cameraPosition
 
-        map.animateCamera(
-            update,
-            CAMERA_ANIMATION_DURATION_MS,
-            object : GoogleMap.CancelableCallback {
-                override fun onFinish() {
-                    if (wasTracking) followMyLocation()
-                }
+        val target = CameraPosition.Builder()
+            .target(current.target)
+            .zoom(targetZoom)
+            .bearing(current.bearing)
+            .tilt(current.tilt)
+            .build()
 
-                override fun onCancel() = Unit
-            },
+        animateCameraTo(
+            target = target,
+            durationMs = CAMERA_ANIMATION_DURATION_MS,
+            onFinished = { if (wasTracking) followMyLocation() },
         )
+    }
+
+    private fun animateCameraTo(
+        target: CameraPosition,
+        durationMs: Long = CAMERA_ANIMATION_DURATION_MS,
+        onFinished: () -> Unit = {},
+    ) {
+        val map = googleMap ?: return
+        val start = map.cameraPosition
+
+        cameraState = cameraState.copy(isFollowingMyLocation = false)
+        cameraAnimator?.cancel()
+
+        cameraAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = durationMs
+            interpolator = FastOutSlowInInterpolator()
+
+            addUpdateListener { anim ->
+                val fraction = anim.animatedValue as Float
+                val lat = lerp(start.target.latitude, target.target.latitude, fraction)
+                val lng = lerp(start.target.longitude, target.target.longitude, fraction)
+                val zoom = lerp(start.zoom, target.zoom, fraction)
+                val bearing = lerpAngle(start.bearing, target.bearing, fraction)
+                val tilt = lerp(start.tilt, target.tilt, fraction)
+
+                map.moveCamera(
+                    CameraUpdateFactory.newCameraPosition(
+                        CameraPosition.Builder()
+                            .target(LatLng(lat, lng))
+                            .zoom(zoom)
+                            .bearing(bearing)
+                            .tilt(tilt)
+                            .build(),
+                    ),
+                )
+            }
+            doOnEnd { onFinished() }
+            start()
+        }
+    }
+
+    private fun lerp(from: Double, to: Double, fraction: Float): Double =
+        from + (to - from) * fraction
+
+    private fun lerp(from: Float, to: Float, fraction: Float): Float =
+        from + (to - from) * fraction
+
+    private fun lerpAngle(from: Float, to: Float, fraction: Float): Float {
+        val diff = ((to - from + 540f) % 360f) - 180f
+        return (from + diff * fraction + 360f) % 360f
+    }
+
+    companion object {
+        private const val MIN_ZOOM = 2f
+        private const val MAX_ZOOM = 21f
     }
 }
 
@@ -113,4 +186,4 @@ data class HomeMapCameraState(
 private const val DEFAULT_LATITUDE = 35.681236
 private const val DEFAULT_LONGITUDE = 139.767125
 private const val DEFAULT_CAMERA_ZOOM = 15f
-private const val CAMERA_ANIMATION_DURATION_MS = 300
+private const val CAMERA_ANIMATION_DURATION_MS = 500L

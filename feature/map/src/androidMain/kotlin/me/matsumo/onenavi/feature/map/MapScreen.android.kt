@@ -1,7 +1,12 @@
 package me.matsumo.onenavi.feature.map
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SheetValue
@@ -21,8 +26,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
+import com.google.android.gms.maps.GoogleMap
 import me.matsumo.onenavi.feature.map.components.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.MapControls
+import me.matsumo.onenavi.feature.map.components.MapMarker
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapSelectedResultSheet
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
@@ -40,12 +47,22 @@ actual fun MapScreen(modifier: Modifier) {
     val screenState by viewModel.currentScreenState.collectAsStateWithLifecycle()
     val hasScreenStateStack by viewModel.hasScreenStateStack.collectAsStateWithLifecycle()
 
+    val navigationBarHeightDp = WindowInsets.navigationBars
+        .asPaddingValues()
+        .calculateBottomPadding()
+
+    var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
     var allowSheetHide by remember { mutableStateOf(false) }
     val shouldShowSheet by remember(screenState) {
         derivedStateOf {
             screenState::class in SHEET_VISIBLE_STATES && uiState.bottomSheetPeekHeight > 0.dp
         }
     }
+
+    val controlsBottomPadding by animateDpAsState(
+        targetValue = if (shouldShowSheet) uiState.bottomSheetPeekHeight else navigationBarHeightDp,
+        label = "ControlsBottomPadding",
+    )
 
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     val cameraState = rememberMapCameraState()
@@ -73,6 +90,16 @@ actual fun MapScreen(modifier: Modifier) {
         }
     }
 
+    MapEffect(
+        screenState = screenState,
+        googleMap = googleMap,
+    )
+
+    MapCameraEffect(
+        screenState = screenState,
+        cameraState = cameraState
+    )
+
     BottomSheetScaffold(
         modifier = modifier,
         scaffoldState = scaffoldState,
@@ -93,7 +120,9 @@ actual fun MapScreen(modifier: Modifier) {
         ) {
             MapItem(
                 modifier = Modifier.fillMaxSize(),
+                googleMap = googleMap,
                 cameraState = cameraState,
+                onMapUpdate = { googleMap = it },
             )
 
             MapScreenContent(
@@ -105,7 +134,9 @@ actual fun MapScreen(modifier: Modifier) {
             )
 
             MapControls(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .padding(bottom = controlsBottomPadding)
+                    .fillMaxSize(),
                 cameraState = cameraState,
             )
         }
@@ -154,6 +185,59 @@ private fun MapScreenBottomSheetContent(
                 selectedResult = screenState.place,
                 onUiEvent = onUiEvent,
             )
+        }
+
+        is MapScreenState.SearchResultsList -> TODO()
+        is MapScreenState.RoutePreview -> TODO()
+        is MapScreenState.Navigating -> TODO()
+        is MapScreenState.Arrived -> TODO()
+    }
+}
+
+@Composable
+private fun MapCameraEffect(
+    screenState: MapScreenState,
+    cameraState: MapCameraState,
+) {
+    LaunchedEffect(screenState) {
+        when (screenState) {
+            is MapScreenState.Browsing -> {
+                cameraState.followMyLocation()
+            }
+
+            is MapScreenState.PlaceDetails -> {
+                cameraState.moveTo(
+                    latitude = screenState.place.latitude,
+                    longitude = screenState.place.longitude,
+                    zoom = 18f,
+                )
+            }
+
+            is MapScreenState.SearchResultsList -> TODO()
+            is MapScreenState.RoutePreview -> TODO()
+            is MapScreenState.Navigating -> TODO()
+            is MapScreenState.Arrived -> TODO()
+        }
+    }
+}
+
+@Composable
+private fun MapEffect(
+    screenState: MapScreenState,
+    googleMap: GoogleMap?,
+) {
+    when (screenState) {
+        is MapScreenState.Browsing -> Unit
+
+        is MapScreenState.PlaceDetails -> {
+            if (googleMap != null) {
+                MapMarker(
+                    googleMap = googleMap,
+                    latitude = screenState.place.latitude,
+                    longitude = screenState.place.longitude,
+                    title = screenState.place.name,
+                )
+            }
         }
 
         is MapScreenState.SearchResultsList -> TODO()
