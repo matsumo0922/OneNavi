@@ -48,22 +48,6 @@ class MapViewModel(
     private val _uiState = MutableStateFlow(MapUiState())
     private val _screenStates = MutableStateFlow<List<MapScreenState>>(listOf(MapScreenState.Browsing))
 
-    private val uiEventDelegate = UiEventDelegate(
-        searchRepository = searchRepository,
-        routeRepository = routeRepository,
-        routeManager = routeManager,
-        guidanceSessionManager = guidanceSessionManager,
-        scope = viewModelScope,
-        uiState = _uiState,
-        updateScreenState = {
-            Napier.d(tag = TAG) { "Update screen state: $it" }
-
-            _screenStates.update { states ->
-                states + it
-            }
-        }
-    )
-
     val uiState = _uiState.asStateFlow()
     val currentScreenState: StateFlow<MapScreenState> = _screenStates
         .map { it.last() }
@@ -81,9 +65,33 @@ class MapViewModel(
             initialValue = _screenStates.value.size > 1
         )
 
+    private val uiEventDelegate = UiEventDelegate(
+        searchRepository = searchRepository,
+        routeRepository = routeRepository,
+        routeManager = routeManager,
+        guidanceSessionManager = guidanceSessionManager,
+        scope = viewModelScope,
+        uiState = _uiState,
+        currentScreenState = currentScreenState,
+        pushScreenState = ::pushScreenState,
+        updateScreenState = ::replaceCurrentScreenState,
+    )
+
     fun onUiEvent(event: MapUiEvent) = uiEventDelegate.onUiEvent(event)
 
-    fun onBackPressed() {
+    fun pushScreenState(state: MapScreenState) {
+        _screenStates.update { states ->
+            states + state
+        }
+    }
+
+    fun replaceCurrentScreenState(state: MapScreenState) {
+        _screenStates.update { states ->
+            states.dropLast(1) + state
+        }
+    }
+
+    fun popScreenState() {
         _screenStates.update { states ->
             states.dropLast(1)
         }
@@ -100,7 +108,9 @@ private class UiEventDelegate(
     private val routeManager: RouteManager,
     private val guidanceSessionManager: GuidanceSessionManager,
     private val scope: CoroutineScope,
+    private val currentScreenState: StateFlow<MapScreenState>,
     private val uiState: MutableStateFlow<MapUiState>,
+    private val pushScreenState: (MapScreenState) -> Unit,
     private val updateScreenState: (MapScreenState) -> Unit,
 ) {
     private var placeSearchJob: Job? = null
@@ -131,6 +141,8 @@ private class UiEventDelegate(
             is MapUiEvent.OnHistorySelected -> handleHistorySelected(event.history)
             is MapUiEvent.OnRemoveHistory -> handleRemoveHistory(event.id)
             is MapUiEvent.OnRouteSearch -> handleRouteSearch(event.item, event.latitude, event.longitude)
+            is MapUiEvent.OnRouteIndexChanged -> handleRouteIndexChanged(event.index)
+            is MapUiEvent.OnNavigationStart -> handleRouteStart(event.routeResult)
             is MapUiEvent.OnTopAppBarHeightChanged -> handleTopAppBarHeightChanged(event.height)
             is MapUiEvent.OnBottomSheetPeekHeightChanged -> handleBottomSheetPeekHeightChanged(event.height)
         }
@@ -145,7 +157,7 @@ private class UiEventDelegate(
         placeSearchJob = scope.launch {
             searchRepository.searchMultiple(query, latitude, longitude)
                 .onSuccess { items ->
-                    updateScreenState(
+                    pushScreenState(
                         MapScreenState.SearchResultsList(
                             query = query,
                             results = items.toImmutableList(),
@@ -168,7 +180,7 @@ private class UiEventDelegate(
                     )
 
                     searchRepository.addHistory(result)
-                    updateScreenState(
+                    pushScreenState(
                         MapScreenState.PlaceDetails(
                             place = result,
                         )
@@ -190,7 +202,7 @@ private class UiEventDelegate(
                     )
 
                     searchRepository.addHistory(result)
-                    updateScreenState(
+                    pushScreenState(
                         MapScreenState.PlaceDetails(
                             place = result,
                         )
@@ -222,6 +234,20 @@ private class UiEventDelegate(
         )
 
         searchRoutesFromWaypoints(waypoints.toImmutableList())
+    }
+
+    private fun handleRouteIndexChanged(index: Int) {
+        val routePreviewScreenState = currentScreenState.value as? MapScreenState.RoutePreview ?: return
+        val newScreenState = routePreviewScreenState.copy(selectedRouteIndex = index)
+
+        updateScreenState(newScreenState)
+    }
+
+    private fun handleRouteStart(routeResult: RouteResult) {
+        routeManager.setRoutes(listOf(routeResult.googleRoute))
+        pushScreenState(
+            MapScreenState.Navigating
+        )
     }
 
     private fun handleTopAppBarHeightChanged(height: Float) {
@@ -274,7 +300,7 @@ private class UiEventDelegate(
                 routeManager.setRoutes(featureResults.map { it.googleRoute })
                 guidanceSessionManager.setNavigationState(NavigationState.RoutePreview)
 
-                updateScreenState(
+                pushScreenState(
                     MapScreenState.RoutePreview(
                         waypoints = waypoints.toImmutableList(),
                         routes = featureResults.toImmutableList(),

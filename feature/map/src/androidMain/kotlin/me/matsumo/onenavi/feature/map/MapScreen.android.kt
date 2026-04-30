@@ -77,7 +77,7 @@ actual fun MapScreen(modifier: Modifier) {
     )
 
     NavigationEventHandler(navigationState, isBackEnabled = hasScreenStateStack) {
-        viewModel.onBackPressed()
+        viewModel.popScreenState()
     }
 
     LaunchedEffect(shouldShowSheet) {
