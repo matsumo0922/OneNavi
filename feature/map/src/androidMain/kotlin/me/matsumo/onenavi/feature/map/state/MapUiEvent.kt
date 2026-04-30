@@ -21,7 +21,11 @@ sealed interface MapUiEvent {
     data class OnHistorySelected(val history: SearchHistory) : MapUiEvent
     data class OnRemoveHistory(val id: String) : MapUiEvent
 
-    data class OnRouteSearch(val item: SearchResultItem) : MapUiEvent
+    data class OnRouteSearch(
+        val item: SearchResultItem,
+        val latitude: Double?,
+        val longitude: Double?,
+    ) : MapUiEvent
 
     data class OnTopAppBarHeightChanged(val height: Float) : MapUiEvent
     data class OnBottomSheetPeekHeightChanged(val height: Dp) : MapUiEvent

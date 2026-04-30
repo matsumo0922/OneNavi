@@ -3,9 +3,9 @@ package me.matsumo.onenavi.feature.map.state
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import kotlinx.collections.immutable.ImmutableList
-import me.matsumo.onenavi.core.model.RouteResult
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchResultItem
+import me.matsumo.onenavi.feature.map.RouteResult
 
 /**
  * HomeMap 画面の排他的な画面状態。

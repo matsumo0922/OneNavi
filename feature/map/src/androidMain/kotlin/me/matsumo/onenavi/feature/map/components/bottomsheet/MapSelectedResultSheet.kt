@@ -141,7 +141,13 @@ internal fun MapSelectedResultSheet(
             ButtonSection(
                 modifier = Modifier.fillMaxWidth(),
                 onRouteClicked = {
-                    onUiEvent(MapUiEvent.OnRouteSearch(selectedResult))
+                    onUiEvent(
+                        MapUiEvent.OnRouteSearch(
+                            item = selectedResult,
+                            latitude = selectedResult.latitude,
+                            longitude = selectedResult.longitude,
+                        )
+                    )
                 },
                 onFavoriteClicked = {},
                 onStreetViewClicked = {},
