@@ -15,6 +15,18 @@
         <select id="sample-select"></select>
       </div>
 
+      <div class="panel-section" id="custom-panel" style="display:none">
+        <h3>Custom Route</h3>
+        <div class="hint">
+          地図をクリックして waypoint を追加。最初=origin、最後=destination、間=経由地。
+        </div>
+        <ul id="custom-point-list" class="point-list"></ul>
+        <div class="row">
+          <button id="btn-custom-undo" type="button">Remove Last</button>
+          <button id="btn-custom-clear" type="button">Clear All</button>
+        </div>
+      </div>
+
       <div class="panel-section">
         <h3>Layers</h3>
         <label class="layer-toggle">
@@ -44,8 +56,8 @@
         <div class="row">
           <label>案内地点</label>
           <select id="maneuver-sampling">
-            <option value="none">None</option>
-            <option value="all" selected>All</option>
+            <option value="none" selected>None</option>
+            <option value="all">All</option>
             <option value="every2">Every 2nd</option>
             <option value="every4">Every 4th</option>
             <option value="every8">Every 8th</option>
@@ -70,7 +82,7 @@
           Set heading (polyline 接線方向で進行方向を Google に強制)
         </label>
         <label class="layer-toggle">
-          <input type="checkbox" id="toggle-via" />
+          <input type="checkbox" id="toggle-via" checked />
           Use via waypoints (intermediates を pass-through 扱いに)
         </label>
         <button id="btn-fetch">Fetch &amp; Render</button>

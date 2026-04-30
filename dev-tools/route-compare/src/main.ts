@@ -3,7 +3,7 @@
  * → Map 上で外部 polyline と並べて描画する。
  */
 
-import {fitBoundsTo, initMap, setExternalPolyline, setGooglePolylines, setLayerVisibility, setSentWaypointMarkers, setWaypointMarkers,} from "./map";
+import {fitBoundsTo, initMap, setCustomInputMarkers, setExternalPolyline, setGooglePolylines, setLayerVisibility, setMapClickHandler, setSentWaypointMarkers, setWaypointMarkers,} from "./map";
 import {loadManeuverIndices, type ManeuverIndices} from "./maneuvers";
 import {computeChunkBoundaryIndices, computeChunkedRoute, type WaypointInput,} from "./routes-api";
 import {type GuidePoint, type LatLng, loadExternalPolyline, loadGuidePoints, SAMPLES,} from "./samples";
@@ -22,7 +22,14 @@ interface Elements {
   toggleVia: HTMLInputElement;
   status: HTMLDivElement;
   metrics: HTMLDivElement;
+  customPanel: HTMLDivElement;
+  customPointList: HTMLUListElement;
+  customUndoButton: HTMLButtonElement;
+  customClearButton: HTMLButtonElement;
 }
+
+/** sample-select の特殊値: 「Custom (click on map)」モード。 */
+const CUSTOM_SAMPLE_ID = "__custom__";
 
 let elements: Elements;
 let currentWaypoints: LatLng[] = [];
@@ -31,6 +38,9 @@ let currentExternal: LatLng[] = [];
 let currentManeuverIndices: ManeuverIndices | null = null;
 /** 各 GP の出発地点からの累積距離 (m)。距離ベース sampling に使う。 */
 let currentCumDistances: number[] = [];
+
+/** Custom mode でユーザがクリックして追加した waypoint 列 (origin, ...via..., destination)。 */
+let customInputs: LatLng[] = [];
 
 async function main(): Promise<void> {
   const apiKey = import.meta.env.VITE_GOOGLE_API_KEY as string;
@@ -70,6 +80,10 @@ function bindElements(): Elements {
     toggleVia: document.getElementById("toggle-via") as HTMLInputElement,
     status: document.getElementById("status") as HTMLDivElement,
     metrics: document.getElementById("metrics") as HTMLDivElement,
+    customPanel: document.getElementById("custom-panel") as HTMLDivElement,
+    customPointList: document.getElementById("custom-point-list") as HTMLUListElement,
+    customUndoButton: document.getElementById("btn-custom-undo") as HTMLButtonElement,
+    customClearButton: document.getElementById("btn-custom-clear") as HTMLButtonElement,
   };
 }
 
@@ -80,6 +94,15 @@ function populateSampleSelect(): void {
     option.textContent = sample.label + (sample.hasExternalPolyline ? "" : "  [no polyline]");
     elements.sampleSelect.appendChild(option);
   }
+  // sample 群の後に Custom mode を追加 (任意の地点を指定したい時に選ぶ)
+  const customOption = document.createElement("option");
+  customOption.value = CUSTOM_SAMPLE_ID;
+  customOption.textContent = "Custom (click on map)";
+  elements.sampleSelect.appendChild(customOption);
+}
+
+function isCustomMode(): boolean {
+  return elements.sampleSelect.value === CUSTOM_SAMPLE_ID;
 }
 
 function attachEventListeners(apiKey: string): void {
@@ -103,17 +126,98 @@ function attachEventListeners(apiKey: string): void {
   elements.toggleSent.addEventListener("change", () => {
     setLayerVisibility("sent", elements.toggleSent.checked);
   });
+
+  // Custom mode 用の操作。click は map.ts で受けて handler 経由で本ファイルに来る。
+  setMapClickHandler(onCustomMapClick);
+  elements.customUndoButton.addEventListener("click", () => {
+    if (!isCustomMode()) return;
+    customInputs.pop();
+    refreshCustomState();
+  });
+  elements.customClearButton.addEventListener("click", () => {
+    if (!isCustomMode()) return;
+    customInputs = [];
+    refreshCustomState();
+  });
+}
+
+/** Custom mode で地図をクリックしたときの hook。waypoint を末尾に追加する。 */
+function onCustomMapClick(latLng: LatLng): void {
+  if (!isCustomMode()) return;
+  customInputs.push(latLng);
+  refreshCustomState();
+}
+
+/** customInputs を反映: marker 再描画 + リスト更新 + status 更新。 */
+function refreshCustomState(): void {
+  setCustomInputMarkers(customInputs);
+  renderCustomPointList();
+  setStatus(buildCustomStatusText());
+}
+
+function buildCustomStatusText(): string {
+  if (customInputs.length === 0) {
+    return "Custom mode: 地図をクリックして waypoint を追加してください (最低 2 点)。";
+  }
+  if (customInputs.length === 1) {
+    return "Custom mode: あと最低 1 点 (destination) が必要。";
+  }
+  return [
+    `Custom mode: ${customInputs.length} 点設定済み`,
+    `  origin → ${customInputs.length - 2} 経由地 → destination`,
+    `Fetch & Render で reference + FPS chunked 比較を実行。`,
+  ].join("\n");
+}
+
+function renderCustomPointList(): void {
+  const list = elements.customPointList;
+  list.replaceChildren();
+  for (let index = 0; index < customInputs.length; index++) {
+    const role =
+      index === 0
+        ? "origin"
+        : index === customInputs.length - 1 && customInputs.length >= 2
+          ? "dest  "
+          : "via   ";
+    const item = document.createElement("li");
+    item.textContent = `${(index + 1).toString().padStart(2)}. [${role}] ${customInputs[index].lat.toFixed(5)}, ${customInputs[index].lng.toFixed(5)}`;
+    list.appendChild(item);
+  }
+}
+
+/** Custom mode に入る/出る時に共通でやる state リセット。 */
+function resetRouteRenderState(): void {
+  setExternalPolyline(null);
+  setGooglePolylines([]);
+  setWaypointMarkers([], false);
+  setSentWaypointMarkers([], new Set(), false);
+  currentExternal = [];
+  currentWaypoints = [];
+  currentCumDistances = [];
+  currentManeuverIndices = null;
 }
 
 async function loadSelectedSample(): Promise<void> {
   const sampleId = elements.sampleSelect.value;
+
+  // Custom mode は sample データを読まないので別経路で初期化する。
+  if (sampleId === CUSTOM_SAMPLE_ID) {
+    resetRouteRenderState();
+    setCustomInputMarkers([]);
+    customInputs = [];
+    elements.customPanel.style.display = "";
+    setMetrics("");
+    refreshCustomState();
+    return;
+  }
+
+  // sample mode: custom UI は隠して click handler は無効化のままでよい (isCustomMode 判定で守る)
+  elements.customPanel.style.display = "none";
+  setCustomInputMarkers([]);
+
   setStatus(`Loading ${sampleId}...`);
   setMetrics("");
-
-  setGooglePolylines([]);
-  setWaypointMarkers([], false);
-  setSentWaypointMarkers([], new Set(), false);
-  setExternalPolyline(null);
+  resetRouteRenderState();
 
   try {
     const [externalPath, guide] = await Promise.all([
@@ -148,6 +252,10 @@ async function loadSelectedSample(): Promise<void> {
 }
 
 async function fetchAndRender(apiKey: string): Promise<void> {
+  if (isCustomMode()) {
+    await fetchAndRenderCustom(apiKey);
+    return;
+  }
   if (currentWaypoints.length < 2) {
     setStatus("Sample not loaded yet.");
     return;
@@ -216,6 +324,134 @@ async function fetchAndRender(apiKey: string): Promise<void> {
   } finally {
     elements.fetchButton.disabled = false;
   }
+}
+
+/**
+ * Custom mode の Fetch 動作。2 段階で実行する:
+ *
+ *   Step 1: ユーザの clicked 点をそのまま Routes API に投げて reference polyline を取得
+ *           (chunk 分割が必要なら chunked、ただし FPS は通さない)。これが「外部ルート」役。
+ *   Step 2: reference polyline を currentExternal にセットし、既存の buildSentWaypoints
+ *           (= polyline-based FPS + heading + chunk + via) を走らせて test polyline を取得。
+ *
+ * サンプルデータ無しで任意ルートに対しアルゴリズム妥当性を確認するための経路。
+ */
+async function fetchAndRenderCustom(apiKey: string): Promise<void> {
+  if (customInputs.length < 2) {
+    setStatus("Custom mode: 最低 2 点 (origin + destination) が必要。");
+    return;
+  }
+
+  const useHeading = elements.toggleHeading.checked;
+  const useVia = elements.toggleVia.checked;
+  const chunkSize = parseChunkSize(elements.chunkSize.value);
+
+  elements.fetchButton.disabled = true;
+
+  try {
+    // Step 1: reference polyline を取得 (FPS なし、ユーザ点そのまま)
+    setStatus("Step 1/2: reference polyline を取得中...");
+    const referenceWaypoints: WaypointInput[] = customInputs.map((point) => ({
+      lat: point.lat,
+      lng: point.lng,
+    }));
+    const referenceChunks = await computeChunkedRoute(
+      referenceWaypoints,
+      { chunkSize, useVia: false },
+      apiKey,
+    );
+    const referencePolyline = mergeChunkPolylines(referenceChunks.map((chunk) => chunk.polyline));
+
+    // 既存のサンプリング/描画ロジックが触る state を「Custom 由来の reference」で埋める
+    currentExternal = referencePolyline;
+    currentWaypoints = customInputs.slice();
+    currentManeuverIndices = null;
+    currentCumDistances = synthesizeCumDistances(referencePolyline, customInputs.length);
+
+    setExternalPolyline(currentExternal);
+    setLayerVisibility("external", elements.toggleExternal.checked);
+    fitBoundsTo(currentExternal);
+
+    // Step 2: FPS + chunked test
+    setStatus("Step 2/2: FPS + chunked Routes API を実行中...");
+    const waypointsForApi = buildSentWaypoints(
+      elements.maneuverSampling.value,
+      elements.betweenSampling.value,
+      useHeading,
+    );
+    const sampled: LatLng[] = waypointsForApi.map((wp) => ({ lat: wp.lat, lng: wp.lng }));
+    const boundaries = computeChunkBoundaryIndices(sampled.length, chunkSize);
+    setSentWaypointMarkers(sampled, boundaries, elements.toggleSent.checked);
+
+    const testChunks = await computeChunkedRoute(
+      waypointsForApi,
+      { chunkSize, useVia },
+      apiKey,
+    );
+    setGooglePolylines(testChunks.map((chunk) => ({ polyline: chunk.polyline, origin: chunk.origin })));
+    setLayerVisibility("google", elements.toggleGoogle.checked);
+
+    const referenceTotal = referenceChunks.reduce((sum, chunk) => sum + chunk.distanceMeters, 0);
+    const testTotal = testChunks.reduce((sum, chunk) => sum + chunk.distanceMeters, 0);
+    const referenceLength = approximatePolylineDistance(referencePolyline);
+
+    setStatus(
+      [
+        `Custom: ${customInputs.length} 入力点 (origin + ${customInputs.length - 2} via + dest)`,
+        `Reference: ${referenceChunks.length} chunks, ${(referenceTotal / 1000).toFixed(2)}km`,
+        `Test:      ${testChunks.length} chunks, ${(testTotal / 1000).toFixed(2)}km, sampled ${sampled.length} waypoints`,
+        ...testChunks.map(
+          (chunk) =>
+            `  #${chunk.chunkIndex}: intermediates=${chunk.intermediateCount} dist=${(chunk.distanceMeters / 1000).toFixed(2)}km verts=${chunk.polyline.length}`,
+        ),
+      ].join("\n"),
+    );
+    setMetrics(
+      [
+        `Reference: ${(referenceTotal / 1000).toFixed(2)} km`,
+        `Test:      ${(testTotal / 1000).toFixed(2)} km`,
+        referenceLength > 0
+          ? `Inflation: ${(testTotal / referenceLength).toFixed(3)}x (test / reference-haversine)`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  } catch (error) {
+    setStatus(`Custom fetch failed:\n${(error as Error).message}`);
+  } finally {
+    elements.fetchButton.disabled = false;
+  }
+}
+
+/**
+ * chunked Routes API レスポンスの polyline 配列を 1 本に結合する。
+ * 隣接 chunk は最後/最初の頂点が重複する (Routes API の chunk 設計上) ので、
+ * 2 つ目以降は先頭 1 頂点を読み飛ばす。
+ */
+function mergeChunkPolylines(chunkPolylines: LatLng[][]): LatLng[] {
+  const merged: LatLng[] = [];
+  for (let chunkIndex = 0; chunkIndex < chunkPolylines.length; chunkIndex++) {
+    const chunk = chunkPolylines[chunkIndex];
+    const startVertex = chunkIndex === 0 ? 0 : 1;
+    for (let vertex = startVertex; vertex < chunk.length; vertex++) {
+      merged.push(chunk[vertex]);
+    }
+  }
+  return merged;
+}
+
+/**
+ * Custom mode 用に「ユーザ入力 GP に紐付く累積距離」配列を合成する。
+ * buildSentWaypoints は origin (index 0, cumDist=0) と destination (index last,
+ * cumDist=totalLength) の cumDist しか実質参照しないので、両端のみ正しく埋めて
+ * 残りは 0 で良い (案内地点 mode は custom 中は使わないため)。
+ */
+function synthesizeCumDistances(referencePolyline: LatLng[], inputCount: number): number[] {
+  const totalLength = approximatePolylineDistance(referencePolyline);
+  const result = new Array<number>(inputCount).fill(0);
+  if (inputCount > 0) result[inputCount - 1] = totalLength;
+  return result;
 }
 
 /**

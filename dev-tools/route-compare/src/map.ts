@@ -20,6 +20,10 @@ let chunkLines: ChunkLine[] = [];
 
 let waypointMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 let sentWaypointMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
+let customInputMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
+
+/** Custom mode 用の click handler。null だと click 無視。 */
+let mapClickHandler: ((latLng: LatLng) => void) | null = null;
 
 export async function initMap(): Promise<void> {
   const { Map } = (await google.maps.importLibrary("maps")) as google.maps.MapsLibrary;
@@ -34,6 +38,16 @@ export async function initMap(): Promise<void> {
     streetViewControl: false,
     fullscreenControl: false,
   });
+
+  map.addListener("click", (event: google.maps.MapMouseEvent) => {
+    if (!mapClickHandler || !event.latLng) return;
+    mapClickHandler({ lat: event.latLng.lat(), lng: event.latLng.lng() });
+  });
+}
+
+/** Custom mode の click 受け口を登録/解除する。null で解除。 */
+export function setMapClickHandler(handler: ((latLng: LatLng) => void) | null): void {
+  mapClickHandler = handler;
 }
 
 export function getMap(): google.maps.Map {
@@ -172,6 +186,44 @@ export function setSentWaypointMarkers(
       zIndex: 200 + index,
     });
     sentWaypointMarkers.push(marker);
+  }
+}
+
+/**
+ * Custom mode でユーザがクリックした入力 waypoint を順序番号付き marker として描く。
+ * Routes API に送る前の「ユーザの意図そのまま」の点なので、見た目を sent waypoint
+ * と区別する (teal / 点線ボーダー)。
+ */
+export function setCustomInputMarkers(points: LatLng[]): void {
+  for (const marker of customInputMarkers) {
+    marker.map = null;
+  }
+  customInputMarkers = [];
+
+  for (let index = 0; index < points.length; index++) {
+    const point = points[index];
+    const isStart = index === 0;
+    const isEnd = points.length >= 2 && index === points.length - 1;
+    const role = isStart ? "origin" : isEnd ? "dest" : "via";
+
+    const badge = document.createElement("div");
+    badge.style.cssText = `
+      background: #00897b; color: white; font-size: 10px; font-weight: 700;
+      min-width: 22px; height: 22px; padding: 0 5px;
+      border-radius: 11px; border: 2px dashed white;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    `;
+    badge.textContent = `${index + 1}`;
+    badge.title = `Custom input ${index + 1} (${role})`;
+
+    const marker = new google.maps.marker.AdvancedMarkerElement({
+      map,
+      position: point,
+      content: badge,
+      zIndex: 300 + index,
+    });
+    customInputMarkers.push(marker);
   }
 }
 
