@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.repository.RouteRepository
 
@@ -33,13 +34,25 @@ class NewRouteManager(
     val state: StateFlow<RoutePreviewState> = _state.asStateFlow()
 
     /**
-     * 指定地点間のルート候補を探索し、refine 完了まで待ってから Ready を発行する。
+     * 指定 waypoint 列のルート候補を探索し、refine 完了まで待ってから Ready を発行する。
+     *
+     * [waypoints] の先頭が origin、末尾が destination、間の要素は intermediate 経由地として
+     * 扱う。intermediate は外部ナビ API ライブラリへの問い合わせと spec/23 §8.5.2
+     * `forcedWaypoints` 双方に渡され、必ず通る経路として refine される。
      *
      * spec/24 §4.4 に従い、全 alternatives × 全 chunk の Routes API 呼び出しが完了する
      * まで Searching 状態を維持し、UI は何も出さない。途中失敗で Failed に遷移する。
      */
-    suspend fun searchRoutes(origin: RoutePoint, destination: RoutePoint) {
+    suspend fun searchRoutes(waypoints: List<RouteWaypoint>) {
+        require(waypoints.size >= 2) {
+            "waypoints must contain at least origin and destination (size=${waypoints.size})"
+        }
+
         _state.value = RoutePreviewState.Searching
+
+        val origin = waypoints.first().toRoutePoint()
+        val destination = waypoints.last().toRoutePoint()
+        val intermediates = waypoints.subList(1, waypoints.lastIndex).map { it.toRoutePoint() }
 
         val refinedRoutes = runCatching {
             val results = routeRepository.searchRoutes(
@@ -47,6 +60,7 @@ class NewRouteManager(
                 originLongitude = origin.longitude,
                 destinationLatitude = destination.latitude,
                 destinationLongitude = destination.longitude,
+                intermediateWaypoints = intermediates.map { it.latitude to it.longitude },
             ).getOrThrow()
 
             require(results.isNotEmpty()) { "No route candidates returned" }
@@ -56,6 +70,7 @@ class NewRouteManager(
                     extPolyline = result.item.geometry,
                     origin = origin,
                     destination = destination,
+                    intermediates = intermediates,
                 )
             }
         }
@@ -93,6 +108,11 @@ class NewRouteManager(
     fun reset() {
         _state.value = RoutePreviewState.Idle
     }
+
+    private fun RouteWaypoint.toRoutePoint(): RoutePoint = RoutePoint(
+        latitude = latitude,
+        longitude = longitude,
+    )
 
     private companion object {
         const val TAG = "NewRouteManager"

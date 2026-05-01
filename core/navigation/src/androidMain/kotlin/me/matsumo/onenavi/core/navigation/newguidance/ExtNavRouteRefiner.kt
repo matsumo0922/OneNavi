@@ -36,13 +36,22 @@ class ExtNavRouteRefiner(
     /**
      * polyline 内側頂点を FPS で間引いて waypoint 列を作る。
      *
+     * [forcedWaypoints] が空でない場合は spec/23 §8.5.2 の `buildCustomSentWaypoints` 相当の
+     * 動作になる。各 forced waypoint を polyline 上の最近傍頂点に projection し、その累積距離を
+     * FPS の seed に追加した上で残り頂点を埋め、最後に 5m 以内の近接 pick を dedup (forced 優先で
+     * 残す)。これにより「ユーザが指定した経由地は必ず通る + その間は polyline 形状を補助点で
+     * 追従させる」test polyline が得られる。
+     *
      * @param extPolyline 外部ルート polyline (WGS84)。先頭が origin、末尾が destination
+     * @param forcedWaypoints 必ず通したい中間地点 (空可)。座標そのものを使い、heading は polyline
+     *                        への projection 接線方向で補完する
      * @param targetGapMeters waypoint 間隔の目標値。spec/23 で実測 4000m が最適
      * @return origin と destination を端点に含む waypoint 列。中間 waypoint には局所接線方向の
      *         heading が付く
      */
     fun samplePolylineWaypoints(
         extPolyline: List<RoutePoint>,
+        forcedWaypoints: List<RoutePoint> = emptyList(),
         targetGapMeters: Double = DEFAULT_TARGET_GAP_METERS,
     ): List<RoutesApiWaypoint> {
         require(extPolyline.size >= 2) {
@@ -54,27 +63,53 @@ class ExtNavRouteRefiner(
 
         val cumDistances = computeCumulativeDistances(extPolyline)
         val totalLength = cumDistances.last()
+        val originWaypoint = RoutesApiWaypoint(point = extPolyline.first())
+        val destinationWaypoint = RoutesApiWaypoint(point = extPolyline.last())
+
         if (totalLength <= 0.0 || extPolyline.size == 2) {
-            return listOf(
-                RoutesApiWaypoint(point = extPolyline.first()),
-                RoutesApiWaypoint(point = extPolyline.last()),
-            )
+            val forcedMiddle = forcedWaypoints.map { RoutesApiWaypoint(point = it) }
+            return listOf(originWaypoint) + forcedMiddle + listOf(destinationWaypoint)
         }
 
-        val pickedIndices = pickInteriorByFps(
+        val forcedProjections = forcedWaypoints.map { forced ->
+            projectForcedWaypoint(forced, extPolyline, cumDistances)
+        }
+
+        val totalDesired = ceil(totalLength / targetGapMeters).toInt().coerceAtLeast(1)
+        val additionalDesired = (totalDesired - forcedProjections.size).coerceAtLeast(0)
+
+        val pickedInteriorIndices = pickInteriorByFps(
             cumDistances = cumDistances,
             totalLength = totalLength,
             targetGapMeters = targetGapMeters,
+            additionalSeedDistances = forcedProjections.map { it.cumDist },
+            desiredCount = additionalDesired,
         )
 
-        val orderedIndices = (listOf(0) + pickedIndices.sorted() + listOf(extPolyline.lastIndex))
-        return orderedIndices.map { index ->
-            val isEndpoint = index == 0 || index == extPolyline.lastIndex
-            RoutesApiWaypoint(
+        val interiorPicks = pickedInteriorIndices.map { index ->
+            WaypointPick(
+                cumDist = cumDistances[index],
                 point = extPolyline[index],
-                heading = if (isEndpoint) null else computeLocalHeading(extPolyline, index),
+                heading = computeLocalHeading(extPolyline, index),
+                isForced = false,
             )
         }
+        val forcedPicks = forcedProjections.map { projection ->
+            WaypointPick(
+                cumDist = projection.cumDist,
+                point = projection.point,
+                heading = projection.heading,
+                isForced = true,
+            )
+        }
+
+        val sortedPicks = (interiorPicks + forcedPicks).sortedBy { it.cumDist }
+        val dedupedPicks = mergeNearbyPicks(sortedPicks, DEDUP_THRESHOLD_METERS)
+
+        val middleWaypoints = dedupedPicks.map { pick ->
+            RoutesApiWaypoint(point = pick.point, heading = pick.heading)
+        }
+        return listOf(originWaypoint) + middleWaypoints + listOf(destinationWaypoint)
     }
 
     /**
@@ -127,11 +162,16 @@ class ExtNavRouteRefiner(
         extPolyline: List<RoutePoint>,
         origin: RoutePoint,
         destination: RoutePoint,
+        intermediates: List<RoutePoint> = emptyList(),
         targetGapMeters: Double = DEFAULT_TARGET_GAP_METERS,
         intermediateMax: Int = ROUTES_API_INTERMEDIATE_MAX,
         useVia: Boolean = true,
     ): RefinedRoute {
-        val sampled = samplePolylineWaypoints(extPolyline, targetGapMeters)
+        val sampled = samplePolylineWaypoints(
+            extPolyline = extPolyline,
+            forcedWaypoints = intermediates,
+            targetGapMeters = targetGapMeters,
+        )
         val chunked = chunkWaypoints(sampled, intermediateMax)
         val refinedChunks = computeChunkedRoute(chunked, useVia)
         return RefinedRoute(
@@ -145,13 +185,15 @@ class ExtNavRouteRefiner(
         cumDistances: DoubleArray,
         totalLength: Double,
         targetGapMeters: Double,
+        additionalSeedDistances: List<Double> = emptyList(),
+        desiredCount: Int = ceil(totalLength / targetGapMeters).toInt().coerceAtLeast(1),
     ): List<Int> {
         val interiorIndices = (1..cumDistances.lastIndex - 1).toList()
-        if (interiorIndices.isEmpty()) return emptyList()
+        if (interiorIndices.isEmpty() || desiredCount <= 0) return emptyList()
 
         val seedDistances = mutableListOf(0.0, totalLength)
+        seedDistances += additionalSeedDistances
         val pickedIndices = mutableListOf<Int>()
-        val desiredCount = ceil(totalLength / targetGapMeters).toInt().coerceAtLeast(1)
         val earlyStopThreshold = targetGapMeters * EARLY_TERMINATION_FRACTION
 
         repeat(desiredCount) {
@@ -173,6 +215,46 @@ class ExtNavRouteRefiner(
             seedDistances += cumDistances[bestIndex]
         }
         return pickedIndices
+    }
+
+    private fun projectForcedWaypoint(
+        forced: RoutePoint,
+        polyline: List<RoutePoint>,
+        cumDistances: DoubleArray,
+    ): ForcedProjection {
+        var nearestIndex = 0
+        var nearestDistance = Double.POSITIVE_INFINITY
+        for (index in polyline.indices) {
+            val distance = haversineDistanceMeters(forced, polyline[index])
+            if (distance < nearestDistance) {
+                nearestDistance = distance
+                nearestIndex = index
+            }
+        }
+        val headingIndex = nearestIndex.coerceIn(1, polyline.lastIndex - 1)
+        return ForcedProjection(
+            point = forced,
+            cumDist = cumDistances[nearestIndex],
+            heading = computeLocalHeading(polyline, headingIndex),
+        )
+    }
+
+    private fun mergeNearbyPicks(
+        picks: List<WaypointPick>,
+        thresholdMeters: Double,
+    ): List<WaypointPick> {
+        val merged = mutableListOf<WaypointPick>()
+        for (pick in picks) {
+            val last = merged.lastOrNull()
+            if (last != null && abs(last.cumDist - pick.cumDist) < thresholdMeters) {
+                if (pick.isForced && !last.isForced) {
+                    merged[merged.lastIndex] = pick
+                }
+                continue
+            }
+            merged += pick
+        }
+        return merged
     }
 
     private fun computeCumulativeDistances(polyline: List<RoutePoint>): DoubleArray {
@@ -219,6 +301,21 @@ class ExtNavRouteRefiner(
         return (thetaDeg + BEARING_FULL_TURN) % BEARING_FULL_TURN
     }
 
+    /** spec/23 §8.5.2 のユーザ click 点を polyline 上に projection した結果。 */
+    private data class ForcedProjection(
+        val point: RoutePoint,
+        val cumDist: Double,
+        val heading: Int,
+    )
+
+    /** sort + dedup 用の中間表現。`isForced` で dedup 時の優先度を区別する。 */
+    private data class WaypointPick(
+        val cumDist: Double,
+        val point: RoutePoint,
+        val heading: Int?,
+        val isForced: Boolean,
+    )
+
     companion object {
         const val DEFAULT_TARGET_GAP_METERS = 4_000.0
         const val ROUTES_API_INTERMEDIATE_MAX = 25
@@ -226,5 +323,6 @@ class ExtNavRouteRefiner(
         private const val EARTH_RADIUS_METERS = 6_371_000.0
         private const val BEARING_FULL_TURN = 360
         private const val EARLY_TERMINATION_FRACTION = 0.4
+        private const val DEDUP_THRESHOLD_METERS = 5.0
     }
 }

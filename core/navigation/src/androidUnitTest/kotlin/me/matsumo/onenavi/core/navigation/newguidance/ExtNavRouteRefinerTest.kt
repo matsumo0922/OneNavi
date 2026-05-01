@@ -63,6 +63,48 @@ class ExtNavRouteRefinerTest {
     }
 
     @Test
+    fun `forcedWaypoints は polyline 上に projection されて waypoint 列に必ず混入する`() {
+        val polyline = (0..29).map { step ->
+            RoutePoint(latitude = 35.0, longitude = 139.0 + 0.01 * step)
+        }
+        // polyline 上の真ん中近辺の座標 (頂点 15 と完全一致しないが最近傍頂点 15 に projection される)
+        val forced = RoutePoint(latitude = 35.0001, longitude = 139.0 + 0.01 * 15 + 0.0002)
+
+        val sampled = refiner.samplePolylineWaypoints(
+            extPolyline = polyline,
+            forcedWaypoints = listOf(forced),
+            targetGapMeters = 4_000.0,
+        )
+
+        // 強制注入された waypoint は座標そのもの (polyline 頂点ではない) で含まれる
+        val forcedInWaypoints = sampled.firstOrNull { it.point == forced }
+        assertNotNull(forcedInWaypoints, "forced waypoint must appear in sampled list")
+        assertNotNull(forcedInWaypoints.heading, "forced waypoint には projection 接線 heading が付く")
+        assertEquals(polyline.first(), sampled.first().point, "先頭は origin")
+        assertEquals(polyline.last(), sampled.last().point, "末尾は destination")
+    }
+
+    @Test
+    fun `forcedWaypoints が空なら従来挙動と同じ`() {
+        val polyline = (0..29).map { step ->
+            RoutePoint(latitude = 35.0, longitude = 139.0 + 0.01 * step)
+        }
+
+        val withoutForced = refiner.samplePolylineWaypoints(polyline, targetGapMeters = 4_000.0)
+        val emptyForced = refiner.samplePolylineWaypoints(
+            extPolyline = polyline,
+            forcedWaypoints = emptyList(),
+            targetGapMeters = 4_000.0,
+        )
+
+        assertEquals(withoutForced.size, emptyForced.size)
+        withoutForced.zip(emptyForced).forEach { (lhs, rhs) ->
+            assertEquals(lhs.point, rhs.point)
+            assertEquals(lhs.heading, rhs.heading)
+        }
+    }
+
+    @Test
     fun `chunkWaypoints は intermediateMax+1 ステップで境界を共有する`() {
         // 60 点 (origin + 58 中間 + destination) → intermediateMax=25 で 3 chunk
         val waypoints = (0 until 60).map { index ->

@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -144,7 +143,7 @@ private class UiEventDelegate(
             .map { it.query }
             .debounce(DEBOUNCE.milliseconds)
             .distinctUntilChanged()
-            .onEach { query -> performSearch(query) }
+            .onEach { query -> performSearchSuggestions(query) }
             .launchIn(scope)
 
         // spec/24 §4.3: Preview 期に selectedRoute が決まるたび Navigator に chunk[0] を投入する。
@@ -278,16 +277,7 @@ private class UiEventDelegate(
 
         routeSearchJob?.cancel()
         routeSearchJob = scope.launch {
-            newRouteManager.searchRoutes(
-                origin = RoutePoint(
-                    latitude = latitude ?: 0.0,
-                    longitude = longitude ?: 0.0,
-                ),
-                destination = RoutePoint(
-                    latitude = item.latitude,
-                    longitude = item.longitude,
-                ),
-            )
+            newRouteManager.searchRoutes(waypoints = waypoints)
         }
     }
 
@@ -322,7 +312,7 @@ private class UiEventDelegate(
         uiState.value = uiState.value.copy(bottomSheetPeekHeight = height)
     }
 
-    private fun performSearch(query: String?) {
+    private fun performSearchSuggestions(query: String?) {
         placeSearchJob?.cancel()
         placeSearchJob = scope.launch {
             if (query.isNullOrBlank() || query.length < 3) return@launch

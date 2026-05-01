@@ -7,6 +7,7 @@ import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteResult
+import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutesApiWaypoint
 import me.matsumo.onenavi.core.repository.RouteRepository
@@ -35,6 +36,16 @@ class NewRouteManagerTest {
 
     private val origin = RoutePoint(latitude = 35.0, longitude = 139.0)
     private val destination = RoutePoint(latitude = 35.5, longitude = 139.5)
+    private val originWaypoint = RouteWaypoint.CurrentLocation(
+        latitude = origin.latitude,
+        longitude = origin.longitude,
+    )
+    private val destinationWaypoint = RouteWaypoint.Place(
+        name = "destination",
+        latitude = destination.latitude,
+        longitude = destination.longitude,
+    )
+    private val defaultWaypoints = listOf(originWaypoint, destinationWaypoint)
 
     @Test
     fun `初期状態は Idle`() {
@@ -47,7 +58,7 @@ class NewRouteManagerTest {
             listOf(buildRouteResult(buildLinearPolyline(pointCount = 5))),
         )
 
-        manager.searchRoutes(origin = origin, destination = destination)
+        manager.searchRoutes(waypoints = defaultWaypoints)
 
         val state = assertIs<RoutePreviewState.Ready>(manager.state.value)
         assertEquals(1, state.routes.size)
@@ -57,10 +68,38 @@ class NewRouteManagerTest {
     }
 
     @Test
+    fun `intermediate waypoint は repository に渡される`() = runTest {
+        fakeDataSource.nextResult = Result.success(
+            listOf(buildRouteResult(buildLinearPolyline(pointCount = 5))),
+        )
+        val intermediate = RouteWaypoint.Place(
+            name = "via",
+            latitude = 35.25,
+            longitude = 139.25,
+        )
+
+        manager.searchRoutes(
+            waypoints = listOf(originWaypoint, intermediate, destinationWaypoint),
+        )
+
+        assertEquals(
+            listOf(intermediate.latitude to intermediate.longitude),
+            fakeDataSource.lastIntermediateWaypoints,
+        )
+    }
+
+    @Test
+    fun `waypoints が 2 未満なら例外`() = runTest {
+        assertFailsWith<IllegalArgumentException> {
+            manager.searchRoutes(waypoints = listOf(originWaypoint))
+        }
+    }
+
+    @Test
     fun `空ルートが返ったら Failed`() = runTest {
         fakeDataSource.nextResult = Result.success(emptyList())
 
-        manager.searchRoutes(origin = origin, destination = destination)
+        manager.searchRoutes(waypoints = defaultWaypoints)
 
         assertIs<RoutePreviewState.Failed>(manager.state.value)
     }
@@ -70,7 +109,7 @@ class NewRouteManagerTest {
         val cause = IllegalStateException("offline")
         fakeDataSource.nextResult = Result.failure(cause)
 
-        manager.searchRoutes(origin = origin, destination = destination)
+        manager.searchRoutes(waypoints = defaultWaypoints)
 
         val state = assertIs<RoutePreviewState.Failed>(manager.state.value)
         assertSame(cause, state.error)
@@ -84,7 +123,7 @@ class NewRouteManagerTest {
                 buildRouteResult(buildLinearPolyline(pointCount = 6)),
             ),
         )
-        manager.searchRoutes(origin = origin, destination = destination)
+        manager.searchRoutes(waypoints = defaultWaypoints)
 
         manager.selectRoute(index = 1)
 
@@ -104,7 +143,7 @@ class NewRouteManagerTest {
         fakeDataSource.nextResult = Result.success(
             listOf(buildRouteResult(buildLinearPolyline(pointCount = 3))),
         )
-        manager.searchRoutes(origin = origin, destination = destination)
+        manager.searchRoutes(waypoints = defaultWaypoints)
 
         assertFailsWith<IllegalArgumentException> {
             manager.selectRoute(index = 99)
@@ -116,7 +155,7 @@ class NewRouteManagerTest {
         fakeDataSource.nextResult = Result.success(
             listOf(buildRouteResult(buildLinearPolyline(pointCount = 3))),
         )
-        manager.searchRoutes(origin = origin, destination = destination)
+        manager.searchRoutes(waypoints = defaultWaypoints)
         assertTrue(manager.state.value is RoutePreviewState.Ready)
 
         manager.reset()
@@ -151,6 +190,8 @@ class NewRouteManagerTest {
 private class FakeRouteDataSource : RouteDataSource {
 
     var nextResult: Result<List<RouteResult>> = Result.success(emptyList())
+    var lastIntermediateWaypoints: List<Pair<Double, Double>> = emptyList()
+        private set
 
     override suspend fun searchRoutes(
         originLatitude: Double,
@@ -158,7 +199,10 @@ private class FakeRouteDataSource : RouteDataSource {
         destinationLatitude: Double,
         destinationLongitude: Double,
         intermediateWaypoints: List<Pair<Double, Double>>,
-    ): Result<List<RouteResult>> = nextResult
+    ): Result<List<RouteResult>> {
+        lastIntermediateWaypoints = intermediateWaypoints
+        return nextResult
+    }
 }
 
 /**
