@@ -4,13 +4,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.aakira.napier.Napier
-import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -33,7 +31,6 @@ import me.matsumo.onenavi.core.navigation.newguidance.NewNavigationSdkManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
-import me.matsumo.onenavi.core.repository.RouteRepository
 import me.matsumo.onenavi.core.repository.SearchRepository
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
@@ -43,12 +40,6 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class MapViewModel(
     private val searchRepository: SearchRepository,
-    private val routeRepository: RouteRepository,
-    /**
-     * spec/24 の新案内系。本 ViewModel では現状 state 公開のみ行い、Preview/Guidance 中の
-     * 実フロー (refine トリガー / startGuidance 呼び出し / polyline 描画) は UI 側で順次
-     * 接続していく。
-     */
     private val newRouteManager: NewRouteManager,
     private val newGuidanceManager: NewGuidanceManager,
     private val newNavigationSdkManager: NewNavigationSdkManager,
@@ -91,15 +82,12 @@ class MapViewModel(
 
     private val uiEventDelegate = UiEventDelegate(
         searchRepository = searchRepository,
-        routeRepository = routeRepository,
         newRouteManager = newRouteManager,
         newGuidanceManager = newGuidanceManager,
         newNavigationSdkManager = newNavigationSdkManager,
         scope = viewModelScope,
         uiState = _uiState,
-        currentScreenState = currentScreenState,
         pushScreenState = ::pushScreenState,
-        updateScreenState = ::replaceCurrentScreenState,
     )
 
     fun onUiEvent(event: MapUiEvent) = uiEventDelegate.onUiEvent(event)
@@ -107,12 +95,6 @@ class MapViewModel(
     fun pushScreenState(state: MapScreenState) {
         _screenStates.update { states ->
             states + state
-        }
-    }
-
-    fun replaceCurrentScreenState(state: MapScreenState) {
-        _screenStates.update { states ->
-            states.dropLast(1) + state
         }
     }
 
@@ -139,15 +121,12 @@ class MapViewModel(
 
 private class UiEventDelegate(
     private val searchRepository: SearchRepository,
-    private val routeRepository: RouteRepository,
     private val newRouteManager: NewRouteManager,
     private val newGuidanceManager: NewGuidanceManager,
     private val newNavigationSdkManager: NewNavigationSdkManager,
     private val scope: CoroutineScope,
-    private val currentScreenState: StateFlow<MapScreenState>,
     private val uiState: MutableStateFlow<MapUiState>,
     private val pushScreenState: (MapScreenState) -> Unit,
-    private val updateScreenState: (MapScreenState) -> Unit,
 ) {
     private var placeSearchJob: Job? = null
     private var routeSearchJob: Job? = null
@@ -258,7 +237,7 @@ private class UiEventDelegate(
     }
 
     private fun handleRouteSearch(item: SearchResultItem, latitude: Double?, longitude: Double?) {
-        val waypoints = listOf(
+        val waypoints = persistentListOf(
             RouteWaypoint.CurrentLocation(
                 latitude = latitude ?: 0.0,
                 longitude = longitude ?: 0.0,
@@ -270,9 +249,15 @@ private class UiEventDelegate(
             ),
         )
 
-        searchRoutesFromWaypoints(waypoints.toImmutableList())
+        pushScreenState(
+            MapScreenState.RoutePreview(
+                waypoints = waypoints,
+                topBarMode = RoutePreviewTopBarMode.Viewing,
+            ),
+        )
 
-        scope.launch {
+        routeSearchJob?.cancel()
+        routeSearchJob = scope.launch {
             newRouteManager.searchRoutes(
                 origin = RoutePoint(
                     latitude = latitude ?: 0.0,
@@ -287,10 +272,6 @@ private class UiEventDelegate(
     }
 
     private fun handleRouteIndexChanged(index: Int) {
-        val routePreviewScreenState = currentScreenState.value as? MapScreenState.RoutePreview ?: return
-        val newScreenState = routePreviewScreenState.copy(selectedRouteIndex = index)
-
-        updateScreenState(newScreenState)
         newRouteManager.selectRoute(index)
     }
 
@@ -334,43 +315,6 @@ private class UiEventDelegate(
                     Napier.e(it, TAG) { "Failed to search. query: $query" }
                     uiState.value = uiState.value.copy(suggestions = persistentListOf())
                 }
-        }
-    }
-
-    private fun searchRoutesFromWaypoints(waypoints: ImmutableList<RouteWaypoint>) {
-        if (waypoints.size < 2) return
-
-        val originCoordinates = waypoints.first().let { it.latitude to it.longitude }
-        val destinationCoordinates = waypoints.last().let { it.latitude to it.longitude }
-        val intermediateWaypoints = waypoints
-            .drop(1)
-            .dropLast(1)
-            .map { waypoint -> waypoint.latitude to waypoint.longitude }
-
-        routeSearchJob?.cancel()
-        routeSearchJob = scope.launch {
-            routeRepository.searchRoutes(
-                originLatitude = originCoordinates.first,
-                originLongitude = originCoordinates.second,
-                destinationLatitude = destinationCoordinates.first,
-                destinationLongitude = destinationCoordinates.second,
-                intermediateWaypoints = intermediateWaypoints,
-            ).onSuccess { coreResults ->
-                ensureActive()
-
-                val featureResults = coreResults.mapNotNull { it.toFeatureRouteResult() }
-
-                pushScreenState(
-                    MapScreenState.RoutePreview(
-                        waypoints = waypoints.toImmutableList(),
-                        routes = featureResults.toImmutableList(),
-                        selectedRouteIndex = 0,
-                        topBarMode = RoutePreviewTopBarMode.Viewing,
-                    ),
-                )
-            }.onFailure {
-                Napier.e(it, TAG) { "Failed to search routes. waypoints: $waypoints" }
-            }
         }
     }
 

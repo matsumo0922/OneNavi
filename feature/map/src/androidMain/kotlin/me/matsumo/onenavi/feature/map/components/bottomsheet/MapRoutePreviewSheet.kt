@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.common.formatDuration
+import me.matsumo.onenavi.core.navigation.newguidance.model.RefinedRoute
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_day
 import me.matsumo.onenavi.core.resource.common_unit_hour
@@ -36,17 +37,13 @@ import me.matsumo.onenavi.core.resource.common_unit_kilometer
 import me.matsumo.onenavi.core.resource.common_unit_meter
 import me.matsumo.onenavi.core.resource.common_unit_minute
 import me.matsumo.onenavi.core.resource.home_map_route_result_duration_distance
-import me.matsumo.onenavi.core.resource.home_map_route_result_general_road
 import me.matsumo.onenavi.core.resource.home_map_route_result_start_navigation
-import me.matsumo.onenavi.core.resource.home_map_route_result_toll_road
-import me.matsumo.onenavi.core.resource.home_map_route_result_via
-import me.matsumo.onenavi.feature.map.RouteResult
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun MapRoutePreviewSheet(
-    routeResults: ImmutableList<RouteResult>,
+    routes: ImmutableList<RefinedRoute>,
     selectedRouteIndex: Int,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
@@ -55,13 +52,13 @@ internal fun MapRoutePreviewSheet(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        itemsIndexed(routeResults) { index, routeResult ->
-            HomeMapRouteResultItem(
+        itemsIndexed(routes) { index, route ->
+            MapRoutePreviewItem(
                 modifier = Modifier.fillMaxWidth(),
-                routeResult = routeResult,
+                route = route,
                 isSelected = selectedRouteIndex == index,
                 onNavigationClicked = { onUiEvent(MapUiEvent.OnNavigationStart) },
-                onRouteResultSelected = { onUiEvent(MapUiEvent.OnRouteIndexChanged(index)) },
+                onRouteSelected = { onUiEvent(MapUiEvent.OnRouteIndexChanged(index)) },
             )
         }
     }
@@ -69,11 +66,11 @@ internal fun MapRoutePreviewSheet(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun HomeMapRouteResultItem(
-    routeResult: RouteResult,
+private fun MapRoutePreviewItem(
+    route: RefinedRoute,
     isSelected: Boolean,
     onNavigationClicked: () -> Unit,
-    onRouteResultSelected: () -> Unit,
+    onRouteSelected: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val dayLabel = stringResource(Res.string.common_unit_day)
@@ -82,17 +79,17 @@ private fun HomeMapRouteResultItem(
     val meterLabel = stringResource(Res.string.common_unit_meter)
     val kilometerLabel = stringResource(Res.string.common_unit_kilometer)
 
-    val duration = remember(routeResult, dayLabel, hourLabel, minuteLabel) {
+    val duration = remember(route, dayLabel, hourLabel, minuteLabel) {
         formatDuration(
-            totalSeconds = routeResult.item.durationSeconds,
+            totalSeconds = route.totalDurationSeconds.toDouble(),
             dayLabel = dayLabel,
             hourLabel = hourLabel,
             minuteLabel = minuteLabel,
         )
     }
-    val distance = remember(routeResult, meterLabel, kilometerLabel) {
+    val distance = remember(route, meterLabel, kilometerLabel) {
         formatDistance(
-            meters = routeResult.item.distanceMeters,
+            meters = route.totalDistanceMeters.toDouble(),
             meterLabel = meterLabel,
             kilometerLabel = kilometerLabel,
         )
@@ -109,7 +106,7 @@ private fun HomeMapRouteResultItem(
                     Modifier
                 },
             )
-            .clickable { onRouteResultSelected.invoke() }
+            .clickable { onRouteSelected.invoke() }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -122,23 +119,6 @@ private fun HomeMapRouteResultItem(
                 modifier = Modifier.fillMaxWidth(),
                 text = stringResource(Res.string.home_map_route_result_duration_distance, duration, distance),
                 style = MaterialTheme.typography.titleLarge,
-            )
-
-            if (routeResult.item.viaRoadNames.isNotEmpty()) {
-                Text(
-                    text = stringResource(Res.string.home_map_route_result_via, routeResult.item.viaRoadNames.joinToString(", ")),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-
-            Text(
-                text = if (routeResult.item.hasTolls) {
-                    stringResource(Res.string.home_map_route_result_toll_road)
-                } else {
-                    stringResource(Res.string.home_map_route_result_general_road)
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
