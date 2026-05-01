@@ -109,13 +109,13 @@ class GuidanceSessionManager(
         activeRoute = route
         sessionStartTimeMillis = System.currentTimeMillis()
 
-        val primaryGuidance = payload.guidance.primary
+        val routeGuidance = payload.routeGuidance
         Napier.i(tag = TAG) {
             "[NAVDBG] startSession: route=${route.id} " +
-                "intersections=${primaryGuidance.intersections.size} " +
-                "gps=${primaryGuidance.guidancePoints.size} " +
-                "polyline=${primaryGuidance.polyline.size} " +
-                "totalMetres=${primaryGuidance.summary.distanceMetres}"
+                "intersections=${routeGuidance.intersections.size} " +
+                "gps=${routeGuidance.guidancePoints.size} " +
+                "polyline=${routeGuidance.polyline.size} " +
+                "totalMetres=${routeGuidance.summary.distanceMetres}"
         }
 
         val sessionTracker = extNavTrackerProvider().also { tracker = it }
@@ -123,7 +123,7 @@ class GuidanceSessionManager(
         val sessionDetector = extNavRerouteDetectorProvider().also { rerouteDetector = it }
         val sessionSpeaker = speakerProvider().also { speaker = it }
 
-        sessionTracker.attach(payload.guidance.primary)
+        sessionTracker.attach(routeGuidance)
         sessionScheduler.reset()
         sessionDetector.reset()
 
@@ -146,7 +146,7 @@ class GuidanceSessionManager(
                 if (newRoute == null) return@onEach
                 val newPayload = extNavRouteRegistry.get(newRoute.id) ?: return@onEach
                 activeRoute = newRoute
-                tracker?.attach(newPayload.guidance.primary)
+                tracker?.attach(newPayload.routeGuidance)
                 scheduler?.reset()
                 rerouteDetector?.reset()
                 _guidanceUiState.value = _guidanceUiState.value.copy(isOffRoute = false)

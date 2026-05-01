@@ -14,6 +14,7 @@ import kotlinx.collections.immutable.ImmutableList
  * @param hasTolls 有料道路区間を含むかどうか
  * @param tollFee 有料道路の料金（円）。null の場合は料金不明。
  * @param congestionSegments geometry 上の渋滞区間。Google Routes API の speedReadingIntervals に対応。
+ * @param priorityLabel ルート種別の表示名（例: 「推奨」「渋滞回避」）。外部ナビ API 由来の場合のみ設定される。
  */
 @Immutable
 data class RouteItem(
@@ -24,6 +25,7 @@ data class RouteItem(
     val hasTolls: Boolean,
     val tollFee: Int? = null,
     val congestionSegments: ImmutableList<CongestionSegment> = kotlinx.collections.immutable.persistentListOf(),
+    val priorityLabel: String? = null,
 )
 
 /**
