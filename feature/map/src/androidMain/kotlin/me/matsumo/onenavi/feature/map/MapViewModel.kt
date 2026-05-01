@@ -92,6 +92,9 @@ class MapViewModel(
     private val uiEventDelegate = UiEventDelegate(
         searchRepository = searchRepository,
         routeRepository = routeRepository,
+        newRouteManager = newRouteManager,
+        newGuidanceManager = newGuidanceManager,
+        newNavigationSdkManager = newNavigationSdkManager,
         scope = viewModelScope,
         uiState = _uiState,
         currentScreenState = currentScreenState,
@@ -124,53 +127,6 @@ class MapViewModel(
         newNavigationSdkManager.initialize(activity)
     }
 
-    /**
-     * spec/23 ベースの refine を起動する。UI で目的地確定後に並走で呼ぶ想定。
-     * 既存の routeRepository ベースのフローは破壊せず、Preview 用に別系統で refined route を
-     * 用意する。
-     */
-    fun startRouteRefine(
-        originLatitude: Double,
-        originLongitude: Double,
-        destinationLatitude: Double,
-        destinationLongitude: Double,
-    ) {
-        viewModelScope.launch {
-            newRouteManager.searchRoutes(
-                origin = RoutePoint(
-                    latitude = originLatitude,
-                    longitude = originLongitude,
-                ),
-                destination = RoutePoint(
-                    latitude = destinationLatitude,
-                    longitude = destinationLongitude,
-                ),
-            )
-        }
-    }
-
-    /** Preview 中のルート切替を新 manager にも伝える。 */
-    fun selectNewRoute(index: Int) {
-        newRouteManager.selectRoute(index)
-    }
-
-    /** Preview から Guidance に遷移するときに呼ぶ。Navigator が ready でなければ no-op。 */
-    fun startNewGuidance() {
-        val navigator = newNavigationSdkManager.navigator.value ?: return
-        val locationProvider = newNavigationSdkManager.roadSnappedLocationProvider.value ?: return
-        val previewState = newRouteManager.state.value as? RoutePreviewState.Ready ?: return
-        newGuidanceManager.startGuidance(
-            navigator = navigator,
-            route = previewState.selectedRoute,
-            locationProvider = locationProvider,
-        )
-    }
-
-    /** Guidance を停止する。UI 側で「案内停止」ボタンや画面離脱時に呼ぶ。 */
-    fun stopNewGuidance() {
-        newGuidanceManager.stopGuidance()
-    }
-
     override fun onCleared() {
         super.onCleared()
         newGuidanceManager.release()
@@ -184,6 +140,9 @@ class MapViewModel(
 private class UiEventDelegate(
     private val searchRepository: SearchRepository,
     private val routeRepository: RouteRepository,
+    private val newRouteManager: NewRouteManager,
+    private val newGuidanceManager: NewGuidanceManager,
+    private val newNavigationSdkManager: NewNavigationSdkManager,
     private val scope: CoroutineScope,
     private val currentScreenState: StateFlow<MapScreenState>,
     private val uiState: MutableStateFlow<MapUiState>,
@@ -220,6 +179,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnRouteSearch -> handleRouteSearch(event.item, event.latitude, event.longitude)
             is MapUiEvent.OnRouteIndexChanged -> handleRouteIndexChanged(event.index)
             is MapUiEvent.OnNavigationStart -> handleRouteStart()
+            is MapUiEvent.OnNavigationStop -> handleNavigationStop()
             is MapUiEvent.OnTopAppBarHeightChanged -> handleTopAppBarHeightChanged(event.height)
             is MapUiEvent.OnBottomSheetPeekHeightChanged -> handleBottomSheetPeekHeightChanged(event.height)
         }
@@ -311,6 +271,19 @@ private class UiEventDelegate(
         )
 
         searchRoutesFromWaypoints(waypoints.toImmutableList())
+
+        scope.launch {
+            newRouteManager.searchRoutes(
+                origin = RoutePoint(
+                    latitude = latitude ?: 0.0,
+                    longitude = longitude ?: 0.0,
+                ),
+                destination = RoutePoint(
+                    latitude = item.latitude,
+                    longitude = item.longitude,
+                ),
+            )
+        }
     }
 
     private fun handleRouteIndexChanged(index: Int) {
@@ -318,12 +291,26 @@ private class UiEventDelegate(
         val newScreenState = routePreviewScreenState.copy(selectedRouteIndex = index)
 
         updateScreenState(newScreenState)
+        newRouteManager.selectRoute(index)
     }
 
     private fun handleRouteStart() {
         pushScreenState(
             MapScreenState.Navigating,
         )
+
+        val navigator = newNavigationSdkManager.navigator.value ?: return
+        val locationProvider = newNavigationSdkManager.roadSnappedLocationProvider.value ?: return
+        val previewState = newRouteManager.state.value as? RoutePreviewState.Ready ?: return
+        newGuidanceManager.startGuidance(
+            navigator = navigator,
+            route = previewState.selectedRoute,
+            locationProvider = locationProvider,
+        )
+    }
+
+    private fun handleNavigationStop() {
+        newGuidanceManager.stopGuidance()
     }
 
     private fun handleTopAppBarHeightChanged(height: Int) {
