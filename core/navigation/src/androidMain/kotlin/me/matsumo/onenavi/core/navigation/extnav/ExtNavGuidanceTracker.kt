@@ -6,17 +6,20 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import me.matsumo.drive.supporter.api.core.model.Coord
-import me.matsumo.drive.supporter.api.guidance.domain.Guidance
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection
+import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker.Companion.BACKWARD_TOLERANCE_METRES
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker.Companion.MANEUVER_INTERSECTION_TOLERANCE_METRES
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker.Companion.SEGMENT_SEARCH_WINDOW
 
 /**
- * 現在地を [Guidance.polyline] に射影して進捗 (累積 m) を求め、
+ * 現在地を [RouteGuidance.polyline] に射影して進捗 (累積 m) を求め、
  * そこから残距離 / 次 GP / 次 Intersection / off-route 判定を提供する。
+ *
+ * 1 セッションで追跡するのは選択中の 1 候補ルート ([RouteGuidance]) のみ。
+ * `Guidance` 全体 (複数候補を含む) を受けるのは attach 呼び出し側の責務とする。
  *
  * 旧実装 (intersections 最近傍) は intersections が sparse だと progressedMetres が
  * 前に進まず、次 GP へ切り替わらなかった。dense polyline (~40-80m 間隔) を
@@ -34,7 +37,7 @@ class ExtNavGuidanceTracker {
     private val _state = MutableStateFlow<ExtNavProgressSnapshot?>(null)
     val state: StateFlow<ExtNavProgressSnapshot?> = _state.asStateFlow()
 
-    private var guidance: Guidance? = null
+    private var guidance: RouteGuidance? = null
     private var averageMetresPerSecond: Double = DEFAULT_SPEED_MPS
 
     private var polylineCumMetres: DoubleArray = DoubleArray(0)
@@ -43,7 +46,7 @@ class ExtNavGuidanceTracker {
     private var lastProgressMetres: Double = 0.0
     private var lastSegmentIndex: Int = 0
 
-    fun attach(guidance: Guidance) {
+    fun attach(guidance: RouteGuidance) {
         this.guidance = guidance
         averageMetresPerSecond = run {
             val totalMetres = guidance.summary.distanceMetres.toDouble()
@@ -143,7 +146,7 @@ class ExtNavGuidanceTracker {
      * 持たないため、事前計算した [intersectionProgressMetres] と [progressMetres] の差が
      * [MANEUVER_INTERSECTION_TOLERANCE_METRES] 以下で最も近いものを採用する。該当なしなら null。
      */
-    private fun findIntersectionAt(guidance: Guidance, progressMetres: Double): Intersection? {
+    private fun findIntersectionAt(guidance: RouteGuidance, progressMetres: Double): Intersection? {
         if (intersectionProgressMetres.isEmpty()) return null
         var bestIndex = -1
         var bestDelta = MANEUVER_INTERSECTION_TOLERANCE_METRES
@@ -157,7 +160,7 @@ class ExtNavGuidanceTracker {
         return if (bestIndex >= 0) guidance.intersections[bestIndex] else null
     }
 
-    private fun precomputePolyline(guidance: Guidance) {
+    private fun precomputePolyline(guidance: RouteGuidance) {
         val polyline = guidance.polyline
         if (polyline.size < 2) {
             polylineCumMetres = DoubleArray(0)

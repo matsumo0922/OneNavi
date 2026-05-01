@@ -2,6 +2,7 @@ package me.matsumo.onenavi.core.navigation.extnav
 
 import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -47,7 +48,7 @@ class ExtNavRouteDataSource(
             waypoints = intermediateWaypoints
                 .map { (lat, lng) -> RouteWaypoint(coord = Coord.fromDegrees(lat, lng)) }
                 .toImmutableList(),
-            priority = CarPriority.Recommended,
+            priorities = persistentSetOf(CarPriority.Recommended),
         )
 
         val (routesResult, guidanceResult) = coroutineScope {
@@ -69,9 +70,10 @@ class ExtNavRouteDataSource(
 
         val geometry = buildGeometry(guidance, originPoint, destinationPoint)
 
-        val tollYen = guidance.summary.tollYen.takeIf { it > 0 }
-        val distanceMetres = guidance.summary.distanceMetres.toDouble()
-        val timeSeconds = guidance.summary.timeSeconds.toDouble()
+        val primaryGuidance = guidance.primary
+        val tollYen = primaryGuidance.summary.tollYen.takeIf { it > 0 }
+        val distanceMetres = primaryGuidance.summary.distanceMetres.toDouble()
+        val timeSeconds = primaryGuidance.summary.timeSeconds.toDouble()
 
         val googleRoute = GoogleRoute(
             id = primaryRoute.id,
@@ -117,11 +119,12 @@ class ExtNavRouteDataSource(
     ): kotlinx.collections.immutable.ImmutableList<RoutePoint> {
         // ROUTE バイナリ由来の dense polyline を最優先で使う (74.4km に 960 点 ≒ 77m 間隔)。
         // ROUTE 欠落 / decode 失敗時のみ intersection 連結 (≒ 500m 間隔) にフォールバック。
-        val dense = guidance.polyline.map { coord ->
+        val primary = guidance.primary
+        val dense = primary.polyline.map { coord ->
             RoutePoint(coord.latDegrees, coord.lonDegrees)
         }
         val raw = dense.ifEmpty {
-            guidance.intersections.map { intersection ->
+            primary.intersections.map { intersection ->
                 RoutePoint(intersection.position.latDegrees, intersection.position.lonDegrees)
             }
         }
