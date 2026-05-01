@@ -60,7 +60,7 @@ internal fun MapRoutePreviewSheet(
                 modifier = Modifier.fillMaxWidth(),
                 routeResult = routeResult,
                 isSelected = selectedRouteIndex == index,
-                onNavigationClicked = { onUiEvent(MapUiEvent.OnNavigationStart(routeResult)) },
+                onNavigationClicked = { onUiEvent(MapUiEvent.OnNavigationStart) },
                 onRouteResultSelected = { onUiEvent(MapUiEvent.OnRouteIndexChanged(index)) },
             )
         }

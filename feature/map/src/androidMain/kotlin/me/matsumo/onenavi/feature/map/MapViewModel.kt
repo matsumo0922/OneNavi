@@ -23,14 +23,11 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import me.matsumo.onenavi.core.model.NavigationState
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
-import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
-import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewNavigationSdkManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
@@ -47,8 +44,6 @@ import kotlin.time.Duration.Companion.milliseconds
 class MapViewModel(
     private val searchRepository: SearchRepository,
     private val routeRepository: RouteRepository,
-    private val routeManager: RouteManager,
-    private val guidanceSessionManager: GuidanceSessionManager,
     /**
      * spec/24 の新案内系。本 ViewModel では現状 state 公開のみ行い、Preview/Guidance 中の
      * 実フロー (refine トリガー / startGuidance 呼び出し / polyline 描画) は UI 側で順次
@@ -97,8 +92,6 @@ class MapViewModel(
     private val uiEventDelegate = UiEventDelegate(
         searchRepository = searchRepository,
         routeRepository = routeRepository,
-        routeManager = routeManager,
-        guidanceSessionManager = guidanceSessionManager,
         scope = viewModelScope,
         uiState = _uiState,
         currentScreenState = currentScreenState,
@@ -191,8 +184,6 @@ class MapViewModel(
 private class UiEventDelegate(
     private val searchRepository: SearchRepository,
     private val routeRepository: RouteRepository,
-    private val routeManager: RouteManager,
-    private val guidanceSessionManager: GuidanceSessionManager,
     private val scope: CoroutineScope,
     private val currentScreenState: StateFlow<MapScreenState>,
     private val uiState: MutableStateFlow<MapUiState>,
@@ -228,7 +219,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnRemoveHistory -> handleRemoveHistory(event.id)
             is MapUiEvent.OnRouteSearch -> handleRouteSearch(event.item, event.latitude, event.longitude)
             is MapUiEvent.OnRouteIndexChanged -> handleRouteIndexChanged(event.index)
-            is MapUiEvent.OnNavigationStart -> handleRouteStart(event.routeResult)
+            is MapUiEvent.OnNavigationStart -> handleRouteStart()
             is MapUiEvent.OnTopAppBarHeightChanged -> handleTopAppBarHeightChanged(event.height)
             is MapUiEvent.OnBottomSheetPeekHeightChanged -> handleBottomSheetPeekHeightChanged(event.height)
         }
@@ -329,8 +320,7 @@ private class UiEventDelegate(
         updateScreenState(newScreenState)
     }
 
-    private fun handleRouteStart(routeResult: RouteResult) {
-        routeManager.setRoutes(listOf(routeResult.googleRoute))
+    private fun handleRouteStart() {
         pushScreenState(
             MapScreenState.Navigating,
         )
@@ -382,9 +372,6 @@ private class UiEventDelegate(
                 ensureActive()
 
                 val featureResults = coreResults.mapNotNull { it.toFeatureRouteResult() }
-
-                routeManager.setRoutes(featureResults.map { it.googleRoute })
-                guidanceSessionManager.setNavigationState(NavigationState.RoutePreview)
 
                 pushScreenState(
                     MapScreenState.RoutePreview(
