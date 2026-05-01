@@ -60,6 +60,10 @@ actual val navigationModule: Module = module {
                     Json {
                         ignoreUnknownKeys = true
                         isLenient = true
+                        // ComputeRoutesRequest が data class のデフォルト値で routingPreference 等を
+                        // 持つため、encodeDefaults を有効にしないと JSON から省略され Google 側で
+                        // TRAFFIC_UNAWARE 相当に倒れて routeToken が返らなくなる。
+                        encodeDefaults = true
                         explicitNulls = false
                     },
                 )
@@ -68,6 +72,7 @@ actual val navigationModule: Module = module {
     }
     single<RoutesApiClient> {
         DefaultRoutesApiClient(
+            context = androidContext(),
             httpClient = get(qualifier = named(NEW_GUIDANCE_HTTP_CLIENT)),
             apiKey = get<AppConfig>().googleApiKey,
         )

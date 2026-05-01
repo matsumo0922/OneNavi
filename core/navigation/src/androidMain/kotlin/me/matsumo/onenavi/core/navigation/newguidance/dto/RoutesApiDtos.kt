@@ -15,7 +15,8 @@ internal data class ComputeRoutesRequest(
     val destination: WaypointDto,
     val intermediates: List<WaypointDto> = emptyList(),
     val travelMode: String = "DRIVE",
-    val routingPreference: String = "TRAFFIC_UNAWARE",
+    /** route_token を取るには TRAFFIC_AWARE 以上が必須 (TRAFFIC_UNAWARE では空文字が返る)。 */
+    val routingPreference: String = "TRAFFIC_AWARE",
     val polylineQuality: String = "HIGH_QUALITY",
 )
 

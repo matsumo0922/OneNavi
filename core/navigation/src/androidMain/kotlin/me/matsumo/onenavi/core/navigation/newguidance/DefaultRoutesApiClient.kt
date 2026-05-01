@@ -1,5 +1,8 @@
 package me.matsumo.onenavi.core.navigation.newguidance
 
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.header
@@ -13,6 +16,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.dto.LatLngDto
 import me.matsumo.onenavi.core.navigation.newguidance.dto.LocationDto
 import me.matsumo.onenavi.core.navigation.newguidance.dto.WaypointDto
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutesApiWaypoint
+import java.security.MessageDigest
 
 /**
  * [RoutesApiClient] の Ktor 実装。
@@ -21,10 +25,15 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RoutesApiWaypoint
  * で必要な項目のみ要求する。intermediate には [useVia] が true のとき `via:true` を
  * 立てて pass-through 扱い (spec/23 §7.3) にする。origin/destination には付けない。
  *
+ * Android アプリ制限付きの API key を通すため、`X-Android-Package` と `X-Android-Cert`
+ * ヘッダを毎リクエストに付与する (legacy `GoogleRoutesDataSource` と同様)。
+ *
+ * @param context Android パッケージ名と署名証明書の SHA-1 を取り出すために使う
  * @param httpClient JSON ContentNegotiation 設定済みの HttpClient
  * @param apiKey [me.matsumo.onenavi.core.model.AppConfig.googleApiKey] を渡す
  */
 internal class DefaultRoutesApiClient(
+    private val context: Context,
     private val httpClient: HttpClient,
     private val apiKey: String,
 ) : RoutesApiClient {
@@ -52,12 +61,13 @@ internal class DefaultRoutesApiClient(
         val response: ComputeRoutesResponse = httpClient.post(ENDPOINT) {
             header(API_KEY_HEADER, apiKey)
             header(FIELD_MASK_HEADER, FIELD_MASK)
+            header(ANDROID_PACKAGE_HEADER, context.packageName)
+            header(ANDROID_CERT_HEADER, context.signingCertificateSha1())
             contentType(ContentType.Application.Json)
             setBody(request)
         }.body()
 
-        val route = response.routes.firstOrNull()
-            ?: error("Routes API returned no routes")
+        val route = response.routes.firstOrNull() ?: error("Routes API returned no routes")
 
         RoutesApiResponse(
             polyline = PolylineDecoder.decode(route.polyline.encodedPolyline),
@@ -91,7 +101,25 @@ internal class DefaultRoutesApiClient(
         private const val ENDPOINT = "https://routes.googleapis.com/directions/v2:computeRoutes"
         private const val API_KEY_HEADER = "X-Goog-Api-Key"
         private const val FIELD_MASK_HEADER = "X-Goog-FieldMask"
+        private const val ANDROID_PACKAGE_HEADER = "X-Android-Package"
+        private const val ANDROID_CERT_HEADER = "X-Android-Cert"
         private const val FIELD_MASK =
             "routes.polyline.encodedPolyline,routes.routeToken,routes.distanceMeters,routes.duration"
     }
+}
+
+private fun Context.signingCertificateSha1(): String {
+    val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        packageManager.getPackageInfo(
+            packageName,
+            PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong()),
+        )
+    } else {
+        @Suppress("DEPRECATION")
+        packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+    }
+    val signature = packageInfo.signingInfo?.apkContentsSigners?.firstOrNull() ?: error("No signing certificate found for package $packageName")
+    val digest = MessageDigest.getInstance("SHA-1").digest(signature.toByteArray())
+
+    return digest.joinToString(separator = "") { byte -> "%02X".format(byte) }
 }
