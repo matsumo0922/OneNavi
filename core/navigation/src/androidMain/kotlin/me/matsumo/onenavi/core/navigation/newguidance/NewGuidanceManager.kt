@@ -25,6 +25,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RefinedChunk
 import me.matsumo.onenavi.core.navigation.newguidance.model.RefinedRoute
 import me.matsumo.onenavi.core.repository.RouteRepository
 import kotlin.coroutines.resume
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * spec/24 §5-§7 の新案内マネージャ。
@@ -118,14 +119,17 @@ class NewGuidanceManager(
                 onSuccess = {
                     navigator.startGuidance()
                     _state.value = GuidanceState.Guiding(activeChunkIndex = 0)
+
                     Napier.i(tag = TAG) { "Guidance started: chunks=${route.chunks.size}" }
                 },
                 onFailure = { error ->
                     Napier.e(tag = TAG, throwable = error) { "Failed to apply chunk 0" }
                     detachListeners()
+
                     this@NewGuidanceManager.navigator = null
                     this@NewGuidanceManager.route = null
                     this@NewGuidanceManager.locationProvider = null
+
                     _state.value = GuidanceState.Failed("chunk0 setDestinations failed: ${error.message}")
                 },
             )
@@ -204,7 +208,12 @@ class NewGuidanceManager(
 
         _state.value = GuidanceState.AdvancingChunk(from = activeChunkIndex)
 
-        val applied = applyChunkWithRetry(navigator = nav, chunk = nextChunk, attempt = 0)
+        val applied = applyChunkWithRetry(
+            navigator = nav,
+            chunk = nextChunk,
+            attempt = 0,
+        )
+
         if (applied) {
             activeChunkIndex = nextIndex
             _state.value = GuidanceState.Guiding(activeChunkIndex = nextIndex)
@@ -213,6 +222,7 @@ class NewGuidanceManager(
             _state.value = GuidanceState.Failed("chunk advance failed after $MAX_RETRY attempts")
             Napier.e(tag = TAG) { "Chunk advance failed after retries" }
         }
+
         advanceJob = null
     }
 
@@ -222,13 +232,19 @@ class NewGuidanceManager(
         attempt: Int,
     ): Boolean {
         val result = applyChunk(navigator, chunk)
+        val delayMs = RETRY_BASE_DELAY_MS * (attempt + 1)
+
         if (result.isSuccess) return true
         if (attempt >= MAX_RETRY - 1) return false
 
-        val delayMs = RETRY_BASE_DELAY_MS * (attempt + 1)
         Napier.w(tag = TAG) { "applyChunk failed (attempt=${attempt + 1}); retrying in ${delayMs}ms" }
-        delay(delayMs)
-        return applyChunkWithRetry(navigator = navigator, chunk = chunk, attempt = attempt + 1)
+        delay(delayMs.milliseconds)
+
+        return applyChunkWithRetry(
+            navigator = navigator,
+            chunk = chunk,
+            attempt = attempt + 1,
+        )
     }
 
     private suspend fun applyChunk(navigator: Navigator, chunk: RefinedChunk): Result<Unit> {
@@ -239,6 +255,7 @@ class NewGuidanceManager(
                 .setTravelMode(CustomRoutesOptions.TravelMode.DRIVING)
                 .build()
             val routeStatus = navigator.setDestinations(waypoints, customRoutesOptions).await()
+
             check(routeStatus == Navigator.RouteStatus.OK) {
                 "setDestinations returned non-OK status: $routeStatus"
             }
@@ -264,11 +281,11 @@ class NewGuidanceManager(
     private suspend fun reroute() {
         val nav = navigator ?: return
         val rt = route ?: return
-        val origin = lastLocation?.toRoutePoint()
-            ?: rt.chunks[activeChunkIndex].waypoints.first().point
+        val origin = lastLocation?.toRoutePoint() ?: rt.chunks[activeChunkIndex].waypoints.first().point
         val destination = rt.destination
 
         _state.value = GuidanceState.Rerouting
+
         Napier.i(tag = TAG) { "Rerouting from $origin to $destination" }
 
         val refined = runCatching {
@@ -278,8 +295,9 @@ class NewGuidanceManager(
                 destinationLatitude = destination.latitude,
                 destinationLongitude = destination.longitude,
             ).getOrThrow()
-            val primary = results.firstOrNull()
-                ?: error("Reroute returned no candidates")
+
+            val primary = results.firstOrNull() ?: error("Reroute returned no candidates")
+
             extNavRouteRefiner.refine(
                 extPolyline = primary.item.geometry,
                 origin = origin,
@@ -291,7 +309,13 @@ class NewGuidanceManager(
             onSuccess = { newRoute ->
                 route = newRoute
                 activeChunkIndex = 0
-                val applied = applyChunkWithRetry(navigator = nav, chunk = newRoute.chunks[0], attempt = 0)
+
+                val applied = applyChunkWithRetry(
+                    navigator = nav,
+                    chunk = newRoute.chunks[0],
+                    attempt = 0,
+                )
+
                 if (applied) {
                     _state.value = GuidanceState.Guiding(activeChunkIndex = 0)
                     Napier.i(tag = TAG) { "Reroute completed: chunks=${newRoute.chunks.size}" }

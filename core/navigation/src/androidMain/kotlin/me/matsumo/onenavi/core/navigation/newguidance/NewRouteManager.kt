@@ -29,7 +29,6 @@ class NewRouteManager(
     private val routeRepository: RouteRepository,
     private val extNavRouteRefiner: ExtNavRouteRefiner,
 ) {
-
     private val _state = MutableStateFlow<RoutePreviewState>(RoutePreviewState.Idle)
     val state: StateFlow<RoutePreviewState> = _state.asStateFlow()
 
@@ -63,10 +62,7 @@ class NewRouteManager(
 
         refinedRoutes
             .onSuccess { refined ->
-                Napier.i(tag = TAG) {
-                    "searchRoutes ready: routes=${refined.size} " +
-                        "totalChunks=${refined.sumOf { it.chunks.size }}"
-                }
+                Napier.i(tag = TAG) { "searchRoutes ready: routes=${refined.size} totalChunks=${refined.sumOf { it.chunks.size }}" }
                 _state.value = RoutePreviewState.Ready(
                     routes = refined.toImmutableList(),
                     selectedIndex = 0,
@@ -84,9 +80,11 @@ class NewRouteManager(
      */
     fun selectRoute(index: Int) {
         val current = _state.value as? RoutePreviewState.Ready ?: return
+
         require(index in current.routes.indices) {
             "selectRoute index $index out of routes.indices=${current.routes.indices}"
         }
+
         if (index == current.selectedIndex) return
         _state.value = current.copy(selectedIndex = index)
     }

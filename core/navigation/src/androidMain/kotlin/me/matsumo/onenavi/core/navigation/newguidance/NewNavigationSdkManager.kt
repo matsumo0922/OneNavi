@@ -8,8 +8,8 @@ import com.google.android.libraries.navigation.Navigator
 import com.google.android.libraries.navigation.RoadSnappedLocationProvider
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import me.matsumo.onenavi.core.navigation.newguidance.NewNavigationSdkManager.Companion.TERMS_NOT_ACCEPTED_ERROR_CODE
 
 /**
  * spec/24 (B 案 並走) で SDK と接合する新規エントリポイント。
@@ -29,16 +29,13 @@ import kotlinx.coroutines.flow.asStateFlow
 class NewNavigationSdkManager(
     private val application: Application,
 ) {
-
     private val _navigator = MutableStateFlow<Navigator?>(null)
-    val navigator: StateFlow<Navigator?> = _navigator.asStateFlow()
-
     private val _roadSnappedLocationProvider = MutableStateFlow<RoadSnappedLocationProvider?>(null)
-    val roadSnappedLocationProvider: StateFlow<RoadSnappedLocationProvider?> =
-        _roadSnappedLocationProvider.asStateFlow()
-
     private val _initializationErrorCode = MutableStateFlow<Int?>(null)
-    val initializationErrorCode: StateFlow<Int?> = _initializationErrorCode.asStateFlow()
+
+    val navigator = _navigator.asStateFlow()
+    val roadSnappedLocationProvider = _roadSnappedLocationProvider.asStateFlow()
+    val initializationErrorCode = _initializationErrorCode.asStateFlow()
 
     private var initializing = false
 
@@ -55,26 +52,27 @@ class NewNavigationSdkManager(
             return
         }
 
-        initializing = true
-        NavigationApi.getNavigator(
-            activity,
-            object : NavigatorListener {
-                override fun onNavigatorReady(navigator: Navigator) {
-                    initializing = false
-                    _navigator.value = navigator
-                    _roadSnappedLocationProvider.value =
-                        NavigationApi.getRoadSnappedLocationProvider(application)
-                    _initializationErrorCode.value = null
-                    Napier.i(tag = TAG) { "Navigator ready (new manager)" }
-                }
+        val listener = object : NavigatorListener {
+            override fun onNavigatorReady(navigator: Navigator) {
+                initializing = false
 
-                override fun onError(@NavigationApi.ErrorCode errorCode: Int) {
-                    initializing = false
-                    _initializationErrorCode.value = errorCode
-                    Napier.e(tag = TAG) { "Navigator init failed (new manager): errorCode=$errorCode" }
-                }
-            },
-        )
+                _navigator.value = navigator
+                _roadSnappedLocationProvider.value = NavigationApi.getRoadSnappedLocationProvider(application)
+                _initializationErrorCode.value = null
+
+                Napier.i(tag = TAG) { "Navigator ready (new manager)" }
+            }
+
+            override fun onError(@NavigationApi.ErrorCode errorCode: Int) {
+                initializing = false
+                _initializationErrorCode.value = errorCode
+
+                Napier.e(tag = TAG) { "Navigator init failed (new manager): errorCode=$errorCode" }
+            }
+        }
+
+        initializing = true
+        NavigationApi.getNavigator(activity, listener)
     }
 
     companion object {
