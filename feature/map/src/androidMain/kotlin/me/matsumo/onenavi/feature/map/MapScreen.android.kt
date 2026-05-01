@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.feature.map
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -47,6 +48,8 @@ import org.koin.compose.viewmodel.koinViewModel
 actual fun MapScreen(modifier: Modifier) {
     val viewModel = koinViewModel<MapViewModel>()
 
+    val activity = LocalActivity.current
+
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val screenState by viewModel.currentScreenState.collectAsStateWithLifecycle()
     val hasScreenStateStack by viewModel.hasScreenStateStack.collectAsStateWithLifecycle()
@@ -83,6 +86,10 @@ actual fun MapScreen(modifier: Modifier) {
 
     NavigationEventHandler(navigationState, isBackEnabled = hasScreenStateStack) {
         viewModel.popScreenState()
+    }
+
+    LaunchedEffect(activity) {
+        activity?.let(viewModel::initializeNewSdk)
     }
 
     LaunchedEffect(shouldShowSheet) {
