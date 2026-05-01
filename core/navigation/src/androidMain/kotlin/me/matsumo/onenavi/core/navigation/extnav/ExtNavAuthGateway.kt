@@ -26,11 +26,12 @@ class ExtNavAuthGateway(
         val password = appConfig.extNavPassword
 
         if (loginId.isBlank() || password.isBlank()) {
-            return Result.failure(MissingCredentialsException)
+            return Result.failure(MissingCredentialsException())
         }
 
         val client = clientProvider.get()
         val state = client.auth.currentState()
+
         if (state is AuthState.SignedIn) {
             return Result.success(Unit)
         }
@@ -45,6 +46,7 @@ class ExtNavAuthGateway(
                 }
             }
         }
+
         Result.failure(AuthGatewayException(ApiFailure.Unexpected(IllegalStateException("sign-in retry exhausted"))))
     }
 
@@ -57,6 +59,6 @@ class ExtNavAuthGateway(
     }
 }
 
-object MissingCredentialsException : Exception("EXT_NAV_LOGIN_ID / EXT_NAV_PASSWORD are not configured")
+class MissingCredentialsException : Exception("EXT_NAV_LOGIN_ID / EXT_NAV_PASSWORD are not configured")
 
 class AuthGatewayException(val failure: ApiFailure) : Exception("drive-supporter-api sign-in failed: $failure")

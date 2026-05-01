@@ -47,7 +47,6 @@ class ExtNavRouteDataSource(
             waypoints = intermediateWaypoints
                 .map { (lat, lng) -> RouteWaypoint(coord = Coord.fromDegrees(lat, lng)) }
                 .toImmutableList(),
-            limit = 1,
             priority = CarPriority.Recommended,
         )
 
