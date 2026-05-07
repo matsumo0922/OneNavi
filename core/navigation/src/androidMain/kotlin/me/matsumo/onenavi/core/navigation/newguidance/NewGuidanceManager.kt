@@ -136,28 +136,6 @@ class NewGuidanceManager(
         }
     }
 
-    /**
-     * Preview 期に Navigator へ chunk[0] を投入する。route_token を SDK にロードするだけで
-     * `startGuidance()` は呼ばない (spec/24 §4.2)。listener attach もしない。
-     *
-     * selectedIndex 切替で何度呼んでも安全。`setDestinations` は前回の destinations を
-     * 暗黙に上書きするので明示的な clear は不要。
-     *
-     * Guidance 中に呼ばれた場合は警告ログのみで no-op。
-     */
-    suspend fun previewRoute(navigator: Navigator, route: RefinedRoute) {
-        require(route.chunks.isNotEmpty()) { "RefinedRoute must contain at least one chunk" }
-
-        if (this.navigator != null) {
-            Napier.w(tag = TAG) { "previewRoute called during active guidance; ignoring" }
-            return
-        }
-
-        applyChunk(navigator, route.chunks[0]).onFailure { error ->
-            Napier.w(tag = TAG, throwable = error) { "previewRoute applyChunk failed" }
-        }
-    }
-
     /** 案内を停止する。listener detach + state = Idle にする。 */
     fun stopGuidance() {
         advanceJob?.cancel()

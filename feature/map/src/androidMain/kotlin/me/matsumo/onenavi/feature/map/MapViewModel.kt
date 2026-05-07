@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
@@ -144,25 +143,6 @@ private class UiEventDelegate(
             .debounce(DEBOUNCE.milliseconds)
             .distinctUntilChanged()
             .onEach { query -> performSearchSuggestions(query) }
-            .launchIn(scope)
-
-        // spec/24 §4.3: Preview 期に selectedRoute が決まるたび Navigator に chunk[0] を投入する。
-        // navigator がまだ来てない時は state を保持しておき、navigator 取得後に最初の Ready で発火する。
-        combine(
-            newRouteManager.state,
-            newNavigationSdkManager.navigator,
-        ) { state, navigator ->
-            (state as? RoutePreviewState.Ready)?.selectedRoute?.let { route ->
-                navigator?.let { route to it }
-            }
-        }
-            .distinctUntilChanged()
-            .onEach { pair ->
-                if (pair != null) {
-                    val (route, navigator) = pair
-                    newGuidanceManager.previewRoute(navigator = navigator, route = route)
-                }
-            }
             .launchIn(scope)
     }
 
