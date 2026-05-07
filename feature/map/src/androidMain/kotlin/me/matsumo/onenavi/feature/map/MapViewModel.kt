@@ -156,7 +156,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnRemoveHistory -> handleRemoveHistory(event.id)
             is MapUiEvent.OnRouteSearch -> handleRouteSearch(event.item, event.latitude, event.longitude)
             is MapUiEvent.OnRouteIndexChanged -> handleRouteIndexChanged(event.index)
-            is MapUiEvent.OnNavigationStart -> handleRouteStart()
+            is MapUiEvent.OnNavigationStart -> handleNavigationStart()
             is MapUiEvent.OnNavigationStop -> handleNavigationStop()
             is MapUiEvent.OnTopAppBarHeightChanged -> handleTopAppBarHeightChanged(event.height)
             is MapUiEvent.OnBottomSheetPeekHeightChanged -> handleBottomSheetPeekHeightChanged(event.height)
@@ -265,14 +265,13 @@ private class UiEventDelegate(
         newRouteManager.selectRoute(index)
     }
 
-    private fun handleRouteStart() {
-        pushScreenState(
-            MapScreenState.Navigating,
-        )
+    private fun handleNavigationStart() {
+        pushScreenState(MapScreenState.Navigating)
 
         val navigator = newNavigationSdkManager.navigator.value ?: return
         val locationProvider = newNavigationSdkManager.roadSnappedLocationProvider.value ?: return
         val previewState = newRouteManager.state.value as? RoutePreviewState.Ready ?: return
+
         newGuidanceManager.startGuidance(
             navigator = navigator,
             route = previewState.selectedRoute,
