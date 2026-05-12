@@ -21,6 +21,8 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavSsmlSpeaker
+import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
+import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
 import me.matsumo.onenavi.core.navigation.tts.AndroidTtsEngine
 import me.matsumo.onenavi.core.navigation.tts.AudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.FallbackTtsEngine
@@ -35,13 +37,16 @@ import me.matsumo.onenavi.core.navigation.tts.fetchSigningCertSha1
 import org.koin.android.ext.koin.androidApplication
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 actual val navigationModule: Module = module {
     single { RouteManager() }
     single { NavigationSdkManager(androidApplication(), get()) }
     single { CameraManager(get()) }
-    single<HttpClient>(qualifier = org.koin.core.qualifier.named("googleCloudTts")) {
+    single { NewRouteManager(routeRepository = get()) }
+    single { NewGuidanceManager() }
+    single<HttpClient>(qualifier = named("googleCloudTts")) {
         HttpClient(OkHttp) {
             install(HttpTimeout) {
                 connectTimeoutMillis = 3_000
@@ -84,7 +89,7 @@ actual val navigationModule: Module = module {
         createTtsEngine(
             context = context,
             appConfig = get(),
-            httpClient = get(qualifier = org.koin.core.qualifier.named("googleCloudTts")),
+            httpClient = get(qualifier = named("googleCloudTts")),
         )
     }
     factory { ExtNavGuidanceTracker() }

@@ -28,6 +28,7 @@ import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.google.android.gms.maps.GoogleMap
+import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.MapControls
 import me.matsumo.onenavi.feature.map.components.MapMarker
@@ -49,6 +50,7 @@ actual fun MapScreen(modifier: Modifier) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val screenState by viewModel.currentScreenState.collectAsStateWithLifecycle()
     val hasScreenStateStack by viewModel.hasScreenStateStack.collectAsStateWithLifecycle()
+    val routePreviewState by viewModel.newRoutePreviewState.collectAsStateWithLifecycle()
 
     val navigationBarHeightDp = WindowInsets.navigationBars
         .asPaddingValues()
@@ -96,13 +98,14 @@ actual fun MapScreen(modifier: Modifier) {
 
     MapEffect(
         screenState = screenState,
+        routePreviewState = routePreviewState,
         googleMap = googleMap,
     )
 
     MapCameraEffect(
         uiState = uiState,
         screenState = screenState,
-        cameraState = cameraState
+        cameraState = cameraState,
     )
 
     BottomSheetScaffold(
@@ -114,6 +117,7 @@ actual fun MapScreen(modifier: Modifier) {
                 modifier = Modifier.fillMaxSize(),
                 uiState = uiState,
                 screenState = screenState,
+                routePreviewState = routePreviewState,
                 cameraState = cameraState,
                 onUiEvent = viewModel::onUiEvent,
             )
@@ -159,7 +163,8 @@ private fun MapScreenContent(
     when (screenState) {
         is MapScreenState.Browsing,
         is MapScreenState.PlaceDetails,
-        is MapScreenState.SearchResultsList -> {
+        is MapScreenState.SearchResultsList,
+        -> {
             MapBrowsingContent(
                 modifier = modifier,
                 cameraState = cameraState,
@@ -169,7 +174,6 @@ private fun MapScreenContent(
         }
 
         is MapScreenState.RoutePreview -> {
-
         }
         is MapScreenState.Navigating -> TODO()
         is MapScreenState.Arrived -> TODO()
@@ -180,6 +184,7 @@ private fun MapScreenContent(
 private fun MapScreenBottomSheetContent(
     uiState: MapUiState,
     screenState: MapScreenState,
+    routePreviewState: RoutePreviewState,
     cameraState: MapCameraState,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
@@ -197,12 +202,15 @@ private fun MapScreenBottomSheetContent(
 
         is MapScreenState.SearchResultsList -> TODO()
         is MapScreenState.RoutePreview -> {
-            MapRoutePreviewSheet(
-                modifier = modifier,
-                routeResults = screenState.routes,
-                selectedRouteIndex = screenState.selectedRouteIndex,
-                onUiEvent = onUiEvent,
-            )
+            val ready = routePreviewState as? RoutePreviewState.Ready
+            if (ready != null) {
+                MapRoutePreviewSheet(
+                    modifier = modifier,
+                    routes = ready.routes,
+                    selectedRouteIndex = ready.selectedIndex,
+                    onUiEvent = onUiEvent,
+                )
+            }
         }
         is MapScreenState.Navigating -> TODO()
         is MapScreenState.Arrived -> TODO()
@@ -249,7 +257,6 @@ private fun MapCameraEffect(
 
             is MapScreenState.SearchResultsList -> TODO()
             is MapScreenState.RoutePreview -> {
-
             }
             is MapScreenState.Navigating -> TODO()
             is MapScreenState.Arrived -> TODO()
@@ -260,6 +267,7 @@ private fun MapCameraEffect(
 @Composable
 private fun MapEffect(
     screenState: MapScreenState,
+    routePreviewState: RoutePreviewState,
     googleMap: GoogleMap?,
 ) {
     when (screenState) {
@@ -278,7 +286,8 @@ private fun MapEffect(
 
         is MapScreenState.SearchResultsList -> TODO()
         is MapScreenState.RoutePreview -> {
-            if (googleMap != null) {
+            val ready = routePreviewState as? RoutePreviewState.Ready
+            if (googleMap != null && ready != null) {
                 for (waypoint in screenState.waypoints.drop(1)) {
                     MapMarker(
                         googleMap = googleMap,
@@ -287,10 +296,10 @@ private fun MapEffect(
                     )
                 }
 
-                for (route in screenState.routes) {
+                for (route in ready.routes) {
                     MapPolyline(
                         googleMap = googleMap,
-                        points = route.item.geometry,
+                        points = route.geometry,
                     )
                 }
             }

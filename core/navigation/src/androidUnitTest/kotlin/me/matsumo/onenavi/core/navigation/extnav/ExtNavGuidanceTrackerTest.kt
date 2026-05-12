@@ -4,11 +4,11 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.guidance.domain.DsrRouteSummary
-import me.matsumo.drive.supporter.api.guidance.domain.Guidance
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection
 import me.matsumo.drive.supporter.api.guidance.domain.ManeuverDirection
+import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
 import me.matsumo.drive.supporter.api.guidance.domain.SsmlPhrase
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -171,7 +171,9 @@ class ExtNavGuidanceTrackerTest {
             ),
         ).toImmutableList()
 
-        val guidance = Guidance(
+        val guidance = RouteGuidance(
+            index = 1,
+            priority = null,
             summary = DsrRouteSummary(
                 depth = 1,
                 distanceMetres = 4400,
@@ -206,7 +208,7 @@ class ExtNavGuidanceTrackerTest {
         assertNull(snapshot.nextManeuverIntersection)
     }
 
-    private fun buildGuidance(): Guidance {
+    private fun buildGuidance(): RouteGuidance {
         val intersections = listOf(
             intersection(id = 1, lat = 35.6812, lng = 139.7671),
             intersection(id = 2, lat = 35.6912, lng = 139.7671),
@@ -235,7 +237,9 @@ class ExtNavGuidanceTrackerTest {
             guidancePoint(index = 3, distanceFromStartMetres = 3500),
         ).toImmutableList()
 
-        return Guidance(
+        return RouteGuidance(
+            index = 1,
+            priority = null,
             summary = DsrRouteSummary(
                 depth = 1,
                 distanceMetres = 4400,

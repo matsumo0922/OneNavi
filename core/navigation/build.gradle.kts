@@ -4,6 +4,7 @@ plugins {
     id("matsumo.primitive.kmp.android")
     id("matsumo.primitive.kmp.ios")
     id("matsumo.primitive.detekt")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -16,6 +17,7 @@ kotlin {
             implementation(project(":core:common"))
             implementation(project(":core:model"))
             implementation(project(":core:datasource"))
+            implementation(project(":core:repository"))
         }
 
         androidMain.dependencies {

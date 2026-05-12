@@ -5,7 +5,6 @@ import androidx.compose.ui.unit.Dp
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
-import me.matsumo.onenavi.feature.map.RouteResult
 
 @Immutable
 sealed interface MapUiEvent {
@@ -29,7 +28,8 @@ sealed interface MapUiEvent {
     ) : MapUiEvent
 
     data class OnRouteIndexChanged(val index: Int) : MapUiEvent
-    data class OnNavigationStart(val routeResult: RouteResult) : MapUiEvent
+    data object OnNavigationStart : MapUiEvent
+    data object OnNavigationStop : MapUiEvent
 
     data class OnTopAppBarHeightChanged(val height: Int) : MapUiEvent
     data class OnBottomSheetPeekHeightChanged(val height: Dp) : MapUiEvent

@@ -5,7 +5,6 @@ import androidx.compose.runtime.Stable
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchResultItem
-import me.matsumo.onenavi.feature.map.RouteResult
 
 /**
  * HomeMap 画面の排他的な画面状態。
@@ -32,12 +31,13 @@ sealed interface MapScreenState {
         val isLoading: Boolean = false,
     ) : MapScreenState
 
-    /** ルートプレビュー中。ルート一覧と概要が表示される。 */
+    /**
+     * ルートプレビュー中。ルート候補データの正本は [me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager]
+     * の StateFlow に存在する。本クラスは画面遷移情報のみ保持する。
+     */
     @Immutable
     data class RoutePreview(
         val waypoints: ImmutableList<RouteWaypoint>,
-        val routes: ImmutableList<RouteResult>,
-        val selectedRouteIndex: Int,
         val topBarMode: RoutePreviewTopBarMode,
         val isLoading: Boolean = false,
     ) : MapScreenState
