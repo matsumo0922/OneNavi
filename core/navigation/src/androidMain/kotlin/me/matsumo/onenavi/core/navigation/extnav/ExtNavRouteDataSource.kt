@@ -220,6 +220,7 @@ class ExtNavRouteDataSource(
                 estimatedMetres = estimatedMetres,
                 fromClass = stretch.roadClass,
                 toClass = nextStretch.roadClass,
+                fromRoadNames = stretch.roadNames,
                 previousBoundaryMetres = previousBoundaryMetres,
                 nextBoundaryEstimateMetres = nextBoundaryEstimateMetres,
                 distanceAnchors = distanceAnchors,
@@ -262,14 +263,19 @@ class ExtNavRouteDataSource(
             val startMetres = accumulatedMetres
             val endMetres = startMetres + street.distanceMetres
             val roadClass = street.toRoadClass()
+            val roadNames = street.roadIdentityNames()
             val lastStretch = stretches.lastOrNull()
             if (lastStretch != null && lastStretch.roadClass == roadClass) {
-                stretches[stretches.lastIndex] = lastStretch.copy(endMetres = endMetres)
+                stretches[stretches.lastIndex] = lastStretch.copy(
+                    endMetres = endMetres,
+                    roadNames = (lastStretch.roadNames + roadNames).toImmutableSet(),
+                )
             } else {
                 stretches += RoadClassStretch(
                     startMetres = startMetres,
                     endMetres = endMetres,
                     roadClass = roadClass,
+                    roadNames = roadNames,
                 )
             }
             accumulatedMetres = endMetres
@@ -442,6 +448,7 @@ class ExtNavRouteDataSource(
         estimatedMetres: Double,
         fromClass: RoadClass,
         toClass: RoadClass,
+        fromRoadNames: ImmutableSet<String>,
         previousBoundaryMetres: Double,
         nextBoundaryEstimateMetres: Double,
         distanceAnchors: List<DistanceAnchor>,
@@ -454,6 +461,17 @@ class ExtNavRouteDataSource(
                 estimatedMetres = estimatedMetres,
                 previousBoundaryMetres = previousBoundaryMetres,
                 nextBoundaryEstimateMetres = nextBoundaryEstimateMetres,
+            )?.let { return it }
+        }
+
+        if (fromClass == RoadClass.HIGHWAY && toClass == RoadClass.ORDINARY) {
+            // 降りる IC は高速側の道路名を持つので、その名前を持つ最後の交差点 = 出口 IC とみなす。
+            // 路線記号や全長按分の推定よりこちらが優先。出口 IC を過ぎても一般道が青のままになるのを防ぐ。
+            findHighwayExitMetres(
+                highwayRoadNames = fromRoadNames,
+                previousBoundaryMetres = previousBoundaryMetres,
+                nextBoundaryEstimateMetres = nextBoundaryEstimateMetres,
+                intersections = intersections,
             )?.let { return it }
         }
 
@@ -474,6 +492,22 @@ class ExtNavRouteDataSource(
         )?.let { return it }
 
         return estimatedMetres
+    }
+
+    private fun findHighwayExitMetres(
+        highwayRoadNames: ImmutableSet<String>,
+        previousBoundaryMetres: Double,
+        nextBoundaryEstimateMetres: Double,
+        intersections: List<SnappedIntersection>,
+    ): Double? {
+        if (highwayRoadNames.isEmpty()) return null
+        return intersections
+            .asSequence()
+            .filter { intersection -> intersection.geometryMetres > previousBoundaryMetres }
+            .filter { intersection -> intersection.geometryMetres < nextBoundaryEstimateMetres }
+            .filter { intersection -> intersection.roadNames.hasAnyNameIn(highwayRoadNames) }
+            .maxByOrNull { intersection -> intersection.geometryMetres }
+            ?.geometryMetres
     }
 
     private fun consumeNearestEntryEvent(
@@ -657,12 +691,15 @@ class ExtNavRouteDataSource(
 
 /**
  * サマリ距離上で同じ道路種別が続く範囲。
+ *
+ * @param roadNames この範囲を構成する StreetSegment の道路名（出口 IC の同定に使う）。
  */
 @Immutable
 private data class RoadClassStretch(
     val startMetres: Double,
     val endMetres: Double,
     val roadClass: RoadClass,
+    val roadNames: ImmutableSet<String>,
 )
 
 /**
