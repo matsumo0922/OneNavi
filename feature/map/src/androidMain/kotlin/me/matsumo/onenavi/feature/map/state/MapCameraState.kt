@@ -36,6 +36,7 @@ import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_PAN_
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ZOOM_DURATION_MS
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.MAX_FLY_TO_DURATION_MS
+import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.MIN_FLY_TO_DURATION_MS
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
@@ -272,7 +273,7 @@ internal class MapCameraState internal constructor() {
         }
 
         val path = VanWijkZoomPath.of(startViewport, endViewport, rho = CAMERA_FLY_TO_RHO)
-        val totalDurationMs = (durationMs ?: (path.naturalDurationMs() * CAMERA_FLY_TO_SPEED_SCALE).toLong()).coerceAtMost(MAX_FLY_TO_DURATION_MS)
+        val totalDurationMs = (durationMs ?: (path.naturalDurationMs() * CAMERA_FLY_TO_SPEED_SCALE).toLong()).coerceIn(MIN_FLY_TO_DURATION_MS, MAX_FLY_TO_DURATION_MS)
         val easing = DecelerateInterpolator(CAMERA_DECELERATE_FACTOR)
 
         cameraState = cameraState.copy(isFollowingMyLocation = false)
@@ -424,6 +425,9 @@ internal class MapCameraState internal constructor() {
 
         /** fly-to の自然な所要時間に掛ける係数。大きいほどゆっくり動く。 */
         private const val CAMERA_FLY_TO_SPEED_SCALE = 1.0
+
+        /** fly-to の所要時間の下限（ms）。ごく短い移動でも一瞬で飛ばないように。 */
+        private const val MIN_FLY_TO_DURATION_MS = 1500L
 
         /** fly-to の所要時間の上限（ms）。地球の裏側へ飛ぶときに何秒も待たされないように。 */
         private const val MAX_FLY_TO_DURATION_MS = 3000L

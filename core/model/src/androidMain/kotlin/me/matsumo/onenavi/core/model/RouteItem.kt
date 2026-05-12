@@ -2,6 +2,7 @@ package me.matsumo.onenavi.core.model
 
 import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 
 /**
  * ルート検索結果の1経路分のデータ。
@@ -24,7 +25,7 @@ data class RouteItem(
     val viaRoadNames: ImmutableList<String>,
     val hasTolls: Boolean,
     val tollFee: Int? = null,
-    val congestionSegments: ImmutableList<CongestionSegment> = kotlinx.collections.immutable.persistentListOf(),
+    val congestionSegments: ImmutableList<CongestionSegment> = persistentListOf(),
     val priorityLabel: String? = null,
 )
 
@@ -52,6 +53,7 @@ data class RoutePoint(
  * @param distanceMeters ルート全体の距離
  * @param durationSeconds ルート全体の所要時間
  * @param steps 案内ステップ
+ * @param roadClassSegments geometry を道路種別（高速 / 一般道）ごとに区切ったセグメント列。経路サマリ由来で境界は近似。空の場合は色分けしない。
  */
 @Immutable
 data class RouteDetail(
@@ -63,4 +65,5 @@ data class RouteDetail(
     val distanceMeters: Double,
     val durationSeconds: Double,
     val steps: ImmutableList<RouteStepInfo>,
+    val roadClassSegments: ImmutableList<RoadClassSegment> = persistentListOf(),
 )

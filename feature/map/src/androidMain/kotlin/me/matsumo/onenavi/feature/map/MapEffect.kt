@@ -2,6 +2,7 @@ package me.matsumo.onenavi.feature.map
 
 import androidx.compose.runtime.Composable
 import com.google.android.gms.maps.GoogleMap
+import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapMarker
 import me.matsumo.onenavi.feature.map.components.MapPolyline
@@ -66,14 +67,12 @@ private fun RoutePreviewEffect(
 
     if (routePreviewState is RoutePreviewState.Ready) {
         for ((routeIndex, route) in routePreviewState.routes.withIndex()) {
+            val isSelected = routeIndex == routePreviewState.selectedIndex
             MapPolyline(
                 googleMap = googleMap,
                 points = route.geometry,
-                style = if (routeIndex == routePreviewState.selectedIndex) {
-                    MapPolylineStyle.Selected
-                } else {
-                    MapPolylineStyle.Unselected
-                },
+                style = if (isSelected) MapPolylineStyle.Selected else MapPolylineStyle.Unselected,
+                roadClassSegments = if (isSelected) route.roadClassSegments else persistentListOf(),
             )
         }
     }
