@@ -36,7 +36,9 @@ import me.matsumo.onenavi.feature.map.components.bottomsheet.MapPlaceDetailSheet
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapRoutePreviewSheet
 import me.matsumo.onenavi.feature.map.components.content.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.content.MapRoutePreviewContent
+import me.matsumo.onenavi.feature.map.components.topappbar.MapWaypointSearchScreen
 import me.matsumo.onenavi.feature.map.state.MapCameraState
+import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
@@ -109,46 +111,59 @@ fun MapScreen(modifier: Modifier = Modifier) {
         cameraState = cameraState,
     )
 
-    BottomSheetScaffold(
+    Box(
         modifier = modifier,
-        scaffoldState = scaffoldState,
-        sheetPeekHeight = uiState.bottomSheetPeekHeight,
-        sheetContent = {
-            MapScreenBottomSheetContent(
-                modifier = Modifier.fillMaxSize(),
-                screenState = screenState,
-                routePreviewState = routePreviewState,
-                cameraState = cameraState,
-                onUiEvent = viewModel::onUiEvent,
-            )
-        },
     ) {
-        Box(
+        BottomSheetScaffold(
             modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
+            scaffoldState = scaffoldState,
+            sheetPeekHeight = uiState.bottomSheetPeekHeight,
+            sheetContent = {
+                MapScreenBottomSheetContent(
+                    modifier = Modifier.fillMaxSize(),
+                    screenState = screenState,
+                    routePreviewState = routePreviewState,
+                    cameraState = cameraState,
+                    onUiEvent = viewModel::onUiEvent,
+                )
+            },
         ) {
-            MapItem(
+            Box(
                 modifier = Modifier.fillMaxSize(),
-                googleMap = googleMap,
-                cameraState = cameraState,
-                onMapUpdate = { googleMap = it },
-            )
+                contentAlignment = Alignment.Center,
+            ) {
+                MapItem(
+                    modifier = Modifier.fillMaxSize(),
+                    googleMap = googleMap,
+                    cameraState = cameraState,
+                    onMapUpdate = { googleMap = it },
+                )
 
-            MapScreenContent(
-                modifier = Modifier.fillMaxSize(),
-                uiState = uiState,
-                screenState = screenState,
-                cameraState = cameraState,
-                onUiEvent = viewModel::onUiEvent,
-            )
+                MapScreenContent(
+                    modifier = Modifier.fillMaxSize(),
+                    uiState = uiState,
+                    screenState = screenState,
+                    cameraState = cameraState,
+                    onUiEvent = viewModel::onUiEvent,
+                )
 
-            MapControls(
-                modifier = Modifier
-                    .padding(bottom = controlsBottomPadding)
-                    .fillMaxSize(),
-                cameraState = cameraState,
-            )
+                MapControls(
+                    modifier = Modifier
+                        .padding(bottom = controlsBottomPadding)
+                        .fillMaxSize(),
+                    cameraState = cameraState,
+                )
+            }
         }
+
+        MapWaypointSearchScreen(
+            modifier = Modifier.fillMaxSize(),
+            isVisible = uiState.overlayState is MapOverlayState.WaypointSearch,
+            initialQuery = (uiState.overlayState as? MapOverlayState.WaypointSearch)?.initialQuery,
+            suggestions = uiState.suggestions,
+            histories = uiState.histories,
+            onUiEvent = viewModel::onUiEvent,
+        )
     }
 }
 

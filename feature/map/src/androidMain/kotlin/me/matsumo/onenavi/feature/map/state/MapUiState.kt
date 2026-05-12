@@ -17,6 +17,7 @@ data class MapUiState(
     val histories: ImmutableList<SearchHistory> = persistentListOf(),
     val selectedResult: SearchResultItem? = null,
     val routeWaypointEditResult: Pair<Int, RouteWaypoint.Place>? = null,
+    val overlayState: MapOverlayState = MapOverlayState.None,
     val topAppBarHeight: Int = 0,
     val bottomSheetPeekHeight: Dp = 0.dp,
 )

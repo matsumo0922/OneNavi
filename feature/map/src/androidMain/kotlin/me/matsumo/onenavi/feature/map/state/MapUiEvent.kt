@@ -42,8 +42,11 @@ sealed interface MapUiEvent {
     /** 編集後の waypoint 列でルートを再探索する。 */
     data class OnRouteWaypointsConfirmed(val waypoints: ImmutableList<RouteWaypoint>) : MapUiEvent
 
-    /** 指定 index の waypoint を差し替えるための地点検索を開始する。 */
+    /** 指定 index の waypoint を差し替えるための地点検索オーバーレイを開く。 */
     data class OnWaypointEditRequested(val index: Int) : MapUiEvent
+
+    /** waypoint 差し替え用の地点検索オーバーレイを閉じる。 */
+    data object OnWaypointSearchDismissed : MapUiEvent
 
     /** waypoint 差し替え結果を消費済みにする。 */
     data object OnWaypointEditResultConsumed : MapUiEvent

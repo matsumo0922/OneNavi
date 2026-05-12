@@ -31,6 +31,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.repository.SearchRepository
+import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
@@ -125,9 +126,6 @@ private class UiEventDelegate(
     private var placeSearchJob: Job? = null
     private var routeSearchJob: Job? = null
 
-    /** [MapUiEvent.OnWaypointEditRequested] で記憶した、差し替え対象 waypoint の index。 */
-    private var pendingWaypointEditIndex: Int? = null
-
     init {
         scope.launch {
             searchRepository.histories.collect { histories ->
@@ -141,17 +139,6 @@ private class UiEventDelegate(
             .debounce(DEBOUNCE.milliseconds)
             .distinctUntilChanged()
             .onEach { query -> performSearchSuggestions(query) }
-            .launchIn(scope)
-
-        screenStates
-            .map { it.lastOrNull() }
-            .distinctUntilChanged()
-            .onEach { state ->
-                // 地点検索 (Browsing) 以外へ遷移したら、未消費の差し替え意図は破棄する
-                if (state !is MapScreenState.Browsing) {
-                    pendingWaypointEditIndex = null
-                }
-            }
             .launchIn(scope)
     }
 
@@ -171,6 +158,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnSwapWaypoints -> handleSwapWaypoints()
             is MapUiEvent.OnRouteWaypointsConfirmed -> handleRouteWaypointsConfirmed(event.waypoints)
             is MapUiEvent.OnWaypointEditRequested -> handleWaypointEditRequested(event.index)
+            is MapUiEvent.OnWaypointSearchDismissed -> handleWaypointSearchDismissed()
             is MapUiEvent.OnWaypointEditResultConsumed -> handleWaypointEditResultConsumed()
             is MapUiEvent.OnTopAppBarHeightChanged -> handleTopAppBarHeightChanged(event.height)
             is MapUiEvent.OnBottomSheetPeekHeightChanged -> handleBottomSheetPeekHeightChanged(event.height)
@@ -313,13 +301,19 @@ private class UiEventDelegate(
     }
 
     private fun handleWaypointEditRequested(index: Int) {
-        pendingWaypointEditIndex = index
         uiState.value = uiState.value.copy(
             query = null,
             suggestions = persistentListOf(),
             selectedResult = null,
+            overlayState = MapOverlayState.WaypointSearch(
+                initialQuery = null,
+                waypointIndex = index,
+            ),
         )
-        pushScreenState(MapScreenState.Browsing)
+    }
+
+    private fun handleWaypointSearchDismissed() {
+        uiState.value = uiState.value.copy(overlayState = MapOverlayState.None)
     }
 
     private fun handleWaypointEditResultConsumed() {
@@ -351,17 +345,16 @@ private class UiEventDelegate(
     }
 
     private fun consumeWaypointEdit(result: SearchResultItem): Boolean {
-        val editIndex = pendingWaypointEditIndex ?: return false
-        pendingWaypointEditIndex = null
+        val waypointSearch = uiState.value.overlayState as? MapOverlayState.WaypointSearch ?: return false
 
         uiState.value = uiState.value.copy(
-            routeWaypointEditResult = editIndex to RouteWaypoint.Place(
+            overlayState = MapOverlayState.None,
+            routeWaypointEditResult = waypointSearch.waypointIndex to RouteWaypoint.Place(
                 name = result.name,
                 latitude = result.latitude,
                 longitude = result.longitude,
             ),
         )
-        popScreenState()
         return true
     }
 
