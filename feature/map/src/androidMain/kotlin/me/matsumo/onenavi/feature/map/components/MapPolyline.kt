@@ -19,8 +19,10 @@ import me.matsumo.onenavi.core.model.RoutePoint
  *
  * Google マップアプリ準拠で「枠線（外側）+ 本体（内側）」の 2 本構成で描画する。
  * 選択中ルートは濃い色 + 最前面、非選択ルートは暗めの灰青 + 背面で表示する。
+ * 道路種別 (`roadClassSegments`) が渡された区間は [borderColor] / [bodyColor] ではなく
+ * 種別ごとの色で塗り分ける。
  *
- * @param borderColor 枠線（外側）の色
+ * @param borderColor 枠線（外側）の色。道路種別で塗り分ける場合は使われない。
  * @param bodyColor 本体（内側）の色。道路種別で塗り分ける場合は使われない。
  * @param bodyWidthPx 本体の線幅 (px)
  * @param borderWidthPx 枠線の線幅 (px)
@@ -33,7 +35,7 @@ internal enum class MapPolylineStyle(
     val borderWidthPx: Float,
     val zIndex: Float,
 ) {
-    /** 選択中ルート: 濃い青の枠線 + 最前面に描画。本体は道路種別があれば塗り分ける。 */
+    /** 選択中ルート: 濃い青の枠線 + 最前面に描画。道路種別があれば種別ごとに塗り分ける。 */
     Selected(
         borderColor = Color(0xFF1A56C7),
         bodyColor = Color(0xFF4DA6F7),
@@ -52,10 +54,16 @@ internal enum class MapPolylineStyle(
     ),
 }
 
-/** 道路種別ごとの本体色。Google マップアプリ準拠で高速＝青、一般道＝緑。 */
+/** 道路種別ごとの枠線（外側）色。高速＝濃い青、一般道＝濃い緑。 */
+private fun borderColorOf(roadClass: RoadClass): Color = when (roadClass) {
+    RoadClass.HIGHWAY -> Color(0xFF1A56C7)
+    RoadClass.ORDINARY -> Color(0xFF146C34)
+}
+
+/** 道路種別ごとの本体（内側）色。高速＝明るい青、一般道＝明るい黄緑。 */
 private fun bodyColorOf(roadClass: RoadClass): Color = when (roadClass) {
-    RoadClass.HIGHWAY -> Color(0xFF4DA6F7)
-    RoadClass.ORDINARY -> Color(0xFF2EA85F)
+    RoadClass.HIGHWAY -> Color(0xFF5AB7FF)
+    RoadClass.ORDINARY -> Color(0xFF8BD24A)
 }
 
 @Composable
@@ -69,21 +77,21 @@ internal fun MapPolyline(
         val latLngPoints = points.map { LatLng(it.latitude, it.longitude) }
         val polylines = mutableListOf<Polyline>()
 
-        // 枠線はルート全体を 1 本で描く（種別ごとに切ると継ぎ目に隙間ができるため）。
-        polylines += googleMap.addPolyline(
-            PolylineOptions()
-                .addAll(latLngPoints)
-                .color(style.borderColor.toArgb())
-                .width(style.borderWidthPx)
-                .zIndex(style.zIndex),
-        )
-
         val usableSegments = roadClassSegments.filter { segment ->
             segment.startPointIndex >= 0 &&
                 segment.startPointIndex < segment.endPointIndex &&
                 segment.endPointIndex <= latLngPoints.lastIndex
         }
+
         if (usableSegments.isEmpty()) {
+            // 道路種別の情報なし: ルート全体を 1 組（枠線 + 本体）の単色で描く。
+            polylines += googleMap.addPolyline(
+                PolylineOptions()
+                    .addAll(latLngPoints)
+                    .color(style.borderColor.toArgb())
+                    .width(style.borderWidthPx)
+                    .zIndex(style.zIndex),
+            )
             polylines += googleMap.addPolyline(
                 PolylineOptions()
                     .addAll(latLngPoints)
@@ -92,6 +100,17 @@ internal fun MapPolyline(
                     .zIndex(style.zIndex + 0.5f),
             )
         } else {
+            // 道路種別あり: 枠線を全区間ぶん描いてから、その上に本体を全区間ぶん描く
+            // （隣接区間の枠線同士は端点を共有するので継ぎ目は目立たない）。
+            for (segment in usableSegments) {
+                polylines += googleMap.addPolyline(
+                    PolylineOptions()
+                        .addAll(latLngPoints.subList(segment.startPointIndex, segment.endPointIndex + 1))
+                        .color(borderColorOf(segment.roadClass).toArgb())
+                        .width(style.borderWidthPx)
+                        .zIndex(style.zIndex),
+                )
+            }
             for (segment in usableSegments) {
                 polylines += googleMap.addPolyline(
                     PolylineOptions()
