@@ -22,6 +22,8 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.FollowMyLocationOptions
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import me.matsumo.onenavi.core.model.RoutePoint
 
 @Composable
 internal fun rememberMapCameraState(): MapCameraState {
@@ -120,6 +122,31 @@ internal class MapCameraState internal constructor() {
         )
     }
 
+    /**
+     * ルート全体が画面に収まるようにカメラを移動させる。
+     *
+     * GoogleMap 標準の `animateCamera` を使うため、`updatePadding` で設定済みの
+     * 地図パディング（トップバー / ボトムシート分）も尊重される。
+     *
+     * @param routePoints フィット対象の座標列（全候補ルートをまとめて渡してよい）
+     * @param paddingPx 画面端とルートの間に確保する余白（px）
+     */
+    fun showRouteOverview(routePoints: List<RoutePoint>, paddingPx: Int = ROUTE_OVERVIEW_PADDING_PX) {
+        val map = googleMap ?: return
+        if (routePoints.isEmpty()) return
+
+        cameraAnimator?.cancel()
+        cameraState = cameraState.copy(isFollowingMyLocation = false)
+
+        val bounds = LatLngBounds.builder()
+            .apply { for (point in routePoints) include(LatLng(point.latitude, point.longitude)) }
+            .build()
+
+        runCatching {
+            map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+        }
+    }
+
     private fun updateCameraPosition(cameraPosition: CameraPosition) {
         cameraState = cameraState.copy(
             latitude = cameraPosition.target.latitude,
@@ -201,6 +228,7 @@ internal class MapCameraState internal constructor() {
     companion object {
         private const val MIN_ZOOM = 2f
         private const val MAX_ZOOM = 21f
+        private const val ROUTE_OVERVIEW_PADDING_PX = 64
     }
 }
 

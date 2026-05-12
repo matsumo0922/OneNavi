@@ -108,6 +108,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
     MapCameraEffect(
         uiState = uiState,
         screenState = screenState,
+        routePreviewState = routePreviewState,
         cameraState = cameraState,
     )
 
@@ -241,6 +242,7 @@ private fun MapScreenBottomSheetContent(
 private fun MapCameraEffect(
     uiState: MapUiState,
     screenState: MapScreenState,
+    routePreviewState: RoutePreviewState,
     cameraState: MapCameraState,
 ) {
     val density = LocalDensity.current
@@ -261,6 +263,20 @@ private fun MapCameraEffect(
         )
     }
 
+    val routeOverviewPoints = remember(screenState, routePreviewState) {
+        val ready = routePreviewState as? RoutePreviewState.Ready
+        if (screenState is MapScreenState.RoutePreview && ready != null) {
+            ready.routes.flatMap { it.geometry }
+        } else {
+            null
+        }
+    }
+
+    // RoutePreview
+    LaunchedEffect(routeOverviewPoints, uiState.topAppBarHeight, uiState.bottomSheetPeekHeight) {
+        routeOverviewPoints?.let { cameraState.showRouteOverview(it) }
+    }
+
     LaunchedEffect(screenState) {
         when (screenState) {
             is MapScreenState.Browsing -> {
@@ -277,6 +293,7 @@ private fun MapCameraEffect(
 
             is MapScreenState.SearchResultsList -> TODO()
             is MapScreenState.RoutePreview -> {
+                // ルートが揃ったタイミングで下の LaunchedEffect がカメラをフィットさせる
             }
             is MapScreenState.Navigating -> TODO()
             is MapScreenState.Arrived -> TODO()
