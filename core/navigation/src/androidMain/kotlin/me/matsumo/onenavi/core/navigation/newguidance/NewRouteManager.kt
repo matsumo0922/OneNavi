@@ -5,7 +5,6 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import me.matsumo.onenavi.core.model.GoogleRoute
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
@@ -16,7 +15,7 @@ import me.matsumo.onenavi.core.repository.RouteRepository
  *
  * 外部ナビ API ライブラリ ([me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource]) から
  * 候補ルートを取得し、結果を [state] (StateFlow<[RoutePreviewState]>) で公開する。地図描画は
- * [GoogleRoute.geometry] をそのまま自前 polyline で描く。Guidance 開始時は
+ * [me.matsumo.onenavi.core.model.RouteDetail.geometry] をそのまま自前 polyline で描く。Guidance 開始時は
  * [RoutePreviewState.Ready.selectedRoute] を [NewGuidanceManager] に渡す。
  *
  * @param routeRepository [me.matsumo.onenavi.core.datasource.RouteDataSource] のラッパ
@@ -56,11 +55,7 @@ class NewRouteManager(
 
             require(results.isNotEmpty()) { "No route candidates returned" }
 
-            results.map { result ->
-                requireNotNull(result.platformRoute as? GoogleRoute) {
-                    "RouteResult.platformRoute is not a GoogleRoute"
-                }
-            }
+            results.map { result -> result.detail }
         }
             .onSuccess { routes ->
                 Napier.i(tag = TAG) { "searchRoutes ready: routes=${routes.size}" }

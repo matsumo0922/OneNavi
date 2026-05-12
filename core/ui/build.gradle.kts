@@ -3,7 +3,6 @@ plugins {
     id("matsumo.primitive.android.library")
     id("matsumo.primitive.kmp.compose")
     id("matsumo.primitive.kmp.android")
-    id("matsumo.primitive.kmp.ios")
     id("matsumo.primitive.detekt")
 }
 
@@ -13,7 +12,7 @@ android {
 
 kotlin {
     sourceSets {
-        commonMain.dependencies {
+        androidMain.dependencies {
             implementation(project(":core:model"))
             implementation(project(":core:common"))
             implementation(project(":core:repository"))
@@ -23,14 +22,11 @@ kotlin {
             api(libs.bundles.ui.common)
             api(libs.bundles.compose)
             api(libs.bundles.calf)
+            api(libs.bundles.ui.android)
 
             api(libs.adaptive)
             api(libs.adaptive.layout)
             api(libs.lexilabs.basic.ads)
-        }
-
-        androidMain.dependencies {
-            api(libs.bundles.ui.android)
             api(libs.play.service.ads)
         }
     }

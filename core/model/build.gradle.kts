@@ -2,7 +2,6 @@ plugins {
     id("matsumo.primitive.kmp.common")
     id("matsumo.primitive.android.library")
     id("matsumo.primitive.kmp.android")
-    id("matsumo.primitive.kmp.ios")
     id("matsumo.primitive.detekt")
 }
 
@@ -12,14 +11,14 @@ android {
 
 kotlin {
     sourceSets {
-        commonMain.dependencies {
+        androidMain.dependencies {
             implementation(project(":core:common"))
             api(project(":core:resource"))
 
             implementation(libs.ktor.core)
         }
 
-        commonTest.dependencies {
+        androidUnitTest.dependencies {
             implementation(kotlin("test"))
         }
     }

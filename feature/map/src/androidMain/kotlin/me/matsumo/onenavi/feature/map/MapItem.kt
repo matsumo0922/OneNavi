@@ -48,7 +48,7 @@ internal fun MapItem(
                         onMapUpdate(map)
                     }
                 }
-            }
+            },
         )
     }
 }

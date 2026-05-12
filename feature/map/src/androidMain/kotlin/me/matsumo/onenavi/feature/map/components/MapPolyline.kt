@@ -11,19 +11,19 @@ import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RoutePoint
 
 @Composable
-  internal fun MapPolyline(
+internal fun MapPolyline(
     googleMap: GoogleMap,
     points: ImmutableList<RoutePoint>,
     color: Color = Color(0xFF1E88E5),
     widthPx: Float = 12f,
-  ) {
-      DisposableEffect(googleMap, points, color, widthPx) {                                                                                              
-          val polyline = googleMap.addPolyline(                                                                                                          
-              PolylineOptions()
-                  .addAll(points.map { LatLng(it.latitude, it.longitude) })
-                  .color(color.toArgb())                                    
-                  .width(widthPx),                                                                                                                       
-          )
-          onDispose { polyline.remove() }                                                                                                                
-      }                                                                     
-  }
+) {
+    DisposableEffect(googleMap, points, color, widthPx) {
+        val polyline = googleMap.addPolyline(
+            PolylineOptions()
+                .addAll(points.map { LatLng(it.latitude, it.longitude) })
+                .color(color.toArgb())
+                .width(widthPx),
+        )
+        onDispose { polyline.remove() }
+    }
+}

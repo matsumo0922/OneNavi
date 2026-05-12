@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.common.formatDuration
-import me.matsumo.onenavi.core.model.GoogleRoute
+import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_day
 import me.matsumo.onenavi.core.resource.common_unit_hour
@@ -43,7 +43,7 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun MapRoutePreviewSheet(
-    routes: ImmutableList<GoogleRoute>,
+    routes: ImmutableList<RouteDetail>,
     selectedRouteIndex: Int,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
@@ -67,7 +67,7 @@ internal fun MapRoutePreviewSheet(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun MapRoutePreviewItem(
-    route: GoogleRoute,
+    route: RouteDetail,
     isSelected: Boolean,
     onNavigationClicked: () -> Unit,
     onRouteSelected: () -> Unit,

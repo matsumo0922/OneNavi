@@ -3,9 +3,9 @@ package me.matsumo.onenavi.core.navigation.extnav
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * `GoogleRoute.id` → [ExtNavRoutePayload] のルックアップテーブル。
+ * `RouteDetail.id` → [ExtNavRoutePayload] のルックアップテーブル。
  *
- * [me.matsumo.onenavi.core.model.GoogleRoute] は commonMain のモデルで drive-supporter-api
+ * [me.matsumo.onenavi.core.model.RouteDetail] は core/model 層の中立モデルで drive-supporter-api
  * 依存を持ち込めないため、ExtNav 固有情報はこのレジストリに一時的に束ねる。
  * セッション終了時に [clear] を呼ぶ。
  */

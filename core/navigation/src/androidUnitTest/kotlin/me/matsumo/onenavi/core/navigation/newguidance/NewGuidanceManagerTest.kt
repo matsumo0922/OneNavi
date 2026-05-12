@@ -1,7 +1,7 @@
 package me.matsumo.onenavi.core.navigation.newguidance
 
 import kotlinx.collections.immutable.persistentListOf
-import me.matsumo.onenavi.core.model.GoogleRoute
+import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import kotlin.test.Test
@@ -42,10 +42,10 @@ class NewGuidanceManagerTest {
         assertEquals(GuidanceState.Idle, manager.state.value)
     }
 
-    private fun buildRoute(): GoogleRoute {
+    private fun buildRoute(): RouteDetail {
         val origin = RoutePoint(latitude = 35.0, longitude = 139.0)
         val destination = RoutePoint(latitude = 35.5, longitude = 139.5)
-        return GoogleRoute(
+        return RouteDetail(
             id = "route-0",
             origin = origin,
             destination = destination,

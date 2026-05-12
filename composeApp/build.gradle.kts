@@ -9,7 +9,6 @@ plugins {
     id("matsumo.primitive.android.application")
     id("matsumo.primitive.kmp.compose")
     id("matsumo.primitive.kmp.android")
-    id("matsumo.primitive.kmp.ios")
     id("matsumo.primitive.detekt")
 }
 
@@ -83,7 +82,6 @@ android {
 
             it.manifestPlaceholders.apply {
                 put("ADMOB_ANDROID_APP_ID", localProperties.getProperty("ADMOB_ANDROID_APP_ID") ?: admobTestAppId)
-                put("ADMOB_IOS_APP_ID", localProperties.getProperty("ADMOB_IOS_APP_ID") ?: admobTestAppId)
                 put("GOOGLE_API_KEY", localProperties.getProperty("GOOGLE_API_KEY") ?: System.getenv("GOOGLE_API_KEY").orEmpty())
             }
 
@@ -102,7 +100,7 @@ android {
 
 kotlin {
     sourceSets {
-        commonMain.dependencies {
+        androidMain.dependencies {
             implementation(project(":core:common"))
             implementation(project(":core:model"))
             implementation(project(":core:datasource"))
@@ -116,9 +114,7 @@ kotlin {
             implementation(project(":feature:map"))
             implementation(project(":feature:setting"))
             implementation(project(":feature:billing"))
-        }
 
-        androidMain.dependencies {
             implementation(libs.androidx.core.splashscreen)
             implementation(libs.play.review)
             implementation(libs.play.update)
@@ -148,19 +144,12 @@ buildkonfig {
         setField("GOOGLE_API_KEY")
         setField("GOOGLE_CLOUD_TTS_API_KEY")
         setField("PURCHASE_ANDROID_API_KEY")
-        setField("PURCHASE_IOS_API_KEY")
 
         setField("ADMOB_ANDROID_APP_ID", admobTestAppId)
         setField("ADMOB_ANDROID_BANNER_AD_UNIT_ID", admobTestAppId)
         setField("ADMOB_ANDROID_INTERSTITIAL_AD_UNIT_ID", bannerAdTestId)
         setField("ADMOB_ANDROID_NATIVE_AD_UNIT_ID", nativeAdTestId)
         setField("ADMOB_ANDROID_REWARDED_AD_UNIT_ID", rewardAdTestId)
-
-        setField("ADMOB_IOS_APP_ID", admobTestAppId)
-        setField("ADMOB_IOS_BANNER_AD_UNIT_ID", bannerAdTestId)
-        setField("ADMOB_IOS_INTERSTITIAL_AD_UNIT_ID", bannerAdTestId)
-        setField("ADMOB_IOS_NATIVE_AD_UNIT_ID", nativeAdTestId)
-        setField("ADMOB_IOS_REWARDED_AD_UNIT_ID", rewardAdTestId)
 
         setField("APPLOVIN_SDK_KEY")
 

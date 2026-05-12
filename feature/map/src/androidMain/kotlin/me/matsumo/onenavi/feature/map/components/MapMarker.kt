@@ -7,18 +7,18 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 
 @Composable
-  internal fun MapMarker(
+internal fun MapMarker(
     googleMap: GoogleMap,
     latitude: Double,
     longitude: Double,
     title: String? = null,
-  ) {                                                                       
-      DisposableEffect(googleMap, latitude, longitude, title) {
-          val marker = googleMap.addMarker(
-              MarkerOptions()
-                  .position(LatLng(latitude, longitude))
-                  .title(title),                                                                                                                         
-          )                                                                 
-          onDispose { marker?.remove() }       
-      }                                                                                                                                                  
-  }
+) {
+    DisposableEffect(googleMap, latitude, longitude, title) {
+        val marker = googleMap.addMarker(
+            MarkerOptions()
+                .position(LatLng(latitude, longitude))
+                .title(title),
+        )
+        onDispose { marker?.remove() }
+    }
+}

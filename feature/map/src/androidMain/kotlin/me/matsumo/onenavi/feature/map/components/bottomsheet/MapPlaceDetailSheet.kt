@@ -148,7 +148,7 @@ internal fun MapPlaceDetailSheet(
                             item = selectedResult,
                             latitude = cameraState.cameraState.myLocationLatitude,
                             longitude = cameraState.cameraState.myLocationLongitude,
-                        )
+                        ),
                     )
                 },
                 onFavoriteClicked = {},

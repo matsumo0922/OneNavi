@@ -17,7 +17,7 @@ internal fun MapBrowsingContent(
     cameraState: MapCameraState,
     uiState: MapUiState,
     onUiEvent: (MapUiEvent) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier,

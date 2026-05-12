@@ -14,14 +14,14 @@ import me.matsumo.drive.supporter.api.route.domain.CarPriority
 import me.matsumo.drive.supporter.api.route.domain.RouteSearchCriteria
 import me.matsumo.drive.supporter.api.route.domain.RouteWaypoint
 import me.matsumo.onenavi.core.datasource.RouteDataSource
-import me.matsumo.onenavi.core.model.GoogleRoute
+import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteResult
 
 /**
  * 外部ナビ API ライブラリを使ったルート検索データソース。
- * `RouteClient.search` と `GuidanceClient.resolveGuidance` を並列に発行し、既存の [GoogleRoute]
+ * `RouteClient.search` と `GuidanceClient.resolveGuidance` を並列に発行し、中立な [RouteDetail]
  * モデルに射影する。ルート探索エンドポイントは priority 1 件しか返さないため、複数候補は
  * `resolveGuidance` の `Guidance.routes` から抽出する。各候補は独立した [ExtNavRoutePayload]
  * として [ExtNavRouteRegistry] に保持する。
@@ -80,7 +80,7 @@ class ExtNavRouteDataSource(
             val distanceMetres = routeGuidance.summary.distanceMetres.toDouble()
             val timeSeconds = routeGuidance.summary.timeSeconds.toDouble()
 
-            val googleRoute = GoogleRoute(
+            val routeDetail = RouteDetail(
                 id = routeId,
                 origin = originPoint,
                 destination = destinationPoint,
@@ -110,7 +110,7 @@ class ExtNavRouteDataSource(
 
             RouteResult(
                 item = item,
-                platformRoute = googleRoute,
+                detail = routeDetail,
             )
         }
     }

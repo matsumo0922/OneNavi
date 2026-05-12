@@ -2,7 +2,6 @@ plugins {
     id("matsumo.primitive.kmp.common")
     id("matsumo.primitive.android.library")
     id("matsumo.primitive.kmp.android")
-    id("matsumo.primitive.kmp.ios")
     id("matsumo.primitive.detekt")
     alias(libs.plugins.kotlin.serialization)
 }
@@ -13,14 +12,12 @@ android {
 
 kotlin {
     sourceSets {
-        commonMain.dependencies {
+        androidMain.dependencies {
             implementation(project(":core:common"))
             implementation(project(":core:model"))
             implementation(project(":core:datasource"))
             implementation(project(":core:repository"))
-        }
 
-        androidMain.dependencies {
             implementation(libs.google.navigation)
             implementation(libs.play.services.location)
             implementation(libs.ktor.core)
@@ -29,11 +26,6 @@ kotlin {
             implementation(libs.ktor.serialization.json)
             implementation(libs.kotlinx.serialization.json)
             implementation("me.matsumo.drive.supporter:drive-supporter-api")
-        }
-
-        commonTest.dependencies {
-            implementation(kotlin("test"))
-            implementation(libs.kotlinx.coroutines.test)
         }
 
         androidUnitTest.dependencies {
