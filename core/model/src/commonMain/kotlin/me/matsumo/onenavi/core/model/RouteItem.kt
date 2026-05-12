@@ -44,7 +44,6 @@ data class RoutePoint(
  * Google 側のルート情報。
  *
  * @param id アプリ内で使うルート ID
- * @param routeToken Google Navigation SDK へ渡す route token。取得できない場合は座標指定で案内する。
  * @param origin 出発地
  * @param destination 目的地
  * @param intermediateWaypoints 経由地
@@ -56,7 +55,6 @@ data class RoutePoint(
 @Immutable
 data class GoogleRoute(
     val id: String,
-    val routeToken: String?,
     val origin: RoutePoint,
     val destination: RoutePoint,
     val intermediateWaypoints: ImmutableList<RoutePoint>,

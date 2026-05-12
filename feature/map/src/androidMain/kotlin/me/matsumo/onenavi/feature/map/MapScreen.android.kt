@@ -1,6 +1,5 @@
 package me.matsumo.onenavi.feature.map
 
-import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -48,8 +47,6 @@ import org.koin.compose.viewmodel.koinViewModel
 actual fun MapScreen(modifier: Modifier) {
     val viewModel = koinViewModel<MapViewModel>()
 
-    val activity = LocalActivity.current
-
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val screenState by viewModel.currentScreenState.collectAsStateWithLifecycle()
     val hasScreenStateStack by viewModel.hasScreenStateStack.collectAsStateWithLifecycle()
@@ -88,10 +85,6 @@ actual fun MapScreen(modifier: Modifier) {
         viewModel.popScreenState()
     }
 
-    LaunchedEffect(activity) {
-        activity?.let(viewModel::initializeNewSdk)
-    }
-
     LaunchedEffect(shouldShowSheet) {
         if (shouldShowSheet) {
             allowSheetHide = false
@@ -112,7 +105,7 @@ actual fun MapScreen(modifier: Modifier) {
     MapCameraEffect(
         uiState = uiState,
         screenState = screenState,
-        cameraState = cameraState
+        cameraState = cameraState,
     )
 
     BottomSheetScaffold(
@@ -170,7 +163,8 @@ private fun MapScreenContent(
     when (screenState) {
         is MapScreenState.Browsing,
         is MapScreenState.PlaceDetails,
-        is MapScreenState.SearchResultsList -> {
+        is MapScreenState.SearchResultsList,
+        -> {
             MapBrowsingContent(
                 modifier = modifier,
                 cameraState = cameraState,
@@ -180,7 +174,6 @@ private fun MapScreenContent(
         }
 
         is MapScreenState.RoutePreview -> {
-
         }
         is MapScreenState.Navigating -> TODO()
         is MapScreenState.Arrived -> TODO()
@@ -264,7 +257,6 @@ private fun MapCameraEffect(
 
             is MapScreenState.SearchResultsList -> TODO()
             is MapScreenState.RoutePreview -> {
-
             }
             is MapScreenState.Navigating -> TODO()
             is MapScreenState.Arrived -> TODO()
@@ -307,7 +299,7 @@ private fun MapEffect(
                 for (route in ready.routes) {
                     MapPolyline(
                         googleMap = googleMap,
-                        points = route.mergedPolyline,
+                        points = route.geometry,
                     )
                 }
             }

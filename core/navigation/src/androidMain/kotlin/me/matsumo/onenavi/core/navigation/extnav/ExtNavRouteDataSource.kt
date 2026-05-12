@@ -20,10 +20,10 @@ import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteResult
 
 /**
- * drive-supporter-api を使ったルート検索データソース。
+ * 外部ナビ API ライブラリを使ったルート検索データソース。
  * `RouteClient.search` と `GuidanceClient.resolveGuidance` を並列に発行し、既存の [GoogleRoute]
- * モデルに射影する。`mocha/route` は priority 1 件しか返さないため、複数候補は DSR
- * (`resolveGuidance`) の `Guidance.routes` から抽出する。各候補は独立した [ExtNavRoutePayload]
+ * モデルに射影する。ルート探索エンドポイントは priority 1 件しか返さないため、複数候補は
+ * `resolveGuidance` の `Guidance.routes` から抽出する。各候補は独立した [ExtNavRoutePayload]
  * として [ExtNavRouteRegistry] に保持する。
  */
 class ExtNavRouteDataSource(
@@ -82,7 +82,6 @@ class ExtNavRouteDataSource(
 
             val googleRoute = GoogleRoute(
                 id = routeId,
-                routeToken = null,
                 origin = originPoint,
                 destination = destinationPoint,
                 intermediateWaypoints = intermediates,

@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.common.formatDuration
-import me.matsumo.onenavi.core.navigation.newguidance.model.RefinedRoute
+import me.matsumo.onenavi.core.model.GoogleRoute
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_day
 import me.matsumo.onenavi.core.resource.common_unit_hour
@@ -43,7 +43,7 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun MapRoutePreviewSheet(
-    routes: ImmutableList<RefinedRoute>,
+    routes: ImmutableList<GoogleRoute>,
     selectedRouteIndex: Int,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
@@ -67,7 +67,7 @@ internal fun MapRoutePreviewSheet(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun MapRoutePreviewItem(
-    route: RefinedRoute,
+    route: GoogleRoute,
     isSelected: Boolean,
     onNavigationClicked: () -> Unit,
     onRouteSelected: () -> Unit,
@@ -81,7 +81,7 @@ private fun MapRoutePreviewItem(
 
     val duration = remember(route, dayLabel, hourLabel, minuteLabel) {
         formatDuration(
-            totalSeconds = route.totalDurationSeconds.toDouble(),
+            totalSeconds = route.durationSeconds,
             dayLabel = dayLabel,
             hourLabel = hourLabel,
             minuteLabel = minuteLabel,
@@ -89,7 +89,7 @@ private fun MapRoutePreviewItem(
     }
     val distance = remember(route, meterLabel, kilometerLabel) {
         formatDistance(
-            meters = route.totalDistanceMeters.toDouble(),
+            meters = route.distanceMeters,
             meterLabel = meterLabel,
             kilometerLabel = kilometerLabel,
         )

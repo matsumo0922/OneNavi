@@ -21,12 +21,8 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavSsmlSpeaker
-import me.matsumo.onenavi.core.navigation.newguidance.DefaultRoutesApiClient
-import me.matsumo.onenavi.core.navigation.newguidance.ExtNavRouteRefiner
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
-import me.matsumo.onenavi.core.navigation.newguidance.NewNavigationSdkManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
-import me.matsumo.onenavi.core.navigation.newguidance.RoutesApiClient
 import me.matsumo.onenavi.core.navigation.tts.AndroidTtsEngine
 import me.matsumo.onenavi.core.navigation.tts.AudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.FallbackTtsEngine
@@ -48,40 +44,9 @@ actual val navigationModule: Module = module {
     single { RouteManager() }
     single { NavigationSdkManager(androidApplication(), get()) }
     single { CameraManager(get()) }
-    single<HttpClient>(qualifier = named(NEW_GUIDANCE_HTTP_CLIENT)) {
-        HttpClient(OkHttp) {
-            install(HttpTimeout) {
-                connectTimeoutMillis = 5_000
-                requestTimeoutMillis = 15_000
-                socketTimeoutMillis = 10_000
-            }
-            install(ContentNegotiation) {
-                json(
-                    Json {
-                        ignoreUnknownKeys = true
-                        isLenient = true
-                        // ComputeRoutesRequest が data class のデフォルト値で routingPreference 等を
-                        // 持つため、encodeDefaults を有効にしないと JSON から省略され Google 側で
-                        // TRAFFIC_UNAWARE 相当に倒れて routeToken が返らなくなる。
-                        encodeDefaults = true
-                        explicitNulls = false
-                    },
-                )
-            }
-        }
-    }
-    single<RoutesApiClient> {
-        DefaultRoutesApiClient(
-            context = androidContext(),
-            httpClient = get(qualifier = named(NEW_GUIDANCE_HTTP_CLIENT)),
-            apiKey = get<AppConfig>().googleApiKey,
-        )
-    }
-    single { ExtNavRouteRefiner(routesApiClient = get()) }
-    single { NewRouteManager(routeRepository = get(), extNavRouteRefiner = get()) }
-    single { NewNavigationSdkManager(application = androidApplication()) }
-    single { NewGuidanceManager(routeRepository = get(), extNavRouteRefiner = get()) }
-    single<HttpClient>(qualifier = org.koin.core.qualifier.named("googleCloudTts")) {
+    single { NewRouteManager(routeRepository = get()) }
+    single { NewGuidanceManager() }
+    single<HttpClient>(qualifier = named("googleCloudTts")) {
         HttpClient(OkHttp) {
             install(HttpTimeout) {
                 connectTimeoutMillis = 3_000
@@ -124,7 +89,7 @@ actual val navigationModule: Module = module {
         createTtsEngine(
             context = context,
             appConfig = get(),
-            httpClient = get(qualifier = org.koin.core.qualifier.named("googleCloudTts")),
+            httpClient = get(qualifier = named("googleCloudTts")),
         )
     }
     factory { ExtNavGuidanceTracker() }
@@ -144,9 +109,6 @@ actual val navigationModule: Module = module {
         )
     }
 }
-
-/** Routes API v2 用 HttpClient の Koin qualifier 名。spec/24 §3.2 で導入。 */
-private const val NEW_GUIDANCE_HTTP_CLIENT = "newGuidanceRoutesApi"
 
 private fun createTtsEngine(
     context: android.content.Context,

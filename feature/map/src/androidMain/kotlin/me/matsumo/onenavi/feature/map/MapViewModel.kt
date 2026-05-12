@@ -26,7 +26,6 @@ import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
-import me.matsumo.onenavi.core.navigation.newguidance.NewNavigationSdkManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
@@ -41,7 +40,6 @@ class MapViewModel(
     private val searchRepository: SearchRepository,
     private val newRouteManager: NewRouteManager,
     private val newGuidanceManager: NewGuidanceManager,
-    private val newNavigationSdkManager: NewNavigationSdkManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MapUiState())
@@ -64,26 +62,16 @@ class MapViewModel(
             initialValue = _screenStates.value.size > 1,
         )
 
-    /** spec/24 §3.3 [RoutePreviewState]。Preview 期に refined route 候補を提供する。 */
+    /** Preview 期のルート候補を提供する ([RoutePreviewState])。 */
     val newRoutePreviewState: StateFlow<RoutePreviewState> = newRouteManager.state
 
-    /** spec/24 §8 [GuidanceState]。Guidance 期の state machine を提供する。 */
+    /** Guidance 期の state machine を提供する ([GuidanceState])。 */
     val newGuidanceState: StateFlow<GuidanceState> = newGuidanceManager.state
-
-    /** Navigator が ready かどうか (terms accept / 初期化エラーは internal で見る)。 */
-    val newNavigatorReady: StateFlow<Boolean> = newNavigationSdkManager.navigator
-        .map { it != null }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = false,
-        )
 
     private val uiEventDelegate = UiEventDelegate(
         searchRepository = searchRepository,
         newRouteManager = newRouteManager,
         newGuidanceManager = newGuidanceManager,
-        newNavigationSdkManager = newNavigationSdkManager,
         scope = viewModelScope,
         uiState = _uiState,
         pushScreenState = ::pushScreenState,
@@ -103,11 +91,6 @@ class MapViewModel(
         }
     }
 
-    /** Navigation SDK terms 確認 + Navigator 初期化。Activity 取得後に Compose から呼ぶ。 */
-    fun initializeNewSdk(activity: android.app.Activity) {
-        newNavigationSdkManager.initialize(activity)
-    }
-
     override fun onCleared() {
         super.onCleared()
         newGuidanceManager.release()
@@ -122,7 +105,6 @@ private class UiEventDelegate(
     private val searchRepository: SearchRepository,
     private val newRouteManager: NewRouteManager,
     private val newGuidanceManager: NewGuidanceManager,
-    private val newNavigationSdkManager: NewNavigationSdkManager,
     private val scope: CoroutineScope,
     private val uiState: MutableStateFlow<MapUiState>,
     private val pushScreenState: (MapScreenState) -> Unit,
@@ -266,17 +248,10 @@ private class UiEventDelegate(
     }
 
     private fun handleNavigationStart() {
-        pushScreenState(MapScreenState.Navigating)
-
-        val navigator = newNavigationSdkManager.navigator.value ?: return
-        val locationProvider = newNavigationSdkManager.roadSnappedLocationProvider.value ?: return
         val previewState = newRouteManager.state.value as? RoutePreviewState.Ready ?: return
 
-        newGuidanceManager.startGuidance(
-            navigator = navigator,
-            route = previewState.selectedRoute,
-            locationProvider = locationProvider,
-        )
+        pushScreenState(MapScreenState.Navigating)
+        newGuidanceManager.startGuidance(route = previewState.selectedRoute)
     }
 
     private fun handleNavigationStop() {
