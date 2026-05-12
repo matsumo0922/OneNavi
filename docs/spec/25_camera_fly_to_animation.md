@@ -10,9 +10,19 @@ context を失った状態からでも本ドキュメント単体で実装着手
 
 ### 0.0 改訂履歴
 
-- **v1 (現行)**: 初版。現状の `animateCameraTo` は「中心・bearing・tilt を直線 lerp、zoom を別 lerp」
+- **v1**: 初版。現状の `animateCameraTo` は「中心・bearing・tilt を直線 lerp、zoom を別 lerp」
   という単純補間で、遠距離移動でズームアウトが挟まらない。本ドキュメントで van Wijk–Nuij
-  アルゴリズムを調査し、OneNavi への移植方針を定める。**未実装**。
+  アルゴリズムを調査し、OneNavi への移植方針を定める。
+- **v2**: §5 段階 ① を実装。`feature/map` に `camera/WebMercatorProjection.kt`（lat/lng ⇔
+  ズーム 0 ワールドピクセル）と `camera/VanWijkZoomPath.kt`（d3-interpolate `interpolateZoom` 移植の
+  純関数）+ `androidUnitTest` を追加。
+- **v3 (現行)**: §5 段階 ②③ を実装。`MapCameraState` に `flyCameraTo`（van Wijk 経路で移動、bearing/tilt は
+  別チャンネル lerp、ビューポート未確定時は `animateCameraTo` フォールバック）を追加し、`moveTo` /
+  `showRouteOverview` を `flyCameraTo` 経由に切り替え。`MapItem` から `onSizeChanged` でビュー幅、
+  `rememberMapCameraState` から `LocalDensity` で密度を `MapCameraState` に渡すよう配線。`zoomIn` /
+  `zoomOut` / `changeZoom` は退化ケースのため従来の `animateCameraTo` のまま据え置き。companion に
+  `CAMERA_FLY_TO_RHO`（1.42）/ `CAMERA_FLY_TO_SPEED_SCALE`（1.0）/ `MIN_FLY_TO_DURATION_MS`（250）/
+  `MAX_FLY_TO_DURATION_MS`（3000）を追加。残るは ④ パラメータ調整（実機での体感合わせ）。
 
 ### 0.1 現状の実装 (`feature/map/.../state/MapCameraState.kt`)
 
@@ -273,8 +283,8 @@ GoogleMap の体感に寄せる手順: まず `CAMERA_FLY_TO_RHO = 1.42` / `SPEE
   既存 `animateCameraTo`（個別 duration）を残してもよい。
 - 既存 `animateCameraTo`（pan/zoom 別 duration の単純 lerp）はレイアウト前の fallback 用に残す。
 
-段階: ①van Wijk 経路計算の純関数 + 座標変換 + ユニットテスト → ②`flyCameraTo` を `MapCameraState` に追加（既存はそのまま）
-→ ③`moveTo` / `showRouteOverview` を切り替え → ④パラメータ調整。
+段階: ①van Wijk 経路計算の純関数 + 座標変換 + ユニットテスト【**実装済み** — `feature/map/.../camera/`】
+→ ②`flyCameraTo` を `MapCameraState` に追加【**実装済み**】 → ③`moveTo` / `showRouteOverview` を切り替え【**実装済み**】 → ④パラメータ調整【未着手 — 実機での体感合わせ】。
 
 ## 6. 参考
 

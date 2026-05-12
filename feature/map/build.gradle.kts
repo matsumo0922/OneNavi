@@ -25,5 +25,9 @@ kotlin {
             implementation(libs.google.navigation)
             implementation(libs.play.services.location)
         }
+
+        androidUnitTest.dependencies {
+            implementation(kotlin("test"))
+        }
     }
 }
