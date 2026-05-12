@@ -35,6 +35,7 @@ import me.matsumo.onenavi.feature.map.components.MapPolyline
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapPlaceDetailSheet
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapRoutePreviewSheet
 import me.matsumo.onenavi.feature.map.components.content.MapBrowsingContent
+import me.matsumo.onenavi.feature.map.components.content.MapRoutePreviewContent
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
@@ -115,7 +116,6 @@ fun MapScreen(modifier: Modifier = Modifier) {
         sheetContent = {
             MapScreenBottomSheetContent(
                 modifier = Modifier.fillMaxSize(),
-                uiState = uiState,
                 screenState = screenState,
                 routePreviewState = routePreviewState,
                 cameraState = cameraState,
@@ -174,6 +174,12 @@ private fun MapScreenContent(
         }
 
         is MapScreenState.RoutePreview -> {
+            MapRoutePreviewContent(
+                modifier = modifier,
+                screenState = screenState,
+                uiState = uiState,
+                onUiEvent = onUiEvent,
+            )
         }
         is MapScreenState.Navigating -> TODO()
         is MapScreenState.Arrived -> TODO()
@@ -182,7 +188,6 @@ private fun MapScreenContent(
 
 @Composable
 private fun MapScreenBottomSheetContent(
-    uiState: MapUiState,
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
     cameraState: MapCameraState,

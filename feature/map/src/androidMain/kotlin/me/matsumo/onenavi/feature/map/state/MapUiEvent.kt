@@ -2,6 +2,8 @@ package me.matsumo.onenavi.feature.map.state
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.unit.Dp
+import kotlinx.collections.immutable.ImmutableList
+import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
@@ -30,6 +32,21 @@ sealed interface MapUiEvent {
     data class OnRouteIndexChanged(val index: Int) : MapUiEvent
     data object OnNavigationStart : MapUiEvent
     data object OnNavigationStop : MapUiEvent
+
+    /** ルートプレビューを閉じて直前の画面へ戻る。 */
+    data object OnRoutePreviewDismissed : MapUiEvent
+
+    /** 出発地と目的地を入れ替えてルートを再探索する。 */
+    data object OnSwapWaypoints : MapUiEvent
+
+    /** 編集後の waypoint 列でルートを再探索する。 */
+    data class OnRouteWaypointsConfirmed(val waypoints: ImmutableList<RouteWaypoint>) : MapUiEvent
+
+    /** 指定 index の waypoint を差し替えるための地点検索を開始する。 */
+    data class OnWaypointEditRequested(val index: Int) : MapUiEvent
+
+    /** waypoint 差し替え結果を消費済みにする。 */
+    data object OnWaypointEditResultConsumed : MapUiEvent
 
     data class OnTopAppBarHeightChanged(val height: Int) : MapUiEvent
     data class OnBottomSheetPeekHeightChanged(val height: Dp) : MapUiEvent

@@ -1,16 +1,22 @@
 package me.matsumo.onenavi.feature.map.components.content
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import me.matsumo.onenavi.feature.map.state.MapCameraState
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.dp
+import me.matsumo.onenavi.feature.map.components.topappbar.MapRoutePreviewTopAppBar
+import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
 
 @Composable
 internal fun MapRoutePreviewContent(
-    cameraState: MapCameraState,
+    screenState: MapScreenState.RoutePreview,
     uiState: MapUiState,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
@@ -19,14 +25,25 @@ internal fun MapRoutePreviewContent(
         modifier = modifier,
         contentAlignment = Alignment.TopCenter,
     ) {
-        /*MapRoutePreviewTopAppBar(
+        MapRoutePreviewTopAppBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
+                .padding(horizontal = 8.dp)
                 .onGloballyPositioned {
                     onUiEvent(MapUiEvent.OnTopAppBarHeightChanged(it.size.height))
                 },
-
-        )*/
+            waypoints = screenState.waypoints,
+            waypointEditResult = uiState.routeWaypointEditResult,
+            onWaypointEditResultConsumed = { onUiEvent(MapUiEvent.OnWaypointEditResultConsumed) },
+            onDismissRoutes = { onUiEvent(MapUiEvent.OnRoutePreviewDismissed) },
+            onSwapOriginDestination = { onUiEvent(MapUiEvent.OnSwapWaypoints) },
+            onRouteWaypointsConfirmed = { confirmedWaypoints ->
+                onUiEvent(MapUiEvent.OnRouteWaypointsConfirmed(confirmedWaypoints))
+            },
+            onWaypointClicked = { waypointIndex ->
+                onUiEvent(MapUiEvent.OnWaypointEditRequested(waypointIndex))
+            },
+        )
     }
 }

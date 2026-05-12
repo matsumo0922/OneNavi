@@ -4,6 +4,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.aakira.napier.Napier
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
@@ -74,7 +75,10 @@ class MapViewModel(
         newGuidanceManager = newGuidanceManager,
         scope = viewModelScope,
         uiState = _uiState,
+        screenStates = _screenStates,
         pushScreenState = ::pushScreenState,
+        popScreenState = ::popScreenState,
+        replaceCurrentScreenState = ::replaceCurrentScreenState,
     )
 
     fun onUiEvent(event: MapUiEvent) = uiEventDelegate.onUiEvent(event)
@@ -88,6 +92,12 @@ class MapViewModel(
     fun popScreenState() {
         _screenStates.update { states ->
             states.dropLast(1)
+        }
+    }
+
+    fun replaceCurrentScreenState(state: MapScreenState) {
+        _screenStates.update { states ->
+            states.dropLast(1) + state
         }
     }
 
@@ -107,10 +117,16 @@ private class UiEventDelegate(
     private val newGuidanceManager: NewGuidanceManager,
     private val scope: CoroutineScope,
     private val uiState: MutableStateFlow<MapUiState>,
+    private val screenStates: StateFlow<List<MapScreenState>>,
     private val pushScreenState: (MapScreenState) -> Unit,
+    private val popScreenState: () -> Unit,
+    private val replaceCurrentScreenState: (MapScreenState) -> Unit,
 ) {
     private var placeSearchJob: Job? = null
     private var routeSearchJob: Job? = null
+
+    /** [MapUiEvent.OnWaypointEditRequested] で記憶した、差し替え対象 waypoint の index。 */
+    private var pendingWaypointEditIndex: Int? = null
 
     init {
         scope.launch {
@@ -126,6 +142,17 @@ private class UiEventDelegate(
             .distinctUntilChanged()
             .onEach { query -> performSearchSuggestions(query) }
             .launchIn(scope)
+
+        screenStates
+            .map { it.lastOrNull() }
+            .distinctUntilChanged()
+            .onEach { state ->
+                // 地点検索 (Browsing) 以外へ遷移したら、未消費の差し替え意図は破棄する
+                if (state !is MapScreenState.Browsing) {
+                    pendingWaypointEditIndex = null
+                }
+            }
+            .launchIn(scope)
     }
 
     fun onUiEvent(event: MapUiEvent) {
@@ -140,6 +167,11 @@ private class UiEventDelegate(
             is MapUiEvent.OnRouteIndexChanged -> handleRouteIndexChanged(event.index)
             is MapUiEvent.OnNavigationStart -> handleNavigationStart()
             is MapUiEvent.OnNavigationStop -> handleNavigationStop()
+            is MapUiEvent.OnRoutePreviewDismissed -> handleRoutePreviewDismissed()
+            is MapUiEvent.OnSwapWaypoints -> handleSwapWaypoints()
+            is MapUiEvent.OnRouteWaypointsConfirmed -> handleRouteWaypointsConfirmed(event.waypoints)
+            is MapUiEvent.OnWaypointEditRequested -> handleWaypointEditRequested(event.index)
+            is MapUiEvent.OnWaypointEditResultConsumed -> handleWaypointEditResultConsumed()
             is MapUiEvent.OnTopAppBarHeightChanged -> handleTopAppBarHeightChanged(event.height)
             is MapUiEvent.OnBottomSheetPeekHeightChanged -> handleBottomSheetPeekHeightChanged(event.height)
         }
@@ -170,19 +202,7 @@ private class UiEventDelegate(
     private fun handleSuggestionSelected(suggestion: SearchSuggestionItem) {
         scope.launch {
             searchRepository.select(suggestion.id)
-                .onSuccess { result ->
-                    uiState.value = uiState.value.copy(
-                        query = result.name,
-                        selectedResult = result,
-                    )
-
-                    searchRepository.addHistory(result)
-                    pushScreenState(
-                        MapScreenState.PlaceDetails(
-                            place = result,
-                        ),
-                    )
-                }
+                .onSuccess { result -> handleResultSelected(result) }
                 .onFailure {
                     Napier.e(it, TAG) { "Failed to select suggestion. id: ${suggestion.id}" }
                 }
@@ -192,23 +212,26 @@ private class UiEventDelegate(
     private fun handleHistorySelected(history: SearchHistory) {
         scope.launch {
             searchRepository.retrieve(history.id)
-                .onSuccess { result ->
-                    uiState.value = uiState.value.copy(
-                        query = result.name,
-                        selectedResult = result,
-                    )
-
-                    searchRepository.addHistory(result)
-                    pushScreenState(
-                        MapScreenState.PlaceDetails(
-                            place = result,
-                        ),
-                    )
-                }
+                .onSuccess { result -> handleResultSelected(result) }
                 .onFailure {
                     Napier.e(it, TAG) { "Failed to retrieve history. id: ${history.id}" }
                 }
         }
+    }
+
+    private suspend fun handleResultSelected(result: SearchResultItem) {
+        if (consumeWaypointEdit(result)) return
+
+        uiState.value = uiState.value.copy(
+            query = result.name,
+            selectedResult = result,
+        )
+        searchRepository.addHistory(result)
+        pushScreenState(
+            MapScreenState.PlaceDetails(
+                place = result,
+            ),
+        )
     }
 
     private fun handleRemoveHistory(historyId: String) {
@@ -258,6 +281,51 @@ private class UiEventDelegate(
         newGuidanceManager.stopGuidance()
     }
 
+    private fun handleRoutePreviewDismissed() {
+        newRouteManager.reset()
+        popScreenState()
+    }
+
+    private fun handleSwapWaypoints() {
+        val routePreview = screenStates.value.lastOrNull() as? MapScreenState.RoutePreview ?: return
+        replaceRoutePreview(routePreview.waypoints.reversed().toImmutableList())
+    }
+
+    private fun handleRouteWaypointsConfirmed(waypoints: ImmutableList<RouteWaypoint>) {
+        if (waypoints.size < 2) return
+        replaceRoutePreview(waypoints)
+    }
+
+    private fun replaceRoutePreview(waypoints: ImmutableList<RouteWaypoint>) {
+        if (screenStates.value.lastOrNull() !is MapScreenState.RoutePreview) return
+
+        replaceCurrentScreenState(
+            MapScreenState.RoutePreview(
+                waypoints = waypoints,
+                topBarMode = RoutePreviewTopBarMode.Viewing,
+            ),
+        )
+
+        routeSearchJob?.cancel()
+        routeSearchJob = scope.launch {
+            newRouteManager.searchRoutes(waypoints = waypoints)
+        }
+    }
+
+    private fun handleWaypointEditRequested(index: Int) {
+        pendingWaypointEditIndex = index
+        uiState.value = uiState.value.copy(
+            query = null,
+            suggestions = persistentListOf(),
+            selectedResult = null,
+        )
+        pushScreenState(MapScreenState.Browsing)
+    }
+
+    private fun handleWaypointEditResultConsumed() {
+        uiState.value = uiState.value.copy(routeWaypointEditResult = null)
+    }
+
     private fun handleTopAppBarHeightChanged(height: Int) {
         uiState.value = uiState.value.copy(topAppBarHeight = height)
     }
@@ -280,6 +348,21 @@ private class UiEventDelegate(
                     uiState.value = uiState.value.copy(suggestions = persistentListOf())
                 }
         }
+    }
+
+    private fun consumeWaypointEdit(result: SearchResultItem): Boolean {
+        val editIndex = pendingWaypointEditIndex ?: return false
+        pendingWaypointEditIndex = null
+
+        uiState.value = uiState.value.copy(
+            routeWaypointEditResult = editIndex to RouteWaypoint.Place(
+                name = result.name,
+                latitude = result.latitude,
+                longitude = result.longitude,
+            ),
+        )
+        popScreenState()
+        return true
     }
 
     companion object {
