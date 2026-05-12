@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.feature.map.state
 
+import android.animation.TimeInterpolator
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.os.Looper
@@ -30,11 +31,14 @@ import com.google.android.gms.maps.model.LatLngBounds
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.feature.map.camera.VanWijkZoomPath
 import me.matsumo.onenavi.feature.map.camera.WebMercatorProjection
+import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_DECELERATE_FACTOR
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_PAN_DURATION_MS
+import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ZOOM_DURATION_MS
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.MAX_FLY_TO_DURATION_MS
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.MIN_FLY_TO_DURATION_MS
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.pow
@@ -161,8 +165,10 @@ internal class MapCameraState internal constructor() {
      * bounds にフィットする [CameraPosition] を一旦 `moveCamera` で算出してから元に戻し、
      * その目標位置へ [flyCameraTo] で van Wijk–Nuij 経路で寄せる。「現在地 → 引いて全体」という
      * 自然なシネマティック移動になり、`updatePadding` で設定済みの地図パディング
-     * （トップバー / ボトムシート分）も尊重される。地図ビューのサイズが未確定の場合は
-     * 単純補間（[animateCameraTo]）にフォールバックする。
+     * （トップバー / ボトムシート分）も尊重される。ルート全体表示は引き量が大きく、弧長へ減速を
+     * かけるだけだと終端の減速が知覚されにくいため、ズームレベルへ直接かける強めの減速
+     * （[CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR]）を [flyCameraTo] に渡す。
+     * 地図ビューのサイズが未確定の場合は単純補間（[animateCameraTo]）にフォールバックする。
      *
      * @param routePoints フィット対象の座標列（全候補ルートをまとめて渡してよい）
      * @param paddingPx 画面端とルートの間に確保する余白（px）
@@ -171,7 +177,7 @@ internal class MapCameraState internal constructor() {
     fun showRouteOverview(
         routePoints: List<RoutePoint>,
         paddingPx: Int = ROUTE_OVERVIEW_PADDING_PX,
-        durationMs: Long? = null,
+        durationMs: Long? = 1500,
     ) {
         val map = googleMap ?: return
         if (routePoints.isEmpty()) return
@@ -189,7 +195,11 @@ internal class MapCameraState internal constructor() {
         map.moveCamera(CameraUpdateFactory.newCameraPosition(current))
 
         if (target != null) {
-            flyCameraTo(target = target, durationMs = durationMs)
+            flyCameraTo(
+                target = target,
+                durationMs = durationMs,
+                zoomEasing = DecelerateInterpolator(CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR),
+            )
         }
     }
 
@@ -228,10 +238,14 @@ internal class MapCameraState internal constructor() {
      *
      * @param durationMs アニメーション時間（ms）。null なら経路長から自動算出し、
      *   [MIN_FLY_TO_DURATION_MS]〜[MAX_FLY_TO_DURATION_MS] にクランプする
+     * @param zoomEasing 指定すると、ズーム（= log ビューポート幅）を弧長から切り離し、生のアニメ進捗に
+     *   このイージングをかけて log 空間で補間する。引き量が大きいときに終端の減速をはっきり効かせるための逃げ道。
+     *   null なら従来どおりズームも弧長パラメータから導出する（中心パンと完全に結合）。
      */
     private fun flyCameraTo(
         target: CameraPosition,
         durationMs: Long? = null,
+        zoomEasing: TimeInterpolator? = null,
         onFinished: () -> Unit = {},
     ) {
         val map = googleMap ?: return
@@ -259,8 +273,7 @@ internal class MapCameraState internal constructor() {
         }
 
         val path = VanWijkZoomPath.of(startViewport, endViewport, rho = CAMERA_FLY_TO_RHO)
-        val totalDurationMs = (durationMs ?: (path.naturalDurationMs() * CAMERA_FLY_TO_SPEED_SCALE).toLong())
-            .coerceIn(MIN_FLY_TO_DURATION_MS, MAX_FLY_TO_DURATION_MS)
+        val totalDurationMs = (durationMs ?: (path.naturalDurationMs() * CAMERA_FLY_TO_SPEED_SCALE).toLong()).coerceAtMost(MAX_FLY_TO_DURATION_MS)
         val easing = DecelerateInterpolator(CAMERA_DECELERATE_FACTOR)
 
         cameraState = cameraState.copy(isFollowingMyLocation = false)
@@ -271,9 +284,19 @@ internal class MapCameraState internal constructor() {
             interpolator = LinearInterpolator()
 
             addUpdateListener { anim ->
-                val fraction = easing.getInterpolation(anim.animatedValue as Float)
-                val viewport = path.at(fraction.toDouble())
-                val zoom = (ln(viewportWidthDp / viewport.viewportWidthWorldPx) / ln(2.0)).toFloat()
+                val rawFraction = anim.animatedValue as Float
+                val arcFraction = easing.getInterpolation(rawFraction)
+                val viewport = path.at(arcFraction.toDouble())
+
+                val widthWorldPx = if (zoomEasing == null) {
+                    viewport.viewportWidthWorldPx
+                } else {
+                    val zoomFraction = zoomEasing.getInterpolation(rawFraction).toDouble()
+                    val logStartWidth = ln(startViewport.viewportWidthWorldPx)
+                    val logEndWidth = ln(endViewport.viewportWidthWorldPx)
+                    exp(logStartWidth + (logEndWidth - logStartWidth) * zoomFraction)
+                }
+                val zoom = (ln(viewportWidthDp / widthWorldPx) / ln(2.0)).toFloat()
                     .coerceIn(MIN_ZOOM, MAX_ZOOM)
 
                 map.moveCamera(
@@ -286,8 +309,8 @@ internal class MapCameraState internal constructor() {
                                 ),
                             )
                             .zoom(zoom)
-                            .bearing(lerpAngle(start.bearing, target.bearing, fraction))
-                            .tilt(lerp(start.tilt, target.tilt, fraction))
+                            .bearing(lerpAngle(start.bearing, target.bearing, arcFraction))
+                            .tilt(lerp(start.tilt, target.tilt, arcFraction))
                             .build(),
                     ),
                 )
@@ -391,7 +414,13 @@ internal class MapCameraState internal constructor() {
         private const val FULL_ZOOM_DELTA = 10f
         private const val CAMERA_DECELERATE_FACTOR = 2.5f
 
-        /** fly-to の曲率 ρ。大きいほど遠距離移動で大胆にズームアウトする。Mapbox の `flyTo` の `curve` と同値。 */
+        /**
+         * [showRouteOverview] の引きアニメで、ズームレベル（= log ビューポート幅）へ直接かける減速の強さ。
+         * 引き量が大きく弧長への減速だと終端の減速が知覚されにくいので、[CAMERA_DECELERATE_FACTOR] より強めにする。
+         */
+        private const val CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR = 5f
+
+        /** fly-to の曲率 ρ。大きいほど遠距離移動で大胆にズームアウトする（d3 / Mapbox の既定は約 1.42）。 */
         private const val CAMERA_FLY_TO_RHO = 0.6
 
         /** fly-to の自然な所要時間に掛ける係数。大きいほどゆっくり動く。 */
