@@ -4,7 +4,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.test.runTest
 import me.matsumo.onenavi.core.datasource.RouteDataSource
-import me.matsumo.onenavi.core.model.GoogleRoute
+import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteResult
@@ -157,7 +157,7 @@ class NewRouteManagerTest {
                 hasTolls = false,
                 tollFee = null,
             ),
-            platformRoute = GoogleRoute(
+            detail = RouteDetail(
                 id = "route-0",
                 origin = origin,
                 destination = destination,

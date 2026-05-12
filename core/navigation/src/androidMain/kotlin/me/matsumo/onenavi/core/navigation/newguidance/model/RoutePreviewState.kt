@@ -2,13 +2,13 @@ package me.matsumo.onenavi.core.navigation.newguidance.model
 
 import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.ImmutableList
-import me.matsumo.onenavi.core.model.GoogleRoute
+import me.matsumo.onenavi.core.model.RouteDetail
 
 /**
  * Preview 期 (案内開始前) のルート選択画面の状態。
  *
  * NewRouteManager がこの値を [kotlinx.coroutines.flow.StateFlow] として公開し、UI 側は [Ready] の
- * ときに地図描画 ([GoogleRoute.geometry] を自前 polyline で描画) と選択 UI を出す。
+ * ときに地図描画 ([RouteDetail.geometry] を自前 polyline で描画) と選択 UI を出す。
  */
 @Immutable
 sealed interface RoutePreviewState {
@@ -27,10 +27,10 @@ sealed interface RoutePreviewState {
      */
     @Immutable
     data class Ready(
-        val routes: ImmutableList<GoogleRoute>,
+        val routes: ImmutableList<RouteDetail>,
         val selectedIndex: Int,
     ) : RoutePreviewState {
-        val selectedRoute: GoogleRoute
+        val selectedRoute: RouteDetail
             get() = routes[selectedIndex]
     }
 

@@ -3,17 +3,17 @@ package me.matsumo.onenavi.core.navigation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import me.matsumo.onenavi.core.model.GoogleRoute
+import me.matsumo.onenavi.core.model.RouteDetail
 
 /**
- * Google ルートの保持・選択を管理するクラス。
+ * ルートの保持・選択を管理するクラス。
  */
 class RouteManager {
 
-    private val _routes = MutableStateFlow<List<GoogleRoute>>(emptyList())
+    private val _routes = MutableStateFlow<List<RouteDetail>>(emptyList())
 
     /** 現在のルート一覧（プライマリ + 代替ルート）。 */
-    val routes: StateFlow<List<GoogleRoute>> = _routes.asStateFlow()
+    val routes: StateFlow<List<RouteDetail>> = _routes.asStateFlow()
 
     fun register() {
         // no-op
@@ -26,7 +26,7 @@ class RouteManager {
     /**
      * ルートを登録する。先頭がプライマリルート。
      */
-    fun setRoutes(routes: List<GoogleRoute>) {
+    fun setRoutes(routes: List<RouteDetail>) {
         _routes.value = routes
     }
 

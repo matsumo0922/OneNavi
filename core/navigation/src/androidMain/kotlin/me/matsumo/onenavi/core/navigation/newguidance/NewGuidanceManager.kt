@@ -4,7 +4,7 @@ import io.github.aakira.napier.Napier
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import me.matsumo.onenavi.core.model.GoogleRoute
+import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 
 /**
@@ -21,7 +21,7 @@ class NewGuidanceManager {
     val state: StateFlow<GuidanceState> = _state.asStateFlow()
 
     /** 指定ルートで案内を開始する。 */
-    fun startGuidance(route: GoogleRoute) {
+    fun startGuidance(route: RouteDetail) {
         Napier.i(tag = TAG) { "Guidance started: routeId=${route.id}" }
         _state.value = GuidanceState.Guiding
     }

@@ -86,7 +86,7 @@ class HomeMapViewModel(
         routeManager.routes,
     ) { routeResults, navigationRoutes ->
         val primaryRouteId = navigationRoutes.firstOrNull()?.id
-        routeResults.indexOfFirst { it.googleRoute.id == primaryRouteId }.takeIf { it >= 0 } ?: 0
+        routeResults.indexOfFirst { it.routeDetail.id == primaryRouteId }.takeIf { it >= 0 } ?: 0
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -352,7 +352,7 @@ class HomeMapViewModel(
     }
 
     fun onRouteSelected(index: Int) {
-        val routeId = _routeResults.value.getOrNull(index)?.googleRoute?.id ?: return
+        val routeId = _routeResults.value.getOrNull(index)?.routeDetail?.id ?: return
         routeManager.selectRoute(routeId)
         _effects.trySend(HomeMapEffect.MoveCameraToRouteOverview)
     }
@@ -427,10 +427,10 @@ class HomeMapViewModel(
 
             result
                 .onSuccess { coreResults ->
-                    val featureResults = coreResults.mapNotNull { it.toFeatureRouteResult() }
+                    val featureResults = coreResults.map { it.toFeatureRouteResult() }
                     _topBarMode.value = RoutePreviewTopBarMode.Viewing
 
-                    routeManager.setRoutes(featureResults.map { it.googleRoute })
+                    routeManager.setRoutes(featureResults.map { it.routeDetail })
                     guidanceSessionManager.setNavigationState(NavigationState.RoutePreview)
                     _routeResults.value = featureResults.toImmutableList()
                     _isRouteSearching.value = false

@@ -41,7 +41,8 @@ data class RoutePoint(
 )
 
 /**
- * Google 側のルート情報。
+ * ルート全体の詳細情報。案内開始に必要なルートデータを保持する。
+ * 取得元の DataSource（外部ナビ API など）に依存しない中立なモデル。
  *
  * @param id アプリ内で使うルート ID
  * @param origin 出発地
@@ -50,10 +51,10 @@ data class RoutePoint(
  * @param geometry ルート形状
  * @param distanceMeters ルート全体の距離
  * @param durationSeconds ルート全体の所要時間
- * @param steps Google Routes API から取得した案内ステップ
+ * @param steps 案内ステップ
  */
 @Immutable
-data class GoogleRoute(
+data class RouteDetail(
     val id: String,
     val origin: RoutePoint,
     val destination: RoutePoint,

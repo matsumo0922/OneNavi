@@ -3,14 +3,13 @@ package me.matsumo.onenavi.core.model
 import androidx.compose.runtime.Immutable
 
 /**
- * ルート検索結果。UI 用の [RouteItem] とプラットフォーム固有のルートオブジェクトを保持する。
- * Android では [platformRoute] に [GoogleRoute] が入る。
+ * ルート検索結果。UI 表示用の [RouteItem] と案内用の [RouteDetail] を保持する。
  *
  * @param item UI 表示用のルート情報
- * @param platformRoute プラットフォーム固有のルートオブジェクト（Android: NavigationRoute）
+ * @param detail 案内に使うルート詳細
  */
 @Immutable
 data class RouteResult(
     val item: RouteItem,
-    val platformRoute: Any? = null,
+    val detail: RouteDetail,
 )

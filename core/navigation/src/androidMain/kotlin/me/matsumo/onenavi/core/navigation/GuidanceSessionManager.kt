@@ -23,12 +23,12 @@ import me.matsumo.drive.supporter.api.guidance.domain.Intersection
 import me.matsumo.drive.supporter.api.guidance.domain.ManeuverDirection
 import me.matsumo.drive.supporter.api.guidance.domain.MergeSide
 import me.matsumo.onenavi.core.model.ArrivalInfo
-import me.matsumo.onenavi.core.model.GoogleRoute
 import me.matsumo.onenavi.core.model.GuidanceUiState
 import me.matsumo.onenavi.core.model.ManeuverInfo
 import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.NavigationState
+import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.TripProgressInfo
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavAnnouncementScheduler
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
@@ -78,7 +78,7 @@ class GuidanceSessionManager(
     private var attachedProvider: RoadSnappedLocationProvider? = null
 
     private var sessionStartTimeMillis: Long = 0L
-    private var activeRoute: GoogleRoute? = null
+    private var activeRoute: RouteDetail? = null
 
     private var locationUpdateCount: Int = 0
 
@@ -364,12 +364,12 @@ class GuidanceSessionManager(
         else -> ManeuverType.TURN
     }
 
-    private fun isSameRoute(old: GoogleRoute?, new: GoogleRoute?): Boolean {
+    private fun isSameRoute(old: RouteDetail?, new: RouteDetail?): Boolean {
         if (old == null || new == null) return old === new
         return old.id == new.id
     }
 
-    private fun onFinalDestinationArrival(route: GoogleRoute) {
+    private fun onFinalDestinationArrival(route: RouteDetail) {
         val elapsedSeconds = (System.currentTimeMillis() - sessionStartTimeMillis) / 1000.0
         _arrivalInfo.value = ArrivalInfo(
             destinationName = "",

@@ -86,22 +86,22 @@ internal fun HomeMapScreenContent(
     val isNavigationFollowing3D by viewModel.cameraManager.isFollowing3D.collectAsStateWithLifecycle()
     val arrivalInfo by viewModel.guidanceSessionManager.arrivalInfo.collectAsStateWithLifecycle()
     val activeRoutes by viewModel.routeManager.routes.collectAsStateWithLifecycle()
-    val activeGoogleRoute = activeRoutes.firstOrNull()
+    val activeRouteDetail = activeRoutes.firstOrNull()
 
     // ナビゲーション中は Navigation SDK が実際に走っているルートで青線を描きたいので、
-    // `routeResults` の geometry / congestion を SDK が追従更新している `activeGoogleRoute.geometry`
+    // `routeResults` の geometry / congestion を SDK が追従更新している `activeRouteDetail.geometry`
     // に差し替えた擬似リストに置き換える。代替ルートはナビ中には表示しないため、単一要素のリストになる。
-    val effectiveRouteResults = remember(screenState, routeResults, selectedRouteIndex, activeGoogleRoute) {
-        if (screenState is HomeMapScreenState.Navigating && activeGoogleRoute != null) {
+    val effectiveRouteResults = remember(screenState, routeResults, selectedRouteIndex, activeRouteDetail) {
+        if (screenState is HomeMapScreenState.Navigating && activeRouteDetail != null) {
             val original = routeResults.getOrNull(selectedRouteIndex) ?: routeResults.firstOrNull()
             if (original != null) {
                 persistentListOf(
                     original.copy(
                         item = original.item.copy(
-                            geometry = activeGoogleRoute.geometry,
+                            geometry = activeRouteDetail.geometry,
                             congestionSegments = persistentListOf(),
                         ),
-                        googleRoute = activeGoogleRoute,
+                        routeDetail = activeRouteDetail,
                     ),
                 ).toImmutableList()
             } else {
