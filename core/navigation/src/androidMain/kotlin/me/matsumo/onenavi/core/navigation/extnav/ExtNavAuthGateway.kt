@@ -1,11 +1,13 @@
 package me.matsumo.onenavi.core.navigation.extnav
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.matsumo.drive.supporter.api.auth.domain.AuthState
 import me.matsumo.drive.supporter.api.core.result.ApiFailure
 import me.matsumo.drive.supporter.api.core.result.ApiResult
 import me.matsumo.onenavi.core.model.AppConfig
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * drive-supporter-api の認証ゲートウェイ。
@@ -15,11 +17,16 @@ class ExtNavAuthGateway(
     private val clientProvider: ExtNavClientProvider,
     private val appConfig: AppConfig,
     private val maxRetry: Int = 3,
+    private val retryBaseDelayMillis: Long = 300L,
 ) {
     private val mutex = Mutex()
 
     /**
      * 現在のセッション状態を確認し、未認証 or downgrade なら credential で再ログインする。
+     *
+     * `signInWithCredentials` は 3 段階の web ログインフローで、最後の userstatuscheck が
+     * まれに匿名セッションを返す（サーバー側の session 反映遅延）。即時リトライで回復するため、
+     * downgrade を含む一時的な失敗は [maxRetry] 回まで指数バックオフ付きで再試行する。
      */
     suspend fun ensureSignedIn(): Result<Unit> = mutex.withLock {
         val loginId = appConfig.extNavLoginId
@@ -43,6 +50,7 @@ class ExtNavAuthGateway(
                     if (!result.failure.isRetryable() || attempt == maxRetry - 1) {
                         return Result.failure(AuthGatewayException(result.failure))
                     }
+                    delay((retryBaseDelayMillis shl attempt).milliseconds)
                 }
             }
         }
@@ -54,6 +62,7 @@ class ExtNavAuthGateway(
         is ApiFailure.Network,
         is ApiFailure.EmptyResponse,
         is ApiFailure.Http,
+        ApiFailure.Auth.Downgraded,
         -> true
         else -> false
     }
