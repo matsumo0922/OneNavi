@@ -10,6 +10,7 @@ import me.matsumo.onenavi.core.model.SearchResultItem
  * HomeMap 画面の排他的な画面状態。
  * combine 導出により、複数の raw state から自動計算される。
  */
+@Stable
 sealed interface MapScreenState {
 
     /** 地図ブラウジング中。検索バーとコントロールが表示される。 */

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SheetValue
@@ -22,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
@@ -31,8 +29,6 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import com.google.android.gms.maps.GoogleMap
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapControls
-import me.matsumo.onenavi.feature.map.components.MapMarker
-import me.matsumo.onenavi.feature.map.components.MapPolyline
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapPlaceDetailSheet
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapRoutePreviewSheet
 import me.matsumo.onenavi.feature.map.components.content.MapBrowsingContent
@@ -100,18 +96,20 @@ fun MapScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    MapEffect(
-        screenState = screenState,
-        routePreviewState = routePreviewState,
-        googleMap = googleMap,
-    )
+    googleMap?.let {
+        MapEffect(
+            screenState = screenState,
+            routePreviewState = routePreviewState,
+            googleMap = it,
+        )
 
-    MapCameraEffect(
-        uiState = uiState,
-        screenState = screenState,
-        routePreviewState = routePreviewState,
-        cameraState = cameraState,
-    )
+        MapCameraEffect(
+            uiState = uiState,
+            screenState = screenState,
+            routePreviewState = routePreviewState,
+            cameraState = cameraState,
+        )
+    }
 
     Box(
         modifier = modifier,
@@ -198,6 +196,7 @@ private fun MapScreenContent(
                 onUiEvent = onUiEvent,
             )
         }
+
         is MapScreenState.Navigating -> TODO()
         is MapScreenState.Arrived -> TODO()
     }
@@ -234,114 +233,7 @@ private fun MapScreenBottomSheetContent(
                 )
             }
         }
-        is MapScreenState.Navigating -> TODO()
-        is MapScreenState.Arrived -> TODO()
-    }
-}
 
-@Composable
-private fun MapCameraEffect(
-    uiState: MapUiState,
-    screenState: MapScreenState,
-    routePreviewState: RoutePreviewState,
-    cameraState: MapCameraState,
-) {
-    val density = LocalDensity.current
-    val statusBarHeightPadding = WindowInsets.statusBars
-        .asPaddingValues()
-        .calculateTopPadding()
-
-    LaunchedEffect(uiState.bottomSheetPeekHeight, uiState.topAppBarHeight, screenState) {
-        val top = uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }
-        val bottom = with(density) { uiState.bottomSheetPeekHeight.toPx() }
-        val horizontal = with(density) { 24.dp.toPx() }
-
-        cameraState.updatePadding(
-            top = top.toInt(),
-            bottom = bottom.toInt(),
-            start = horizontal.toInt(),
-            end = horizontal.toInt(),
-        )
-    }
-
-    val routeOverviewPoints = remember(screenState, routePreviewState) {
-        val ready = routePreviewState as? RoutePreviewState.Ready
-        if (screenState is MapScreenState.RoutePreview && ready != null) {
-            ready.routes.flatMap { it.geometry }
-        } else {
-            null
-        }
-    }
-
-    // RoutePreview
-    LaunchedEffect(routeOverviewPoints, uiState.topAppBarHeight, uiState.bottomSheetPeekHeight) {
-        routeOverviewPoints?.let { cameraState.showRouteOverview(it) }
-    }
-
-    LaunchedEffect(screenState) {
-        when (screenState) {
-            is MapScreenState.Browsing -> {
-                cameraState.followMyLocation()
-            }
-
-            is MapScreenState.PlaceDetails -> {
-                cameraState.moveTo(
-                    latitude = screenState.place.latitude,
-                    longitude = screenState.place.longitude,
-                    zoom = 18f,
-                )
-            }
-
-            is MapScreenState.SearchResultsList -> TODO()
-            is MapScreenState.RoutePreview -> {
-                // ルートが揃ったタイミングで下の LaunchedEffect がカメラをフィットさせる
-            }
-            is MapScreenState.Navigating -> TODO()
-            is MapScreenState.Arrived -> TODO()
-        }
-    }
-}
-
-@Composable
-private fun MapEffect(
-    screenState: MapScreenState,
-    routePreviewState: RoutePreviewState,
-    googleMap: GoogleMap?,
-) {
-    when (screenState) {
-        is MapScreenState.Browsing -> Unit
-
-        is MapScreenState.PlaceDetails -> {
-            if (googleMap != null) {
-                MapMarker(
-                    googleMap = googleMap,
-                    latitude = screenState.place.latitude,
-                    longitude = screenState.place.longitude,
-                    title = screenState.place.name,
-                )
-            }
-        }
-
-        is MapScreenState.SearchResultsList -> TODO()
-        is MapScreenState.RoutePreview -> {
-            val ready = routePreviewState as? RoutePreviewState.Ready
-            if (googleMap != null && ready != null) {
-                for (waypoint in screenState.waypoints.drop(1)) {
-                    MapMarker(
-                        googleMap = googleMap,
-                        latitude = waypoint.latitude,
-                        longitude = waypoint.longitude,
-                    )
-                }
-
-                for (route in ready.routes) {
-                    MapPolyline(
-                        googleMap = googleMap,
-                        points = route.geometry,
-                    )
-                }
-            }
-        }
         is MapScreenState.Navigating -> TODO()
         is MapScreenState.Arrived -> TODO()
     }

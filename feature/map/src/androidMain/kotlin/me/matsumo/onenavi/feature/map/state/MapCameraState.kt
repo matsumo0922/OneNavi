@@ -36,7 +36,6 @@ import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_PAN_
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ZOOM_DURATION_MS
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.MAX_FLY_TO_DURATION_MS
-import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.MIN_FLY_TO_DURATION_MS
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
@@ -425,9 +424,6 @@ internal class MapCameraState internal constructor() {
 
         /** fly-to の自然な所要時間に掛ける係数。大きいほどゆっくり動く。 */
         private const val CAMERA_FLY_TO_SPEED_SCALE = 1.0
-
-        /** fly-to の所要時間の下限（ms）。ごく短い移動でも一瞬で飛ばないように。 */
-        private const val MIN_FLY_TO_DURATION_MS = 2000L
 
         /** fly-to の所要時間の上限（ms）。地球の裏側へ飛ぶときに何秒も待たされないように。 */
         private const val MAX_FLY_TO_DURATION_MS = 3000L
