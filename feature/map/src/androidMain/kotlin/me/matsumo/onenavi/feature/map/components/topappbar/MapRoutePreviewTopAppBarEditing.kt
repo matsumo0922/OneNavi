@@ -33,6 +33,7 @@ import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_map_route_done
+import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import org.jetbrains.compose.resources.stringResource
 import sh.calvin.reorderable.ReorderableColumn
 
@@ -44,11 +45,9 @@ private val DIVIDER_HEIGHT = 16.dp
 internal fun MapRoutePreviewTopAppBarEditing(
     waypoints: ImmutableList<RouteWaypoint>,
     waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
-    onWaypointEditResultConsumed: () -> Unit,
-    onBackClicked: () -> Unit,
-    onConfirmed: (ImmutableList<RouteWaypoint>) -> Unit,
+    onUiEvent: (MapUiEvent) -> Unit,
+    onEditingFinished: () -> Unit,
     modifier: Modifier = Modifier,
-    onWaypointClicked: (Int) -> Unit,
 ) {
     var editingList by remember(waypoints) {
         mutableStateOf(
@@ -72,7 +71,7 @@ internal fun MapRoutePreviewTopAppBarEditing(
                 add(null)
             }
         }
-        onWaypointEditResultConsumed()
+        onUiEvent(MapUiEvent.OnWaypointEditResultConsumed)
     }
 
     val confirmedCount = editingList.count { it != null }
@@ -87,7 +86,7 @@ internal fun MapRoutePreviewTopAppBarEditing(
         ) {
             IconButton(
                 modifier = Modifier.size(48.dp),
-                onClick = onBackClicked,
+                onClick = onEditingFinished,
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -147,7 +146,7 @@ internal fun MapRoutePreviewTopAppBarEditing(
                                     position = position,
                                     isEditing = true,
                                     waypointLabel = waypointLabel,
-                                    onClicked = { onWaypointClicked(index) },
+                                    onClicked = { onUiEvent(MapUiEvent.OnWaypointEditRequested(index)) },
                                 )
 
                                 Icon(
@@ -194,7 +193,8 @@ internal fun MapRoutePreviewTopAppBarEditing(
             TextButton(
                 onClick = {
                     val confirmed = editingList.filterNotNull().toImmutableList()
-                    onConfirmed(confirmed)
+                    onUiEvent(MapUiEvent.OnRouteWaypointsConfirmed(confirmed))
+                    onEditingFinished()
                 },
                 enabled = canConfirm,
             ) {

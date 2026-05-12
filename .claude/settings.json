@@ -45,7 +45,10 @@
       "Bash(rtk git *)",
       "Bash(rtk proxy git *)",
       "Bash(./gradlew *kspCommonMainKotlinMetadata*)",
-      "Bash(./gradlew *kspCommonMainKotlinMetadata *)"
+      "Bash(./gradlew *kspCommonMainKotlinMetadata *)",
+      "Bash(./gradlew :feature:map:assembleDebug *)",
+      "Bash(./gradlew :core:navigation:assembleDebug *)",
+      "Bash(./gradlew :feature:map:compileDebugKotlin *)"
     ]
   }
 }

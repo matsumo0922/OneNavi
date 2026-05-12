@@ -16,16 +16,13 @@ import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
+import me.matsumo.onenavi.feature.map.state.MapUiEvent
 
 @Composable
 internal fun MapRoutePreviewTopAppBar(
     waypoints: ImmutableList<RouteWaypoint>,
     waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
-    onWaypointEditResultConsumed: () -> Unit,
-    onDismissRoutes: () -> Unit,
-    onSwapOriginDestination: () -> Unit,
-    onRouteWaypointsConfirmed: (ImmutableList<RouteWaypoint>) -> Unit,
-    onWaypointClicked: (Int) -> Unit,
+    onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
@@ -35,7 +32,7 @@ internal fun MapRoutePreviewTopAppBar(
         if (isEditing) {
             isEditing = false
         } else {
-            onDismissRoutes()
+            onUiEvent(MapUiEvent.OnRoutePreviewDismissed)
         }
     }
 
@@ -53,29 +50,21 @@ internal fun MapRoutePreviewTopAppBar(
             MapRoutePreviewTopAppBarEditing(
                 waypoints = waypoints,
                 waypointEditResult = waypointEditResult,
-                onWaypointEditResultConsumed = onWaypointEditResultConsumed,
-                onConfirmed = { confirmed ->
-                    onRouteWaypointsConfirmed(confirmed)
-                    isEditing = false
-                },
-                onWaypointClicked = onWaypointClicked,
-                onBackClicked = { isEditing = false },
+                onUiEvent = onUiEvent,
+                onEditingFinished = { isEditing = false },
             )
         } else {
             MapRoutePreviewTopAppBarConfirmed(
                 waypoints = waypoints,
                 waypointEditResult = waypointEditResult,
-                onWaypointEditResultConsumed = onWaypointEditResultConsumed,
+                onUiEvent = onUiEvent,
                 onEditClicked = { isEditing = true },
-                onSwapClicked = onSwapOriginDestination,
-                onWaypointClicked = onWaypointClicked,
-                onBackClicked = onDismissRoutes,
-                onRouteWaypointsConfirmed = onRouteWaypointsConfirmed,
             )
         }
     }
 }
 
+/** waypoint 行の位置種別。先頭は出発地、末尾は目的地、それ以外は経由地を表す。 */
 internal enum class WaypointPosition {
     First,
     Middle,

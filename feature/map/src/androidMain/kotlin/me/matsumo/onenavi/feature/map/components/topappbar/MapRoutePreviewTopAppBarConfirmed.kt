@@ -21,17 +21,14 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
+import me.matsumo.onenavi.feature.map.state.MapUiEvent
 
 @Composable
 internal fun MapRoutePreviewTopAppBarConfirmed(
     waypoints: ImmutableList<RouteWaypoint>,
     waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
-    onWaypointEditResultConsumed: () -> Unit,
-    onBackClicked: () -> Unit,
+    onUiEvent: (MapUiEvent) -> Unit,
     onEditClicked: () -> Unit,
-    onSwapClicked: () -> Unit,
-    onWaypointClicked: (Int) -> Unit,
-    onRouteWaypointsConfirmed: (ImmutableList<RouteWaypoint>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(waypointEditResult) {
@@ -39,8 +36,8 @@ internal fun MapRoutePreviewTopAppBarConfirmed(
         if (index !in waypoints.indices) return@LaunchedEffect
 
         val updated = waypoints.toMutableList().apply { set(index, place) }.toImmutableList()
-        onRouteWaypointsConfirmed(updated)
-        onWaypointEditResultConsumed()
+        onUiEvent(MapUiEvent.OnRouteWaypointsConfirmed(updated))
+        onUiEvent(MapUiEvent.OnWaypointEditResultConsumed)
     }
 
     val hasWaypoints = waypoints.size > 2
@@ -51,7 +48,7 @@ internal fun MapRoutePreviewTopAppBarConfirmed(
     ) {
         IconButton(
             modifier = Modifier.size(48.dp),
-            onClick = onBackClicked,
+            onClick = { onUiEvent(MapUiEvent.OnRoutePreviewDismissed) },
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -76,7 +73,7 @@ internal fun MapRoutePreviewTopAppBarConfirmed(
                     ),
                     isEditing = false,
                     waypointLabel = if (!hasWaypoints) null else null,
-                    onClicked = { onWaypointClicked(index) },
+                    onClicked = { onUiEvent(MapUiEvent.OnWaypointEditRequested(index)) },
                 )
 
                 if (index < waypoints.lastIndex) {
@@ -103,7 +100,7 @@ internal fun MapRoutePreviewTopAppBarConfirmed(
             if (!hasWaypoints) {
                 IconButton(
                     modifier = Modifier.size(48.dp),
-                    onClick = onSwapClicked,
+                    onClick = { onUiEvent(MapUiEvent.OnSwapWaypoints) },
                 ) {
                     Icon(
                         imageVector = Icons.Filled.SwapVert,

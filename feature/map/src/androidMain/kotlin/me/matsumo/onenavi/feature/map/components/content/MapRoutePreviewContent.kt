@@ -35,15 +35,7 @@ internal fun MapRoutePreviewContent(
                 },
             waypoints = screenState.waypoints,
             waypointEditResult = uiState.routeWaypointEditResult,
-            onWaypointEditResultConsumed = { onUiEvent(MapUiEvent.OnWaypointEditResultConsumed) },
-            onDismissRoutes = { onUiEvent(MapUiEvent.OnRoutePreviewDismissed) },
-            onSwapOriginDestination = { onUiEvent(MapUiEvent.OnSwapWaypoints) },
-            onRouteWaypointsConfirmed = { confirmedWaypoints ->
-                onUiEvent(MapUiEvent.OnRouteWaypointsConfirmed(confirmedWaypoints))
-            },
-            onWaypointClicked = { waypointIndex ->
-                onUiEvent(MapUiEvent.OnWaypointEditRequested(waypointIndex))
-            },
+            onUiEvent = onUiEvent,
         )
     }
 }
