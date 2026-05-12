@@ -5,6 +5,7 @@ import com.google.android.gms.maps.GoogleMap
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapMarker
 import me.matsumo.onenavi.feature.map.components.MapPolyline
+import me.matsumo.onenavi.feature.map.components.MapPolylineStyle
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 
 @Composable
@@ -64,10 +65,15 @@ private fun RoutePreviewEffect(
     }
 
     if (routePreviewState is RoutePreviewState.Ready) {
-        for (route in routePreviewState.routes) {
+        for ((routeIndex, route) in routePreviewState.routes.withIndex()) {
             MapPolyline(
                 googleMap = googleMap,
                 points = route.geometry,
+                style = if (routeIndex == routePreviewState.selectedIndex) {
+                    MapPolylineStyle.Selected
+                } else {
+                    MapPolylineStyle.Unselected
+                },
             )
         }
     }
