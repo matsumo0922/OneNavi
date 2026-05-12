@@ -1,30 +1,65 @@
 package me.matsumo.onenavi.core.datasource.helper
 
-import android.content.Context
 import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import okio.Path.Companion.toPath
+import io.github.aakira.napier.Napier
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 
-class PreferenceHelperImpl(
-    private val context: Context,
-    private val ioDispatcher: CoroutineDispatcher,
-) : PreferenceHelper {
+interface PreferenceHelper {
+    fun create(name: String): DataStore<Preferences>
+    fun delete(name: String)
+}
 
-    override fun create(name: String): DataStore<Preferences> {
-        val file = context.filesDir.resolve("$name.preferences_pb")
+@OptIn(ExperimentalSerializationApi::class)
+fun <T> Preferences.deserialize(
+    formatter: Json,
+    serializer: KSerializer<T>,
+    defaultValue: T,
+): T {
+    return try {
+        val parsedPrefMap: Map<String, JsonElement> = buildMap {
+            for ((k, vAny) in this@deserialize.asMap()) {
+                val key = k.name
+                val elem: JsonElement = when (val v = vAny) {
+                    is String -> {
+                        // JSON 文字列（{...} or [...]）は parse、通常文字列は Primitive
+                        if (v.startsWith("{") && v.endsWith("}") || v.startsWith("[") && v.endsWith("]")) {
+                            formatter.parseToJsonElement(v)
+                        } else {
+                            JsonPrimitive(v)
+                        }
+                    }
 
-        return PreferenceDataStoreFactory.createWithPath(
-            corruptionHandler = null,
-            migrations = emptyList(),
-            scope = CoroutineScope(ioDispatcher),
-            produceFile = { file.absolutePath.toPath() },
-        )
-    }
+                    is Int -> JsonPrimitive(v)
+                    is Long -> JsonPrimitive(v)
+                    is Float -> JsonPrimitive(v)
+                    is Double -> JsonPrimitive(v)
+                    is Boolean -> JsonPrimitive(v)
+                    else -> JsonPrimitive(v.toString())
+                }
+                put(key, elem)
+            }
+        }
 
-    override fun delete(name: String) {
-        // do nothing
+        val defaultData = formatter.encodeToJsonElement(serializer, defaultValue).jsonObject
+        val preferenceData = JsonObject(parsedPrefMap)
+
+        val data = buildJsonObject {
+            // デフォルトをベースにしつつ、Prefs を上書き
+            for ((k, v) in defaultData) put(k, v)
+            for ((k, v) in preferenceData) put(k, v)
+        }
+
+        formatter.decodeFromJsonElement(serializer, data)
+    } catch (e: Exception) {
+        Napier.e("Failed to deserialize.", e)
+        defaultValue
     }
 }

@@ -10,9 +10,9 @@ import org.koin.compose.viewmodel.koinViewModel
 
 @Suppress("ViewModelForwarding")
 @Composable
-internal actual fun HomeMapScreen(
+internal fun HomeMapScreen(
     onNavigatingChanged: (Boolean) -> Unit,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     val viewModel: HomeMapViewModel = koinViewModel()
     val screenState by viewModel.screenState.collectAsStateWithLifecycle()

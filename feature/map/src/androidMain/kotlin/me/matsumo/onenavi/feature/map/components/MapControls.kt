@@ -52,7 +52,7 @@ internal fun MapControls(
                     } else {
                         cameraState.setPerspective(GoogleMap.CameraPerspective.TILTED)
                     }
-                }
+                },
             )
 
             MapZoomButtons(

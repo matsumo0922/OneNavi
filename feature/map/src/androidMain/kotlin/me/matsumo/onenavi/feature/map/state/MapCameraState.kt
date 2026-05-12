@@ -50,7 +50,7 @@ internal fun rememberMapCameraState(): MapCameraState {
 }
 
 @Stable
-internal class MapCameraState internal constructor () {
+internal class MapCameraState internal constructor() {
 
     private var googleMap: GoogleMap? = null
     private var cameraAnimator: ValueAnimator? = null

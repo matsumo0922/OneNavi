@@ -2,7 +2,6 @@ plugins {
     id("matsumo.primitive.kmp.common")
     id("matsumo.primitive.android.library")
     id("matsumo.primitive.kmp.android")
-    id("matsumo.primitive.kmp.ios")
     id("matsumo.primitive.detekt")
     alias(libs.plugins.ksp)
 }
@@ -14,20 +13,6 @@ android {
 kotlin {
     sourceSets {
         androidMain.dependencies {
-            implementation(libs.androidx.datastore)
-            implementation(libs.androidx.datastore.proto)
-            implementation(libs.ktor.okhttp)
-            implementation(libs.google.navigation)
-            implementation("com.google.android.libraries.places:places:${libs.versions.googlePlaces.get()}") {
-                exclude(group = "com.google.android.gms", module = "play-services-maps")
-            }
-        }
-
-        iosMain.dependencies {
-            implementation(libs.ktor.darwin)
-        }
-
-        commonMain.dependencies {
             implementation(project(":core:common"))
             implementation(project(":core:model"))
             implementation(project(":core:resource"))
@@ -44,9 +29,17 @@ kotlin {
 
             implementation(libs.androidx.room.runtime)
             implementation(libs.androidx.sqlite.bundled)
+
+            implementation(libs.androidx.datastore)
+            implementation(libs.androidx.datastore.proto)
+            implementation(libs.ktor.okhttp)
+            implementation(libs.google.navigation)
+            implementation("com.google.android.libraries.places:places:${libs.versions.googlePlaces.get()}") {
+                exclude(group = "com.google.android.gms", module = "play-services-maps")
+            }
         }
 
-        commonTest.dependencies {
+        androidUnitTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.ktor.client.mock)
             implementation(libs.kotlinx.coroutines.test)
@@ -55,7 +48,5 @@ kotlin {
 }
 
 dependencies {
-    listOf("kspAndroid", "kspIosX64", "kspIosArm64", "kspIosSimulatorArm64").forEach { target ->
-        add(target, libs.androidx.room.compiler)
-    }
+    add("kspAndroid", libs.androidx.room.compiler)
 }

@@ -13,12 +13,11 @@ internal fun MapRoutePreview(
     cameraState: MapCameraState,
     uiState: MapUiState,
     onUiEvent: (MapUiEvent) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier,
         contentAlignment = Alignment.TopCenter,
     ) {
-
     }
 }

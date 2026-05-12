@@ -3,7 +3,6 @@ plugins {
     id("matsumo.primitive.android.library")
     id("matsumo.primitive.kmp.compose")
     id("matsumo.primitive.kmp.android")
-    id("matsumo.primitive.kmp.ios")
     id("matsumo.primitive.detekt")
 }
 
@@ -13,7 +12,7 @@ android {
 
 kotlin {
     sourceSets {
-        commonMain.dependencies {
+        androidMain.dependencies {
             implementation(project(":core:common"))
             implementation(project(":core:model"))
             implementation(project(":core:navigation"))
@@ -23,9 +22,6 @@ kotlin {
             implementation(project(":core:resource"))
 
             implementation(libs.kotlinx.datetime)
-        }
-
-        androidMain.dependencies {
             implementation(libs.google.navigation)
             implementation(libs.play.services.location)
         }

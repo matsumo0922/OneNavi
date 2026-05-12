@@ -85,8 +85,8 @@ internal fun MapTopAppBar(
             MapUiEvent.OnSearch(
                 query = query,
                 latitude = cameraState.cameraState.myLocationLatitude,
-                longitude = cameraState.cameraState.myLocationLongitude
-            )
+                longitude = cameraState.cameraState.myLocationLongitude,
+            ),
         )
     }
 
