@@ -11,14 +11,19 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.core.result.ApiResult
+import me.matsumo.drive.supporter.api.guidance.domain.CongestionLevel
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection
+import me.matsumo.drive.supporter.api.guidance.domain.RouteCongestionSegment
 import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
 import me.matsumo.drive.supporter.api.guidance.domain.StreetSegment
 import me.matsumo.drive.supporter.api.route.domain.CarPriority
 import me.matsumo.drive.supporter.api.route.domain.RouteSearchCriteria
 import me.matsumo.drive.supporter.api.route.domain.RouteWaypoint
 import me.matsumo.onenavi.core.datasource.RouteDataSource
+import me.matsumo.onenavi.core.model.CongestionSegment
+import me.matsumo.onenavi.core.model.CongestionSeverity
+import me.matsumo.onenavi.core.model.CongestionTrend
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RoadClassSegment
 import me.matsumo.onenavi.core.model.RouteDetail
@@ -31,6 +36,7 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
+import me.matsumo.drive.supporter.api.guidance.domain.CongestionTrend as ExtNavCongestionTrend
 
 /**
  * 外部ナビ API ライブラリを使ったルート検索データソース。
@@ -90,6 +96,7 @@ class ExtNavRouteDataSource(
             val routeId = routeIdFor(routeGuidance)
             val geometry = buildGeometry(routeGuidance, originPoint, destinationPoint)
             val roadClassSegments = buildRoadClassSegments(routeGuidance, geometry)
+            val congestionSegments = buildCongestionSegments(routeGuidance, geometry)
             val tollYen = routeGuidance.summary.tollYen.takeIf { it > 0 }
             val distanceMetres = routeGuidance.summary.distanceMetres.toDouble()
             val timeSeconds = routeGuidance.summary.timeSeconds.toDouble()
@@ -104,6 +111,7 @@ class ExtNavRouteDataSource(
                 durationSeconds = timeSeconds,
                 steps = persistentListOf(),
                 roadClassSegments = roadClassSegments,
+                congestionSegments = congestionSegments,
             )
 
             registry.put(
@@ -120,6 +128,7 @@ class ExtNavRouteDataSource(
                 viaRoadNames = persistentListOf(),
                 hasTolls = tollYen != null,
                 tollFee = tollYen,
+                congestionSegments = congestionSegments,
                 priorityLabel = priorityLabelFor(routeGuidance.priority),
             )
 
@@ -156,6 +165,72 @@ class ExtNavRouteDataSource(
             addAll(raw)
             if (raw.last() != destinationPoint) add(destinationPoint)
         }.toImmutableList()
+    }
+
+    /**
+     * [routeGuidance] の渋滞区間（外部ナビ API ライブラリが route バイナリから算出済み）を中立モデルに詰め替える。
+     *
+     * polyline index はライブラリ側で [RouteGuidance.polyline] に対して計算されている。OneNavi の
+     * [geometry] は先頭に出発地を足している場合があるため、その分だけ index をずらしてから [geometry] の
+     * 範囲にクランプする。座標マッチや測地系変換は行わない。
+     */
+    private fun buildCongestionSegments(
+        routeGuidance: RouteGuidance,
+        geometry: ImmutableList<RoutePoint>,
+    ): ImmutableList<CongestionSegment> {
+        if (routeGuidance.congestionSegments.isEmpty() || geometry.isEmpty()) {
+            return persistentListOf()
+        }
+        val polyline = routeGuidance.polyline
+        val originPrepended = polyline.isNotEmpty() &&
+            (
+                geometry.first().latitude != polyline.first().latDegrees ||
+                    geometry.first().longitude != polyline.first().lonDegrees
+                )
+        val indexOffset = if (originPrepended) 1 else 0
+        return routeGuidance.congestionSegments
+            .map { segment -> segment.toModel(indexOffset, geometry.lastIndex) }
+            .toImmutableList()
+    }
+
+    private fun RouteCongestionSegment.toModel(
+        indexOffset: Int,
+        lastGeometryIndex: Int,
+    ): CongestionSegment {
+        val startIndex = (polylineStartIndex + indexOffset).coerceIn(0, lastGeometryIndex)
+        val endIndex = (polylineEndIndex + indexOffset).coerceIn(startIndex, lastGeometryIndex)
+        return CongestionSegment(
+            startPolylinePointIndex = startIndex,
+            endPolylinePointIndex = endIndex,
+            severity = level.toSeverity(),
+            startDistanceMeters = startDistanceFromRouteStartMetres.toDouble(),
+            endDistanceMeters = endDistanceFromRouteStartMetres.toDouble(),
+            congestionDistanceMeters = congestionDistanceMetres.toDouble(),
+            transitMinutes = transitTimeSeconds?.let { seconds -> (seconds + SECONDS_PER_MINUTE / 2) / SECONDS_PER_MINUTE },
+            trend = trend.toModel(),
+            isIntermittent = isIntermittent,
+            headPointName = headPointName?.ifBlank { null },
+            headPointKana = headPointKana?.ifBlank { null },
+            headRoadNumbering = headRoadNumbering?.ifBlank { null },
+            tailPointName = tailPointName?.ifBlank { null },
+            tailPointKana = tailPointKana?.ifBlank { null },
+            tailRoadNumbering = tailRoadNumbering?.ifBlank { null },
+        )
+    }
+
+    private fun CongestionLevel.toSeverity(): CongestionSeverity = when (this) {
+        CongestionLevel.Smooth -> CongestionSeverity.NORMAL
+        CongestionLevel.Crowded -> CongestionSeverity.SLOW
+        CongestionLevel.Jam -> CongestionSeverity.TRAFFIC_JAM
+        CongestionLevel.Unknown -> CongestionSeverity.UNKNOWN
+    }
+
+    private fun ExtNavCongestionTrend.toModel(): CongestionTrend = when (this) {
+        ExtNavCongestionTrend.Stable -> CongestionTrend.STABLE
+        ExtNavCongestionTrend.Increasing, ExtNavCongestionTrend.PartlyIncreasing -> CongestionTrend.INCREASING
+        ExtNavCongestionTrend.Decreasing, ExtNavCongestionTrend.PartlyDecreasing -> CongestionTrend.DECREASING
+        ExtNavCongestionTrend.Intermittent -> CongestionTrend.INTERMITTENT
+        ExtNavCongestionTrend.Unknown -> CongestionTrend.UNKNOWN
     }
 
     /**
@@ -687,7 +762,7 @@ class ExtNavRouteDataSource(
         is ApiResult.Failure -> error("$hint failed: $failure")
     }
 
-    /** 道路種別セグメント推定で使う距離しきい値。 */
+    /** 道路種別セグメント推定で使う距離しきい値ほか。 */
     private companion object {
         private const val ANCHOR_SOURCE_TOLERANCE_METRES: Double = 1.0
         private const val ANCHOR_GEOMETRY_TOLERANCE_METRES: Double = 1.0
@@ -695,6 +770,7 @@ class ExtNavRouteDataSource(
         private const val BOUNDARY_SEARCH_INTERVAL_RATIO: Double = 0.35
         private const val MIN_BOUNDARY_SEARCH_RADIUS_METRES: Double = 750.0
         private const val MAX_BOUNDARY_SEARCH_RADIUS_METRES: Double = 5_000.0
+        private const val SECONDS_PER_MINUTE: Int = 60
     }
 }
 
