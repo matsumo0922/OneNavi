@@ -44,10 +44,10 @@ internal enum class MapPolylineStyle(
         zIndex = 10f,
     ),
 
-    /** 非選択ルート: 彩度を落とした暗めの灰青で背面に描画。 */
+    /** 非選択ルート: 彩度を落とした灰青で背面に描画。 */
     Unselected(
-        borderColor = Color(0xFF4A5A78),
-        bodyColor = Color(0xFF8A99B5),
+        borderColor = Color(0xFF59698C),
+        bodyColor = Color(0xFF9DACC8),
         bodyWidthPx = 12f,
         borderWidthPx = 18f,
         zIndex = 0f,
