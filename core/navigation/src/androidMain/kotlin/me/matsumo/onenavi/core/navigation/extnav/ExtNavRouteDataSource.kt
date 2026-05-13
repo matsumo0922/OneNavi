@@ -467,8 +467,11 @@ class ExtNavRouteDataSource(
         if (fromClass == RoadClass.HIGHWAY && toClass == RoadClass.ORDINARY) {
             // 降りる IC は高速側の道路名を持つので、その名前を持つ最後の交差点 = 出口 IC とみなす。
             // 路線記号や全長按分の推定よりこちらが優先。出口 IC を過ぎても一般道が青のままになるのを防ぐ。
+            // ただし推定境界から大きく離れた JCT（経路途中で別の高速へ乗り換える地点など）まで遡らないよう、
+            // 探索半径内に収まる交差点に限定する。
             findHighwayExitMetres(
                 highwayRoadNames = fromRoadNames,
+                estimatedMetres = estimatedMetres,
                 previousBoundaryMetres = previousBoundaryMetres,
                 nextBoundaryEstimateMetres = nextBoundaryEstimateMetres,
                 intersections = intersections,
@@ -496,15 +499,21 @@ class ExtNavRouteDataSource(
 
     private fun findHighwayExitMetres(
         highwayRoadNames: ImmutableSet<String>,
+        estimatedMetres: Double,
         previousBoundaryMetres: Double,
         nextBoundaryEstimateMetres: Double,
         intersections: List<SnappedIntersection>,
     ): Double? {
         if (highwayRoadNames.isEmpty()) return null
+        val searchRadiusMetres = boundarySearchRadius(
+            previousBoundaryMetres = previousBoundaryMetres,
+            nextBoundaryEstimateMetres = nextBoundaryEstimateMetres,
+        )
         return intersections
             .asSequence()
             .filter { intersection -> intersection.geometryMetres > previousBoundaryMetres }
             .filter { intersection -> intersection.geometryMetres < nextBoundaryEstimateMetres }
+            .filter { intersection -> abs(intersection.geometryMetres - estimatedMetres) <= searchRadiusMetres }
             .filter { intersection -> intersection.roadNames.hasAnyNameIn(highwayRoadNames) }
             .maxByOrNull { intersection -> intersection.geometryMetres }
             ?.geometryMetres
