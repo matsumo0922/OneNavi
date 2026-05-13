@@ -181,13 +181,11 @@ class ExtNavRouteDataSource(
         if (routeGuidance.congestionSegments.isEmpty() || geometry.isEmpty()) {
             return persistentListOf()
         }
+
         val polyline = routeGuidance.polyline
-        val originPrepended = polyline.isNotEmpty() &&
-            (
-                geometry.first().latitude != polyline.first().latDegrees ||
-                    geometry.first().longitude != polyline.first().lonDegrees
-                )
+        val originPrepended = polyline.isNotEmpty() && (geometry.first().latitude != polyline.first().latDegrees || geometry.first().longitude != polyline.first().lonDegrees)
         val indexOffset = if (originPrepended) 1 else 0
+
         return routeGuidance.congestionSegments
             .map { segment -> segment.toModel(indexOffset, geometry.lastIndex) }
             .toImmutableList()
@@ -199,6 +197,7 @@ class ExtNavRouteDataSource(
     ): CongestionSegment {
         val startIndex = (polylineStartIndex + indexOffset).coerceIn(0, lastGeometryIndex)
         val endIndex = (polylineEndIndex + indexOffset).coerceIn(startIndex, lastGeometryIndex)
+
         return CongestionSegment(
             startPolylinePointIndex = startIndex,
             endPolylinePointIndex = endIndex,
@@ -259,6 +258,7 @@ class ExtNavRouteDataSource(
         val roadClassStretches = buildRoadClassStretches(orderedStreets)
         val cumulativeMetres = buildCumulativeGeometryMetres(geometry)
         val totalGeometryMetres = cumulativeMetres.last()
+
         if (totalGeometryMetres <= 0.0) {
             return persistentListOf()
         }
@@ -268,18 +268,22 @@ class ExtNavRouteDataSource(
             geometry = geometry,
             cumulativeMetres = cumulativeMetres,
         )
+
         val distanceAnchors = buildDistanceAnchors(
             streets = orderedStreets,
             intersections = snappedIntersections,
             totalStreetMetres = totalStreetMetres,
             totalGeometryMetres = totalGeometryMetres,
         )
+
         val distanceMapper = PiecewiseDistanceMapper(distanceAnchors)
+
         val entryEventMetres = buildExpresswayEntryEventMetres(
             routeGuidance = routeGuidance,
             totalGeometryMetres = totalGeometryMetres,
             intersections = snappedIntersections,
         ).toMutableList()
+
         val boundaryEstimates = roadClassStretches
             .dropLast(1)
             .map { stretch -> distanceMapper.map(stretch.endMetres) }
@@ -315,6 +319,7 @@ class ExtNavRouteDataSource(
 
         val segments = mutableListOf<RoadClassSegment>()
         var startIndex = 0
+
         for ((stretchIndex, stretch) in roadClassStretches.withIndex()) {
             val endIndex = boundaryIndices.getOrNull(stretchIndex) ?: geometry.lastIndex
             if (endIndex > startIndex) {
@@ -334,12 +339,14 @@ class ExtNavRouteDataSource(
     private fun buildRoadClassStretches(streets: List<StreetSegment>): List<RoadClassStretch> {
         val stretches = mutableListOf<RoadClassStretch>()
         var accumulatedMetres = 0.0
+
         for (street in streets) {
             val startMetres = accumulatedMetres
             val endMetres = startMetres + street.distanceMetres
             val roadClass = street.toRoadClass()
             val roadNames = street.roadIdentityNames()
             val lastStretch = stretches.lastOrNull()
+
             if (lastStretch != null && lastStretch.roadClass == roadClass) {
                 stretches[stretches.lastIndex] = lastStretch.copy(
                     endMetres = endMetres,
@@ -398,18 +405,19 @@ class ExtNavRouteDataSource(
             DistanceAnchor(sourceMetres = totalStreetMetres, geometryMetres = totalGeometryMetres),
         )
         var lastMatchedStretchIndex = -1
+
         for (intersection in intersections) {
             if (intersection.roadNames.isEmpty()) continue
+
             val matchedStretchIndex = findMatchingNamedStreetStretchIndex(
                 namedStretches = namedStretches,
                 roadNames = intersection.roadNames,
                 lastMatchedStretchIndex = lastMatchedStretchIndex,
             ) ?: continue
+
             if (matchedStretchIndex != lastMatchedStretchIndex) {
                 val matchedStretch = namedStretches[matchedStretchIndex]
-                if (matchedStretch.startMetres > ANCHOR_SOURCE_TOLERANCE_METRES &&
-                    matchedStretch.startMetres < totalStreetMetres - ANCHOR_SOURCE_TOLERANCE_METRES
-                ) {
+                if (matchedStretch.startMetres > ANCHOR_SOURCE_TOLERANCE_METRES && matchedStretch.startMetres < totalStreetMetres - ANCHOR_SOURCE_TOLERANCE_METRES) {
                     anchors += DistanceAnchor(
                         sourceMetres = matchedStretch.startMetres,
                         geometryMetres = intersection.geometryMetres,
@@ -427,16 +435,15 @@ class ExtNavRouteDataSource(
     private fun buildNamedStreetStretches(streets: List<StreetSegment>): List<NamedStreetStretch> {
         val stretches = mutableListOf<NamedStreetStretch>()
         var accumulatedMetres = 0.0
+
         for (street in streets) {
             val startMetres = accumulatedMetres
             val endMetres = startMetres + street.distanceMetres
             val roadNames = street.roadIdentityNames()
             val roadClass = street.toRoadClass()
             val lastStretch = stretches.lastOrNull()
-            if (lastStretch != null &&
-                lastStretch.roadClass == roadClass &&
-                lastStretch.roadNames.hasAnyNameIn(roadNames)
-            ) {
+
+            if (lastStretch != null && lastStretch.roadClass == roadClass && lastStretch.roadNames.hasAnyNameIn(roadNames)) {
                 stretches[stretches.lastIndex] = lastStretch.copy(
                     endMetres = endMetres,
                     roadNames = (lastStretch.roadNames + roadNames).toImmutableSet(),
@@ -449,6 +456,7 @@ class ExtNavRouteDataSource(
                     roadNames = roadNames,
                 )
             }
+
             accumulatedMetres = endMetres
         }
         return stretches
@@ -459,12 +467,12 @@ class ExtNavRouteDataSource(
         roadNames: ImmutableSet<String>,
         lastMatchedStretchIndex: Int,
     ): Int? {
-        if (lastMatchedStretchIndex >= 0 &&
-            namedStretches.getOrNull(lastMatchedStretchIndex)?.roadNames?.hasAnyNameIn(roadNames) == true
-        ) {
+        if (lastMatchedStretchIndex >= 0 && namedStretches.getOrNull(lastMatchedStretchIndex)?.roadNames?.hasAnyNameIn(roadNames) == true) {
             return lastMatchedStretchIndex
         }
+
         val searchStartIndex = (lastMatchedStretchIndex + 1).coerceAtLeast(0)
+
         for (streetIndex in searchStartIndex until namedStretches.size) {
             if (namedStretches[streetIndex].roadNames.hasAnyNameIn(roadNames)) {
                 return streetIndex
@@ -475,12 +483,11 @@ class ExtNavRouteDataSource(
 
     private fun List<DistanceAnchor>.filterMonotonicDistanceAnchors(): List<DistanceAnchor> {
         val filteredAnchors = mutableListOf<DistanceAnchor>()
+
         for (anchor in this) {
             val previousAnchor = filteredAnchors.lastOrNull()
-            if (previousAnchor == null ||
-                anchor.sourceMetres > previousAnchor.sourceMetres + ANCHOR_SOURCE_TOLERANCE_METRES &&
-                anchor.geometryMetres > previousAnchor.geometryMetres + ANCHOR_GEOMETRY_TOLERANCE_METRES
-            ) {
+
+            if (previousAnchor == null || anchor.sourceMetres > previousAnchor.sourceMetres + ANCHOR_SOURCE_TOLERANCE_METRES && anchor.geometryMetres > previousAnchor.geometryMetres + ANCHOR_GEOMETRY_TOLERANCE_METRES) {
                 filteredAnchors += anchor
             }
         }
@@ -496,6 +503,7 @@ class ExtNavRouteDataSource(
             .takeIf { it > 0 }
             ?.toDouble()
             ?: return emptyList()
+
         return routeGuidance.guidancePoints
             .asSequence()
             .filter { guidancePoint ->
