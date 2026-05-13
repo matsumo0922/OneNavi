@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.navigation.extnav
 
 import androidx.compose.runtime.Immutable
+import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -20,6 +21,8 @@ import me.matsumo.drive.supporter.api.guidance.domain.StreetSegment
 import me.matsumo.drive.supporter.api.route.domain.CarPriority
 import me.matsumo.drive.supporter.api.route.domain.RouteSearchCriteria
 import me.matsumo.drive.supporter.api.route.domain.RouteWaypoint
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.model.CongestionSegment
 import me.matsumo.onenavi.core.model.CongestionSeverity
@@ -84,6 +87,35 @@ class ExtNavRouteDataSource(
         val guidance = guidanceResult.unwrap("guidance.resolveGuidance")
         if (guidance.routes.isEmpty()) {
             error("guidance.resolveGuidance returned no routes")
+        }
+
+        Napier.d(tag = "ExtNavRouteDataSource") {
+            val vicsTimeJst = guidance.vicsTime
+                ?.atZone(ZoneId.of("Asia/Tokyo"))
+                ?.format(VICS_TIME_LOG_FORMAT)
+                ?: "<disabled>"
+            val perRouteSegmentCounts = guidance.routes.joinToString(separator = ", ") { route ->
+                val byLevel = route.congestionSegments.groupingBy { it.level.name }.eachCount()
+                "route[${route.index}]=${route.congestionSegments.size}($byLevel)"
+            }
+            "VICS data time: $vicsTimeJst, segments=[$perRouteSegmentCounts]"
+        }
+        // 各 segment の詳細 (start/end 距離・polyline index・level・head/tail 名) も別ログで出す。
+        // 想定外の長距離赤線が出るケースで何が origin かを実機ログから追えるようにする。
+        for (route in guidance.routes) {
+            if (route.congestionSegments.isEmpty()) continue
+            Napier.d(tag = "ExtNavRouteDataSource") {
+                val lines = route.congestionSegments.joinToString(separator = "\n") { segment ->
+                    "  [route ${route.index}] " +
+                        "${segment.level.name} " +
+                        "${segment.startDistanceFromRouteStartMetres}m..${segment.endDistanceFromRouteStartMetres}m " +
+                        "(len=${segment.congestionDistanceMetres}m) " +
+                        "polyIdx=${segment.polylineStartIndex}..${segment.polylineEndIndex} " +
+                        "head=${segment.headPointName}/${segment.headRoadNumbering} " +
+                        "tail=${segment.tailPointName}/${segment.tailRoadNumbering}"
+                }
+                "Congestion segments detail:\n$lines"
+            }
         }
 
         val originPoint = RoutePoint(originLatitude, originLongitude)
@@ -779,6 +811,8 @@ class ExtNavRouteDataSource(
         private const val MIN_BOUNDARY_SEARCH_RADIUS_METRES: Double = 750.0
         private const val MAX_BOUNDARY_SEARCH_RADIUS_METRES: Double = 5_000.0
         private const val SECONDS_PER_MINUTE: Int = 60
+        private val VICS_TIME_LOG_FORMAT: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
     }
 }
 
