@@ -73,6 +73,7 @@ private fun RoutePreviewEffect(
                 points = route.geometry,
                 style = if (isSelected) MapPolylineStyle.Selected else MapPolylineStyle.Unselected,
                 roadClassSegments = if (isSelected) route.roadClassSegments else persistentListOf(),
+                congestionSegments = if (isSelected) route.congestionSegments else persistentListOf(),
             )
         }
     }
