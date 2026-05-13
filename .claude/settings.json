@@ -48,7 +48,13 @@
       "Bash(./gradlew *kspCommonMainKotlinMetadata *)",
       "Bash(./gradlew :feature:map:assembleDebug *)",
       "Bash(./gradlew :core:navigation:assembleDebug *)",
-      "Bash(./gradlew :feature:map:compileDebugKotlin *)"
+      "Bash(./gradlew :feature:map:compileDebugKotlin *)",
+      "Bash(rtk grep *)",
+      "Bash(rtk find *)",
+      "Bash(jadx *)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(./gradlew :drive-supporter-api:compileDebugKotlin *)",
+      "Bash(./gradlew :drive-supporter-api:assembleDebug *)"
     ]
   }
 }

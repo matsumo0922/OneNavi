@@ -14,7 +14,7 @@ import kotlinx.collections.immutable.persistentListOf
  * @param viaRoadNames 経由する主要道路名。現状の Google Routes API 実装では未取得のため通常は空。
  * @param hasTolls 有料道路区間を含むかどうか
  * @param tollFee 有料道路の料金（円）。null の場合は料金不明。
- * @param congestionSegments geometry 上の渋滞区間。Google Routes API の speedReadingIntervals に対応。
+ * @param congestionSegments geometry に沿った渋滞区間。ルート計算時点のスナップショット。渋滞が無ければ空。
  * @param priorityLabel ルート種別の表示名（例: 「推奨」「渋滞回避」）。外部ナビ API 由来の場合のみ設定される。
  */
 @Immutable
@@ -54,6 +54,7 @@ data class RoutePoint(
  * @param durationSeconds ルート全体の所要時間
  * @param steps 案内ステップ
  * @param roadClassSegments geometry を道路種別（高速 / 一般道）ごとに区切ったセグメント列。経路サマリ由来で境界は近似。空の場合は色分けしない。
+ * @param congestionSegments geometry に沿った渋滞区間。ルート計算時点のスナップショット。渋滞が無ければ空。
  */
 @Immutable
 data class RouteDetail(
@@ -66,4 +67,5 @@ data class RouteDetail(
     val durationSeconds: Double,
     val steps: ImmutableList<RouteStepInfo>,
     val roadClassSegments: ImmutableList<RoadClassSegment> = persistentListOf(),
+    val congestionSegments: ImmutableList<CongestionSegment> = persistentListOf(),
 )

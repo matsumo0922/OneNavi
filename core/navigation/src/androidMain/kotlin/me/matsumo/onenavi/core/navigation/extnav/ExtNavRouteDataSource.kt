@@ -11,14 +11,19 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.core.result.ApiResult
+import me.matsumo.drive.supporter.api.guidance.domain.CongestionLevel
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection
+import me.matsumo.drive.supporter.api.guidance.domain.RouteCongestionSegment
 import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
 import me.matsumo.drive.supporter.api.guidance.domain.StreetSegment
 import me.matsumo.drive.supporter.api.route.domain.CarPriority
 import me.matsumo.drive.supporter.api.route.domain.RouteSearchCriteria
 import me.matsumo.drive.supporter.api.route.domain.RouteWaypoint
 import me.matsumo.onenavi.core.datasource.RouteDataSource
+import me.matsumo.onenavi.core.model.CongestionSegment
+import me.matsumo.onenavi.core.model.CongestionSeverity
+import me.matsumo.onenavi.core.model.CongestionTrend
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RoadClassSegment
 import me.matsumo.onenavi.core.model.RouteDetail
@@ -31,6 +36,7 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
+import me.matsumo.drive.supporter.api.guidance.domain.CongestionTrend as ExtNavCongestionTrend
 
 /**
  * 外部ナビ API ライブラリを使ったルート検索データソース。
@@ -90,6 +96,7 @@ class ExtNavRouteDataSource(
             val routeId = routeIdFor(routeGuidance)
             val geometry = buildGeometry(routeGuidance, originPoint, destinationPoint)
             val roadClassSegments = buildRoadClassSegments(routeGuidance, geometry)
+            val congestionSegments = buildCongestionSegments(routeGuidance, geometry)
             val tollYen = routeGuidance.summary.tollYen.takeIf { it > 0 }
             val distanceMetres = routeGuidance.summary.distanceMetres.toDouble()
             val timeSeconds = routeGuidance.summary.timeSeconds.toDouble()
@@ -104,6 +111,7 @@ class ExtNavRouteDataSource(
                 durationSeconds = timeSeconds,
                 steps = persistentListOf(),
                 roadClassSegments = roadClassSegments,
+                congestionSegments = congestionSegments,
             )
 
             registry.put(
@@ -120,6 +128,7 @@ class ExtNavRouteDataSource(
                 viaRoadNames = persistentListOf(),
                 hasTolls = tollYen != null,
                 tollFee = tollYen,
+                congestionSegments = congestionSegments,
                 priorityLabel = priorityLabelFor(routeGuidance.priority),
             )
 
@@ -159,6 +168,71 @@ class ExtNavRouteDataSource(
     }
 
     /**
+     * [routeGuidance] の渋滞区間（外部ナビ API ライブラリが route バイナリから算出済み）を中立モデルに詰め替える。
+     *
+     * polyline index はライブラリ側で [RouteGuidance.polyline] に対して計算されている。OneNavi の
+     * [geometry] は先頭に出発地を足している場合があるため、その分だけ index をずらしてから [geometry] の
+     * 範囲にクランプする。座標マッチや測地系変換は行わない。
+     */
+    private fun buildCongestionSegments(
+        routeGuidance: RouteGuidance,
+        geometry: ImmutableList<RoutePoint>,
+    ): ImmutableList<CongestionSegment> {
+        if (routeGuidance.congestionSegments.isEmpty() || geometry.isEmpty()) {
+            return persistentListOf()
+        }
+
+        val polyline = routeGuidance.polyline
+        val originPrepended = polyline.isNotEmpty() && (geometry.first().latitude != polyline.first().latDegrees || geometry.first().longitude != polyline.first().lonDegrees)
+        val indexOffset = if (originPrepended) 1 else 0
+
+        return routeGuidance.congestionSegments
+            .map { segment -> segment.toModel(indexOffset, geometry.lastIndex) }
+            .toImmutableList()
+    }
+
+    private fun RouteCongestionSegment.toModel(
+        indexOffset: Int,
+        lastGeometryIndex: Int,
+    ): CongestionSegment {
+        val startIndex = (polylineStartIndex + indexOffset).coerceIn(0, lastGeometryIndex)
+        val endIndex = (polylineEndIndex + indexOffset).coerceIn(startIndex, lastGeometryIndex)
+
+        return CongestionSegment(
+            startPolylinePointIndex = startIndex,
+            endPolylinePointIndex = endIndex,
+            severity = level.toSeverity(),
+            startDistanceMeters = startDistanceFromRouteStartMetres.toDouble(),
+            endDistanceMeters = endDistanceFromRouteStartMetres.toDouble(),
+            congestionDistanceMeters = congestionDistanceMetres.toDouble(),
+            transitMinutes = transitTimeSeconds?.let { seconds -> (seconds + SECONDS_PER_MINUTE / 2) / SECONDS_PER_MINUTE },
+            trend = trend.toModel(),
+            isIntermittent = isIntermittent,
+            headPointName = headPointName?.ifBlank { null },
+            headPointKana = headPointKana?.ifBlank { null },
+            headRoadNumbering = headRoadNumbering?.ifBlank { null },
+            tailPointName = tailPointName?.ifBlank { null },
+            tailPointKana = tailPointKana?.ifBlank { null },
+            tailRoadNumbering = tailRoadNumbering?.ifBlank { null },
+        )
+    }
+
+    private fun CongestionLevel.toSeverity(): CongestionSeverity = when (this) {
+        CongestionLevel.Smooth -> CongestionSeverity.NORMAL
+        CongestionLevel.Crowded -> CongestionSeverity.SLOW
+        CongestionLevel.Jam -> CongestionSeverity.TRAFFIC_JAM
+        CongestionLevel.Unknown -> CongestionSeverity.UNKNOWN
+    }
+
+    private fun ExtNavCongestionTrend.toModel(): CongestionTrend = when (this) {
+        ExtNavCongestionTrend.Stable -> CongestionTrend.STABLE
+        ExtNavCongestionTrend.Increasing, ExtNavCongestionTrend.PartlyIncreasing -> CongestionTrend.INCREASING
+        ExtNavCongestionTrend.Decreasing, ExtNavCongestionTrend.PartlyDecreasing -> CongestionTrend.DECREASING
+        ExtNavCongestionTrend.Intermittent -> CongestionTrend.INTERMITTENT
+        ExtNavCongestionTrend.Unknown -> CongestionTrend.UNKNOWN
+    }
+
+    /**
      * [geometry] を道路種別（高速 / 一般道）ごとの連続区間に分割する。
      *
      * 道路種別そのものは経路サマリの [StreetSegment.highway] を正とする。境界位置は
@@ -184,6 +258,7 @@ class ExtNavRouteDataSource(
         val roadClassStretches = buildRoadClassStretches(orderedStreets)
         val cumulativeMetres = buildCumulativeGeometryMetres(geometry)
         val totalGeometryMetres = cumulativeMetres.last()
+
         if (totalGeometryMetres <= 0.0) {
             return persistentListOf()
         }
@@ -193,18 +268,22 @@ class ExtNavRouteDataSource(
             geometry = geometry,
             cumulativeMetres = cumulativeMetres,
         )
+
         val distanceAnchors = buildDistanceAnchors(
             streets = orderedStreets,
             intersections = snappedIntersections,
             totalStreetMetres = totalStreetMetres,
             totalGeometryMetres = totalGeometryMetres,
         )
+
         val distanceMapper = PiecewiseDistanceMapper(distanceAnchors)
+
         val entryEventMetres = buildExpresswayEntryEventMetres(
             routeGuidance = routeGuidance,
             totalGeometryMetres = totalGeometryMetres,
             intersections = snappedIntersections,
         ).toMutableList()
+
         val boundaryEstimates = roadClassStretches
             .dropLast(1)
             .map { stretch -> distanceMapper.map(stretch.endMetres) }
@@ -240,6 +319,7 @@ class ExtNavRouteDataSource(
 
         val segments = mutableListOf<RoadClassSegment>()
         var startIndex = 0
+
         for ((stretchIndex, stretch) in roadClassStretches.withIndex()) {
             val endIndex = boundaryIndices.getOrNull(stretchIndex) ?: geometry.lastIndex
             if (endIndex > startIndex) {
@@ -259,12 +339,14 @@ class ExtNavRouteDataSource(
     private fun buildRoadClassStretches(streets: List<StreetSegment>): List<RoadClassStretch> {
         val stretches = mutableListOf<RoadClassStretch>()
         var accumulatedMetres = 0.0
+
         for (street in streets) {
             val startMetres = accumulatedMetres
             val endMetres = startMetres + street.distanceMetres
             val roadClass = street.toRoadClass()
             val roadNames = street.roadIdentityNames()
             val lastStretch = stretches.lastOrNull()
+
             if (lastStretch != null && lastStretch.roadClass == roadClass) {
                 stretches[stretches.lastIndex] = lastStretch.copy(
                     endMetres = endMetres,
@@ -323,18 +405,19 @@ class ExtNavRouteDataSource(
             DistanceAnchor(sourceMetres = totalStreetMetres, geometryMetres = totalGeometryMetres),
         )
         var lastMatchedStretchIndex = -1
+
         for (intersection in intersections) {
             if (intersection.roadNames.isEmpty()) continue
+
             val matchedStretchIndex = findMatchingNamedStreetStretchIndex(
                 namedStretches = namedStretches,
                 roadNames = intersection.roadNames,
                 lastMatchedStretchIndex = lastMatchedStretchIndex,
             ) ?: continue
+
             if (matchedStretchIndex != lastMatchedStretchIndex) {
                 val matchedStretch = namedStretches[matchedStretchIndex]
-                if (matchedStretch.startMetres > ANCHOR_SOURCE_TOLERANCE_METRES &&
-                    matchedStretch.startMetres < totalStreetMetres - ANCHOR_SOURCE_TOLERANCE_METRES
-                ) {
+                if (matchedStretch.startMetres > ANCHOR_SOURCE_TOLERANCE_METRES && matchedStretch.startMetres < totalStreetMetres - ANCHOR_SOURCE_TOLERANCE_METRES) {
                     anchors += DistanceAnchor(
                         sourceMetres = matchedStretch.startMetres,
                         geometryMetres = intersection.geometryMetres,
@@ -352,16 +435,15 @@ class ExtNavRouteDataSource(
     private fun buildNamedStreetStretches(streets: List<StreetSegment>): List<NamedStreetStretch> {
         val stretches = mutableListOf<NamedStreetStretch>()
         var accumulatedMetres = 0.0
+
         for (street in streets) {
             val startMetres = accumulatedMetres
             val endMetres = startMetres + street.distanceMetres
             val roadNames = street.roadIdentityNames()
             val roadClass = street.toRoadClass()
             val lastStretch = stretches.lastOrNull()
-            if (lastStretch != null &&
-                lastStretch.roadClass == roadClass &&
-                lastStretch.roadNames.hasAnyNameIn(roadNames)
-            ) {
+
+            if (lastStretch != null && lastStretch.roadClass == roadClass && lastStretch.roadNames.hasAnyNameIn(roadNames)) {
                 stretches[stretches.lastIndex] = lastStretch.copy(
                     endMetres = endMetres,
                     roadNames = (lastStretch.roadNames + roadNames).toImmutableSet(),
@@ -374,6 +456,7 @@ class ExtNavRouteDataSource(
                     roadNames = roadNames,
                 )
             }
+
             accumulatedMetres = endMetres
         }
         return stretches
@@ -384,12 +467,12 @@ class ExtNavRouteDataSource(
         roadNames: ImmutableSet<String>,
         lastMatchedStretchIndex: Int,
     ): Int? {
-        if (lastMatchedStretchIndex >= 0 &&
-            namedStretches.getOrNull(lastMatchedStretchIndex)?.roadNames?.hasAnyNameIn(roadNames) == true
-        ) {
+        if (lastMatchedStretchIndex >= 0 && namedStretches.getOrNull(lastMatchedStretchIndex)?.roadNames?.hasAnyNameIn(roadNames) == true) {
             return lastMatchedStretchIndex
         }
+
         val searchStartIndex = (lastMatchedStretchIndex + 1).coerceAtLeast(0)
+
         for (streetIndex in searchStartIndex until namedStretches.size) {
             if (namedStretches[streetIndex].roadNames.hasAnyNameIn(roadNames)) {
                 return streetIndex
@@ -400,12 +483,11 @@ class ExtNavRouteDataSource(
 
     private fun List<DistanceAnchor>.filterMonotonicDistanceAnchors(): List<DistanceAnchor> {
         val filteredAnchors = mutableListOf<DistanceAnchor>()
+
         for (anchor in this) {
             val previousAnchor = filteredAnchors.lastOrNull()
-            if (previousAnchor == null ||
-                anchor.sourceMetres > previousAnchor.sourceMetres + ANCHOR_SOURCE_TOLERANCE_METRES &&
-                anchor.geometryMetres > previousAnchor.geometryMetres + ANCHOR_GEOMETRY_TOLERANCE_METRES
-            ) {
+
+            if (previousAnchor == null || anchor.sourceMetres > previousAnchor.sourceMetres + ANCHOR_SOURCE_TOLERANCE_METRES && anchor.geometryMetres > previousAnchor.geometryMetres + ANCHOR_GEOMETRY_TOLERANCE_METRES) {
                 filteredAnchors += anchor
             }
         }
@@ -421,6 +503,7 @@ class ExtNavRouteDataSource(
             .takeIf { it > 0 }
             ?.toDouble()
             ?: return emptyList()
+
         return routeGuidance.guidancePoints
             .asSequence()
             .filter { guidancePoint ->
@@ -467,8 +550,11 @@ class ExtNavRouteDataSource(
         if (fromClass == RoadClass.HIGHWAY && toClass == RoadClass.ORDINARY) {
             // 降りる IC は高速側の道路名を持つので、その名前を持つ最後の交差点 = 出口 IC とみなす。
             // 路線記号や全長按分の推定よりこちらが優先。出口 IC を過ぎても一般道が青のままになるのを防ぐ。
+            // ただし推定境界から大きく離れた JCT（経路途中で別の高速へ乗り換える地点など）まで遡らないよう、
+            // 探索半径内に収まる交差点に限定する。
             findHighwayExitMetres(
                 highwayRoadNames = fromRoadNames,
+                estimatedMetres = estimatedMetres,
                 previousBoundaryMetres = previousBoundaryMetres,
                 nextBoundaryEstimateMetres = nextBoundaryEstimateMetres,
                 intersections = intersections,
@@ -496,15 +582,21 @@ class ExtNavRouteDataSource(
 
     private fun findHighwayExitMetres(
         highwayRoadNames: ImmutableSet<String>,
+        estimatedMetres: Double,
         previousBoundaryMetres: Double,
         nextBoundaryEstimateMetres: Double,
         intersections: List<SnappedIntersection>,
     ): Double? {
         if (highwayRoadNames.isEmpty()) return null
+        val searchRadiusMetres = boundarySearchRadius(
+            previousBoundaryMetres = previousBoundaryMetres,
+            nextBoundaryEstimateMetres = nextBoundaryEstimateMetres,
+        )
         return intersections
             .asSequence()
             .filter { intersection -> intersection.geometryMetres > previousBoundaryMetres }
             .filter { intersection -> intersection.geometryMetres < nextBoundaryEstimateMetres }
+            .filter { intersection -> abs(intersection.geometryMetres - estimatedMetres) <= searchRadiusMetres }
             .filter { intersection -> intersection.roadNames.hasAnyNameIn(highwayRoadNames) }
             .maxByOrNull { intersection -> intersection.geometryMetres }
             ?.geometryMetres
@@ -678,7 +770,7 @@ class ExtNavRouteDataSource(
         is ApiResult.Failure -> error("$hint failed: $failure")
     }
 
-    /** 道路種別セグメント推定で使う距離しきい値。 */
+    /** 道路種別セグメント推定で使う距離しきい値ほか。 */
     private companion object {
         private const val ANCHOR_SOURCE_TOLERANCE_METRES: Double = 1.0
         private const val ANCHOR_GEOMETRY_TOLERANCE_METRES: Double = 1.0
@@ -686,6 +778,7 @@ class ExtNavRouteDataSource(
         private const val BOUNDARY_SEARCH_INTERVAL_RATIO: Double = 0.35
         private const val MIN_BOUNDARY_SEARCH_RADIUS_METRES: Double = 750.0
         private const val MAX_BOUNDARY_SEARCH_RADIUS_METRES: Double = 5_000.0
+        private const val SECONDS_PER_MINUTE: Int = 60
     }
 }
 
