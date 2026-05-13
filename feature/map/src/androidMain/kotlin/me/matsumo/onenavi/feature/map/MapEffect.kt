@@ -68,6 +68,7 @@ private fun RoutePreviewEffect(
     if (routePreviewState is RoutePreviewState.Ready) {
         for ((routeIndex, route) in routePreviewState.routes.withIndex()) {
             val isSelected = routeIndex == routePreviewState.selectedIndex
+
             MapPolyline(
                 googleMap = googleMap,
                 points = route.geometry,

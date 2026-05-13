@@ -142,9 +142,20 @@ internal fun MapPolyline(
         for (segment in congestionSegments) {
             val overlayColor = congestionBodyColorOf(segment.severity) ?: continue
             if (latLngPoints.isEmpty()) continue
-            val startIndex = segment.startPolylinePointIndex.coerceIn(0, latLngPoints.lastIndex)
-            val endIndex = segment.endPolylinePointIndex.coerceIn(startIndex, latLngPoints.lastIndex)
-            if (endIndex <= startIndex) continue
+
+            var startIndex = segment.startPolylinePointIndex.coerceIn(0, latLngPoints.lastIndex)
+            var endIndex = segment.endPolylinePointIndex.coerceIn(startIndex, latLngPoints.lastIndex)
+
+            // 単点 segment (start==end) は polyline が 1 点しかなく Polygon API で描画できないため、
+            // 隣の polyline 点まで広げて最低 2 点を確保する（外環道 attr_ex の短い区間で発生）。
+            if (endIndex == startIndex) {
+                when {
+                    endIndex < latLngPoints.lastIndex -> endIndex += 1
+                    startIndex > 0 -> startIndex -= 1
+                    else -> continue
+                }
+            }
+
             polylines += googleMap.addPolyline(
                 PolylineOptions()
                     .addAll(latLngPoints.subList(startIndex, endIndex + 1))
