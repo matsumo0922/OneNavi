@@ -80,6 +80,9 @@ private fun congestionBodyColorOf(severity: CongestionSeverity): Color? = when (
     CongestionSeverity.NORMAL, CongestionSeverity.UNKNOWN -> null
 }
 
+private const val ROUTE_BODY_Z_OFFSET = 0.5f
+private const val CONGESTION_OVERLAY_Z_OFFSET = 2f
+
 @Composable
 internal fun MapPolyline(
     googleMap: GoogleMap,
@@ -112,7 +115,7 @@ internal fun MapPolyline(
                     .addAll(latLngPoints)
                     .color(style.bodyColor.toArgb())
                     .width(style.bodyWidthPx)
-                    .zIndex(style.zIndex + 0.5f),
+                    .zIndex(style.zIndex + ROUTE_BODY_Z_OFFSET),
             )
         } else {
             // 道路種別あり: 枠線を全区間ぶん描いてから、その上に本体を全区間ぶん描く
@@ -132,7 +135,7 @@ internal fun MapPolyline(
                         .addAll(latLngPoints.subList(segment.startPointIndex, segment.endPointIndex + 1))
                         .color(bodyColorOf(segment.roadClass).toArgb())
                         .width(style.bodyWidthPx)
-                        .zIndex(style.zIndex + 0.5f),
+                        .zIndex(style.zIndex + ROUTE_BODY_Z_OFFSET),
                 )
             }
         }
@@ -161,7 +164,7 @@ internal fun MapPolyline(
                     .addAll(latLngPoints.subList(startIndex, endIndex + 1))
                     .color(overlayColor.toArgb())
                     .width(style.bodyWidthPx)
-                    .zIndex(style.zIndex + 0.7f),
+                    .zIndex(style.zIndex + CONGESTION_OVERLAY_Z_OFFSET),
             )
         }
 
