@@ -6,7 +6,7 @@ import me.matsumo.onenavi.core.navigation.tts.TtsEngine
 import me.matsumo.onenavi.core.navigation.tts.TtsInput
 
 /**
- * drive-supporter-api の SSML を [TtsEngine] に投げる薄いラッパー。
+ * 外部ナビ API ライブラリの SSML を [TtsEngine] に投げる薄いラッパー。
  *
  * - Cloud TTS 側には W3C 互換 SSML を渡し (`PhonemeConverter.toGoogleCloudSsml`)、
  *   Android TTS 側には plaintext に落として読ませる

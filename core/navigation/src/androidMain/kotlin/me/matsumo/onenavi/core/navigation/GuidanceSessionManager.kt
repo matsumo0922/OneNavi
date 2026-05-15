@@ -39,7 +39,7 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavSsmlSpeaker
 import kotlin.math.sqrt
 
 /**
- * drive-supporter-api 由来の案内セッションを制御する。
+ * 外部ナビ API ライブラリ由来の案内セッションを制御する。
  *
  * - Navigator (`setDestinations` / `startGuidance`) は呼ばない
  * - `NavigationApi.getNavigator()` は [NavigationSdkManager] 側で初期化済み。

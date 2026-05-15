@@ -4,7 +4,7 @@ import me.matsumo.onenavi.core.navigation.tts.PhonemeConverter.toGoogleCloudSsml
 import me.matsumo.onenavi.core.navigation.tts.PhonemeConverter.toPlainText
 
 /**
- * drive-supporter-api が返す SSML 内の独自 phoneme 拡張を、TTS エンジンで読める形に変換する。
+ * 外部ナビ API ライブラリが返す SSML 内の独自 phoneme 拡張を、TTS エンジンで読める形に変換する。
  *
  * 入力例:
  * ```

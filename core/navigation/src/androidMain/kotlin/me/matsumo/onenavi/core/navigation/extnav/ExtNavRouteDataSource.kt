@@ -22,6 +22,7 @@ import me.matsumo.drive.supporter.api.route.domain.RouteSearchCriteria
 import me.matsumo.drive.supporter.api.route.domain.RouteWaypoint
 import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.model.CongestionSegment
+import me.matsumo.onenavi.core.model.CongestionSegmentSource
 import me.matsumo.onenavi.core.model.CongestionSeverity
 import me.matsumo.onenavi.core.model.CongestionTrend
 import me.matsumo.onenavi.core.model.RoadClass
@@ -37,6 +38,7 @@ import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
 import me.matsumo.drive.supporter.api.guidance.domain.CongestionTrend as ExtNavCongestionTrend
+import me.matsumo.drive.supporter.api.guidance.domain.RouteCongestionSource as ExtNavRouteCongestionSource
 
 /**
  * 外部ナビ API ライブラリを使ったルート検索データソース。
@@ -214,6 +216,7 @@ class ExtNavRouteDataSource(
             tailPointName = tailPointName?.ifBlank { null },
             tailPointKana = tailPointKana?.ifBlank { null },
             tailRoadNumbering = tailRoadNumbering?.ifBlank { null },
+            source = source.toModel(),
         )
     }
 
@@ -230,6 +233,11 @@ class ExtNavRouteDataSource(
         ExtNavCongestionTrend.Decreasing, ExtNavCongestionTrend.PartlyDecreasing -> CongestionTrend.DECREASING
         ExtNavCongestionTrend.Intermittent -> CongestionTrend.INTERMITTENT
         ExtNavCongestionTrend.Unknown -> CongestionTrend.UNKNOWN
+    }
+
+    private fun ExtNavRouteCongestionSource.toModel(): CongestionSegmentSource = when (this) {
+        ExtNavRouteCongestionSource.Guide -> CongestionSegmentSource.GUIDANCE_POINT
+        ExtNavRouteCongestionSource.RouteLink -> CongestionSegmentSource.ROUTE_LINK
     }
 
     /**
