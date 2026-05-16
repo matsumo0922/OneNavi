@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
@@ -15,9 +16,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.libraries.navigation.NavigationView
+import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.feature.map.state.MapCameraState
+import org.koin.compose.koinInject
 
 @Composable
 internal fun MapItem(
@@ -27,6 +31,8 @@ internal fun MapItem(
     modifier: Modifier = Modifier,
 ) {
     val navigationView = rememberNavigationViewWithLifecycle()
+    val navigationSdkManager = koinInject<NavigationSdkManager>()
+    val isNavigatorReady by navigationSdkManager.isNavigatorReady.collectAsStateWithLifecycle()
 
     googleMap?.let {
         MapEffect(
@@ -37,6 +43,12 @@ internal fun MapItem(
 
         LaunchedEffect(it) {
             cameraState.attachMap(it)
+        }
+    }
+
+    LaunchedEffect(isNavigatorReady) {
+        if (isNavigatorReady) {
+            cameraState.onNavigatorReady()
         }
     }
 
