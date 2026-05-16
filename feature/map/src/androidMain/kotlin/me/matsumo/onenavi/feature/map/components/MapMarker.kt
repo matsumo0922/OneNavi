@@ -12,13 +12,17 @@ internal fun MapMarker(
     latitude: Double,
     longitude: Double,
     title: String? = null,
+    zIndex: Float = DEFAULT_MARKER_Z_INDEX,
 ) {
-    DisposableEffect(googleMap, latitude, longitude, title) {
+    DisposableEffect(googleMap, latitude, longitude, title, zIndex) {
         val marker = googleMap.addMarker(
             MarkerOptions()
                 .position(LatLng(latitude, longitude))
-                .title(title),
+                .title(title)
+                .zIndex(zIndex),
         )
         onDispose { marker?.remove() }
     }
 }
+
+private const val DEFAULT_MARKER_Z_INDEX = 10_000f

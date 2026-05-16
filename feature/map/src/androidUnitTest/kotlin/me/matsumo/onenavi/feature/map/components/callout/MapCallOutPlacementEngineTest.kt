@@ -61,6 +61,119 @@ class MapCallOutPlacementEngineTest {
     }
 
     @Test
+    fun polylineMovableUsesVisibleRouteSectionWhenWholeRouteIsLong() {
+        val placements = MapCallOutPlacementEngine.place(
+            requests = listOf(
+                MapCallOutRequest(
+                    id = "route",
+                    target = MapCallOutTarget.PolylineMovable(
+                        points = persistentListOf(
+                            Offset(-5_000f, 260f).toRoutePoint(),
+                            Offset(5_000f, 260f).toRoutePoint(),
+                        ),
+                    ),
+                    previousPlacement = MapCallOutPreviousPlacement(
+                        position = Offset(-2_000f, 260f).toRoutePoint(),
+                        tailSide = MapCallOutTailSide.BottomRight,
+                    ),
+                ),
+            ),
+            sizes = listOf(IntSize(96, 48)),
+            viewportSize = ViewportSize,
+            viewport = Viewport,
+            tailLengthPx = TailLengthPx,
+            project = ::projectForTest,
+        )
+
+        assertEquals(1, placements.size)
+        assertTrue(placements.single().tip.x in Viewport.left..Viewport.right)
+    }
+
+    @Test
+    fun polylineMovableDispersesMultipleCallOutsOnVisibleRoute() {
+        val route = persistentListOf(
+            Offset(20f, 260f).toRoutePoint(),
+            Offset(380f, 260f).toRoutePoint(),
+        )
+        val placements = MapCallOutPlacementEngine.place(
+            requests = listOf(
+                MapCallOutRequest(
+                    id = "route-0",
+                    target = MapCallOutTarget.PolylineMovable(route),
+                    priority = 100,
+                ),
+                MapCallOutRequest(
+                    id = "route-1",
+                    target = MapCallOutTarget.PolylineMovable(route),
+                    priority = 10,
+                ),
+                MapCallOutRequest(
+                    id = "route-2",
+                    target = MapCallOutTarget.PolylineMovable(route),
+                ),
+            ),
+            sizes = listOf(
+                IntSize(96, 48),
+                IntSize(96, 48),
+                IntSize(96, 48),
+            ),
+            viewportSize = ViewportSize,
+            viewport = Viewport,
+            tailLengthPx = TailLengthPx,
+            project = ::projectForTest,
+        )
+
+        val tipXs = placements.map { it.tip.x }.sorted()
+
+        assertEquals(3, placements.size)
+        assertTrue(
+            actual = tipXs.last() - tipXs.first() >= 200f,
+            message = "tipXs=$tipXs",
+        )
+    }
+
+    @Test
+    fun polylineMovableDispersesMultipleCallOutsOnVisibleMiddleRouteSection() {
+        val route = persistentListOf(
+            Offset(-5_000f, 260f).toRoutePoint(),
+            Offset(5_000f, 260f).toRoutePoint(),
+        )
+        val placements = MapCallOutPlacementEngine.place(
+            requests = listOf(
+                MapCallOutRequest(
+                    id = "route-0",
+                    target = MapCallOutTarget.PolylineMovable(route),
+                    priority = 100,
+                ),
+                MapCallOutRequest(
+                    id = "route-1",
+                    target = MapCallOutTarget.PolylineMovable(route),
+                    priority = 10,
+                ),
+                MapCallOutRequest(
+                    id = "route-2",
+                    target = MapCallOutTarget.PolylineMovable(route),
+                ),
+            ),
+            sizes = listOf(
+                IntSize(96, 48),
+                IntSize(96, 48),
+                IntSize(96, 48),
+            ),
+            viewportSize = ViewportSize,
+            viewport = Viewport,
+            tailLengthPx = TailLengthPx,
+            project = ::projectForTest,
+        )
+
+        val tipXs = placements.map { it.tip.x }.sorted()
+
+        assertEquals(3, placements.size)
+        assertTrue(placements.all { it.tip.x in Viewport.left..Viewport.right })
+        assertTrue(tipXs.last() - tipXs.first() >= 220f)
+    }
+
+    @Test
     fun lowerPriorityCallOutUsesOtherSideToAvoidOverlap() {
         val placements = MapCallOutPlacementEngine.place(
             requests = listOf(

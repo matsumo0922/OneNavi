@@ -8,7 +8,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,11 +27,11 @@ import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
-import com.google.maps.android.compose.MapsComposeExperimentalApi
-import com.google.maps.android.compose.rememberComposeBitmapDescriptor
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import me.matsumo.onenavi.core.model.RoutePoint
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -40,7 +39,6 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * Compose slot を GoogleMap marker icon に変換し、CallOut 配置を一定間隔で更新する effect。
  */
-@OptIn(MapsComposeExperimentalApi::class)
 @Composable
 internal fun MapCallOutMarkerEffect(
     googleMap: GoogleMap,
@@ -57,12 +55,12 @@ internal fun MapCallOutMarkerEffect(
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
-    val markerSpecs = remember(googleMap) { mutableMapOf<String, Marker>() }
+    val markerSpecs = remember(googleMap) { mutableMapOf<String, MapCallOutMarkerState>() }
     val markerClickHandlers = remember(googleMap) { mutableMapOf<String, () -> Unit>() }
     val previousPlacements = remember(googleMap) { mutableMapOf<String, MapCallOutPreviousPlacement>() }
     val measuredSizes = remember { mutableStateMapOf<String, IntSize>() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
-    var relayoutTick by remember { mutableIntStateOf(0) }
+    var placements by remember { mutableStateOf<List<MapCallOutPlacement>>(emptyList()) }
 
     DisposableEffect(googleMap) {
         googleMap.setOnMarkerClickListener { marker ->
@@ -74,21 +72,13 @@ internal fun MapCallOutMarkerEffect(
         }
 
         onDispose {
-            markerSpecs.values.forEach(Marker::remove)
+            markerSpecs.values.forEach { state ->
+                state.marker.remove()
+            }
             markerSpecs.clear()
             markerClickHandlers.clear()
             previousPlacements.clear()
             googleMap.setOnMarkerClickListener(null)
-        }
-    }
-
-    LaunchedEffect(requests, relayoutInterval) {
-        if (requests.isEmpty()) return@LaunchedEffect
-
-        relayoutTick += 1
-        while (isActive) {
-            delay(relayoutInterval)
-            relayoutTick += 1
         }
     }
 
@@ -109,36 +99,46 @@ internal fun MapCallOutMarkerEffect(
         density = density,
         layoutDirection = layoutDirection,
     )
-    val placements = remember(
+
+    LaunchedEffect(
         googleMap,
         requests,
         sizes,
         viewport,
         viewportSize,
         tailLengthPx,
-        relayoutTick,
+        relayoutInterval,
     ) {
         if (requests.isEmpty() || viewportSize == IntSize.Zero) {
-            emptyList()
-        } else {
+            placements = emptyList()
+            return@LaunchedEffect
+        }
+
+        while (isActive) {
             val requestsWithPrevious = requests.map { request ->
                 request.copy(previousPlacement = previousPlacements[request.id])
             }
+            val projectedPoints = requestsWithPrevious.projectedPoints(googleMap)
 
-            MapCallOutPlacementEngine.place(
-                requests = requestsWithPrevious,
-                sizes = sizes,
-                viewportSize = viewportSize,
-                viewport = viewport,
-                tailLengthPx = tailLengthPx,
-                project = googleMap::project,
-            )
+            placements = withContext(Dispatchers.Default) {
+                MapCallOutPlacementEngine.place(
+                    requests = requestsWithPrevious,
+                    sizes = sizes,
+                    viewportSize = viewportSize,
+                    viewport = viewport,
+                    tailLengthPx = tailLengthPx,
+                    project = { point -> projectedPoints.getValue(point) },
+                )
+            }
+
+            delay(relayoutInterval)
         }
     }
+
     val specs = placements.map { placement ->
         val request = requests[placement.requestIndex]
         val descriptor = key(request.id, placement.tailSide, request.contentKey ?: NO_CONTENT_KEY) {
-            rememberComposeBitmapDescriptor(
+            rememberMapComposeBitmapDescriptor(
                 request.id,
                 placement.tailSide,
                 request.contentKey ?: NO_CONTENT_KEY,
@@ -204,7 +204,7 @@ private fun PaddingValues.toViewportRect(
 
 private fun syncCallOutMarkers(
     googleMap: GoogleMap,
-    markers: MutableMap<String, Marker>,
+    markers: MutableMap<String, MapCallOutMarkerState>,
     clickHandlers: MutableMap<String, () -> Unit>,
     previousPlacements: MutableMap<String, MapCallOutPreviousPlacement>,
     specs: List<MapCallOutMarkerSpec>,
@@ -215,9 +215,9 @@ private fun syncCallOutMarkers(
     val markerIterator = markers.iterator()
 
     while (markerIterator.hasNext()) {
-        val (tag, marker) = markerIterator.next()
+        val (tag, state) = markerIterator.next()
         if (tag !in activeTags) {
-            marker.remove()
+            state.marker.remove()
             markerIterator.remove()
         }
     }
@@ -233,19 +233,39 @@ private fun syncCallOutMarkers(
             )
         }
 
-        val marker = markers[spec.tag] ?: googleMap.addMarker(
+        val position = spec.placement.position.toLatLng()
+        val zIndex = CALLOUT_MARKER_Z_INDEX_BASE + spec.request.priority
+        val markerState = markers[spec.tag] ?: googleMap.addMarker(
             MarkerOptions()
-                .position(spec.placement.position.toLatLng())
+                .position(position)
                 .anchor(spec.placement.tailSide.anchorX(), 1f)
                 .icon(spec.icon)
-                .zIndex(spec.request.priority.toFloat()),
-        ) ?: continue
+                .zIndex(zIndex),
+        )?.let { marker ->
+            MapCallOutMarkerState(
+                marker = marker,
+                icon = spec.icon,
+                visualKey = spec.visualKey,
+                zIndex = zIndex,
+            ).also { state ->
+                markers[spec.tag] = state
+            }
+        } ?: continue
 
-        markers[spec.tag] = marker
-        marker.position = spec.placement.position.toLatLng()
-        marker.setAnchor(spec.placement.tailSide.anchorX(), 1f)
-        marker.setIcon(spec.icon)
-        marker.zIndex = spec.request.priority.toFloat()
+        val marker = markerState.marker
+        if (marker.position != position) {
+            marker.position = position
+        }
+        if (markerState.visualKey != spec.visualKey || markerState.icon != spec.icon) {
+            marker.setAnchor(spec.placement.tailSide.anchorX(), 1f)
+            marker.setIcon(spec.icon)
+            markerState.icon = spec.icon
+            markerState.visualKey = spec.visualKey
+        }
+        if (markerState.zIndex != zIndex) {
+            marker.zIndex = zIndex
+            markerState.zIndex = zIndex
+        }
         marker.isVisible = true
         marker.tag = spec.tag
 
@@ -254,6 +274,21 @@ private fun syncCallOutMarkers(
             tailSide = spec.placement.tailSide,
         )
     }
+}
+
+private fun List<MapCallOutRequest>.projectedPoints(googleMap: GoogleMap): Map<RoutePoint, Offset> {
+    return flatMap { request ->
+        buildList {
+            when (val target = request.target) {
+                is MapCallOutTarget.PointFixed -> add(target.point)
+                is MapCallOutTarget.PolylineMovable -> addAll(target.points)
+            }
+
+            request.previousPlacement?.let { placement ->
+                add(placement.position)
+            }
+        }
+    }.distinct().associateWith(googleMap::project)
 }
 
 private fun GoogleMap.project(point: RoutePoint): Offset {
@@ -282,9 +317,21 @@ private class MapCallOutMarkerSpec(
     val icon: BitmapDescriptor,
 ) {
     val tag: String = "$MARKER_TAG_PREFIX${request.id}"
+    val visualKey: String = "${placement.tailSide}:${request.contentKey ?: NO_CONTENT_KEY}"
 }
+
+/**
+ * GoogleMap marker の前回反映状態。
+ */
+private class MapCallOutMarkerState(
+    val marker: Marker,
+    var icon: BitmapDescriptor,
+    var visualKey: String,
+    var zIndex: Float,
+)
 
 private val DEFAULT_CALLOUT_WIDTH = 88.dp
 private val DEFAULT_CALLOUT_HEIGHT = 44.dp
+private const val CALLOUT_MARKER_Z_INDEX_BASE = 20_000f
 private const val MARKER_TAG_PREFIX = "map-callout:"
 private const val NO_CONTENT_KEY = "__none__"

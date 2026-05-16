@@ -6,6 +6,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.IntSize
 import me.matsumo.onenavi.core.model.RoutePoint
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -38,6 +39,10 @@ internal object MapCallOutPlacementEngine {
                 .thenBy { requests[it].id }
                 .thenBy { it },
         )
+        val routeSlotFractions = routeSlotFractions(
+            requests = requests,
+            orderedIndexes = orderedIndexes,
+        )
 
         for (requestIndex in orderedIndexes) {
             val request = requests[requestIndex]
@@ -51,6 +56,7 @@ internal object MapCallOutPlacementEngine {
                 tailLengthPx = tailLengthPx,
                 allPolylines = allPolylines,
                 placed = placed,
+                preferredRouteFraction = routeSlotFractions[requestIndex],
                 project = project,
             )
 
@@ -71,6 +77,7 @@ internal object MapCallOutPlacementEngine {
         tailLengthPx: Float,
         allPolylines: List<List<Offset>>,
         placed: List<MapCallOutPlacement>,
+        preferredRouteFraction: Float?,
         project: (RoutePoint) -> Offset,
     ): MapCallOutPlacement? {
         if (size.width <= 0 || size.height <= 0 || viewportSize.width <= 0 || viewportSize.height <= 0) {
@@ -92,6 +99,7 @@ internal object MapCallOutPlacementEngine {
                     tailLengthPx = tailLengthPx,
                     allPolylines = allPolylines,
                     placed = placed,
+                    preferredRouteFraction = preferredRouteFraction,
                 )
             }
             .maxByOrNull { it.score }
@@ -114,9 +122,10 @@ internal object MapCallOutPlacementEngine {
         )
         val tips = when (val target = request.target) {
             is MapCallOutTarget.PointFixed -> listOf(
-                ProjectedRoutePoint(
+                CandidateTip(
                     position = target.point,
                     screenPoint = project(target.point),
+                    visibleFraction = null,
                 ),
             )
             is MapCallOutTarget.PolylineMovable -> {
@@ -134,12 +143,16 @@ internal object MapCallOutPlacementEngine {
 
                 buildList {
                     request.previousPlacement?.let { previous ->
-                        add(
-                            ProjectedRoutePoint(
-                                position = previous.position,
-                                screenPoint = project(previous.position),
-                            ),
-                        )
+                        val previousTip = project(previous.position)
+                        if (viewport.contains(previousTip)) {
+                            add(
+                                CandidateTip(
+                                    position = previous.position,
+                                    screenPoint = previousTip,
+                                    visibleFraction = null,
+                                ),
+                            )
+                        }
                     }
                     addAll(sampled)
                 }.distinctBy { it.position }
@@ -152,9 +165,37 @@ internal object MapCallOutPlacementEngine {
                     position = tip.position,
                     tip = tip.screenPoint,
                     tailSide = side,
+                    visibleFraction = tip.visibleFraction,
                 )
             }
         }
+    }
+
+    private fun routeSlotFractions(
+        requests: List<MapCallOutRequest>,
+        orderedIndexes: List<Int>,
+    ): Map<Int, Float> {
+        val routeIndexes = orderedIndexes.filter { index ->
+            requests[index].target is MapCallOutTarget.PolylineMovable
+        }
+        val fractions = visibleRouteFractions(routeIndexes.size)
+
+        return routeIndexes.mapIndexed { slotIndex, requestIndex ->
+            requestIndex to fractions[slotIndex]
+        }.toMap()
+    }
+
+    private fun visibleRouteFractions(count: Int): List<Float> {
+        if (count <= 0) return emptyList()
+        if (count == 1) return listOf(ROUTE_SLOT_CENTER_FRACTION)
+
+        val step = (ROUTE_SLOT_END_FRACTION - ROUTE_SLOT_START_FRACTION) / (count - 1)
+        return (0 until count)
+            .map { index -> ROUTE_SLOT_START_FRACTION + step * index }
+            .sortedWith(
+                compareBy<Float> { fraction -> abs(fraction - ROUTE_SLOT_CENTER_FRACTION) }
+                    .thenBy { fraction -> fraction },
+            )
     }
 
     private fun rotateTailSides(
@@ -173,45 +214,92 @@ internal object MapCallOutPlacementEngine {
         polyline: List<ProjectedRoutePoint>,
         viewport: Rect,
         maxSamples: Int,
-    ): List<ProjectedRoutePoint> {
+    ): List<CandidateTip> {
         if (polyline.isEmpty()) return emptyList()
-        if (polyline.size == 1) return polyline
+        if (maxSamples <= 0) return emptyList()
 
-        val totalLength = polyline.zipWithNext().sumOf { (start, end) ->
-            start.screenPoint.distanceTo(end.screenPoint).toDouble()
-        }.toFloat()
-        if (totalLength <= 0f) return listOf(polyline.first())
+        val visibleViewport = viewport
+        if (polyline.size == 1) {
+            return polyline.filter { visibleViewport.contains(it.screenPoint) }
+                .map { point ->
+                    CandidateTip(
+                        position = point.position,
+                        screenPoint = point.screenPoint,
+                        visibleFraction = ROUTE_SLOT_CENTER_FRACTION,
+                    )
+                }
+        }
 
-        val sampleCount = min(maxSamples, max(1, polyline.size))
-        val sampled = (1..sampleCount).map { index ->
-            pointAtDistance(
-                polyline = polyline,
-                distance = totalLength * index / (sampleCount + 1),
+        val visibleSegments = polyline.zipWithNext().mapNotNull { (start, end) ->
+            clipPolylineSegment(
+                start = start,
+                end = end,
+                rect = visibleViewport,
             )
         }
-        val visibleViewport = viewport.inflate(VISIBLE_POLYLINE_MARGIN_PX)
-        val visibleSamples = sampled.filter { visibleViewport.contains(it.screenPoint) }
+        val totalLength = visibleSegments.sumOf { segment ->
+            segment.length.toDouble()
+        }.toFloat()
+        if (totalLength <= 0f) return emptyList()
 
-        return centerOut(visibleSamples.ifEmpty { sampled })
+        val sampleCount = max(1, maxSamples)
+        return (1..sampleCount).map { index ->
+            val distance = totalLength * index / (sampleCount + 1)
+            val point = pointAtVisibleDistance(
+                segments = visibleSegments,
+                distance = distance,
+            )
+
+            CandidateTip(
+                position = point.position,
+                screenPoint = point.screenPoint,
+                visibleFraction = (distance / totalLength).coerceIn(0f, 1f),
+            )
+        }
     }
 
-    private fun pointAtDistance(
-        polyline: List<ProjectedRoutePoint>,
+    private fun pointAtVisibleDistance(
+        segments: List<VisiblePolylineSegment>,
         distance: Float,
     ): ProjectedRoutePoint {
         var remaining = distance
 
-        for ((start, end) in polyline.zipWithNext()) {
-            val segmentLength = start.screenPoint.distanceTo(end.screenPoint)
+        for (segment in segments) {
+            val segmentLength = segment.length
             if (segmentLength <= 0f) continue
             if (remaining <= segmentLength) {
                 val fraction = remaining / segmentLength
-                return interpolate(start, end, fraction)
+                return interpolate(segment.start, segment.end, fraction)
             }
             remaining -= segmentLength
         }
 
-        return polyline.last()
+        return segments.last().end
+    }
+
+    private fun clipPolylineSegment(
+        start: ProjectedRoutePoint,
+        end: ProjectedRoutePoint,
+        rect: Rect,
+    ): VisiblePolylineSegment? {
+        val (startFraction, endFraction) = clipRange(
+            rect = rect,
+            start = start.screenPoint,
+            end = end.screenPoint,
+        ) ?: return null
+        val clippedStart = if (startFraction == 0f) start else interpolate(start, end, startFraction)
+        val clippedEnd = if (endFraction == 1f) end else interpolate(start, end, endFraction)
+        val length = clippedStart.screenPoint.distanceTo(clippedEnd.screenPoint)
+
+        return if (length > 0f) {
+            VisiblePolylineSegment(
+                start = clippedStart,
+                end = clippedEnd,
+                length = length,
+            )
+        } else {
+            null
+        }
     }
 
     private fun interpolate(
@@ -231,21 +319,6 @@ internal object MapCallOutPlacementEngine {
         )
     }
 
-    private fun centerOut(points: List<ProjectedRoutePoint>): List<ProjectedRoutePoint> {
-        if (points.size <= 2) return points
-
-        val center = points.lastIndex / 2
-        return buildList {
-            add(points[center])
-            for (distance in 1..points.lastIndex) {
-                val right = center + distance
-                val left = center - distance
-                if (right <= points.lastIndex) add(points[right])
-                if (left >= 0) add(points[left])
-            }
-        }
-    }
-
     private fun scoreCandidate(
         candidate: Candidate,
         request: MapCallOutRequest,
@@ -254,6 +327,7 @@ internal object MapCallOutPlacementEngine {
         tailLengthPx: Float,
         allPolylines: List<List<Offset>>,
         placed: List<MapCallOutPlacement>,
+        preferredRouteFraction: Float?,
     ): ScoredCandidate? {
         val topLeft = tipToTopLeft(
             tip = candidate.tip,
@@ -275,6 +349,10 @@ internal object MapCallOutPlacementEngine {
             tip = candidate.tip,
             placed = placed,
         )
+        val routeSlotScore = routeSlotScore(
+            candidate = candidate,
+            preferredRouteFraction = preferredRouteFraction,
+        )
         val stickinessScore = stickinessScore(
             candidate = candidate,
             previousPlacement = request.previousPlacement,
@@ -283,6 +361,7 @@ internal object MapCallOutPlacementEngine {
         val score = viewportRatio * VIEWPORT_WEIGHT +
             (1f - polylineCoverage) * POLYLINE_CLEARANCE_WEIGHT +
             dispersionScore * DISPERSION_WEIGHT +
+            routeSlotScore * ROUTE_SLOT_WEIGHT +
             stickinessScore
 
         return ScoredCandidate(
@@ -321,6 +400,24 @@ internal object MapCallOutPlacementEngine {
         start: Offset,
         end: Offset,
     ): Float {
+        val (startFraction, endFraction) = clipRange(
+            rect = rect,
+            start = start,
+            end = end,
+        ) ?: return 0f
+        val dx = end.x - start.x
+        val dy = end.y - start.y
+
+        val clippedStart = Offset(start.x + dx * startFraction, start.y + dy * startFraction)
+        val clippedEnd = Offset(start.x + dx * endFraction, start.y + dy * endFraction)
+        return clippedStart.distanceTo(clippedEnd)
+    }
+
+    private fun clipRange(
+        rect: Rect,
+        start: Offset,
+        end: Offset,
+    ): Pair<Float, Float>? {
         val dx = end.x - start.x
         val dy = end.y - start.y
         var t0 = 0f
@@ -349,11 +446,11 @@ internal object MapCallOutPlacementEngine {
             clip(-dy, start.y - rect.top) &&
             clip(dy, rect.bottom - start.y)
 
-        if (!visible || t1 <= t0) return 0f
-
-        val clippedStart = Offset(start.x + dx * t0, start.y + dy * t0)
-        val clippedEnd = Offset(start.x + dx * t1, start.y + dy * t1)
-        return clippedStart.distanceTo(clippedEnd)
+        return if (visible && t1 > t0) {
+            t0 to t1
+        } else {
+            null
+        }
     }
 
     private fun dispersionScore(
@@ -366,6 +463,17 @@ internal object MapCallOutPlacementEngine {
             tip.distanceTo(placement.tip)
         }
         return (minDistance / DISPERSION_TARGET_DISTANCE_PX).coerceIn(0f, 1f)
+    }
+
+    private fun routeSlotScore(
+        candidate: Candidate,
+        preferredRouteFraction: Float?,
+    ): Float {
+        val visibleFraction = candidate.visibleFraction ?: return 0f
+        if (preferredRouteFraction == null) return 0f
+
+        return (1f - abs(visibleFraction - preferredRouteFraction) / ROUTE_SLOT_SCORE_DISTANCE)
+            .coerceIn(0f, 1f)
     }
 
     private fun stickinessScore(
@@ -461,10 +569,25 @@ internal object MapCallOutPlacementEngine {
     )
 
     @Immutable
+    private data class CandidateTip(
+        val position: RoutePoint,
+        val screenPoint: Offset,
+        val visibleFraction: Float?,
+    )
+
+    @Immutable
+    private data class VisiblePolylineSegment(
+        val start: ProjectedRoutePoint,
+        val end: ProjectedRoutePoint,
+        val length: Float,
+    )
+
+    @Immutable
     private data class Candidate(
         val position: RoutePoint,
         val tip: Offset,
         val tailSide: MapCallOutTailSide,
+        val visibleFraction: Float?,
     )
 
     @Immutable
@@ -477,15 +600,19 @@ internal object MapCallOutPlacementEngine {
     )
 }
 
-private const val MAX_POLYLINE_SAMPLES = 10
-private const val VISIBLE_POLYLINE_MARGIN_PX = 96f
+private const val MAX_POLYLINE_SAMPLES = 24
 private const val CALLOUT_COLLISION_MARGIN_PX = 8f
 private const val MIN_VIEWPORT_RATIO = 0.45f
 private const val MIN_ACCEPTED_SCORE = 1f
 private const val VIEWPORT_WEIGHT = 40f
 private const val POLYLINE_CLEARANCE_WEIGHT = 35f
-private const val DISPERSION_WEIGHT = 15f
-private const val DISPERSION_TARGET_DISTANCE_PX = 260f
-private const val EXACT_PREVIOUS_REWARD = 12f
-private const val SAME_TAIL_SIDE_REWARD = 4f
-private const val SAME_POSITION_REWARD = 8f
+private const val DISPERSION_WEIGHT = 28f
+private const val DISPERSION_TARGET_DISTANCE_PX = 360f
+private const val ROUTE_SLOT_WEIGHT = 45f
+private const val ROUTE_SLOT_START_FRACTION = 0.2f
+private const val ROUTE_SLOT_CENTER_FRACTION = 0.5f
+private const val ROUTE_SLOT_END_FRACTION = 0.8f
+private const val ROUTE_SLOT_SCORE_DISTANCE = 0.5f
+private const val EXACT_PREVIOUS_REWARD = 6f
+private const val SAME_TAIL_SIDE_REWARD = 2f
+private const val SAME_POSITION_REWARD = 4f

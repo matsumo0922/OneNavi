@@ -128,7 +128,9 @@ private fun RouteDetail.toCallOutRequest(
 
     return MapCallOutRequest(
         id = "route-$routeIndex-$id",
-        target = MapCallOutTarget.PolylineMovable(geometry),
+        target = MapCallOutTarget.PolylineMovable(
+            geometry.toImmutableList(),
+        ),
         priority = if (isSelected) SELECTED_ROUTE_CALLOUT_PRIORITY else routeIndex,
         label = PREVIEW_CALLOUT_PLACEHOLDER,
         contentKey = if (isSelected) SELECTED_CONTENT_KEY else UNSELECTED_CONTENT_KEY,
