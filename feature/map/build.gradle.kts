@@ -22,6 +22,9 @@ kotlin {
             implementation(project(":core:resource"))
 
             implementation(libs.kotlinx.datetime)
+            implementation("com.google.maps.android:maps-compose:${libs.versions.googleMapsCompose.get()}") {
+                exclude(group = "com.google.android.gms", module = "play-services-maps")
+            }
             implementation(libs.google.navigation)
             implementation(libs.play.services.location)
         }

@@ -31,6 +31,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapControls
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapPlaceDetailSheet
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapRoutePreviewSheet
+import me.matsumo.onenavi.feature.map.components.callout.MapRoutePreviewCallOutMarkerEffect
 import me.matsumo.onenavi.feature.map.components.content.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.content.MapRoutePreviewContent
 import me.matsumo.onenavi.feature.map.components.topappbar.MapWaypointSearchScreen
@@ -143,6 +144,8 @@ fun MapScreen(modifier: Modifier = Modifier) {
                     modifier = Modifier.fillMaxSize(),
                     uiState = uiState,
                     screenState = screenState,
+                    routePreviewState = routePreviewState,
+                    googleMap = googleMap,
                     cameraState = cameraState,
                     onUiEvent = viewModel::onUiEvent,
                 )
@@ -171,6 +174,8 @@ fun MapScreen(modifier: Modifier = Modifier) {
 private fun MapScreenContent(
     uiState: MapUiState,
     screenState: MapScreenState,
+    routePreviewState: RoutePreviewState,
+    googleMap: GoogleMap?,
     cameraState: MapCameraState,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
@@ -189,12 +194,26 @@ private fun MapScreenContent(
         }
 
         is MapScreenState.RoutePreview -> {
-            MapRoutePreviewContent(
-                modifier = modifier,
-                screenState = screenState,
-                uiState = uiState,
-                onUiEvent = onUiEvent,
-            )
+            val ready = routePreviewState as? RoutePreviewState.Ready
+            Box(modifier = modifier) {
+                MapRoutePreviewContent(
+                    modifier = Modifier.fillMaxSize(),
+                    screenState = screenState,
+                    uiState = uiState,
+                    onUiEvent = onUiEvent,
+                )
+
+                MapRoutePreviewCallOutMarkerEffect(
+                    modifier = Modifier.fillMaxSize(),
+                    googleMap = googleMap,
+                    routePreviewState = ready,
+                    topAppBarHeightPx = uiState.topAppBarHeight,
+                    bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
+                    onRouteSelected = { index ->
+                        onUiEvent(MapUiEvent.OnRouteIndexChanged(index))
+                    },
+                )
+            }
         }
 
         is MapScreenState.Navigating -> TODO()

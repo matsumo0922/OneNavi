@@ -42,7 +42,7 @@ androidxSqlite = "2.5.1"
 
 # Google
 googlePlaces = "5.1.1"
-googleMapsCompose = "6.12.0"
+googleMapsCompose = "8.3.0"
 googleNavigation = "7.6.1"
 playServicesMaps = "19.2.0"
 playReview = "2.0.2"
