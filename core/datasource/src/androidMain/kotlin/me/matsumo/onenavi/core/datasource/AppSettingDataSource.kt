@@ -18,6 +18,7 @@ import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
 import me.matsumo.onenavi.core.datasource.helper.deserialize
 import me.matsumo.onenavi.core.model.AppSetting
 import me.matsumo.onenavi.core.model.Theme
+import java.security.SecureRandom
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -95,15 +96,27 @@ class AppSettingDataSource(
         }
     }
 
-    @OptIn(ExperimentalUuidApi::class)
     suspend fun getOrCreateExtNavDeviceUuid(): String = withContext(ioDispatcher) {
         val current = setting.first().extNavDeviceUuid
-        if (current.isNotBlank()) return@withContext current
+        if (current.matches(EXT_NAV_DEVICE_UUID_REGEX)) return@withContext current
 
-        val uuid = Uuid.random().toString().uppercase()
+        // 旧バージョンは標準 UUID (`xxxxxxxx-xxxx-...`) を保存していたが、
+        // 外部ナビ API サーバーは独自形式 (`DNS` + 40 桁 hex lowercase) を要求する。
+        // 形式不一致だと unknown device 扱いとなりログイン POST が失敗するため、
+        // 不正形式の値は破棄して再生成する。
+        val bytes = ByteArray(EXT_NAV_DEVICE_UUID_BYTES)
+        SecureRandom().nextBytes(bytes)
+        val hex = bytes.joinToString("") { "%02x".format(it) }
+        val uuid = "$EXT_NAV_DEVICE_UUID_PREFIX$hex"
         preference.edit {
             it[stringPreferencesKey(AppSetting::extNavDeviceUuid.name)] = uuid
         }
         uuid
+    }
+
+    private companion object {
+        const val EXT_NAV_DEVICE_UUID_PREFIX = "DNS"
+        const val EXT_NAV_DEVICE_UUID_BYTES = 20
+        val EXT_NAV_DEVICE_UUID_REGEX = Regex("^${EXT_NAV_DEVICE_UUID_PREFIX}[0-9a-f]{40}$")
     }
 }
