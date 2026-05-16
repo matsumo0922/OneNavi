@@ -35,7 +35,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.resource.Res
-import me.matsumo.onenavi.core.resource.home_search_bar_placeholder
+import me.matsumo.onenavi.core.resource.home_waypoint_search_placeholder
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import org.jetbrains.compose.resources.stringResource
 
@@ -148,7 +148,7 @@ private fun MapWaypointSearchInputField(
         onSearch = { onSearch() },
         placeholder = {
             Text(
-                text = stringResource(Res.string.home_search_bar_placeholder),
+                text = stringResource(Res.string.home_waypoint_search_placeholder),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )

@@ -344,8 +344,10 @@ private class UiEventDelegate(
         }
     }
 
-    private fun consumeWaypointEdit(result: SearchResultItem): Boolean {
+    private suspend fun consumeWaypointEdit(result: SearchResultItem): Boolean {
         val waypointSearch = uiState.value.overlayState as? MapOverlayState.WaypointSearch ?: return false
+
+        searchRepository.addHistory(result)
 
         uiState.value = uiState.value.copy(
             overlayState = MapOverlayState.None,

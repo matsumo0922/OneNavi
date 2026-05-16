@@ -74,6 +74,7 @@
     <string name="home_navigation_route">ルート</string>
     <string name="home_title">OneNavi</string>
     <string name="home_search_bar_placeholder">目的地を検索</string>
+    <string name="home_waypoint_search_placeholder">地点を検索</string>
     <string name="home_map_search_route">ルート検索</string>
     <string name="home_map_bookmark">保存</string>
     <string name="home_map_street_view">360°</string>

@@ -552,12 +552,27 @@ class HomeMapViewModel(
     fun onWaypointHistorySelected(history: SearchHistory) {
         val overlay = _overlayState.value as? HomeMapOverlayState.WaypointSearch ?: return
 
-        _waypointEditResultInternal.value = overlay.index to RouteWaypoint.Place(
-            name = history.name,
-            latitude = history.latitude,
-            longitude = history.longitude,
-        )
-        _overlayState.value = HomeMapOverlayState.None
+        viewModelScope.launch {
+            searchRepository.retrieve(history.id)
+                .onSuccess { result ->
+                    searchRepository.addHistory(result)
+                    _waypointEditResultInternal.value = overlay.index to RouteWaypoint.Place(
+                        name = result.name,
+                        latitude = result.latitude,
+                        longitude = result.longitude,
+                    )
+                    _overlayState.value = HomeMapOverlayState.None
+                }
+                .onFailure {
+                    Napier.e(it) { "Failed to retrieve waypoint history. id: ${history.id}" }
+                    _waypointEditResultInternal.value = overlay.index to RouteWaypoint.Place(
+                        name = history.name,
+                        latitude = history.latitude,
+                        longitude = history.longitude,
+                    )
+                    _overlayState.value = HomeMapOverlayState.None
+                }
+        }
     }
 
     fun onWaypointSearchDismissed() {
