@@ -142,6 +142,7 @@ internal object MapCallOutPlacementEngine {
                 )
 
                 buildList {
+                    addAll(sampled)
                     request.previousPlacement?.let { previous ->
                         val previousTip = project(previous.position)
                         if (viewport.contains(previousTip)) {
@@ -154,7 +155,6 @@ internal object MapCallOutPlacementEngine {
                             )
                         }
                     }
-                    addAll(sampled)
                 }.distinctBy { it.position }
             }
         }

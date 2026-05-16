@@ -174,6 +174,61 @@ class MapCallOutPlacementEngineTest {
     }
 
     @Test
+    fun polylineMovableKeepsPlacementStableWhenInputsDoNotChange() {
+        val route = persistentListOf(
+            Offset(-5_000f, 260f).toRoutePoint(),
+            Offset(5_000f, 260f).toRoutePoint(),
+        )
+        val requests = listOf(
+            MapCallOutRequest(
+                id = "route-0",
+                target = MapCallOutTarget.PolylineMovable(route),
+                priority = 100,
+            ),
+            MapCallOutRequest(
+                id = "route-1",
+                target = MapCallOutTarget.PolylineMovable(route),
+                priority = 10,
+            ),
+            MapCallOutRequest(
+                id = "route-2",
+                target = MapCallOutTarget.PolylineMovable(route),
+            ),
+        )
+        val sizes = listOf(
+            IntSize(96, 48),
+            IntSize(96, 48),
+            IntSize(96, 48),
+        )
+        val firstPlacements = placeForTest(
+            requests = requests,
+            sizes = sizes,
+        )
+        val previousByRequestId = firstPlacements.associate { placement ->
+            placement.requestId to MapCallOutPreviousPlacement(
+                position = placement.position,
+                tailSide = placement.tailSide,
+            )
+        }
+        val requestsWithPrevious = requests.map { request ->
+            request.copy(previousPlacement = previousByRequestId[request.id])
+        }
+        val secondPlacements = placeForTest(
+            requests = requestsWithPrevious,
+            sizes = sizes,
+        )
+
+        assertEquals(
+            firstPlacements.map { placement -> placement.requestId to placement.position },
+            secondPlacements.map { placement -> placement.requestId to placement.position },
+        )
+        assertEquals(
+            firstPlacements.map { placement -> placement.requestId to placement.tailSide },
+            secondPlacements.map { placement -> placement.requestId to placement.tailSide },
+        )
+    }
+
+    @Test
     fun lowerPriorityCallOutUsesOtherSideToAvoidOverlap() {
         val placements = MapCallOutPlacementEngine.place(
             requests = listOf(
@@ -200,6 +255,20 @@ class MapCallOutPlacementEngineTest {
         assertEquals(2, placements.size)
         assertEquals(MapCallOutTailSide.BottomRight, placements[0].tailSide)
         assertEquals(MapCallOutTailSide.BottomLeft, placements[1].tailSide)
+    }
+
+    private fun placeForTest(
+        requests: List<MapCallOutRequest>,
+        sizes: List<IntSize>,
+    ): List<MapCallOutPlacement> {
+        return MapCallOutPlacementEngine.place(
+            requests = requests,
+            sizes = sizes,
+            viewportSize = ViewportSize,
+            viewport = Viewport,
+            tailLengthPx = TailLengthPx,
+            project = ::projectForTest,
+        )
     }
 
     private companion object {
