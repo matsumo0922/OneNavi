@@ -41,7 +41,6 @@ internal object MapCallOutPlacementEngine {
         )
         val routeSlotFractions = routeSlotFractions(
             requests = requests,
-            orderedIndexes = orderedIndexes,
         )
 
         for (requestIndex in orderedIndexes) {
@@ -173,9 +172,8 @@ internal object MapCallOutPlacementEngine {
 
     private fun routeSlotFractions(
         requests: List<MapCallOutRequest>,
-        orderedIndexes: List<Int>,
     ): Map<Int, Float> {
-        val routeIndexes = orderedIndexes.filter { index ->
+        val routeIndexes = requests.indices.filter { index ->
             requests[index].target is MapCallOutTarget.PolylineMovable
         }
         val fractions = visibleRouteFractions(routeIndexes.size)

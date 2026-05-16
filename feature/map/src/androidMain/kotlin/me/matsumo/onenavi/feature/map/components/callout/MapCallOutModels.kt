@@ -62,7 +62,8 @@ internal data class MapCallOutPreviousPlacement(
  *
  * @param id 安定した識別子
  * @param target tail 先端の自由度を表す対象
- * @param priority 配置優先度。大きいほど先に配置され、描画時も前面に出る
+ * @param priority 配置優先度。大きいほど先に配置される
+ * @param zIndexPriority 描画優先度。null の場合は [priority] を使う
  * @param label 仮 UI で表示する文言
  * @param contentKey slot content を bitmap 化し直すための描画キー
  * @param supportedTailSides 許可する tail 側。空の場合は下側左右を使う
@@ -73,6 +74,7 @@ internal data class MapCallOutRequest(
     val id: String,
     val target: MapCallOutTarget,
     val priority: Int = 0,
+    val zIndexPriority: Int? = null,
     val label: String? = null,
     val contentKey: String? = null,
     val supportedTailSides: ImmutableList<MapCallOutTailSide> = DEFAULT_MAP_CALLOUT_TAIL_SIDES,

@@ -131,7 +131,8 @@ private fun RouteDetail.toCallOutRequest(
         target = MapCallOutTarget.PolylineMovable(
             geometry.toImmutableList(),
         ),
-        priority = if (isSelected) SELECTED_ROUTE_CALLOUT_PRIORITY else routeIndex,
+        priority = routeIndex,
+        zIndexPriority = if (isSelected) SELECTED_ROUTE_CALLOUT_Z_INDEX_PRIORITY else routeIndex,
         label = PREVIEW_CALLOUT_PLACEHOLDER,
         contentKey = if (isSelected) SELECTED_CONTENT_KEY else UNSELECTED_CONTENT_KEY,
     )
@@ -141,7 +142,7 @@ private val SelectedCallOutColor = Color(0xFF1A73E8)
 
 private const val PREVIEW_CALLOUT_PLACEHOLDER = "Test"
 private const val MIN_ROUTE_CALLOUT_POLYLINE_POINTS = 2
-private const val SELECTED_ROUTE_CALLOUT_PRIORITY = 100
+private const val SELECTED_ROUTE_CALLOUT_Z_INDEX_PRIORITY = 100
 private const val SELECTED_CONTENT_KEY = "selected"
 private const val UNSELECTED_CONTENT_KEY = "unselected"
 

@@ -229,6 +229,52 @@ class MapCallOutPlacementEngineTest {
     }
 
     @Test
+    fun polylineMovableKeepsPlacementStableWhenOnlyVisualPriorityChanges() {
+        val route = persistentListOf(
+            Offset(-5_000f, 260f).toRoutePoint(),
+            Offset(5_000f, 260f).toRoutePoint(),
+        )
+        val selectedFirstRequests = routePreviewLikeRequests(
+            route = route,
+            selectedIndex = 0,
+        )
+        val sizes = listOf(
+            IntSize(96, 48),
+            IntSize(96, 48),
+            IntSize(96, 48),
+        )
+        val firstPlacements = placeForTest(
+            requests = selectedFirstRequests,
+            sizes = sizes,
+        )
+        val previousByRequestId = firstPlacements.associate { placement ->
+            placement.requestId to MapCallOutPreviousPlacement(
+                position = placement.position,
+                tailSide = placement.tailSide,
+            )
+        }
+        val selectedSecondRequests = routePreviewLikeRequests(
+            route = route,
+            selectedIndex = 1,
+        ).map { request ->
+            request.copy(previousPlacement = previousByRequestId[request.id])
+        }
+        val secondPlacements = placeForTest(
+            requests = selectedSecondRequests,
+            sizes = sizes,
+        )
+
+        assertEquals(
+            firstPlacements.map { placement -> placement.requestId to placement.position },
+            secondPlacements.map { placement -> placement.requestId to placement.position },
+        )
+        assertEquals(
+            firstPlacements.map { placement -> placement.requestId to placement.tailSide },
+            secondPlacements.map { placement -> placement.requestId to placement.tailSide },
+        )
+    }
+
+    @Test
     fun lowerPriorityCallOutUsesOtherSideToAvoidOverlap() {
         val placements = MapCallOutPlacementEngine.place(
             requests = listOf(
@@ -271,6 +317,21 @@ class MapCallOutPlacementEngineTest {
         )
     }
 
+    private fun routePreviewLikeRequests(
+        route: kotlinx.collections.immutable.ImmutableList<RoutePoint>,
+        selectedIndex: Int,
+    ): List<MapCallOutRequest> {
+        return (0 until ROUTE_PREVIEW_TEST_ROUTE_COUNT).map { index ->
+            MapCallOutRequest(
+                id = "route-$index",
+                target = MapCallOutTarget.PolylineMovable(route),
+                priority = index,
+                zIndexPriority = if (index == selectedIndex) SELECTED_TEST_Z_INDEX_PRIORITY else index,
+                contentKey = if (index == selectedIndex) SELECTED_TEST_CONTENT_KEY else UNSELECTED_TEST_CONTENT_KEY,
+            )
+        }
+    }
+
     private companion object {
         val ViewportSize = IntSize(400, 400)
         val Viewport = Rect(
@@ -280,6 +341,10 @@ class MapCallOutPlacementEngineTest {
             bottom = 400f,
         )
         const val TailLengthPx = 9f
+        const val ROUTE_PREVIEW_TEST_ROUTE_COUNT = 3
+        const val SELECTED_TEST_Z_INDEX_PRIORITY = 100
+        const val SELECTED_TEST_CONTENT_KEY = "selected"
+        const val UNSELECTED_TEST_CONTENT_KEY = "unselected"
 
         fun Offset.toRoutePoint(): RoutePoint {
             return RoutePoint(

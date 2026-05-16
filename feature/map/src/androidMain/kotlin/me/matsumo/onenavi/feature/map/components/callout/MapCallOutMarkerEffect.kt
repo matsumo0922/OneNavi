@@ -234,7 +234,7 @@ private fun syncCallOutMarkers(
         }
 
         val position = spec.placement.position.toLatLng()
-        val zIndex = CALLOUT_MARKER_Z_INDEX_BASE + spec.request.priority
+        val zIndex = CALLOUT_MARKER_Z_INDEX_BASE + (spec.request.zIndexPriority ?: spec.request.priority)
         val markerState = markers[spec.tag] ?: googleMap.addMarker(
             MarkerOptions()
                 .position(position)
