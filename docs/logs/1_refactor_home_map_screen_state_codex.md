@@ -625,7 +625,7 @@ sealed interface HomeMapBottomSheetState {
 data class HomeMapSceneState(
     val markers: ImmutableList<HomeMapMarker>,
     val waypointPins: ImmutableList<HomeMapWaypointPinState>,
-    val routeCallouts: ImmutableList<HomeMapRouteCalloutState>,
+    val routeCallOuts: ImmutableList<RouteCallOutState>,
     val routeLineState: HomeMapRouteLineState,
     val routeTapEnabled: Boolean,
 )

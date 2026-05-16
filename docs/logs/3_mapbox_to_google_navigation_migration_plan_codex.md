@@ -295,8 +295,8 @@ Android Auto は本体移行とは別フェーズに分ける。
 - `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/HomeMapScreenEffects.kt`
 - `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/components/HomeMapNumberedPin.kt`
 - `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/components/HomeMapWaypointPin.kt`
-- `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/components/HomeMapRouteCallout.kt`
-- `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/util/MapCalloutPositioner.kt`
+- 旧ルート CallOut UI（削除済み）
+- 旧ルート CallOut positioner（削除済み）
 
 現在の役割:
 

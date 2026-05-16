@@ -10,7 +10,7 @@
   - `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/HomeMapScreenContent.kt`
   - `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/HomeMapsMapEffectContent.kt`
   - `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/components/HomeMapControls.kt`
-  - `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/components/HomeMapRouteCalloutAdapter.kt`
+  - 旧ルート CallOut adapter（削除済み）
   - `core/datasource/src/androidMain/kotlin/me/matsumo/onenavi/core/datasource/MapboxNavigationRouteDataSource.kt`
   - `core/datasource/src/androidMain/kotlin/me/matsumo/onenavi/core/datasource/GooglePlacesSearchDataSource.kt`
   - `composeApp/src/androidMain/kotlin/me/matsumo/onenavi/OneNaviApplication.kt`
@@ -265,7 +265,7 @@
 
 - `feature/home/src/commonMain/kotlin/me/matsumo/onenavi/feature/home/map/HomeMapViewModel.kt`
 - `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/HomeMapsMapEffectContent.kt`
-- `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/components/HomeMapRouteCalloutAdapter.kt`
+- 旧ルート CallOut adapter（削除済み）
 
 現状:
 
@@ -287,7 +287,7 @@
 
 該当コード:
 
-- `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/components/HomeMapRouteCalloutAdapter.kt`
+- 旧ルート CallOut adapter（削除済み）
 
 現状:
 

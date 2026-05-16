@@ -700,7 +700,7 @@ when (val state = screenState) {
                 HomeMapWaypointPin(point = ..., label = "K${index + 1}")
             }
         }
-        state.routes.forEachIndexed { index, result -> HomeMapRouteCallout(...) }
+        state.routes.forEachIndexed { index, result -> RouteCallOut(...) }
     }
     is Navigating, is Arrived -> { /* なし */ }
 }

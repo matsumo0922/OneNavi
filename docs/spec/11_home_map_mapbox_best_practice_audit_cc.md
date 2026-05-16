@@ -235,7 +235,7 @@ MapEffect(routeResults, selectedRouteIndex) { mapView ->
 
 ### 4. Route Callout — RoutesObserver 駆動でない
 
-**対象ファイル:** `feature/home/src/androidMain/.../HomeMapsMapEffectContent.kt:99-101,155-158`、`feature/home/src/androidMain/.../components/HomeMapRouteCalloutAdapter.kt`
+**対象ファイル:** `feature/home/src/androidMain/.../HomeMapsMapEffectContent.kt:99-101,155-158`、旧ルート CallOut adapter（削除済み）
 
 **公式の推奨パターン:**
 
@@ -568,7 +568,7 @@ data class RouteResult(
 以下の箇所で `as? NavigationRoute` キャストが散在:
 - `HomeMapsMapEffectContent.kt:198`
 - `HomeMapScreenContent.kt:239`
-- `HomeMapRouteCalloutAdapter.kt:168` (間接的に `===` 比較)
+- 旧ルート CallOut adapter（削除済み。間接的に `===` 比較）
 
 **問題:**
 
@@ -615,7 +615,7 @@ val baseOptions = RouteOptions.builder()
 
 ### 13. Callout Adapter — DefaultRouteCalloutAdapter の検討不足
 
-**対象ファイル:** `feature/home/src/androidMain/.../components/HomeMapRouteCalloutAdapter.kt`
+**対象ファイル:** 旧ルート CallOut adapter（削除済み）
 
 **公式の推奨:**
 

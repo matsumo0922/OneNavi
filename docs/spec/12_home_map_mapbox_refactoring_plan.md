@@ -442,10 +442,10 @@ navigationManager.enhancedLocation
 
 ## Phase 3 — Cleanup
 
-### P3-1. Callout Adapter の整理 (F-08)
+### P3-1. 旧 CallOut adapter の整理 (F-08)
 
 **対象ファイル:**
-- `feature/home/src/androidMain/.../map/components/HomeMapRouteCalloutAdapter.kt`
+- 削除済み実装のため、現行対象なし
 
 **変更内容:**
 1. `calloutViews: MutableMap<NavigationRoute, View>` の手動管理を削除

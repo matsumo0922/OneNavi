@@ -223,7 +223,7 @@ F-04（Route Line / Callout の observer-driven 化）が Confirmed である以
 **違反箇所:**
 
 - `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/HomeMapsMapEffectContent.kt:187-217`
-- `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/components/HomeMapRouteCalloutAdapter.kt:36-57`
+- 旧ルート CallOut adapter（削除済み）
 
 **現状 (Route Line):**
 
@@ -391,7 +391,7 @@ data class RouteResult(
 
 - `HomeMapsMapEffectContent.kt:198`
 - `HomeMapScreenContent.kt:239`
-- `HomeMapRouteCalloutAdapter.kt:168`（間接的に `===` 比較）
+- 旧ルート CallOut adapter（削除済み。間接的に `===` 比較）
 
 加えて、ルート選択が `selectedRouteIndex: Int` と `===` 参照比較に依存しており、refresh / reroute 後に object identity が変わると選択状態が不安定になる。
 
@@ -415,7 +415,7 @@ data class RouteResult(
 
 **違反箇所:**
 
-- `feature/home/src/androidMain/kotlin/me/matsumo/onenavi/feature/home/map/components/HomeMapRouteCalloutAdapter.kt:36-57`
+- 旧ルート CallOut adapter（削除済み）
 
 **現状:**
 

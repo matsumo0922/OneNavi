@@ -408,7 +408,7 @@ data class TripProgressInfo(
 
 - 地図上のマニューバ地点に青い吹き出しで表示
 - **表示内容:** 方向アイコン（← / → 等） + 地点名（例: `← 銚子大橋前`）
-- 既存の `HomeMapRouteCallout`（時間差分バッジ）とは別コンポーネント
+- ルート候補の時間差分 CallOut とは別の Point fixed CallOut として扱う
 - `BannerInstructions` のデータから生成
 
 ### 5.6 道路名バッジ

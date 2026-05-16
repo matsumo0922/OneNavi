@@ -35,7 +35,7 @@
 | 地図描画（ベクタータイル・POI・信号/停止線・建物・ダーク切替） | Google Maps SDK（`NavigationView` が内包する `GoogleMap`） | 現状維持 |
 | 自車位置（map-matched） | Google Navigation SDK `RoadSnappedLocationProvider` | SDK 初期化だけ残し、Navigator では setDestinations しない |
 | カメラ追従（chevron / tilted / overview） | `GoogleMap.followMyLocation()` | 現状維持 |
-| ルートライン・代替ルート・Callout・ピン | 自前（`GoogleMap.addPolyline` / `CalloutLayer`） | 現状維持 |
+| ルートライン・代替ルート・Callout・ピン | 自前（`GoogleMap.addPolyline` / 独自 CallOut engine） | CallOut は新設計で再実装 |
 | 音声案内の発話 | 自前 TTS エンジン（Android TTS / Google Cloud TTS Chirp 3 HD） | テキスト組み立ては外部ナビ API の SSML をそのまま利用 |
 | ナビ状態マシン・セッション管理 | 自前（`GuidanceSessionManager` の書き換え） | Navigator には依存しない |
 | リルート判定・到着判定・経由地通過判定 | 自前 | 外部ナビ API 再検索を自前で走らせる |

@@ -1,373 +1,238 @@
-# 17. Callout 再設計プラン
+# 17. CallOut 配置設計
 
 ## 背景
 
-OneNavi のルートプレビュー画面で、Google Maps 風の吹き出し（Callout）UI を表示している。現状実装には複数の問題があり、全面的に書き直す必要がある。
+OneNavi に実装していた古い CallOut は削除済み。以後の設計では、削除済み実装の API、型、配置方式を前提にしない。
 
-詳細な配置ロジック調査は `docs/research/google_navigation_callout_placement.md` を参照。
+Google Maps / Navigation SDK の逆解析結果は `docs/research/google_navigation_callout_placement.md` を参照する。この文書では、OneNavi 側で再実装する場合の要求仕様だけを整理する。
 
-### 現状の問題点
+## 基本方針
 
-- Mapbox → Google Maps 移行時に、Mapbox SDK が提供していた 9-patch 画像ベースの Callout からの置き換えが雑に行われ、簡素な代替に妥協した
-- 吹き出し口が常に下中央から真下に伸びている（Google Maps は矩形の角から斜め 45° に出る）
-- 吹き出し口の先端がアンカー点に正確に一致していない
-- 地図をパン/ズームしても Callout が連動せず、`OnCameraIdleListener` 後にワープする
-- 複数 Callout 間の衝突回避ロジックが `GoogleMapCalloutPositioner` にあるが UI サイズがハードコードで壊れやすい
+CallOut は 1 種類の汎用配置問題として扱わない。SDK 側の構造に合わせて、入力モデルを次の 2 タイプに分ける。
 
-### 実現したい仕様
+| タイプ | 用途 | tail 先端 | body 位置 | tail 左右選択 |
+|---|---|---|---|---|
+| Polyline movable | ルート候補ごとの所要時間 / 差分表示 | ルート polyline 上で移動可能 | 候補点ごとに移動可能 | 可能 |
+| Point fixed | 案内地点 / 事故地点 / waypoint / destination など | 指定地点に固定 | tail 左右に応じて相対位置だけ変わる | 可能 |
 
-- 吹き出し口は矩形の 4 コーナーのいずれかから 45° で外に伸びる三角形
-- 吹き出し口の先端が指定アンカー点に厳密に一致
-- 2 つの配置戦略:
-  - `AvoidOverlap`（ルートプレビュー）: Callout 同士の重なり回避を優先、アンカーはルート上で候補点を試せる
-  - `AnchorFirst`（ナビ中の交差点/事故）: アンカー固定、重なり許容
-- 中身は**スロットパターン**で複数画面/用途から再利用可能
-- 地図のパン/ズームに追従
+重要なのは、どちらも「左下 tail / 右下 tail を選べる」が、動かせる対象が違うこと。
 
----
+- Polyline movable: tail 先端そのものを polyline 上の別地点へ移せる
+- Point fixed: tail 先端は指定地点から動かせない。body の出方だけを変える
 
-## 設計方針（確定分）
+Google Maps アプリ観察では tail は左下 / 右下のみが使われる。SDK 内部には上側 anchor も存在するが、OneNavi の初期仕様では下側 2 方向だけを正式対応にする。上側方向は、スクショ比較で必要と分かった場合の fallback として扱う。
 
-### API 骨子
+## 配置優先順位
 
-```kotlin
-enum class CalloutTailDirection { TopLeft, TopRight, BottomLeft, BottomRight }
+ユーザー観察と SDK 解析を合わせると、次の要求が中核になる。
 
-@Immutable
-sealed interface CalloutAnchor {
-    val id: Any
-    val primaryPoint: Offset
+1. 他の CallOut と重ならない
+2. ルート polyline と重ならない
+3. 画面内、または許容 viewport 内に入る
+4. polyline 上で表示する場合は、他の CallOut と散らばりを保つ
+5. 前回配置から無意味にジャンプしない
 
-    @Immutable
-    data class Flexible(
-        override val id: Any,
-        override val primaryPoint: Offset,
-        val candidates: ImmutableList<Offset>,
-    ) : CalloutAnchor
+SDK はこれを単純な first-fit ではなく、hard penalty / soft penalty / reward を持つ scoring として処理している。完全一致を狙う場合、OneNavi 側も scorer 方式に寄せる。
 
-    @Immutable
-    data class Fixed(
-        override val id: Any,
-        override val primaryPoint: Offset,
-    ) : CalloutAnchor
-}
+## Polyline Movable CallOut
 
-enum class CalloutPlacementStrategy { AvoidOverlap, AnchorFirst }
+対象はルート候補ごとの所要時間や差分表示。CallOut の tail 先端は、表示中のルート polyline 上で候補点を試せる。
 
-@Composable
-fun CalloutLayer(
-    anchors: ImmutableList<CalloutAnchor>,
-    placementStrategy: CalloutPlacementStrategy,
-    modifier: Modifier = Modifier,
-    content: @Composable (index: Int, tailDirection: CalloutTailDirection) -> Unit,
-)
+### 入力
 
-@Composable
-fun Callout(
-    tailDirection: CalloutTailDirection,
-    modifier: Modifier = Modifier,
-    backgroundColor: Color = MaterialTheme.colorScheme.surface,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-    content: @Composable ColumnScope.() -> Unit,
-)
+- stable id
+- route screen polyline
+- measured body size
+- supported tail sides: `BottomLeft`, `BottomRight`
+- previous placement: tip、tail side、zoom
+- priority: selected route / alternative route など
+- exclusion rects: 上部バー、下部操作領域、FAB、案内パネルなど
+
+### 候補生成
+
+1. route polyline を現在 viewport に clip する
+2. visible segment を距離ベースで最大 10 点程度に sample する
+3. 画面中央寄りから外側へ試す順序に並べる
+4. 前回 tip がまだ有効なら最初に試す
+5. 各 tip で左下 / 右下 tail を評価する
+
+候補数の初期上限は `10 tips x 2 sides = 20 attempts` とする。SDK 内部は上側 anchor も含めて最大 40 attempts を持つため、上側 fallback を有効化する場合は `10 tips x 4 sides = 40 attempts` に揃える。
+
+### 評価
+
+Polyline movable では、次の scorer を使う。
+
+| Scorer | 目的 |
+|---|---|
+| Bounds | tip + tail side + body size から rect が作れるか |
+| Viewport | rect が viewport / exclusion に収まるか |
+| CallOut overlap | 既に配置済みの CallOut と重ならないか |
+| Polyline coverage | rect が route polyline を隠しすぎないか |
+| Dispersion | 他の CallOut と近すぎないか |
+| Position stickiness | 前回 tip と同じ、または近い位置を優遇する |
+| Tail side stickiness | 前回 tail side と同じ向きを優遇する |
+
+前回配置の score が十分高い場合は、そのまま維持する。初期値は SDK 解析に合わせて `0.8` を早期採用の目安にする。
+
+## Point Fixed CallOut
+
+対象はナビゲーション中の案内地点、事故地点、注意喚起地点など。CallOut の tail 先端は、入力された screen point に固定される。
+
+### 入力
+
+- stable id
+- fixed screen point
+- measured body size
+- supported tail sides: `BottomLeft`, `BottomRight`
+- previous tail side
+- use case: maneuver / incident / destination / waypoint など
+- priority
+- exclusion rects
+- important points
+
+### 候補生成
+
+候補 tip は 1 点だけ。polyline 上を探索しない。
+
+```text
+tips = [fixedPoint]
+sides = rotate([previousSide, otherSide])
+attempts = tips x sides
 ```
 
-### 形状実装
+つまり、Point fixed は「どこに出すか」ではなく「指定地点に対して左下 / 右下どちらで出すか」を選ぶ問題になる。
 
-- `GenericShape` + `Path.op(roundedRect, triangle, Union)` により、角丸矩形とコーナー三角形を 1 つの Path にマージ
-- `Modifier.background(color, shape)` に渡すのみ。Canvas 手描き不使用
-- Tail は 45°、対象コーナーから外側へ伸びる
+### 評価
 
-### 配置アルゴリズム
+Point fixed では、次の scorer を使う。
 
-`SubcomposeLayout` ベースの 2 パス:
-1. Pass 1: 仮 Tail 方向で subcompose → 各 Callout の実測サイズを取得
-2. Pass 2: `CalloutPlacement.compute(anchors, sizes, screenSize, strategy)` が pure function で (candidatePoint × 4 tailDirection) を列挙し、画面内収容 & 衝突回避条件で最適組を選ぶ
-3. Pass 3: 確定 Tail 方向で再 subcompose し `place()`
+| Scorer | 目的 |
+|---|---|
+| Bounds | fixed point + tail side + body size から rect が作れるか |
+| Viewport | rect が viewport / exclusion に収まるか |
+| CallOut overlap | 既に配置済みの CallOut と重ならないか |
+| Important point coverage | 重要地点や案内点を body が隠さないか |
+| Maneuver direction | 進行方向 / 分岐方向と body の出方が不自然でないか |
+| Tail side stickiness | 前回 tail side と同じ向きを優遇する |
 
-### カメラ追従
+すべての候補が悪い場合の fallback は use case ごとに決める。
 
-`OnCameraMoveListener` で毎フレーム screen 座標を再計算し `mutableStateOf` に反映。`CalloutLayer` は自動で再配置される。
+| use case | fallback |
+|---|---|
+| maneuver | 重なりを許容してでも表示 |
+| incident | priority が低いものは非表示可 |
+| destination / waypoint | marker と競合する場合は非表示可 |
 
----
+## 共通データモデル
 
-## Discoveries (Round 1)
+再実装時は、CallOut 入力を 1 つの「anchor」だけで表現しない。移動可否を型で分ける。
 
-### Assumptions Challenged
-
-| Assumption | Finding | Impact | Decision |
-|---|---|---|---|
-| Pass 1/Pass 3 のサイズは Tail 方向が変わっても同一 | Tail 方向側に padding が入る設計だとサイズが方向依存で変わる → Pass 1 結果が Pass 3 で無効になる可能性 | High | **全方向に max 余白を固定確保**。方向に関係なくサイズ一定にする |
-| `core/ui` は commonMain (KMP + iOS) なので、Android-only の Google Maps SDK との境界設計が必要 | LatLng→Screen 変換は androidMain 側、CalloutLayer は commonMain に置いて Offset だけ受け取る案と、全部 androidMain に閉じ込める案が対立 | High | **`core/ui/src/androidMain/` に配置**。iOS への露出を諦め、`expect/actual` の stub 量産を回避 |
-| 将来の `NavigationView` 移行との互換性を考慮すべきか | `docs/logs/3_mapbox_to_google_navigation_migration_plan_codex.md` は **stale**。NavigationView 移行は行わない | Blocker for abstraction design | **`GoogleMap` + `MapView` 前提で設計を固定**。抽象化レイヤー/インターフェース化は不要 |
-
-### Decisions Made
-
-| Topic | Decision | Rationale | Risk Level |
-|---|---|---|---|
-| Tail 余白 | 全方向に max tail length 分の padding を常時確保 | Pass 1/Pass 3 のサイズ不変性を保証し、配置計算を単純化 | Low（余白分の占有面積増で衝突が起きやすくなるのは許容） |
-| モジュール配置 | `core/ui/src/androidMain/` | KMP ポリシーに一部反するが、Android 専用 API 依存が閉じることを優先 | Low |
-| 地図 SDK 前提 | `GoogleMap` + `MapView` 固定。`NavigationView` 非対応 | 旧移行計画は stale。抽象化は過剰 | Low |
-
-### New Questions Surfaced（Round 2 以降で掘る）
-
-- 配置計算コスト: Flexible で候補点が多数（ルート上 N 点）× 4 方向 × Callout 数 N 個。毎フレーム走るのは耐えられるか？
-- 画面端・全方向 off-screen 時の fallback 挙動
-- 選択中ルートの z-order / 配置優先度
-- Tail 三角部分の hit-test 精度
-- Material3 テーマ連動（現状 `Color(0xFF4285F4)` ハードコード）
-- テスト戦略（Paparazzi / Roborazzi / ユニットテストの有無）
-
----
-
-## Discoveries (Round 2)
-
-### Assumptions Challenged
-
-| Assumption | Finding | Impact | Decision |
-|---|---|---|---|
-| 毎フレーム配置再計算が必須 | カメラ pan/zoom 中は Callout を非表示にし、計算を止めてよい。自車移動による自動追従中は 3 秒に 1 回の再配置で十分 | High（パフォーマンス大幅改善） | **ジェスチャー中: 非表示 + フェード / 自動追従中: 3 秒インターバル**で再配置。フェード in/out 必須 |
-| 画面端 fallback に複雑なロジックが必要 | 現実のユースケースでは許容でよい | Low | **Off-screen は Compose の clip 任せ**。Callout 自体が画面外にはみ出しても OK |
-
-### Decisions Made
-
-| Topic | Decision | Rationale | Risk Level |
-|---|---|---|---|
-| 配置再計算タイミング | ジェスチャー中は callout を非表示（フェードアウト）し、ジェスチャー停止で再計算→フェードイン。自動追従中は `CALLOUT_RELAYOUT_INTERVAL_MS = 3_000L` の間隔でのみ再配置。3 秒間はアンカー screen 座標を保持（地図との乖離を許容） | UX 的に途切れない、CPU 負荷激減。Google Maps 本体も同様の挙動に近い | Low |
-| フェードアニメーション | 表示切り替え時は `AnimatedVisibility(enter = fadeIn, exit = fadeOut)` | ジェスチャー検出の判定ラグを視覚的にマスク | Low |
-| ジェスチャー検出 | `OnCameraMoveStartedListener` で `REASON_GESTURE` を検出。既存 `viewportState.setGestureInProgress` 経路を再利用 | 既に実装済みフラグを活用 | Low |
-| 画面端 fallback | Off-screen 允容。Compose が自動 clip | 複雑な shape 変形を避ける | Medium（画面端のアンカーで見切れるが UX 許容） |
-| 定数化 | `private const val CALLOUT_RELAYOUT_INTERVAL_MS = 3_000L`（または `kotlin.time.Duration`）として callout モジュール内で定義 | マジックナンバー禁止、将来調整しやすく | Low |
-
-### New Questions Surfaced（Round 3 以降）
-
-- 選択ルート変更時の placement 再計算扱い（3 秒待たない？即座に再配置？）
-- Tail 三角部分のクリック判定（`Modifier.clickable` は shape でクリップされるか？）
-- ルートプレビューと自動追従中で `CALLOUT_RELAYOUT_INTERVAL_MS` は共通でよいか、プレビュー時は常時再配置か
-- Material3 テーマ連動の粒度（背景色/文字色を caller が決めるか、Callout 側で `selected/unselected` 表現を持つか）
-- テスト戦略（Paparazzi/Roborazzi の有無、unit test で Placement を守るか）
-
----
-
-## Discoveries (Round 3)
-
-### Assumptions Challenged
-
-| Assumption | Finding | Impact | Decision |
-|---|---|---|---|
-| 選択ルート変更で placement 再計算が必要 | 画面座標は変わっていないので placement は不変。色/z-order だけが変わればよい | Medium | **選択変更で placement は再計算しない**。slot content 側で selected 状態を受けて色変え |
-| Callout 全体（tail 含む）がクリック対象 | ボディ矩形だけで UX 上十分 | Low | **Tail 部分はタップ透過**。`clickable` はボディ矩形にのみ適用 |
-
-### Decisions Made
-
-| Topic | Decision | Rationale | Risk Level |
-|---|---|---|---|
-| 選択変更時 | `placementStrategy` と `anchors` が変わらない限り placement 結果を保持。`index == selectedRouteIndex` の判定はスロット内で行い、背景色/文字色/z-order を切り替え | 画面座標不変 → placement 不変。計算コストもゼロ | Low |
-| クリック領域 | `Modifier.background(color, calloutShape).clickable { ... }` をボディ相当の Box に限定。Tail 三角は `drawBehind` or 別の child layer で描画（ripple 領域もボディのみ） | Tail は装飾、UX 上タップ対象になる必要なし | Low |
-| Tail 描画方針（追加確定） | Tail は Callout の「ボディ Box の外側」に Canvas で別描画するのではなく、**Shape 全体（ボディ角丸 + Tail 三角）を 1 つの `GenericShape` にマージし、`Modifier.background(color, shape)` で描画**。ただしクリックは**内側の body 矩形 Box** に限定することで実現 | Shape と clickable の責務を分離。ripple は内側 Box の角丸矩形内に収まる（tail は独立した見た目要素） | Medium（layering が少し複雑、実装時に確認が必要） |
-
-### New Questions Surfaced（Round 4 以降）
-
-- selected callout の z-order（常に最前面？）
-- placement compute の候補点優先順位（ルート中間点寄りを優先？先頭優先？）
-- Material3 テーマ連動：背景色 default を MaterialTheme.colorScheme から取るか、caller 完全任せか
-- テスト戦略（unit test / Paparazzi / 既存 test infra 有無）
-
----
-
-## Discoveries (Round 4)
-
-### Decisions Made
-
-| Topic | Decision | Rationale | Risk Level |
-|---|---|---|---|
-| テーマ API | `backgroundColor = MaterialTheme.colorScheme.surface` / `contentColor = onSurface` をデフォルトに。caller が必要なら上書き可能 | Material3 準拠、ダークモード自動対応、caller 側の記述も最小 | Low |
-| selected 表現 | Callout は selected フラグを持たない。スロット内で `index == selectedRouteIndex` を判定し、caller が backgroundColor / content を差し替え | 汎用部品にルートプレビュー専用ロジックを混入させない | Low |
-| テスト戦略 | **テストコード追加なし**。実機確認のみ | 既存モジュールに test infra なし、本タスクのスコープ外 | Medium（回帰時に気付けないが許容） |
-
----
-
-## 確定版 設計サマリ
-
-### モジュール構成
-
-```
-core/ui/src/androidMain/kotlin/me/matsumo/onenavi/core/ui/callout/
-├── Callout.kt              # 単一 Callout composable（slot ベース）
-├── CalloutShape.kt         # GenericShape + Path.op(Union) で 4 方向の形状を生成
-├── CalloutLayer.kt         # SubcomposeLayout で複数 Callout を配置
-├── CalloutAnchor.kt        # sealed interface（Flexible / Fixed）
-└── CalloutPlacement.kt     # pure function. 候補列挙 + 衝突回避
+```text
+CallOutRequest
+  id
+  useCase
+  priority
+  supportedTailSides
+  previousPlacement
+  contentSize
+  target:
+    PolylineTarget(screenPolyline)
+    FixedPointTarget(screenPoint)
 ```
 
-削除対象:
-- `feature/home/src/androidMain/.../map/components/HomeMapRouteCallout.kt`
-- `feature/home/src/androidMain/.../map/util/GoogleMapCalloutPositioner.kt`
+placement result は最低限これを持つ。
 
-修正対象:
-- `feature/home/src/androidMain/.../map/HomeMapsMapEffectContent.kt`（旧 callout ロジック削除、`CalloutLayer` を呼び出し）
-
-### 主要 API
-
-```kotlin
-enum class CalloutTailDirection { TopLeft, TopRight, BottomLeft, BottomRight }
-
-@Immutable
-sealed interface CalloutAnchor {
-    val id: Any
-    val primaryPoint: Offset
-
-    @Immutable
-    data class Flexible(
-        override val id: Any,
-        override val primaryPoint: Offset,
-        val candidates: ImmutableList<Offset>,
-    ) : CalloutAnchor
-
-    @Immutable
-    data class Fixed(
-        override val id: Any,
-        override val primaryPoint: Offset,
-    ) : CalloutAnchor
-}
-
-enum class CalloutPlacementStrategy { AvoidOverlap, AnchorFirst }
-
-@Composable
-fun CalloutLayer(
-    anchors: ImmutableList<CalloutAnchor>,
-    placementStrategy: CalloutPlacementStrategy,
-    isGestureInProgress: Boolean,
-    modifier: Modifier = Modifier,
-    content: @Composable (index: Int, tailDirection: CalloutTailDirection) -> Unit,
-)
-
-@Composable
-fun Callout(
-    tailDirection: CalloutTailDirection,
-    modifier: Modifier = Modifier,
-    backgroundColor: Color = MaterialTheme.colorScheme.surface,
-    contentColor: Color = MaterialTheme.colorScheme.onSurface,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-    onClick: (() -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit,
-)
+```text
+CallOutPlacement
+  id
+  visible
+  tip
+  tailSide
+  bodyBounds
+  score
 ```
 
-### 重要な定数
+`tip` は tail 先端。Polyline movable では route polyline 上の採用点、Point fixed では入力 fixed point と必ず一致する。
 
-```kotlin
-private const val CALLOUT_RELAYOUT_INTERVAL_MS = 3_000L
+## Engine の流れ
+
+```text
+placeCallOuts(requests, viewport, exclusions, previousState):
+  sorted = sortByUseCaseAndPriority(requests)
+  placed = []
+
+  for request in sorted:
+    positioner = when request.target:
+      PolylineTarget -> polylineMovablePositioner
+      FixedPointTarget -> pointFixedPositioner
+
+    result = positioner.place(request, viewport, exclusions, placed, previousState)
+
+    if result.visible:
+      placed += result.bodyBounds
+      save result for next frame
 ```
 
-### 挙動まとめ
+この分岐を engine 内部に閉じ込め、UI 側は placement result だけを受け取って描画する。
+
+## 描画仕様
+
+- body は角丸矩形
+- tail は左下または右下から出る
+- tail 先端は placement result の `tip` に一致させる
+- body bounds は scorer が評価した bounds と一致させる
+- shadow / padding / corner radius / tail length はスクショ比較で調整する
+
+完全一致を狙う場合、tail side ごとに content rect や bounds が変わる可能性も許容する。計測安定性のために全方向で同じ余白を固定する方式は実装しやすいが、SDK の geometry と一致しない可能性がある。
+
+## 再配置タイミング
 
 | 状況 | 挙動 |
 |---|---|
-| ジェスチャー中（`REASON_GESTURE`） | Callout を fade out で非表示。placement 計算停止 |
-| ジェスチャー停止 | screen 座標再計算 → placement 再計算 → fade in で再表示 |
-| 自動追従中（自車移動でカメラが動く） | `CALLOUT_RELAYOUT_INTERVAL_MS` 間隔でのみ placement 再計算。間は前回配置を保持 |
-| 選択ルート変更 | placement は不変。スロット内で `selected` を判定して色/z-order を切り替え |
-| 新しいルート結果到着 | anchors が新規になるので placement は自然に再計算 |
-| 画面端で callout が収まらない | Compose の clip に任せる。Callout 自体は計算どおり配置、画面外は見切れる |
-| Tail 部分のタップ | 透過（ボディ矩形のみ clickable） |
+| route result 更新 | 即時再配置 |
+| selected route 変更 | priority / z-order / style のみ変更。geometry が同じなら再配置不要 |
+| camera idle | screen point / polyline を更新して再配置 |
+| user gesture 中 | 表示を抑制するか、前回配置を維持する。完全一致検証で決める |
+| navigation location 更新 | use case priority に従って再配置 |
 
-### Tail 形状
+古い実装で採用していた固定インターバルや簡易 first-fit は、完全一致を狙う段階では前提にしない。
 
-- 全方向に **max tail length 分の padding** を常時確保 → Tail 方向が変わってもサイズ一定（SubcomposeLayout の Pass 1/Pass 3 サイズ不変性保証）
-- `GenericShape` + `Path.op(roundedRect, cornerTriangle, Union)` で 1 つの Path にマージ
-- `Modifier.background(color, calloutShape)` で描画。Canvas 手描き不使用
+## 検証
 
-### 配置アルゴリズム
+SDK 解析だけでは Google Maps アプリの見た目との完全一致は確定しない。次のスクショ比較を終了条件にする。
 
-`CalloutPlacement.compute(anchors, sizes, screenSize, strategy) -> List<Placement>`
+| ケース | 見るもの |
+|---|---|
+| ルート 1 本 | Polyline movable の基準位置 |
+| ルート 2-3 本 | CallOut 同士の衝突回避 |
+| ルートが交差 | polyline coverage |
+| 短いルート | sample 数が少ない場合の fallback |
+| 画面端 | viewport / exclusion |
+| maneuver 密集 | Point fixed の tail side 選択 |
+| incident + maneuver | priority と非表示判断 |
+| zoom / pan | 前回配置維持とジャンプ抑制 |
 
-- `AvoidOverlap`: `anchor.candidates × 4 directions` を全列挙、画面内 AND 既 placed と非重複の最初を採用
-- `AnchorFirst`: `primaryPoint × 4 directions` のみ、画面内収容を優先に直線探索
-- どちらも first-fit greedy。候補順は caller が geometry から渡す順（中間点優先等は caller 側の責任）
+合格条件の初期値:
 
-### カメラ追従
+- tail side が主要ケースで一致
+- tail tip が 2 px 以内
+- body bounds が 5 px 以内
+- 表示 / 非表示の判断が主要ケースで一致
+- pan / zoom 後のジャンプ回数が大きく違わない
 
-- `OnCameraMoveStartedListener` で `REASON_GESTURE` を検知 → `isGestureInProgress = true` → Callout fade out
-- `OnCameraIdleListener` で `isGestureInProgress = false` → anchor screen 座標更新 → fade in
-- 自動追従時は 3 秒タイマーで placement 再計算
+## 実装順
 
----
+1. 入力モデルを Polyline movable / Point fixed に分ける
+2. 共通 scorer と placement result を定義する
+3. Point fixed positioner を先に実装する
+4. Polyline movable positioner を実装する
+5. CallOut 形状と geometry をスクショ比較で調整する
+6. route preview と navigation overlay のそれぞれに接続する
+7. golden screenshot fixture を作り、差分を詰める
 
-## Dig Summary
+## 非目標
 
-### Investigation Overview
-
-- Rounds completed: 4
-- Questions asked: 9
-- Assumptions challenged: 7
-- Decisions made: 13
-
-### Key Discoveries
-
-1. **毎フレーム配置計算は不要**。ジェスチャー中は非表示（fade）、自動追従中は 3 秒間隔で十分。これで当初懸念の 20,000 回/秒計算が実質ゼロに。
-2. **Tail 方向でサイズが変わる SubcomposeLayout 2-pass 設計の罠**を、全方向 max padding で根絶。size-invariant にすることで placement 計算が単純化。
-3. **NavigationView 移行計画 (`docs/logs/3_mapbox_to_google_navigation_migration_plan_codex.md`) は stale**。`GoogleMap` + `MapView` 固定前提で設計してよい（抽象化不要）。
-4. **選択ルート変更は再配置不要**。screen 座標は不変なので placement 結果を再利用、色/z-order のみ更新。
-
-### All Decisions
-
-| Topic | Decision | Rationale | Risk |
-|---|---|---|---|
-| Tail 余白 | 全方向に max tail 分の padding 固定 | Pass 1/Pass 3 サイズ不変性保証 | Low |
-| モジュール配置 | `core/ui/src/androidMain/callout/` | Android-only API 依存を閉じる、commonMain の abstraction コスト回避 | Low |
-| 地図 SDK 前提 | `GoogleMap` + `MapView` 固定、`NavigationView` 非対応 | 移行計画 stale | Low |
-| 再計算タイミング | ジェスチャー中は非表示、自動追従中は 3 秒インターバル | CPU 負荷削減、UX 安定 | Low |
-| フェード | `AnimatedVisibility(enter = fadeIn, exit = fadeOut)` | ジェスチャー検出ラグのマスク | Low |
-| 定数化 | `CALLOUT_RELAYOUT_INTERVAL_MS = 3_000L` | マジックナンバー禁止 | Low |
-| 画面端 fallback | Off-screen 允容、Compose clip 任せ | 複雑な shape 変形回避 | Medium |
-| 選択変更扱い | placement は不変、色のみ差し替え | screen 座標不変 | Low |
-| クリック領域 | ボディ矩形のみ、Tail は透過 | Tail は装飾 | Low |
-| Shape 実装 | `GenericShape` + `Path.op(Union)` | Canvas 手描き不使用、AI 苦手領域を回避 | Low |
-| テーマ | MaterialTheme.colorScheme を default、caller 上書き可 | Material3 自然連動、ダークモード自動対応 | Low |
-| selected 表現 | Callout 自体は selected を持たない、スロット内で判定 | 汎用部品に用途固有ロジックを混入させない | Low |
-| テスト | なし（実機確認のみ） | test infra 未整備、スコープ外 | Medium |
-
-### Remaining Risks
-
-- **回帰検出不可**: unit test / screenshot test なし。placement / shape のデグレは実機で人が気付くまで顕在化しない
-- **3 秒インターバルの体感**: 高速道路 100km/h で走行時、3 秒 ≒ 83m 移動する。自動追従中の callout 位置が最大 83m ずれる瞬間がある（許容範囲と判断）
-- **Flexible 候補点の順序は caller 責任**: `CalloutLayer` は渡された候補列を first-fit で採用するため、caller がルート先頭だけに偏った候補を渡すと複数 callout がルート前半に固まる可能性。caller は geometry を「中間→両端」の順で並べる等の配慮が必要
-- **画面端で callout が見切れる**: Off-screen 允容方針のため、アンカーが画面端ギリギリにあると callout 本体の大半が見えない瞬間が発生しうる
-
-### Recommended Next Steps
-
-1. **新モジュール骨格作成**
-   - `core/ui/src/androidMain/kotlin/me/matsumo/onenavi/core/ui/callout/` に 5 ファイル作成
-   - `CalloutTailDirection` / `CalloutAnchor` / `CalloutPlacementStrategy` から着手（型定義のみ）
-
-2. **`CalloutShape` 実装**
-   - `GenericShape` で 4 方向分の Path 生成を先に確定
-   - プレビュー Composable を作って 4 方向をビジュアル確認（実機 preview）
-
-3. **`CalloutPlacement.compute` 実装**
-   - pure function として純度を保つ（外部依存ゼロ）
-   - `AvoidOverlap` / `AnchorFirst` の分岐を明示
-
-4. **`CalloutLayer` 実装**
-   - `SubcomposeLayout` による 2-pass measure-then-place
-   - `isGestureInProgress` 受け取り、`AnimatedVisibility` でフェード
-   - 自動追従時 3 秒タイマー（`LaunchedEffect` + `delay`）で anchor 座標を snapshot して placement 再計算
-
-5. **`Callout` 実装**
-   - Material3 default 色、slot content、ボディ矩形のみ `clickable`
-   - `Modifier.background(color, calloutShape)` で tail 統合形状
-
-6. **`HomeMapsMapEffectContent` 改修**
-   - 旧 callout ロジック（`routeCalloutOffsets` / `computeRouteCalloutOffsets` / `GoogleMapCalloutPositioner`）を削除
-   - `CalloutLayer` + `CallOut` を呼び出し、ルート geometry から `CalloutAnchor.Flexible` を生成
-   - `viewportState.isGestureInProgress` を `CalloutLayer` に接続
-
-7. **旧ファイル削除**
-   - `HomeMapRouteCallout.kt` / `GoogleMapCalloutPositioner.kt`
-
-8. **実機検証**
-   - ルートプレビュー: 3 ルート表示で重ならないこと、選択切り替え反映
-   - ジェスチャー: pan/zoom で fade out → 停止で fade in
-   - 画面端: アンカーが端にあるときに fallback が許容範囲内か目視
-   - Material3 ダーク/ライト切り替え
+- 削除済み CallOut 実装の復元
+- 古い first-fit 配置方式の踏襲
+- SDK 内部 class 名に依存した公開 API の設計
+- Google Maps / Navigation SDK の非公開コード片の転載

@@ -647,7 +647,7 @@ when (val state = screenState) {
             }
         }
         // ルート吹き出し
-        state.routes.forEachIndexed { index, result -> HomeMapRouteCallout(...) }
+        state.routes.forEachIndexed { index, result -> RouteCallOut(...) }
     }
     is HomeMapScreenState.Navigating,
     is HomeMapScreenState.Arrived -> { /* マーカーなし */ }
