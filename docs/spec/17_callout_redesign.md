@@ -4,6 +4,8 @@
 
 OneNavi のルートプレビュー画面で、Google Maps 風の吹き出し（Callout）UI を表示している。現状実装には複数の問題があり、全面的に書き直す必要がある。
 
+詳細な配置ロジック調査は `docs/research/google_navigation_callout_placement.md` を参照。
+
 ### 現状の問題点
 
 - Mapbox → Google Maps 移行時に、Mapbox SDK が提供していた 9-patch 画像ベースの Callout からの置き換えが雑に行われ、簡素な代替に妥協した
@@ -369,4 +371,3 @@ private const val CALLOUT_RELAYOUT_INTERVAL_MS = 3_000L
    - ジェスチャー: pan/zoom で fade out → 停止で fade in
    - 画面端: アンカーが端にあるときに fallback が許容範囲内か目視
    - Material3 ダーク/ライト切り替え
-
