@@ -26,7 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_map_route_placeholder
-import me.matsumo.onenavi.feature.home.map.HomeMapScreen
+import me.matsumo.onenavi.core.resource.home_navigation_map
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -69,18 +69,23 @@ internal fun HomeScreen(
             contentWindowInsets = WindowInsets.navigationBars,
         ) { contentPadding ->
             AnimatedContent(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .padding(contentPadding)
+                    .fillMaxSize(),
                 targetState = currentIndex,
             ) { index ->
                 saveableStateHolder.SaveableStateProvider(index) {
                     when (HomeNavDestination.all[index].route) {
                         HomeRoute.Map -> {
-                            HomeMapScreen(
-                                modifier = Modifier
-                                    .padding(contentPadding)
-                                    .fillMaxSize(),
-                                onNavigatingChanged = { isNavigating = it },
-                            )
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = stringResource(Res.string.home_navigation_map),
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                            }
                         }
 
                         HomeRoute.Route -> {
