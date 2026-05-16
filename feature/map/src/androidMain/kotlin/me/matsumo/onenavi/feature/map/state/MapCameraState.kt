@@ -82,6 +82,8 @@ internal class MapCameraState internal constructor() {
     private var cameraAnimator: ValueAnimator? = null
     private var mapViewWidthPx: Int = 0
     private var density: Float = DEFAULT_DENSITY
+    private var isNavigatorReady: Boolean = false
+    private var hasPendingFollowMyLocation: Boolean = false
 
     var cameraState by mutableStateOf(HomeMapCameraState())
         private set
@@ -89,7 +91,11 @@ internal class MapCameraState internal constructor() {
     fun attachMap(googleMap: GoogleMap) {
         this.googleMap = googleMap
 
-        followMyLocation()
+        if (isNavigatorReady) {
+            followMyLocation()
+        } else {
+            hasPendingFollowMyLocation = true
+        }
 
         googleMap.setOnCameraMoveStartedListener { reason ->
             if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
@@ -127,12 +133,29 @@ internal class MapCameraState internal constructor() {
 
     @SuppressLint("MissingPermission")
     fun followMyLocation() {
+        val map = googleMap ?: return
+        if (!isNavigatorReady) {
+            hasPendingFollowMyLocation = true
+            return
+        }
+
         val options = FollowMyLocationOptions.builder()
             .setZoomLevel(cameraState.zoom)
             .build()
 
-        googleMap?.followMyLocation(cameraState.perspective, options)
+        map.followMyLocation(cameraState.perspective, options)
         cameraState = cameraState.copy(isFollowingMyLocation = true)
+    }
+
+    /** Navigation SDK の Navigator 初期化完了を通知する。保留中の追従要求があればここで実行する。 */
+    fun onNavigatorReady() {
+        if (isNavigatorReady) return
+        isNavigatorReady = true
+
+        if (hasPendingFollowMyLocation) {
+            hasPendingFollowMyLocation = false
+            followMyLocation()
+        }
     }
 
     fun setPerspective(perspective: Int) {
