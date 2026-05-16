@@ -10,7 +10,7 @@ import me.matsumo.onenavi.core.model.AppConfig
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * drive-supporter-api の認証ゲートウェイ。
+ * 外部ナビ API ライブラリの認証ゲートウェイ。
  * ルート検索 / 案内 API コール前に [ensureSignedIn] を呼び、未ログインや session downgrade を検出して再認証する。
  */
 class ExtNavAuthGateway(
@@ -70,4 +70,4 @@ class ExtNavAuthGateway(
 
 class MissingCredentialsException : Exception("EXT_NAV_LOGIN_ID / EXT_NAV_PASSWORD are not configured")
 
-class AuthGatewayException(val failure: ApiFailure) : Exception("drive-supporter-api sign-in failed: $failure")
+class AuthGatewayException(val failure: ApiFailure) : Exception("ExtNav sign-in failed: $failure")

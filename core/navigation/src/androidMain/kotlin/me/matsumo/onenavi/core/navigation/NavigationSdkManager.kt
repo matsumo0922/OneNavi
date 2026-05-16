@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * Google Navigation SDK の最小ラッパ。
  *
- * drive-supporter-api 移行後、turn-by-turn 案内は外部ナビ API 側が担うため、
+ * 外部ナビ API ライブラリ移行後、turn-by-turn 案内は外部ナビ API 側が担うため、
  * Navigator の [Navigator.setDestinations] / [Navigator.startGuidance] は使用しない。
  *
  * 本クラスが維持する責務:

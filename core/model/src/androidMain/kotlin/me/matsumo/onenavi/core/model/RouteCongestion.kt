@@ -43,6 +43,24 @@ enum class CongestionTrend {
 }
 
 /**
+ * 渋滞区間の供給元。
+ *
+ * ルート線の色分け描画では [ROUTE_LINK] が最も密で、案内点ベースの補助表示では
+ * [GUIDANCE_POINT] が地点名や通過予想を持つ場合がある。取得元が判別できない場合は
+ * [UNKNOWN] として扱う。
+ */
+enum class CongestionSegmentSource {
+    /** 案内点単位の交通情報 */
+    GUIDANCE_POINT,
+
+    /** ルート link 単位の交通流カテゴリ */
+    ROUTE_LINK,
+
+    /** 供給元不明 */
+    UNKNOWN,
+}
+
+/**
  * ルートの形状（polyline）に沿った連続した渋滞区間 1 件。
  *
  * index ベースの 3 フィールド（[startPolylinePointIndex] / [endPolylinePointIndex] / [severity]）は
@@ -66,6 +84,7 @@ enum class CongestionTrend {
  * @param tailPointName 渋滞末尾の地点名（例: 「△△ＳＡ」）。null=不明。
  * @param tailPointKana 渋滞末尾の地点名の読み。null=不明。
  * @param tailRoadNumbering 渋滞末尾の路線番号。null=不明。
+ * @param source 渋滞区間の供給元
  */
 @Immutable
 data class CongestionSegment(
@@ -84,4 +103,5 @@ data class CongestionSegment(
     val tailPointName: String? = null,
     val tailPointKana: String? = null,
     val tailRoadNumbering: String? = null,
+    val source: CongestionSegmentSource = CongestionSegmentSource.UNKNOWN,
 )

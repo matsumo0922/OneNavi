@@ -86,7 +86,7 @@ private const val ROUTE_OUTER_PRIMARY_Z = 2f
 private const val ROUTE_INNER_PRIMARY_Z = 3f
 private const val ROUTE_OUTER_SECONDARY_Z = 0f
 private const val ROUTE_INNER_SECONDARY_Z = 1f
-private const val ROUTE_CONGESTION_OVERLAY_Z = 4f
+private const val ROUTE_CONGESTION_OVERLAY_Z = 6f
 
 private const val ROUTE_CALLOUT_PRIMARY_BG = 0xFF4285F4
 private const val ROUTE_CALLOUT_SECONDARY_BG = 0xFFFFFFFF

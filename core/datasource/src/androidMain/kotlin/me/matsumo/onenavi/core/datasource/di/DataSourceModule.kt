@@ -16,7 +16,7 @@ import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 
 // NOTE: [RouteDataSource] の Android バインディングは core/navigation 側 (NavigationModule) で
-// drive-supporter-api ベースの実装 (ExtNavRouteDataSource) を登録する。
+// 外部ナビ API ライブラリベースの実装 (ExtNavRouteDataSource) を登録する。
 val dataSourceModule = module {
     singleOf(::AppSettingDataSource)
     singleOf(::SearchHistoryDataSource)
