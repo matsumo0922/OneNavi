@@ -18,6 +18,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.GoogleMapOptions
 import com.google.android.libraries.navigation.NavigationView
 import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.feature.map.state.MapCameraState
@@ -75,7 +76,16 @@ private fun rememberNavigationViewWithLifecycle(): NavigationView {
     val context = LocalContext.current
 
     return remember(context) {
-        NavigationView(context).apply {
+        val mapOptions = GoogleMapOptions()
+            .mapType(GoogleMap.MAP_TYPE_NORMAL)
+            .liteMode(false)
+            .tiltGesturesEnabled(true)
+            .rotateGesturesEnabled(true)
+            .zoomControlsEnabled(false)
+            .compassEnabled(false)
+            .mapToolbarEnabled(false)
+
+        NavigationView(context, mapOptions).apply {
             onCreate(Bundle())
 
             isNavigationUiEnabled = false
@@ -102,7 +112,9 @@ private fun MapEffect(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     LaunchedEffect(googleMap) {
+        googleMap.mapType = GoogleMap.MAP_TYPE_NORMAL
         googleMap.isBuildingsEnabled = true
+        googleMap.isTrafficEnabled = true
         googleMap.isMyLocationEnabled = true
 
         googleMap.uiSettings.apply {
