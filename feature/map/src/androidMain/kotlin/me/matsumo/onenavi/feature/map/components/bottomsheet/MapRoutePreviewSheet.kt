@@ -138,7 +138,6 @@ private fun MapRoutePreviewRow(
                 )
 
                 Text(
-                    modifier = Modifier.padding(top = 4.dp),
                     text = formatYen(route.tollFee ?: 0),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (selectedRouteIndex == index) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
