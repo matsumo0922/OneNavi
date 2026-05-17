@@ -341,10 +341,15 @@ class ExtNavRouteDataSource(
         val segments = mutableListOf<RoadClassSegment>()
         var startIndex = 0
 
+        val lastStretchIndex = roadClassStretches.lastIndex
         for ((stretchIndex, stretch) in roadClassStretches.withIndex()) {
             val endIndex = boundaryIndices.getOrNull(stretchIndex) ?: geometry.lastIndex
             if (endIndex > startIndex) {
-                val entryName = if (startIndex == 0) {
+                // 出発地 / 目的地に紐付くセグメント端は IC ではないので null。
+                // 一方、ルート末尾の ORDINARY が極短いと boundary が geometry.lastIndex まで丸められて
+                // HIGHWAY セグメントの endIndex == lastIndex になりうるが、それは「最終 stretch」ではないので
+                // 出口 IC として扱う必要がある。geometry index ではなく stretch の位置で判定する。
+                val entryName = if (stretchIndex == 0) {
                     null
                 } else {
                     findBoundaryInterchangeName(
@@ -354,7 +359,7 @@ class ExtNavRouteDataSource(
                         snappedIntersections = snappedIntersections,
                     )
                 }
-                val exitName = if (endIndex == geometry.lastIndex) {
+                val exitName = if (stretchIndex == lastStretchIndex) {
                     null
                 } else {
                     findBoundaryInterchangeName(
@@ -380,10 +385,11 @@ class ExtNavRouteDataSource(
     }
 
     /**
-     * [geometryIndex] に対応する地点に最も近い交差点の名前を返す。
+     * [geometryIndex] に対応する地点付近で「名前を持つ最も近い交差点」の名前を返す。
      *
-     * 推定境界は intersection の位置と必ずしも一致しないため、許容距離以内の最近傍だけを採用する。
-     * 名前が空欄、または許容距離を超える場合は null。
+     * 推定境界の geometry index に最近傍の intersection が「目的地」「無名の分岐点」等で name が空の
+     * 場合があるため、許容距離以内で name が非空の中から最近傍を選ぶ。許容距離内に name 付きが
+     * 1 件も無ければ null。
      */
     private fun findBoundaryInterchangeName(
         geometryIndex: Int,
@@ -393,12 +399,17 @@ class ExtNavRouteDataSource(
     ): String? {
         if (snappedIntersections.isEmpty()) return null
         val targetMetres = cumulativeMetres[geometryIndex]
-        val nearest = snappedIntersections.minByOrNull { intersection ->
-            abs(intersection.geometryMetres - targetMetres)
-        } ?: return null
-        if (abs(nearest.geometryMetres - targetMetres) > INTERCHANGE_SNAP_TOLERANCE_METRES) return null
-        val intersection = intersections.getOrNull(nearest.intersectionIndex) ?: return null
-        return intersection.name.trim().takeIf { name -> name.isNotEmpty() }
+        return snappedIntersections
+            .asSequence()
+            .filter { snapped -> abs(snapped.geometryMetres - targetMetres) <= INTERCHANGE_SNAP_TOLERANCE_METRES }
+            .sortedBy { snapped -> abs(snapped.geometryMetres - targetMetres) }
+            .mapNotNull { snapped ->
+                intersections.getOrNull(snapped.intersectionIndex)
+                    ?.name
+                    ?.trim()
+                    ?.takeIf { name -> name.isNotEmpty() }
+            }
+            .firstOrNull()
     }
 
     private fun buildRoadClassStretches(streets: List<StreetSegment>): List<RoadClassStretch> {
