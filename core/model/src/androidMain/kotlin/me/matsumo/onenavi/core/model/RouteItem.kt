@@ -3,6 +3,7 @@ package me.matsumo.onenavi.core.model
 import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 
 /**
  * ルート検索結果の1経路分のデータ。
@@ -54,6 +55,18 @@ data class TollSegmentFee(
 )
 
 /**
+ * ルートが通る道路1区間ぶんの距離。
+ *
+ * @param roadName 道路の名称（例: 「東名高速道路」「環状七号線」）。空欄や匿名区間は持たない前提。
+ * @param distanceMeters 区間の走行距離（メートル）
+ */
+@Immutable
+data class RoadSegmentDistance(
+    val roadName: String,
+    val distanceMeters: Int,
+)
+
+/**
  * ルート全体の詳細情報。案内開始に必要なルートデータを保持する。
  * 取得元の DataSource（外部ナビ API など）に依存しない中立なモデル。
  *
@@ -70,6 +83,7 @@ data class TollSegmentFee(
  * @param priority ルート種別（推奨 / 渋滞回避 / 等）。取得元が複数候補を返さないソースでは null。
  * @param tollFee 有料道路の合計料金（円）。料金不明 / 有料区間なしの場合は null。
  * @param tollDetails 有料道路の道路別料金内訳。空の場合は内訳不明 / 有料区間なし。
+ * @param roadSegments ルートが通る道路の名前と距離。走行順は保持しない（同じ道路は複数区間に分割されている場合がある）。
  */
 @Immutable
 data class RouteDetail(
@@ -86,6 +100,7 @@ data class RouteDetail(
     val priority: RoutePriority? = null,
     val tollFee: Int? = null,
     val tollDetails: ImmutableList<TollSegmentFee> = persistentListOf(),
+    val roadSegments: ImmutableList<RoadSegmentDistance> = persistentListOf(),
 ) {
     /**
      * ルート上で最初に高速道路に入る IC / JCT 名。
@@ -104,4 +119,17 @@ data class RouteDetail(
         get() = roadClassSegments
             .lastOrNull { segment -> segment.roadClass == RoadClass.HIGHWAY }
             ?.exitInterchangeName
+
+    /**
+     * 通る道路を走行距離の長い順に並べた名前リスト。
+     * 同じ道路名が分割されて [roadSegments] に複数入っていても距離を合算した上で 1 件に集約する。
+     */
+    val roadNamesByDistance: ImmutableList<String>
+        get() = roadSegments
+            .groupingBy { segment -> segment.roadName }
+            .fold(0L) { accumulated, segment -> accumulated + segment.distanceMeters }
+            .entries
+            .sortedByDescending { entry -> entry.value }
+            .map { entry -> entry.key }
+            .toImmutableList()
 }

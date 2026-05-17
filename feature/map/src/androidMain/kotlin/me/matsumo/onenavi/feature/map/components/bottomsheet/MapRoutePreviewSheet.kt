@@ -1,16 +1,24 @@
 package me.matsumo.onenavi.feature.map.components.bottomsheet
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Navigation
@@ -21,23 +29,31 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.common.formatDuration
+import me.matsumo.onenavi.core.common.formatYen
 import me.matsumo.onenavi.core.model.RouteDetail
+import me.matsumo.onenavi.core.model.RoutePriority
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_day
 import me.matsumo.onenavi.core.resource.common_unit_hour
 import me.matsumo.onenavi.core.resource.common_unit_kilometer
 import me.matsumo.onenavi.core.resource.common_unit_meter
 import me.matsumo.onenavi.core.resource.common_unit_minute
-import me.matsumo.onenavi.core.resource.home_map_route_result_duration_distance
 import me.matsumo.onenavi.core.resource.home_map_route_result_start_navigation
+import me.matsumo.onenavi.core.resource.home_map_route_result_via
+import me.matsumo.onenavi.core.ui.theme.semiBold
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import org.jetbrains.compose.resources.stringResource
 
@@ -48,18 +64,86 @@ internal fun MapRoutePreviewSheet(
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    val density = LocalDensity.current
+
+    val navigationBarHeightDp = WindowInsets.navigationBars
+        .asPaddingValues()
+        .calculateBottomPadding()
+
+    Column(
+        modifier = modifier.onGloballyPositioned { coordinates ->
+            val yDp = 48.dp // BottomSheetDefaults.DragHandle の固定サイズ
+            val heightDp = with(density) { coordinates.size.height.toDp() }
+
+            onUiEvent(MapUiEvent.OnBottomSheetPeekHeightChanged(yDp + heightDp + navigationBarHeightDp))
+        },
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        itemsIndexed(routes) { index, route ->
+        MapRoutePreviewRow(
+            routes = routes,
+            selectedRouteIndex = selectedRouteIndex,
+            onRouteSelected = { onUiEvent(MapUiEvent.OnRouteIndexChanged(it)) },
+        )
+
+        AnimatedContent(
+            modifier = Modifier.fillMaxWidth(),
+            targetState = selectedRouteIndex,
+        ) {
             MapRoutePreviewItem(
                 modifier = Modifier.fillMaxWidth(),
-                route = route,
-                isSelected = selectedRouteIndex == index,
+                route = routes[it],
                 onNavigationClicked = { onUiEvent(MapUiEvent.OnNavigationStart) },
-                onRouteSelected = { onUiEvent(MapUiEvent.OnRouteIndexChanged(index)) },
             )
+        }
+    }
+}
+
+@Composable
+private fun MapRoutePreviewRow(
+    routes: ImmutableList<RouteDetail>,
+    selectedRouteIndex: Int,
+    onRouteSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        contentPadding = PaddingValues(horizontal = 16.dp),
+    ) {
+        itemsIndexed(routes) { index, route ->
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onRouteSelected(index) }
+                    .background(if (selectedRouteIndex == index) MaterialTheme.colorScheme.surfaceContainer else Color.Transparent)
+                    .border(
+                        width = 1.dp,
+                        color = if (selectedRouteIndex == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                        shape = RoundedCornerShape(16.dp),
+                    )
+                    .padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                MapRoutePriority(
+                    priority = route.priority,
+                )
+
+                Text(
+                    modifier = Modifier.padding(top = 8.dp),
+                    text = route.formattedDuration(),
+                    style = MaterialTheme.typography.bodyMedium.semiBold(),
+                    color = if (selectedRouteIndex == index) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Text(
+                    modifier = Modifier.padding(top = 4.dp),
+                    text = formatYen(route.tollFee ?: 0),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (selectedRouteIndex == index) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -68,46 +152,11 @@ internal fun MapRoutePreviewSheet(
 @Composable
 private fun MapRoutePreviewItem(
     route: RouteDetail,
-    isSelected: Boolean,
     onNavigationClicked: () -> Unit,
-    onRouteSelected: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val dayLabel = stringResource(Res.string.common_unit_day)
-    val hourLabel = stringResource(Res.string.common_unit_hour)
-    val minuteLabel = stringResource(Res.string.common_unit_minute)
-    val meterLabel = stringResource(Res.string.common_unit_meter)
-    val kilometerLabel = stringResource(Res.string.common_unit_kilometer)
-
-    val duration = remember(route, dayLabel, hourLabel, minuteLabel) {
-        formatDuration(
-            totalSeconds = route.durationSeconds,
-            dayLabel = dayLabel,
-            hourLabel = hourLabel,
-            minuteLabel = minuteLabel,
-        )
-    }
-    val distance = remember(route, meterLabel, kilometerLabel) {
-        formatDistance(
-            meters = route.distanceMeters,
-            meterLabel = meterLabel,
-            kilometerLabel = kilometerLabel,
-        )
-    }
-
     Row(
-        modifier = modifier
-            .padding(horizontal = 8.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .then(
-                if (isSelected) {
-                    Modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                } else {
-                    Modifier
-                },
-            )
-            .clickable { onRouteSelected.invoke() }
-            .padding(16.dp),
+        modifier = modifier.padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -115,10 +164,36 @@ private fun MapRoutePreviewItem(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            MapRoutePriority(
+                priority = route.priority,
+            )
+
             Text(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(Res.string.home_map_route_result_duration_distance, duration, distance),
-                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(top = 4.dp),
+                text = route.formattedDuration(),
+                style = MaterialTheme.typography.headlineMedium,
+            )
+
+            Text(
+                modifier = Modifier.padding(top = 4.dp),
+                text = buildAnnotatedString {
+                    append(route.formattedDistance())
+
+                    route.tollFee?.let {
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                            append(" ")
+                            append(formatYen(it))
+                        }
+                    }
+                },
+                style = MaterialTheme.typography.bodyLarge.semiBold(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Text(
+                text = stringResource(Res.string.home_map_route_result_via, route.roadNamesByDistance.take(2).joinToString("/")),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -140,3 +215,38 @@ private fun MapRoutePreviewItem(
         }
     }
 }
+
+@Composable
+private fun MapRoutePriority(
+    priority: RoutePriority?,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .padding(8.dp, 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = (priority ?: RoutePriority.Recommended).label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+    }
+}
+
+@Composable
+private fun RouteDetail.formattedDuration(): String = formatDuration(
+    totalSeconds = durationSeconds,
+    dayLabel = stringResource(Res.string.common_unit_day),
+    hourLabel = stringResource(Res.string.common_unit_hour),
+    minuteLabel = stringResource(Res.string.common_unit_minute),
+)
+
+@Composable
+private fun RouteDetail.formattedDistance(): String = formatDistance(
+    meters = distanceMeters,
+    kilometerLabel = stringResource(Res.string.common_unit_kilometer),
+    meterLabel = stringResource(Res.string.common_unit_meter),
+)

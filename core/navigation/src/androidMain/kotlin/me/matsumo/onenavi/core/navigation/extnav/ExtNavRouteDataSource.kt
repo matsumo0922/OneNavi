@@ -27,6 +27,7 @@ import me.matsumo.onenavi.core.model.CongestionSeverity
 import me.matsumo.onenavi.core.model.CongestionTrend
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RoadClassSegment
+import me.matsumo.onenavi.core.model.RoadSegmentDistance
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.RoutePoint
@@ -109,6 +110,7 @@ class ExtNavRouteDataSource(
             val tollDetails = routeGuidance.summary.tollDetails
                 .map { detail -> TollSegmentFee(roadName = detail.road, amount = detail.amount) }
                 .toImmutableList()
+            val roadSegments = buildRoadSegmentDistances(routeGuidance)
 
             val routeDetail = RouteDetail(
                 id = routeId,
@@ -124,6 +126,7 @@ class ExtNavRouteDataSource(
                 priority = routePriority,
                 tollFee = tollYen,
                 tollDetails = tollDetails,
+                roadSegments = roadSegments,
             )
 
             registry.put(
@@ -810,6 +813,27 @@ class ExtNavRouteDataSource(
 
     private fun ImmutableSet<String>.hasAnyNameIn(other: ImmutableSet<String>): Boolean =
         any { name -> name in other }
+
+    /**
+     * 経路サマリ由来の通過道路一覧を中立モデルに射影する。
+     * 道路名は `officialName` を優先、無ければ `nickname` を使う。匿名 / 距離 0 の区間はスキップ。
+     */
+    private fun buildRoadSegmentDistances(routeGuidance: RouteGuidance): ImmutableList<RoadSegmentDistance> =
+        routeGuidance.summary.streets
+            .mapNotNull { street ->
+                val roadName = (street.officialName ?: street.nickname)
+                    ?.trim()
+                    ?.takeIf { name -> name.isNotEmpty() }
+                if (roadName == null || street.distanceMetres <= 0) {
+                    null
+                } else {
+                    RoadSegmentDistance(
+                        roadName = roadName,
+                        distanceMeters = street.distanceMetres,
+                    )
+                }
+            }
+            .toImmutableList()
 
     private fun routePriorityFor(priority: CarPriority?): RoutePriority? = when (priority) {
         CarPriority.Recommended -> RoutePriority.Recommended

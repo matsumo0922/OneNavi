@@ -234,7 +234,6 @@ private fun MapScreenBottomSheetContent(
             val ready = routePreviewState as? RoutePreviewState.Ready
             if (ready != null) {
                 MapRoutePreviewSheet(
-                    modifier = modifier,
                     routes = ready.routes,
                     selectedRouteIndex = ready.selectedIndex,
                     onUiEvent = onUiEvent,
