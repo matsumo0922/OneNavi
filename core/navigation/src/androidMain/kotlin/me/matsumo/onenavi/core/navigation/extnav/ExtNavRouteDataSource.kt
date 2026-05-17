@@ -30,7 +30,9 @@ import me.matsumo.onenavi.core.model.RoadClassSegment
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RouteItem
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.model.RoutePriority
 import me.matsumo.onenavi.core.model.RouteResult
+import me.matsumo.onenavi.core.model.TollSegmentFee
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -103,6 +105,11 @@ class ExtNavRouteDataSource(
             val distanceMetres = routeGuidance.summary.distanceMetres.toDouble()
             val timeSeconds = routeGuidance.summary.timeSeconds.toDouble()
 
+            val routePriority = routePriorityFor(routeGuidance.priority)
+            val tollDetails = routeGuidance.summary.tollDetails
+                .map { detail -> TollSegmentFee(roadName = detail.road, amount = detail.amount) }
+                .toImmutableList()
+
             val routeDetail = RouteDetail(
                 id = routeId,
                 origin = originPoint,
@@ -114,6 +121,9 @@ class ExtNavRouteDataSource(
                 steps = persistentListOf(),
                 roadClassSegments = roadClassSegments,
                 congestionSegments = congestionSegments,
+                priority = routePriority,
+                tollFee = tollYen,
+                tollDetails = tollDetails,
             )
 
             registry.put(
@@ -131,7 +141,7 @@ class ExtNavRouteDataSource(
                 hasTolls = tollYen != null,
                 tollFee = tollYen,
                 congestionSegments = congestionSegments,
-                priorityLabel = priorityLabelFor(routeGuidance.priority),
+                priorityLabel = routePriority?.label,
             )
 
             RouteResult(
@@ -331,17 +341,61 @@ class ExtNavRouteDataSource(
         for ((stretchIndex, stretch) in roadClassStretches.withIndex()) {
             val endIndex = boundaryIndices.getOrNull(stretchIndex) ?: geometry.lastIndex
             if (endIndex > startIndex) {
+                val entryName = if (startIndex == 0) {
+                    null
+                } else {
+                    findBoundaryInterchangeName(
+                        geometryIndex = startIndex,
+                        cumulativeMetres = cumulativeMetres,
+                        intersections = routeGuidance.intersections,
+                        snappedIntersections = snappedIntersections,
+                    )
+                }
+                val exitName = if (endIndex == geometry.lastIndex) {
+                    null
+                } else {
+                    findBoundaryInterchangeName(
+                        geometryIndex = endIndex,
+                        cumulativeMetres = cumulativeMetres,
+                        intersections = routeGuidance.intersections,
+                        snappedIntersections = snappedIntersections,
+                    )
+                }
                 segments.add(
                     RoadClassSegment(
                         startPointIndex = startIndex,
                         endPointIndex = endIndex,
                         roadClass = stretch.roadClass,
+                        entryInterchangeName = entryName,
+                        exitInterchangeName = exitName,
                     ),
                 )
                 startIndex = endIndex
             }
         }
         return segments.toImmutableList()
+    }
+
+    /**
+     * [geometryIndex] に対応する地点に最も近い交差点の名前を返す。
+     *
+     * 推定境界は intersection の位置と必ずしも一致しないため、許容距離以内の最近傍だけを採用する。
+     * 名前が空欄、または許容距離を超える場合は null。
+     */
+    private fun findBoundaryInterchangeName(
+        geometryIndex: Int,
+        cumulativeMetres: DoubleArray,
+        intersections: ImmutableList<Intersection>,
+        snappedIntersections: List<SnappedIntersection>,
+    ): String? {
+        if (snappedIntersections.isEmpty()) return null
+        val targetMetres = cumulativeMetres[geometryIndex]
+        val nearest = snappedIntersections.minByOrNull { intersection ->
+            abs(intersection.geometryMetres - targetMetres)
+        } ?: return null
+        if (abs(nearest.geometryMetres - targetMetres) > INTERCHANGE_SNAP_TOLERANCE_METRES) return null
+        val intersection = intersections.getOrNull(nearest.intersectionIndex) ?: return null
+        return intersection.name.trim().takeIf { name -> name.isNotEmpty() }
     }
 
     private fun buildRoadClassStretches(streets: List<StreetSegment>): List<RoadClassStretch> {
@@ -757,19 +811,19 @@ class ExtNavRouteDataSource(
     private fun ImmutableSet<String>.hasAnyNameIn(other: ImmutableSet<String>): Boolean =
         any { name -> name in other }
 
-    private fun priorityLabelFor(priority: CarPriority?): String? = when (priority) {
-        CarPriority.Recommended -> "推奨"
-        CarPriority.AiRoute -> "AI"
-        CarPriority.Free -> "一般道優先"
-        CarPriority.Express -> "高速優先"
-        CarPriority.Distance -> "距離優先"
-        CarPriority.AvoidCongestion -> "渋滞回避"
-        CarPriority.EcoPriority -> "燃費優先"
-        CarPriority.Scenic -> "景観優先"
-        CarPriority.FreeDistance -> "一般道距離優先"
-        CarPriority.UrbanExpress -> "都市高速優先"
-        CarPriority.AvoidUrbanExpress -> "都市高速回避"
-        CarPriority.SecondRecommended -> "第 2 推奨"
+    private fun routePriorityFor(priority: CarPriority?): RoutePriority? = when (priority) {
+        CarPriority.Recommended -> RoutePriority.Recommended
+        CarPriority.AiRoute -> RoutePriority.AiRoute
+        CarPriority.Free -> RoutePriority.Free
+        CarPriority.Express -> RoutePriority.Express
+        CarPriority.Distance -> RoutePriority.Distance
+        CarPriority.AvoidCongestion -> RoutePriority.AvoidCongestion
+        CarPriority.EcoPriority -> RoutePriority.EcoPriority
+        CarPriority.Scenic -> RoutePriority.Scenic
+        CarPriority.FreeDistance -> RoutePriority.FreeDistance
+        CarPriority.UrbanExpress -> RoutePriority.UrbanExpress
+        CarPriority.AvoidUrbanExpress -> RoutePriority.AvoidUrbanExpress
+        CarPriority.SecondRecommended -> RoutePriority.SecondRecommended
         null -> null
     }
 
@@ -786,6 +840,7 @@ class ExtNavRouteDataSource(
         private const val BOUNDARY_SEARCH_INTERVAL_RATIO: Double = 0.35
         private const val MIN_BOUNDARY_SEARCH_RADIUS_METRES: Double = 750.0
         private const val MAX_BOUNDARY_SEARCH_RADIUS_METRES: Double = 5_000.0
+        private const val INTERCHANGE_SNAP_TOLERANCE_METRES: Double = 1_000.0
         private const val SECONDS_PER_MINUTE: Int = 60
     }
 }

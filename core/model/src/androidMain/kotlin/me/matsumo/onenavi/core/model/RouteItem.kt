@@ -42,6 +42,18 @@ data class RoutePoint(
 )
 
 /**
+ * 有料道路1区間ぶんの料金内訳。
+ *
+ * @param roadName 有料道路の名称（例: 「東名高速道路」）
+ * @param amount 料金（円）
+ */
+@Immutable
+data class TollSegmentFee(
+    val roadName: String,
+    val amount: Int,
+)
+
+/**
  * ルート全体の詳細情報。案内開始に必要なルートデータを保持する。
  * 取得元の DataSource（外部ナビ API など）に依存しない中立なモデル。
  *
@@ -55,6 +67,9 @@ data class RoutePoint(
  * @param steps 案内ステップ
  * @param roadClassSegments geometry を道路種別（高速 / 一般道）ごとに区切ったセグメント列。経路サマリ由来で境界は近似。空の場合は色分けしない。
  * @param congestionSegments geometry に沿った渋滞区間。ルート計算時点のスナップショット。渋滞が無ければ空。
+ * @param priority ルート種別（推奨 / 渋滞回避 / 等）。取得元が複数候補を返さないソースでは null。
+ * @param tollFee 有料道路の合計料金（円）。料金不明 / 有料区間なしの場合は null。
+ * @param tollDetails 有料道路の道路別料金内訳。空の場合は内訳不明 / 有料区間なし。
  */
 @Immutable
 data class RouteDetail(
@@ -68,4 +83,25 @@ data class RouteDetail(
     val steps: ImmutableList<RouteStepInfo>,
     val roadClassSegments: ImmutableList<RoadClassSegment> = persistentListOf(),
     val congestionSegments: ImmutableList<CongestionSegment> = persistentListOf(),
-)
+    val priority: RoutePriority? = null,
+    val tollFee: Int? = null,
+    val tollDetails: ImmutableList<TollSegmentFee> = persistentListOf(),
+) {
+    /**
+     * ルート上で最初に高速道路に入る IC / JCT 名。
+     * 高速区間が複数ある場合は最初の入口、高速区間が無い / 名前が取れない場合は null。
+     */
+    val entryInterchangeName: String?
+        get() = roadClassSegments
+            .firstOrNull { segment -> segment.roadClass == RoadClass.HIGHWAY }
+            ?.entryInterchangeName
+
+    /**
+     * ルート上で最後に高速道路から出る IC / JCT 名。
+     * 高速区間が複数ある場合は最後の出口、高速区間が無い / 名前が取れない場合は null。
+     */
+    val exitInterchangeName: String?
+        get() = roadClassSegments
+            .lastOrNull { segment -> segment.roadClass == RoadClass.HIGHWAY }
+            ?.exitInterchangeName
+}
