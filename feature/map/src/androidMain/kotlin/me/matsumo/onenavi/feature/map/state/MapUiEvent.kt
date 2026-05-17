@@ -36,6 +36,9 @@ sealed interface MapUiEvent {
     /** ルートプレビューを閉じて直前の画面へ戻る。 */
     data object OnRoutePreviewDismissed : MapUiEvent
 
+    /** 地点詳細を閉じて直前の画面へ戻る。 */
+    data object OnPlaceDetailsDismissed : MapUiEvent
+
     /** 出発地と目的地を入れ替えてルートを再探索する。 */
     data object OnSwapWaypoints : MapUiEvent
 

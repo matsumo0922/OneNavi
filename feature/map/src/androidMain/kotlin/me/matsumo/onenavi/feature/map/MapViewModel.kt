@@ -155,6 +155,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnNavigationStart -> handleNavigationStart()
             is MapUiEvent.OnNavigationStop -> handleNavigationStop()
             is MapUiEvent.OnRoutePreviewDismissed -> handleRoutePreviewDismissed()
+            is MapUiEvent.OnPlaceDetailsDismissed -> handlePlaceDetailsDismissed()
             is MapUiEvent.OnSwapWaypoints -> handleSwapWaypoints()
             is MapUiEvent.OnRouteWaypointsConfirmed -> handleRouteWaypointsConfirmed(event.waypoints)
             is MapUiEvent.OnWaypointEditRequested -> handleWaypointEditRequested(event.index)
@@ -272,6 +273,17 @@ private class UiEventDelegate(
     private fun handleRoutePreviewDismissed() {
         newRouteManager.reset()
         popScreenState()
+    }
+
+    private fun handlePlaceDetailsDismissed() {
+        popScreenState()
+
+        uiState.update {
+            it.copy(
+                query = null,
+                selectedResult = null,
+            )
+        }
     }
 
     private fun handleSwapWaypoints() {

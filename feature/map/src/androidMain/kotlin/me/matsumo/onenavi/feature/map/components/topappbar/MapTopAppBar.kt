@@ -78,6 +78,7 @@ internal fun MapTopAppBar(
 
     fun onBackClicked() {
         showSearchResult = false
+        onUiEvent(MapUiEvent.OnPlaceDetailsDismissed)
     }
 
     fun onSearchAction(query: String) {
@@ -98,6 +99,9 @@ internal fun MapTopAppBar(
         if (selectedResult != null) {
             textFieldState.setTextAndPlaceCursorAtEnd(selectedResult.name)
             showSearchResult = true
+        } else {
+            textFieldState.clearText()
+            showSearchResult = false
         }
     }
 
