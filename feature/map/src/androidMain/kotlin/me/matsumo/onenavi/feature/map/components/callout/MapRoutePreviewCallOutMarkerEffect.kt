@@ -46,15 +46,10 @@ internal fun MapRoutePreviewCallOutMarkerEffect(
 
     val density = LocalDensity.current
     val topPadding = with(density) { topAppBarHeightPx.toDp() } + 12.dp
-    val items = remember(
-        routePreviewState.routes,
-        routePreviewState.selectedIndex,
-    ) {
+
+    val items = remember(routePreviewState.routes, routePreviewState.selectedIndex) {
         routePreviewState.routes.mapIndexedNotNull { index, route ->
-            route.toCallOutRequest(
-                routeIndex = index,
-                selectedRouteIndex = routePreviewState.selectedIndex,
-            )?.let { request ->
+            route.toCallOutRequest(index, routePreviewState.selectedIndex)?.let { request ->
                 RoutePreviewCallOutItem(
                     routeIndex = index,
                     route = route,
@@ -63,6 +58,7 @@ internal fun MapRoutePreviewCallOutMarkerEffect(
             }
         }
     }
+
     val requests = remember(items) {
         items.map { it.request }.toImmutableList()
     }
@@ -105,11 +101,11 @@ private fun MapRoutePreviewPlaceholderCallOut(
     MapCallOut(
         modifier = modifier,
         tailSide = tailSide,
-        backgroundColor = if (isSelected) SelectedCallOutColor else MaterialTheme.colorScheme.surface,
-        contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
+        backgroundColor = if (isSelected) SelectedCallOutColor else MaterialTheme.colorScheme.inverseSurface,
+        contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.inverseOnSurface,
     ) {
         Text(
-            text = PREVIEW_CALLOUT_PLACEHOLDER,
+            text = "Test",
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.labelLarge,
@@ -128,19 +124,15 @@ private fun RouteDetail.toCallOutRequest(
 
     return MapCallOutRequest(
         id = "route-$routeIndex-$id",
-        target = MapCallOutTarget.PolylineMovable(
-            geometry.toImmutableList(),
-        ),
+        target = MapCallOutTarget.PolylineMovable(geometry.toImmutableList()),
         priority = routeIndex,
         zIndexPriority = if (isSelected) SELECTED_ROUTE_CALLOUT_Z_INDEX_PRIORITY else routeIndex,
-        label = PREVIEW_CALLOUT_PLACEHOLDER,
         contentKey = if (isSelected) SELECTED_CONTENT_KEY else UNSELECTED_CONTENT_KEY,
     )
 }
 
 private val SelectedCallOutColor = Color(0xFF1A73E8)
 
-private const val PREVIEW_CALLOUT_PLACEHOLDER = "Test"
 private const val MIN_ROUTE_CALLOUT_POLYLINE_POINTS = 2
 private const val SELECTED_ROUTE_CALLOUT_Z_INDEX_PRIORITY = 100
 private const val SELECTED_CONTENT_KEY = "selected"

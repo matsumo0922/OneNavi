@@ -1,12 +1,15 @@
 package me.matsumo.onenavi.feature.map
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import com.google.android.gms.maps.GoogleMap
 import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapMarker
 import me.matsumo.onenavi.feature.map.components.MapPolyline
 import me.matsumo.onenavi.feature.map.components.MapPolylineStyle
+import me.matsumo.onenavi.feature.map.components.callout.MapRoutePreviewCallOutMarkerEffect
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 
 @Composable
@@ -14,6 +17,10 @@ internal fun MapEffect(
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
     googleMap: GoogleMap,
+    topAppBarHeightPx: Int,
+    bottomSheetPeekHeight: Dp,
+    onRouteSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     when (screenState) {
         is MapScreenState.Browsing -> Unit
@@ -28,9 +35,13 @@ internal fun MapEffect(
         is MapScreenState.SearchResultsList -> TODO()
         is MapScreenState.RoutePreview -> {
             RoutePreviewEffect(
+                modifier = modifier,
                 screenState = screenState,
                 routePreviewState = routePreviewState,
                 googleMap = googleMap,
+                topAppBarHeightPx = topAppBarHeightPx,
+                bottomSheetPeekHeight = bottomSheetPeekHeight,
+                onRouteSelected = onRouteSelected,
             )
         }
         is MapScreenState.Navigating -> TODO()
@@ -56,6 +67,10 @@ private fun RoutePreviewEffect(
     screenState: MapScreenState.RoutePreview,
     routePreviewState: RoutePreviewState,
     googleMap: GoogleMap,
+    topAppBarHeightPx: Int,
+    bottomSheetPeekHeight: Dp,
+    onRouteSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     for (waypoint in screenState.waypoints.drop(1)) {
         MapMarker(
@@ -78,4 +93,13 @@ private fun RoutePreviewEffect(
             )
         }
     }
+
+    MapRoutePreviewCallOutMarkerEffect(
+        modifier = modifier,
+        googleMap = googleMap,
+        routePreviewState = routePreviewState as? RoutePreviewState.Ready,
+        topAppBarHeightPx = topAppBarHeightPx,
+        bottomSheetPeekHeight = bottomSheetPeekHeight,
+        onRouteSelected = onRouteSelected,
+    )
 }
