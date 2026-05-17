@@ -84,11 +84,12 @@ internal fun MapCallOutMarkerEffect(
 
     val defaultSize = with(density) {
         IntSize(
-            width = DEFAULT_CALLOUT_WIDTH.roundToPx(),
-            height = DEFAULT_CALLOUT_HEIGHT.roundToPx(),
+            width = (DEFAULT_CALLOUT_WIDTH + MapCallOutDefaults.ShadowPadding * 2).roundToPx(),
+            height = (DEFAULT_CALLOUT_HEIGHT + MapCallOutDefaults.ShadowPadding * 2).roundToPx(),
         )
     }
     val tailLengthPx = with(density) { MapCallOutDefaults.TailLength.toPx() }
+    val shadowPaddingPx = with(density) { MapCallOutDefaults.ShadowPadding.toPx() }
     val sizes = requests.map { request ->
         measuredSizes[request.id]
             ?.takeIf { it.width > 0 && it.height > 0 }
@@ -107,6 +108,7 @@ internal fun MapCallOutMarkerEffect(
         viewport,
         viewportSize,
         tailLengthPx,
+        shadowPaddingPx,
         relayoutInterval,
     ) {
         if (requests.isEmpty() || viewportSize == IntSize.Zero) {
@@ -127,6 +129,7 @@ internal fun MapCallOutMarkerEffect(
                     viewportSize = viewportSize,
                     viewport = viewport,
                     tailLengthPx = tailLengthPx,
+                    shadowPaddingPx = shadowPaddingPx,
                     project = { point -> projectedPoints.getValue(point) },
                 )
             }
@@ -171,6 +174,7 @@ internal fun MapCallOutMarkerEffect(
             clickHandlers = markerClickHandlers,
             previousPlacements = previousPlacements,
             specs = specs,
+            shadowPaddingPx = shadowPaddingPx,
             onCallOutClick = onCallOutClick,
         )
     }
@@ -208,6 +212,7 @@ private fun syncCallOutMarkers(
     clickHandlers: MutableMap<String, () -> Unit>,
     previousPlacements: MutableMap<String, MapCallOutPreviousPlacement>,
     specs: List<MapCallOutMarkerSpec>,
+    shadowPaddingPx: Float,
     onCallOutClick: (Int, MapCallOutRequest) -> Unit,
 ) {
     val activeTags = specs.mapTo(mutableSetOf()) { it.tag }
@@ -226,6 +231,12 @@ private fun syncCallOutMarkers(
     previousPlacements.keys.retainAll(activeRequestIds)
 
     for (spec in specs) {
+        val anchorX = spec.placement.tailSide.anchorX(
+            size = spec.placement.size,
+            shadowPaddingPx = shadowPaddingPx,
+        )
+        val anchorY = spec.placement.anchorY(shadowPaddingPx)
+
         clickHandlers[spec.tag] = {
             onCallOutClick(
                 spec.placement.requestIndex,
@@ -238,7 +249,7 @@ private fun syncCallOutMarkers(
         val markerState = markers[spec.tag] ?: googleMap.addMarker(
             MarkerOptions()
                 .position(position)
-                .anchor(spec.placement.tailSide.anchorX(), 1f)
+                .anchor(anchorX, anchorY)
                 .icon(spec.icon)
                 .zIndex(zIndex),
         )?.let { marker ->
@@ -247,6 +258,8 @@ private fun syncCallOutMarkers(
                 icon = spec.icon,
                 visualKey = spec.visualKey,
                 zIndex = zIndex,
+                anchorX = anchorX,
+                anchorY = anchorY,
             ).also { state ->
                 markers[spec.tag] = state
             }
@@ -257,10 +270,14 @@ private fun syncCallOutMarkers(
             marker.position = position
         }
         if (markerState.visualKey != spec.visualKey || markerState.icon != spec.icon) {
-            marker.setAnchor(spec.placement.tailSide.anchorX(), 1f)
             marker.setIcon(spec.icon)
             markerState.icon = spec.icon
             markerState.visualKey = spec.visualKey
+        }
+        if (markerState.anchorX != anchorX || markerState.anchorY != anchorY) {
+            marker.setAnchor(anchorX, anchorY)
+            markerState.anchorX = anchorX
+            markerState.anchorY = anchorY
         }
         if (markerState.zIndex != zIndex) {
             marker.zIndex = zIndex
@@ -304,11 +321,24 @@ private fun RoutePoint.toLatLng(): LatLng {
     return LatLng(latitude, longitude)
 }
 
-private fun MapCallOutTailSide.anchorX(): Float {
+private fun MapCallOutTailSide.anchorX(
+    size: IntSize,
+    shadowPaddingPx: Float,
+): Float {
+    val width = size.width.toFloat().coerceAtLeast(1f)
+    val shadow = shadowPaddingPx.coerceIn(0f, width / 2f)
+
     return when (this) {
-        MapCallOutTailSide.BottomLeft -> 0f
-        MapCallOutTailSide.BottomRight -> 1f
+        MapCallOutTailSide.BottomLeft -> shadow / width
+        MapCallOutTailSide.BottomRight -> (width - shadow) / width
     }
+}
+
+private fun MapCallOutPlacement.anchorY(shadowPaddingPx: Float): Float {
+    val height = size.height.toFloat().coerceAtLeast(1f)
+    val shadow = shadowPaddingPx.coerceIn(0f, height / 2f)
+
+    return (height - shadow) / height
 }
 
 private class MapCallOutMarkerSpec(
@@ -328,6 +358,8 @@ private class MapCallOutMarkerState(
     var icon: BitmapDescriptor,
     var visualKey: String,
     var zIndex: Float,
+    var anchorX: Float,
+    var anchorY: Float,
 )
 
 private val DEFAULT_CALLOUT_WIDTH = 88.dp

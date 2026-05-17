@@ -26,12 +26,15 @@ class MapCallOutPlacementEngineTest {
             viewportSize = ViewportSize,
             viewport = Viewport,
             tailLengthPx = TailLengthPx,
+            shadowPaddingPx = ShadowPaddingPx,
             project = ::projectForTest,
         )
 
         assertEquals(1, placements.size)
         assertEquals(fixedPoint, placements.single().tip)
         assertEquals(routePoint, placements.single().position)
+        assertEquals(fixedPoint.x - 96f + ShadowPaddingPx, placements.single().topLeft.x)
+        assertEquals(fixedPoint.y - 48f + ShadowPaddingPx, placements.single().topLeft.y)
     }
 
     @Test
@@ -52,6 +55,7 @@ class MapCallOutPlacementEngineTest {
             viewportSize = ViewportSize,
             viewport = Viewport,
             tailLengthPx = TailLengthPx,
+            shadowPaddingPx = ShadowPaddingPx,
             project = ::projectForTest,
         )
 
@@ -82,6 +86,7 @@ class MapCallOutPlacementEngineTest {
             viewportSize = ViewportSize,
             viewport = Viewport,
             tailLengthPx = TailLengthPx,
+            shadowPaddingPx = ShadowPaddingPx,
             project = ::projectForTest,
         )
 
@@ -120,6 +125,7 @@ class MapCallOutPlacementEngineTest {
             viewportSize = ViewportSize,
             viewport = Viewport,
             tailLengthPx = TailLengthPx,
+            shadowPaddingPx = ShadowPaddingPx,
             project = ::projectForTest,
         )
 
@@ -163,6 +169,7 @@ class MapCallOutPlacementEngineTest {
             viewportSize = ViewportSize,
             viewport = Viewport,
             tailLengthPx = TailLengthPx,
+            shadowPaddingPx = ShadowPaddingPx,
             project = ::projectForTest,
         )
 
@@ -295,6 +302,7 @@ class MapCallOutPlacementEngineTest {
             viewportSize = ViewportSize,
             viewport = Viewport,
             tailLengthPx = TailLengthPx,
+            shadowPaddingPx = ShadowPaddingPx,
             project = ::projectForTest,
         )
 
@@ -313,6 +321,7 @@ class MapCallOutPlacementEngineTest {
             viewportSize = ViewportSize,
             viewport = Viewport,
             tailLengthPx = TailLengthPx,
+            shadowPaddingPx = ShadowPaddingPx,
             project = ::projectForTest,
         )
     }
@@ -341,6 +350,7 @@ class MapCallOutPlacementEngineTest {
             bottom = 400f,
         )
         const val TailLengthPx = 9f
+        const val ShadowPaddingPx = 10f
         const val ROUTE_PREVIEW_TEST_ROUTE_COUNT = 3
         const val SELECTED_TEST_Z_INDEX_PRIORITY = 100
         const val SELECTED_TEST_CONTENT_KEY = "selected"

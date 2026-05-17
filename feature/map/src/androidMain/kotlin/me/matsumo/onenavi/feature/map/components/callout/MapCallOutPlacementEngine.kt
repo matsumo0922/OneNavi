@@ -22,6 +22,7 @@ internal object MapCallOutPlacementEngine {
         viewportSize: IntSize,
         viewport: Rect,
         tailLengthPx: Float,
+        shadowPaddingPx: Float,
         project: (RoutePoint) -> Offset,
     ): List<MapCallOutPlacement> {
         require(requests.size == sizes.size) {
@@ -53,6 +54,7 @@ internal object MapCallOutPlacementEngine {
                 viewportSize = viewportSize,
                 viewport = viewport,
                 tailLengthPx = tailLengthPx,
+                shadowPaddingPx = shadowPaddingPx,
                 allPolylines = allPolylines,
                 placed = placed,
                 preferredRouteFraction = routeSlotFractions[requestIndex],
@@ -74,6 +76,7 @@ internal object MapCallOutPlacementEngine {
         viewportSize: IntSize,
         viewport: Rect,
         tailLengthPx: Float,
+        shadowPaddingPx: Float,
         allPolylines: List<List<Offset>>,
         placed: List<MapCallOutPlacement>,
         preferredRouteFraction: Float?,
@@ -96,6 +99,7 @@ internal object MapCallOutPlacementEngine {
                     size = size,
                     viewport = viewport,
                     tailLengthPx = tailLengthPx,
+                    shadowPaddingPx = shadowPaddingPx,
                     allPolylines = allPolylines,
                     placed = placed,
                     preferredRouteFraction = preferredRouteFraction,
@@ -323,6 +327,7 @@ internal object MapCallOutPlacementEngine {
         size: IntSize,
         viewport: Rect,
         tailLengthPx: Float,
+        shadowPaddingPx: Float,
         allPolylines: List<List<Offset>>,
         placed: List<MapCallOutPlacement>,
         preferredRouteFraction: Float?,
@@ -331,9 +336,10 @@ internal object MapCallOutPlacementEngine {
             tip = candidate.tip,
             tailSide = candidate.tailSide,
             size = size,
+            shadowPaddingPx = shadowPaddingPx,
         )
         val bounds = Rect(topLeft, Size(size.width.toFloat(), size.height.toFloat()))
-        val bodyBounds = bounds.deflate(tailLengthPx)
+        val bodyBounds = bounds.deflate(tailLengthPx + shadowPaddingPx)
         val viewportRatio = viewportIntersectionRatio(bodyBounds, viewport)
 
         if (viewportRatio <= MIN_VIEWPORT_RATIO) return null
@@ -495,9 +501,18 @@ internal object MapCallOutPlacementEngine {
         tip: Offset,
         tailSide: MapCallOutTailSide,
         size: IntSize,
-    ): Offset = when (tailSide) {
-        MapCallOutTailSide.BottomLeft -> Offset(tip.x, tip.y - size.height)
-        MapCallOutTailSide.BottomRight -> Offset(tip.x - size.width, tip.y - size.height)
+        shadowPaddingPx: Float,
+    ): Offset {
+        val width = size.width.toFloat()
+        val height = size.height.toFloat()
+        val shadowX = shadowPaddingPx.coerceIn(0f, width / 2f)
+        val shadowY = shadowPaddingPx.coerceIn(0f, height / 2f)
+        val anchor = when (tailSide) {
+            MapCallOutTailSide.BottomLeft -> Offset(shadowX, height - shadowY)
+            MapCallOutTailSide.BottomRight -> Offset(width - shadowX, height - shadowY)
+        }
+
+        return tip - anchor
     }
 
     private fun ScoredCandidate.toPlacement(

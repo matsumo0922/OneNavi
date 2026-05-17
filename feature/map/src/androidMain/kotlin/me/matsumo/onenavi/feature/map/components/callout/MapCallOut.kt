@@ -1,5 +1,7 @@
 package me.matsumo.onenavi.feature.map.components.callout
 
+import android.graphics.BlurMaskFilter
+import android.graphics.Paint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -16,7 +18,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -24,6 +26,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
@@ -50,16 +56,14 @@ internal fun MapCallOut(
     CompositionLocalProvider(LocalContentColor provides contentColor) {
         Box(
             modifier = modifier
-                .shadow(
-                    elevation = MapCallOutDefaults.Elevation,
+                .mapCallOutShadow(
                     shape = shape,
-                    clip = false,
                 )
                 .background(
                     color = backgroundColor,
                     shape = shape,
                 )
-                .padding(MapCallOutDefaults.TailLength),
+                .padding(MapCallOutDefaults.ShapeInset),
         ) {
             Column(
                 modifier = Modifier
@@ -79,11 +83,40 @@ internal object MapCallOutDefaults {
     val CornerRadius: Dp = 8.dp
     val TailLength: Dp = 9.dp
     val TailBaseInset: Dp = 6.dp
-    val Elevation: Dp = 6.dp
+    val ShadowPadding: Dp = 10.dp
+    val ShadowBlurRadius: Dp = 8.dp
+    val ShadowOffsetY: Dp = 2.dp
+    val ShapeInset: Dp = TailLength + ShadowPadding
     val ContentPadding: PaddingValues = PaddingValues(
         horizontal = 12.dp,
         vertical = 8.dp,
     )
+}
+
+private fun Modifier.mapCallOutShadow(
+    shape: Shape,
+    color: Color = Color(0x33000000),
+    blurRadius: Dp = MapCallOutDefaults.ShadowBlurRadius,
+    offsetY: Dp = MapCallOutDefaults.ShadowOffsetY,
+): Modifier = drawBehind {
+    val path = when (val outline = shape.createOutline(size, layoutDirection, this)) {
+        is Outline.Generic -> outline.path
+        else -> return@drawBehind
+    }
+    val blurRadiusPx = blurRadius.toPx()
+    val offsetYPx = offsetY.toPx()
+
+    drawIntoCanvas { canvas ->
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color.toArgb()
+            maskFilter = BlurMaskFilter(blurRadiusPx, BlurMaskFilter.Blur.NORMAL)
+        }
+
+        canvas.nativeCanvas.save()
+        canvas.nativeCanvas.translate(0f, offsetYPx)
+        canvas.nativeCanvas.drawPath(path.asAndroidPath(), paint)
+        canvas.nativeCanvas.restore()
+    }
 }
 
 /**
@@ -95,6 +128,7 @@ private class MapCallOutShape(
     private val cornerRadius: Dp = MapCallOutDefaults.CornerRadius,
     private val tailLength: Dp = MapCallOutDefaults.TailLength,
     private val tailBaseInset: Dp = MapCallOutDefaults.TailBaseInset,
+    private val shadowPadding: Dp = MapCallOutDefaults.ShadowPadding,
 ) : Shape {
 
     override fun createOutline(
@@ -105,11 +139,12 @@ private class MapCallOutShape(
         val radius = with(density) { cornerRadius.toPx() }
         val tail = with(density) { tailLength.toPx() }
         val baseInset = with(density) { tailBaseInset.toPx() }
+        val shadow = with(density) { shadowPadding.toPx() }
         val body = Rect(
-            left = tail,
-            top = tail,
-            right = size.width - tail,
-            bottom = size.height - tail,
+            left = shadow + tail,
+            top = shadow + tail,
+            right = size.width - shadow - tail,
+            bottom = size.height - shadow - tail,
         )
 
         return Outline.Generic(
