@@ -43,6 +43,7 @@ import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.common.formatYen
+import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePriority
 import me.matsumo.onenavi.core.resource.Res
@@ -53,6 +54,7 @@ import me.matsumo.onenavi.core.resource.common_unit_meter
 import me.matsumo.onenavi.core.resource.common_unit_minute
 import me.matsumo.onenavi.core.resource.home_map_route_result_start_navigation
 import me.matsumo.onenavi.core.resource.home_map_route_result_via
+import me.matsumo.onenavi.core.ui.theme.RouteColors
 import me.matsumo.onenavi.core.ui.theme.semiBold
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import org.jetbrains.compose.resources.stringResource
@@ -194,6 +196,36 @@ private fun MapRoutePreviewItem(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            if (route.entryInterchangeName != null || route.exitInterchangeName != null) {
+                Row(
+                    modifier = Modifier.padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    route.entryInterchangeName?.let {
+                        Text(
+                            text = "IN: ",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        InterChange(name = it)
+                    }
+
+                    Spacer(modifier = Modifier.size(4.dp))
+
+                    route.exitInterchangeName?.let {
+                        Text(
+                            text = "OUT: ",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        InterChange(name = it)
+                    }
+                }
+            }
         }
 
         Button(
@@ -231,6 +263,26 @@ private fun MapRoutePriority(
             text = (priority ?: RoutePriority.Recommended).label,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+    }
+}
+
+@Composable
+private fun InterChange(
+    name: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(RouteColors.accent(RoadClass.HIGHWAY).primary)
+            .padding(8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodySmall.semiBold(),
+            color = RouteColors.accent(RoadClass.HIGHWAY).onPrimary,
         )
     }
 }

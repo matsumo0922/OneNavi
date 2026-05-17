@@ -12,9 +12,9 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.model.CongestionSegment
 import me.matsumo.onenavi.core.model.CongestionSeverity
-import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RoadClassSegment
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.ui.theme.RouteColors
 
 /**
  * ルート Polyline の表示スタイル。
@@ -56,18 +56,6 @@ internal enum class MapPolylineStyle(
         borderWidthPx = 18f,
         zIndex = 0f,
     ),
-}
-
-/** 道路種別ごとの枠線（外側）色。高速＝濃い青、一般道＝濃い緑。 */
-private fun borderColorOf(roadClass: RoadClass): Color = when (roadClass) {
-    RoadClass.HIGHWAY -> Color(0xFF1A56C7)
-    RoadClass.ORDINARY -> Color(0xFF146C34)
-}
-
-/** 道路種別ごとの本体（内側）色。高速＝明るい青、一般道＝明るい黄緑。 */
-private fun bodyColorOf(roadClass: RoadClass): Color = when (roadClass) {
-    RoadClass.HIGHWAY -> Color(0xFF5AB7FF)
-    RoadClass.ORDINARY -> Color(0xFF8BD24A)
 }
 
 /**
@@ -124,7 +112,7 @@ internal fun MapPolyline(
                 polylines += googleMap.addPolyline(
                     PolylineOptions()
                         .addAll(latLngPoints.subList(segment.startPointIndex, segment.endPointIndex + 1))
-                        .color(borderColorOf(segment.roadClass).toArgb())
+                        .color(RouteColors.polyline(segment.roadClass).border.toArgb())
                         .width(style.borderWidthPx)
                         .zIndex(style.zIndex),
                 )
@@ -133,7 +121,7 @@ internal fun MapPolyline(
                 polylines += googleMap.addPolyline(
                     PolylineOptions()
                         .addAll(latLngPoints.subList(segment.startPointIndex, segment.endPointIndex + 1))
-                        .color(bodyColorOf(segment.roadClass).toArgb())
+                        .color(RouteColors.polyline(segment.roadClass).body.toArgb())
                         .width(style.bodyWidthPx)
                         .zIndex(style.zIndex + ROUTE_BODY_Z_OFFSET),
                 )
