@@ -8,6 +8,7 @@ import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.core.result.ApiResult
@@ -18,6 +19,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.RouteCongestionSegment
 import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
 import me.matsumo.drive.supporter.api.guidance.domain.StreetSegment
 import me.matsumo.drive.supporter.api.route.domain.CarPriority
+import me.matsumo.drive.supporter.api.route.domain.Route
 import me.matsumo.drive.supporter.api.route.domain.RouteSearchCriteria
 import me.matsumo.drive.supporter.api.route.domain.RouteWaypoint
 import me.matsumo.onenavi.core.datasource.RouteDataSource
@@ -45,10 +47,10 @@ import me.matsumo.drive.supporter.api.guidance.domain.RouteCongestionSource as E
 
 /**
  * 外部ナビ API ライブラリを使ったルート検索データソース。
- * `RouteClient.search` と `GuidanceClient.resolveGuidance` を並列に発行し、中立な [RouteDetail]
- * モデルに射影する。ルート探索エンドポイントは priority 1 件しか返さないため、複数候補は
- * `resolveGuidance` の `Guidance.routes` から抽出する。各候補は独立した [ExtNavRoutePayload]
- * として [ExtNavRouteRegistry] に保持する。
+ * `GuidanceClient.resolveGuidance` と priority 別の `RouteClient.search` を並列に発行し、
+ * 中立な [RouteDetail] モデルに射影する。ルート探索エンドポイントは priority 1 件しか
+ * 返さないため、複数候補は `resolveGuidance` の `Guidance.routes` から抽出する。
+ * 各候補は独立した [ExtNavRoutePayload] として [ExtNavRouteRegistry] に保持する。
  */
 class ExtNavRouteDataSource(
     private val clientProvider: ExtNavClientProvider,
@@ -80,10 +82,20 @@ class ExtNavRouteDataSource(
             ),
         )
 
-        val (_, guidanceResult) = coroutineScope {
-            val routesDeferred = async { client.route.search(criteria) }
+        val (interchangeNameHints, guidanceResult) = coroutineScope {
             val guidanceDeferred = async { client.guidance.resolveGuidance(criteria) }
-            routesDeferred.await() to guidanceDeferred.await()
+            val interchangeNameHintsDeferred = criteria.priorities.map { priority ->
+                async {
+                    priority to client.route
+                        .search(criteria.copy(priorities = persistentSetOf(priority)))
+                        .toInterchangeNameHint()
+                }
+            }
+
+            val hints = interchangeNameHintsDeferred.awaitAll()
+                .mapNotNull { (priority, hint) -> hint?.let { priority to it } }
+                .toMap()
+            hints to guidanceDeferred.await()
         }
 
         val guidance = guidanceResult.unwrap("guidance.resolveGuidance")
@@ -100,7 +112,9 @@ class ExtNavRouteDataSource(
         guidance.routes.map { routeGuidance ->
             val routeId = routeIdFor(routeGuidance)
             val geometry = buildGeometry(routeGuidance, originPoint, destinationPoint)
-            val roadClassSegments = buildRoadClassSegments(routeGuidance, geometry)
+            val interchangeNameHint = routeGuidance.priority
+                ?.let { priority -> interchangeNameHints[priority] }
+            val roadClassSegments = buildRoadClassSegments(routeGuidance, geometry, interchangeNameHint)
             val congestionSegments = buildCongestionSegments(routeGuidance, geometry)
             val tollYen = routeGuidance.summary.tollYen.takeIf { it > 0 }
             val distanceMetres = routeGuidance.summary.distanceMetres.toDouble()
@@ -263,6 +277,7 @@ class ExtNavRouteDataSource(
     private fun buildRoadClassSegments(
         routeGuidance: RouteGuidance,
         geometry: ImmutableList<RoutePoint>,
+        interchangeNameHint: InterchangeNameHint?,
     ): ImmutableList<RoadClassSegment> {
         if (geometry.size < 2) {
             return persistentListOf()
@@ -342,6 +357,10 @@ class ExtNavRouteDataSource(
         var startIndex = 0
 
         val lastStretchIndex = roadClassStretches.lastIndex
+        val firstHighwayStretchIndex = roadClassStretches
+            .indexOfFirst { stretch -> stretch.roadClass == RoadClass.HIGHWAY }
+        val lastHighwayStretchIndex = roadClassStretches
+            .indexOfLast { stretch -> stretch.roadClass == RoadClass.HIGHWAY }
         for ((stretchIndex, stretch) in roadClassStretches.withIndex()) {
             val endIndex = boundaryIndices.getOrNull(stretchIndex) ?: geometry.lastIndex
             if (endIndex > startIndex) {
@@ -374,8 +393,16 @@ class ExtNavRouteDataSource(
                         startPointIndex = startIndex,
                         endPointIndex = endIndex,
                         roadClass = stretch.roadClass,
-                        entryInterchangeName = entryName,
-                        exitInterchangeName = exitName,
+                        entryInterchangeName = if (stretchIndex == firstHighwayStretchIndex) {
+                            interchangeNameHint?.entryName ?: entryName
+                        } else {
+                            entryName
+                        },
+                        exitInterchangeName = if (stretchIndex == lastHighwayStretchIndex) {
+                            interchangeNameHint?.exitName ?: exitName
+                        } else {
+                            exitName
+                        },
                     ),
                 )
                 startIndex = endIndex
@@ -383,6 +410,39 @@ class ExtNavRouteDataSource(
         }
         return segments.toImmutableList()
     }
+
+    private fun ApiResult<ImmutableList<Route>>.toInterchangeNameHint(): InterchangeNameHint? = when (this) {
+        is ApiResult.Success -> value.firstOrNull()?.toInterchangeNameHint()
+        is ApiResult.Failure -> null
+    }
+
+    private fun Route.toInterchangeNameHint(): InterchangeNameHint? {
+        if (fareSegments.isEmpty()) return null
+
+        val entryName = fareSegments
+            .asSequence()
+            .mapNotNull { segment -> segment.from.name.toInterchangeNameOrNull() }
+            .firstOrNull()
+        val exitName = fareSegments
+            .asReversed()
+            .asSequence()
+            .mapNotNull { segment -> segment.to.name.toInterchangeNameOrNull() }
+            .firstOrNull()
+
+        return if (entryName == null && exitName == null) {
+            null
+        } else {
+            InterchangeNameHint(entryName = entryName, exitName = exitName)
+        }
+    }
+
+    private fun String.toInterchangeNameOrNull(): String? =
+        trim()
+            .takeIf { name -> name.isNotEmpty() }
+            ?.takeUnless { name ->
+                name.equals("start", ignoreCase = true) ||
+                    name.equals("goal", ignoreCase = true)
+            }
 
     /**
      * [geometryIndex] に対応する地点付近で「名前を持つ最も近い交差点」の名前を返す。
@@ -926,6 +986,15 @@ private data class SnappedIntersection(
     val signalRoadClass: RoadClass
         get() = if (hasHighwaySign) RoadClass.HIGHWAY else RoadClass.ORDINARY
 }
+
+/**
+ * 料金区間の入口 / 出口としてサーバが返す地点名。
+ */
+@Immutable
+private data class InterchangeNameHint(
+    val entryName: String?,
+    val exitName: String?,
+)
 
 /**
  * アンカー間を線形補間する距離変換器。

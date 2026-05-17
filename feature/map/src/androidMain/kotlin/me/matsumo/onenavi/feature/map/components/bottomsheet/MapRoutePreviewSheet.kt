@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -200,28 +201,21 @@ private fun MapRoutePreviewItem(
             if (route.entryInterchangeName != null || route.exitInterchangeName != null) {
                 Row(
                     modifier = Modifier.padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     route.entryInterchangeName?.let {
-                        Text(
-                            text = "IN: ",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-
                         InterChange(name = it)
                     }
 
-                    Spacer(modifier = Modifier.size(4.dp))
+                    Icon(
+                        modifier = Modifier.size(20.dp),
+                        imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        contentDescription = null,
+                    )
 
                     route.exitInterchangeName?.let {
-                        Text(
-                            text = "OUT: ",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-
                         InterChange(name = it)
                     }
                 }
