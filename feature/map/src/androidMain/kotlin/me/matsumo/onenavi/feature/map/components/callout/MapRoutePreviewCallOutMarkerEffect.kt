@@ -101,8 +101,8 @@ private fun MapRoutePreviewPlaceholderCallOut(
     MapCallOut(
         modifier = modifier,
         tailSide = tailSide,
-        backgroundColor = if (isSelected) SelectedCallOutColor else MaterialTheme.colorScheme.inverseSurface,
-        contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.inverseOnSurface,
+        backgroundColor = if (isSelected) SelectedCallOutColor else Color.White,
+        contentColor = if (isSelected) Color.White else Color.Black,
     ) {
         Text(
             text = "Test",

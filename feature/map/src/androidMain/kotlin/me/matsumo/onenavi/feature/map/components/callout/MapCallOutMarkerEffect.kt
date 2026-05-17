@@ -141,11 +141,7 @@ internal fun MapCallOutMarkerEffect(
     val specs = placements.map { placement ->
         val request = requests[placement.requestIndex]
         val descriptor = key(request.id, placement.tailSide, request.contentKey ?: NO_CONTENT_KEY) {
-            rememberMapComposeBitmapDescriptor(
-                request.id,
-                placement.tailSide,
-                request.contentKey ?: NO_CONTENT_KEY,
-            ) {
+            rememberMapComposeBitmapDescriptor(request.id, placement.tailSide, request.contentKey ?: NO_CONTENT_KEY) {
                 Box(
                     modifier = Modifier.onSizeChanged { size ->
                         measuredSizes[request.id] = size
