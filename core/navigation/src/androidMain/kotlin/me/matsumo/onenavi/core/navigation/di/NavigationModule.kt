@@ -10,17 +10,12 @@ import me.matsumo.drive.supporter.api.core.model.LogLevel
 import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.model.AppConfig
 import me.matsumo.onenavi.core.navigation.CameraManager
-import me.matsumo.onenavi.core.navigation.GuidanceSessionManager
 import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.core.navigation.RouteManager
-import me.matsumo.onenavi.core.navigation.extnav.ExtNavAnnouncementScheduler
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavAuthGateway
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavClientProvider
-import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
-import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
-import me.matsumo.onenavi.core.navigation.extnav.ExtNavSsmlSpeaker
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
 import me.matsumo.onenavi.core.navigation.tts.AndroidTtsEngine
@@ -31,7 +26,7 @@ import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsConfig
 import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsEngine
 import me.matsumo.onenavi.core.navigation.tts.PcmAudioPlayer
 import me.matsumo.onenavi.core.navigation.tts.SpeechQueueMode
-import me.matsumo.onenavi.core.navigation.tts.TtsAudioCache // 将来利用
+import me.matsumo.onenavi.core.navigation.tts.TtsAudioCache
 import me.matsumo.onenavi.core.navigation.tts.TtsEngine
 import me.matsumo.onenavi.core.navigation.tts.fetchSigningCertSha1
 import org.koin.android.ext.koin.androidApplication
@@ -90,22 +85,6 @@ val navigationModule: Module = module {
             context = context,
             appConfig = get(),
             httpClient = get(qualifier = named("googleCloudTts")),
-        )
-    }
-    factory { ExtNavGuidanceTracker() }
-    factory { ExtNavSsmlSpeaker(engine = get()) }
-    factory { ExtNavAnnouncementScheduler(speaker = get()) }
-    factory { ExtNavRerouteDetector() }
-    single {
-        GuidanceSessionManager(
-            cameraManager = get(),
-            routeManager = get(),
-            navigationSdkManager = get(),
-            extNavRouteRegistry = get(),
-            extNavTrackerProvider = { get() },
-            extNavSchedulerProvider = { get() },
-            extNavRerouteDetectorProvider = { get() },
-            speakerProvider = { get() },
         )
     }
 }
