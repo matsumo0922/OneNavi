@@ -2,6 +2,7 @@ package me.matsumo.onenavi.feature.map.components.callout
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,14 +15,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.GoogleMap
 import kotlinx.collections.immutable.toImmutableList
+import me.matsumo.onenavi.core.common.formatDuration
+import me.matsumo.onenavi.core.common.formatYen
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
+import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.common_unit_day
+import me.matsumo.onenavi.core.resource.common_unit_hour
+import me.matsumo.onenavi.core.resource.common_unit_minute
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * ルートプレビュー用の仮 CallOut marker effect。
@@ -41,9 +48,10 @@ internal fun MapRoutePreviewCallOutMarkerEffect(
         route: RouteDetail,
         tailSide: MapCallOutTailSide,
         isSelected: Boolean,
-    ) -> Unit = { _, _, tailSide, isSelected ->
+    ) -> Unit = { _, route, tailSide, isSelected ->
         MapRoutePreviewPlaceholderCallOut(
             tailSide = tailSide,
+            routeDetail = route,
             isSelected = isSelected,
         )
     },
@@ -101,9 +109,17 @@ internal fun MapRoutePreviewCallOutMarkerEffect(
 @Composable
 private fun MapRoutePreviewPlaceholderCallOut(
     tailSide: MapCallOutTailSide,
+    routeDetail: RouteDetail,
     isSelected: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val duration = formatDuration(
+        totalSeconds = routeDetail.durationSeconds,
+        dayLabel = stringResource(Res.string.common_unit_day),
+        hourLabel = stringResource(Res.string.common_unit_hour),
+        minuteLabel = stringResource(Res.string.common_unit_minute),
+    )
+
     MapCallOut(
         modifier = modifier,
         tailSide = tailSide,
@@ -119,14 +135,25 @@ private fun MapRoutePreviewPlaceholderCallOut(
                 .padding(8.dp, 4.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "Test",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (isSelected) Color.White else Color.Black,
-                fontWeight = FontWeight.Bold,
-            )
+            Column {
+                Text(
+                    text = duration,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (isSelected) Color.White else Color.Black,
+                )
+
+                routeDetail.tollFee?.let {
+                    Text(
+                        text = formatYen(it),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (isSelected) Color.White else Color.Black,
+                    )
+                }
+            }
         }
     }
 }
