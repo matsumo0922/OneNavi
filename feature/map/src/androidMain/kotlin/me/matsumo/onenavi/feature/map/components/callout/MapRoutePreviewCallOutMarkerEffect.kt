@@ -1,11 +1,17 @@
 package me.matsumo.onenavi.feature.map.components.callout
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -101,16 +107,27 @@ private fun MapRoutePreviewPlaceholderCallOut(
     MapCallOut(
         modifier = modifier,
         tailSide = tailSide,
-        backgroundColor = if (isSelected) SelectedCallOutColor else Color.White,
-        contentColor = if (isSelected) Color.White else Color.Black,
+        backgroundColor = Color.White,
+        contentColor = Color.Black,
+        contentPadding = PaddingValues(0.dp),
     ) {
-        Text(
-            text = "Test",
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-        )
+        Box(
+            modifier = Modifier
+                .padding(2.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (isSelected) SelectedCallOutColor else Color.Transparent)
+                .padding(8.dp, 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "Test",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (isSelected) Color.White else Color.Black,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 
