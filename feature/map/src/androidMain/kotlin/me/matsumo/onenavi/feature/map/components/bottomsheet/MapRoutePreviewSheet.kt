@@ -83,11 +83,13 @@ internal fun MapRoutePreviewSheet(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        MapRoutePreviewRow(
-            routes = routes,
-            selectedRouteIndex = selectedRouteIndex,
-            onRouteSelected = { onUiEvent(MapUiEvent.OnRouteIndexChanged(it)) },
-        )
+        if (routes.size > 1) {
+            MapRoutePreviewRow(
+                routes = routes,
+                selectedRouteIndex = selectedRouteIndex,
+                onRouteSelected = { onUiEvent(MapUiEvent.OnRouteIndexChanged(it)) },
+            )
+        }
 
         AnimatedContent(
             modifier = Modifier.fillMaxWidth(),

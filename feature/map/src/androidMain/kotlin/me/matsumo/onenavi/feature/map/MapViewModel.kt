@@ -85,21 +85,32 @@ class MapViewModel(
     fun onUiEvent(event: MapUiEvent) = uiEventDelegate.onUiEvent(event)
 
     fun pushScreenState(state: MapScreenState) {
-        _screenStates.update { states ->
-            states + state
-        }
+        setScreenStates(_screenStates.value + state)
     }
 
     fun popScreenState() {
-        _screenStates.update { states ->
-            states.dropLast(1)
-        }
+        val states = _screenStates.value
+        val nextStates = if (states.size > 1) states.dropLast(1) else states
+        setScreenStates(nextStates)
     }
 
     fun replaceCurrentScreenState(state: MapScreenState) {
-        _screenStates.update { states ->
-            states.dropLast(1) + state
+        setScreenStates(_screenStates.value.dropLast(1) + state)
+    }
+
+    private fun setScreenStates(states: List<MapScreenState>) {
+        val nextStates = states.ifEmpty { listOf(MapScreenState.Browsing) }
+
+        if (nextStates.last() is MapScreenState.Browsing) {
+            _uiState.update { uiState ->
+                uiState.copy(
+                    query = null,
+                    selectedResult = null,
+                )
+            }
         }
+
+        _screenStates.value = nextStates
     }
 
     override fun onCleared() {

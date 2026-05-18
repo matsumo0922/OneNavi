@@ -31,6 +31,7 @@ internal fun MapBrowsingContent(
                     onUiEvent(MapUiEvent.OnTopAppBarHeightChanged(it.size.height))
                 },
             cameraState = cameraState,
+            query = uiState.query,
             suggestions = uiState.suggestions,
             histories = uiState.histories,
             selectedResult = uiState.selectedResult,

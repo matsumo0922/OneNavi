@@ -63,6 +63,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun MapTopAppBar(
     cameraState: MapCameraState,
+    query: String?,
     suggestions: ImmutableList<SearchSuggestionItem>,
     histories: ImmutableList<SearchHistory>,
     selectedResult: SearchResultItem?,
@@ -95,13 +96,17 @@ internal fun MapTopAppBar(
         canFocus = true
     }
 
-    LaunchedEffect(selectedResult) {
-        if (selectedResult != null) {
-            textFieldState.setTextAndPlaceCursorAtEnd(selectedResult.name)
-            showSearchResult = true
-        } else {
-            textFieldState.clearText()
-            showSearchResult = false
+    LaunchedEffect(selectedResult, query) {
+        when {
+            selectedResult != null -> {
+                textFieldState.setTextAndPlaceCursorAtEnd(selectedResult.name)
+                showSearchResult = true
+            }
+
+            query == null -> {
+                textFieldState.clearText()
+                showSearchResult = false
+            }
         }
     }
 
