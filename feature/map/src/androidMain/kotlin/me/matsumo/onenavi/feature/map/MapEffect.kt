@@ -51,8 +51,8 @@ internal fun MapEffect(
                 onRouteSelected = onRouteSelected,
             )
         }
-        is MapScreenState.Navigating -> TODO()
-        is MapScreenState.Arrived -> TODO()
+        is MapScreenState.Navigating -> Unit
+        is MapScreenState.Arrived -> Unit
     }
 }
 

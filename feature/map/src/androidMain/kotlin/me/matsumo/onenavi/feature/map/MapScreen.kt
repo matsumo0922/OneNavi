@@ -224,8 +224,8 @@ private fun MapScreenContent(
             )
         }
 
-        is MapScreenState.Navigating -> TODO()
-        is MapScreenState.Arrived -> TODO()
+        is MapScreenState.Navigating -> Unit
+        is MapScreenState.Arrived -> Unit
     }
 }
 
@@ -268,8 +268,8 @@ private fun MapScreenBottomSheetContent(
             }
         }
 
-        is MapScreenState.Navigating -> TODO()
-        is MapScreenState.Arrived -> TODO()
+        is MapScreenState.Navigating -> Unit
+        is MapScreenState.Arrived -> Unit
     }
 }
 

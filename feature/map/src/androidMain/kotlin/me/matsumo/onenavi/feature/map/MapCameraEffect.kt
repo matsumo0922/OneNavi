@@ -89,8 +89,12 @@ internal fun MapCameraEffect(
             is MapScreenState.RoutePreview -> {
                 // ルートが揃ったタイミングで下の LaunchedEffect がカメラをフィットさせる
             }
-            is MapScreenState.Navigating -> TODO()
-            is MapScreenState.Arrived -> TODO()
+            is MapScreenState.Navigating -> {
+                // TODO
+            }
+            is MapScreenState.Arrived -> {
+                // TODO
+            }
         }
     }
 }
