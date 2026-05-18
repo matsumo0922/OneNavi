@@ -132,6 +132,24 @@ fun MapScreen(modifier: Modifier = Modifier) {
                     googleMap = googleMap,
                     cameraState = cameraState,
                     onMapUpdate = { googleMap = it },
+                    onPointOfInterestClicked = { pointOfInterest ->
+                        viewModel.onUiEvent(
+                            MapUiEvent.OnMapPointOfInterestSelected(
+                                placeId = pointOfInterest.placeId.orEmpty(),
+                                name = pointOfInterest.name.orEmpty(),
+                                latitude = pointOfInterest.latLng.latitude,
+                                longitude = pointOfInterest.latLng.longitude,
+                            ),
+                        )
+                    },
+                    onMapLongClicked = { latLng ->
+                        viewModel.onUiEvent(
+                            MapUiEvent.OnMapLongPressed(
+                                latitude = latLng.latitude,
+                                longitude = latLng.longitude,
+                            ),
+                        )
+                    },
                 )
 
                 googleMap?.let {

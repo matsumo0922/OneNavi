@@ -9,6 +9,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -19,6 +20,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.GoogleMapOptions
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.PointOfInterest
 import com.google.android.libraries.navigation.NavigationView
 import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.feature.map.state.MapCameraState
@@ -29,6 +32,8 @@ internal fun MapItem(
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
     onMapUpdate: (GoogleMap?) -> Unit,
+    onPointOfInterestClicked: (PointOfInterest) -> Unit,
+    onMapLongClicked: (LatLng) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val navigationView = rememberNavigationViewWithLifecycle()
@@ -39,6 +44,8 @@ internal fun MapItem(
         MapEffect(
             navigationView = navigationView,
             googleMap = it,
+            onPointOfInterestClicked = onPointOfInterestClicked,
+            onMapLongClicked = onMapLongClicked,
             onClear = { onMapUpdate(null) },
         )
 
@@ -107,9 +114,13 @@ private fun rememberNavigationViewWithLifecycle(): NavigationView {
 private fun MapEffect(
     navigationView: NavigationView,
     googleMap: GoogleMap,
+    onPointOfInterestClicked: (PointOfInterest) -> Unit,
+    onMapLongClicked: (LatLng) -> Unit,
     onClear: () -> Unit,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
+    val currentOnPointOfInterestClicked by rememberUpdatedState(onPointOfInterestClicked)
+    val currentOnMapLongClicked by rememberUpdatedState(onMapLongClicked)
 
     LaunchedEffect(googleMap) {
         googleMap.mapType = GoogleMap.MAP_TYPE_NORMAL
@@ -122,6 +133,20 @@ private fun MapEffect(
             isMapToolbarEnabled = false
             isMyLocationButtonEnabled = false
             isZoomControlsEnabled = false
+        }
+    }
+
+    DisposableEffect(googleMap) {
+        googleMap.setOnPoiClickListener { pointOfInterest ->
+            currentOnPointOfInterestClicked(pointOfInterest)
+        }
+        googleMap.setOnMapLongClickListener { latLng ->
+            currentOnMapLongClicked(latLng)
+        }
+
+        onDispose {
+            googleMap.setOnPoiClickListener(null)
+            googleMap.setOnMapLongClickListener(null)
         }
     }
 

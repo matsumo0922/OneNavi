@@ -26,6 +26,20 @@ sealed interface MapUiEvent {
     /** テキスト検索結果一覧から地点を選択する。 */
     data class OnSearchResultSelected(val item: SearchResultItem) : MapUiEvent
 
+    /** 地図上の POI タップから地点詳細を開く。 */
+    data class OnMapPointOfInterestSelected(
+        val placeId: String,
+        val name: String,
+        val latitude: Double,
+        val longitude: Double,
+    ) : MapUiEvent
+
+    /** 地図上の座標長押しから地点詳細を開く。 */
+    data class OnMapLongPressed(
+        val latitude: Double,
+        val longitude: Double,
+    ) : MapUiEvent
+
     data class OnRouteSearch(
         val item: SearchResultItem,
         val latitude: Double?,

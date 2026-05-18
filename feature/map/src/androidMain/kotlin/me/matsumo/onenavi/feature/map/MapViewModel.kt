@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import me.matsumo.onenavi.core.common.OpenLocationCode
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -36,6 +37,7 @@ import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.RoutePreviewTopBarMode
+import java.util.*
 import kotlin.time.Duration.Companion.milliseconds
 
 class MapViewModel(
@@ -162,6 +164,8 @@ private class UiEventDelegate(
             is MapUiEvent.OnHistorySelected -> handleHistorySelected(event.history)
             is MapUiEvent.OnRemoveHistory -> handleRemoveHistory(event.id)
             is MapUiEvent.OnSearchResultSelected -> handleSearchResultSelected(event.item)
+            is MapUiEvent.OnMapPointOfInterestSelected -> handleMapPointOfInterestSelected(event.placeId, event.name, event.latitude, event.longitude)
+            is MapUiEvent.OnMapLongPressed -> handleMapLongPressed(event.latitude, event.longitude)
             is MapUiEvent.OnRouteSearch -> handleRouteSearch(event.item, event.latitude, event.longitude)
             is MapUiEvent.OnRouteIndexChanged -> handleRouteIndexChanged(event.index)
             is MapUiEvent.OnNavigationStart -> handleNavigationStart()
@@ -227,18 +231,95 @@ private class UiEventDelegate(
     }
 
     private suspend fun handleResultSelected(result: SearchResultItem) {
-        if (consumeWaypointEdit(result)) return
+        openPlaceDetails(
+            result = result,
+            addHistory = true,
+        )
+    }
 
+    private suspend fun openPlaceDetails(
+        result: SearchResultItem,
+        addHistory: Boolean,
+    ) {
+        if (consumeWaypointEdit(result, addHistory)) return
         uiState.value = uiState.value.copy(
             query = result.name,
             selectedResult = result,
         )
-        searchRepository.addHistory(result)
+
+        if (addHistory) {
+            searchRepository.addHistory(result)
+        }
+
         pushScreenState(
             MapScreenState.PlaceDetails(
                 place = result,
             ),
         )
+    }
+
+    private fun handleMapPointOfInterestSelected(
+        placeId: String,
+        name: String,
+        latitude: Double,
+        longitude: Double,
+    ) {
+        placeSearchJob?.cancel()
+
+        if (placeId.isBlank()) {
+            scope.launch {
+                openPlaceDetails(
+                    result = createMapPointResult(
+                        placeId = null,
+                        name = name,
+                        latitude = latitude,
+                        longitude = longitude,
+                    ),
+                    addHistory = false,
+                )
+            }
+            return
+        }
+
+        placeSearchJob = scope.launch {
+            searchRepository.retrieve(placeId)
+                .onSuccess { result ->
+                    openPlaceDetails(
+                        result = result,
+                        addHistory = true,
+                    )
+                }
+                .onFailure {
+                    Napier.e(it, TAG) { "Failed to retrieve map place. id: $placeId" }
+                    openPlaceDetails(
+                        result = createMapPointResult(
+                            placeId = placeId,
+                            name = name,
+                            latitude = latitude,
+                            longitude = longitude,
+                        ),
+                        addHistory = false,
+                    )
+                }
+        }
+    }
+
+    private fun handleMapLongPressed(
+        latitude: Double,
+        longitude: Double,
+    ) {
+        placeSearchJob?.cancel()
+        scope.launch {
+            openPlaceDetails(
+                result = createMapPointResult(
+                    placeId = null,
+                    name = formatCoordinateName(latitude, longitude),
+                    latitude = latitude,
+                    longitude = longitude,
+                ),
+                addHistory = false,
+            )
+        }
     }
 
     private fun handleRemoveHistory(historyId: String) {
@@ -374,10 +455,15 @@ private class UiEventDelegate(
         }
     }
 
-    private suspend fun consumeWaypointEdit(result: SearchResultItem): Boolean {
+    private suspend fun consumeWaypointEdit(
+        result: SearchResultItem,
+        addHistory: Boolean,
+    ): Boolean {
         val waypointSearch = uiState.value.overlayState as? MapOverlayState.WaypointSearch ?: return false
 
-        searchRepository.addHistory(result)
+        if (addHistory) {
+            searchRepository.addHistory(result)
+        }
 
         uiState.value = uiState.value.copy(
             overlayState = MapOverlayState.None,
@@ -394,4 +480,51 @@ private class UiEventDelegate(
         private const val TAG = "MapViewModel - UiEventDelegate"
         private const val DEBOUNCE = 300L
     }
+}
+
+private const val MAP_POINT_ID_PREFIX = "map-point:"
+
+private fun createMapPointResult(
+    placeId: String?,
+    name: String,
+    latitude: Double,
+    longitude: Double,
+): SearchResultItem {
+    val plusCode = OpenLocationCode.encode(latitude, longitude)
+
+    return SearchResultItem(
+        placeId = placeId ?: "$MAP_POINT_ID_PREFIX$plusCode",
+        name = name.ifBlank { formatCoordinateName(latitude, longitude) },
+        formattedAddress = null,
+        shortFormattedAddress = null,
+        latitude = latitude,
+        longitude = longitude,
+        viewportSouth = null,
+        viewportWest = null,
+        viewportNorth = null,
+        viewportEast = null,
+        primaryType = null,
+        primaryTypeDisplayName = null,
+        types = emptyList(),
+        googleMapsUri = null,
+        websiteUri = null,
+        internationalPhoneNumber = null,
+        nationalPhoneNumber = null,
+        rating = null,
+        userRatingCount = null,
+        priceLevel = null,
+        businessStatus = null,
+        iconBackgroundColor = null,
+        iconMaskUrl = null,
+        editorialSummary = null,
+        currentOpeningHours = null,
+        isOpenNow = null,
+    )
+}
+
+private fun formatCoordinateName(
+    latitude: Double,
+    longitude: Double,
+): String {
+    return String.format(Locale.US, "%.6f, %.6f", latitude, longitude)
 }
