@@ -208,6 +208,10 @@ private fun HomeMapSearchInputField(
         textFieldState = textFieldState,
         onSearch = {
             onSearch.invoke(textFieldState.text.toString())
+
+            scope.launch {
+                searchBarState.animateToCollapsed()
+            }
         },
         placeholder = {
             Text(

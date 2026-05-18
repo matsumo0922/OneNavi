@@ -7,6 +7,7 @@ import com.google.android.gms.maps.GoogleMap
 import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapMarker
+import me.matsumo.onenavi.feature.map.components.MapNumberedMarker
 import me.matsumo.onenavi.feature.map.components.MapPolyline
 import me.matsumo.onenavi.feature.map.components.MapPolylineStyle
 import me.matsumo.onenavi.feature.map.components.callout.MapRoutePreviewCallOutMarkerEffect
@@ -32,7 +33,13 @@ internal fun MapEffect(
             )
         }
 
-        is MapScreenState.SearchResultsList -> TODO()
+        is MapScreenState.SearchResultsList -> {
+            SearchResultsListEffect(
+                screenState = screenState,
+                googleMap = googleMap,
+            )
+        }
+
         is MapScreenState.RoutePreview -> {
             RoutePreviewEffect(
                 modifier = modifier,
@@ -60,6 +67,23 @@ private fun PlaceDetailsEffect(
         longitude = screenState.place.longitude,
         title = screenState.place.name,
     )
+}
+
+@Composable
+private fun SearchResultsListEffect(
+    screenState: MapScreenState.SearchResultsList,
+    googleMap: GoogleMap,
+) {
+    screenState.results.forEachIndexed { index, result ->
+        MapNumberedMarker(
+            googleMap = googleMap,
+            latitude = result.latitude,
+            longitude = result.longitude,
+            number = index + 1,
+            title = result.name,
+            zIndex = SEARCH_RESULT_MARKER_Z_INDEX + index,
+        )
+    }
 }
 
 @Composable
@@ -103,3 +127,5 @@ private fun RoutePreviewEffect(
         onRouteSelected = onRouteSelected,
     )
 }
+
+private const val SEARCH_RESULT_MARKER_Z_INDEX = 11_000f

@@ -8,6 +8,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
@@ -66,7 +67,25 @@ internal fun MapCameraEffect(
                 )
             }
 
-            is MapScreenState.SearchResultsList -> TODO()
+            is MapScreenState.SearchResultsList -> {
+                val points = screenState.results.map { result ->
+                    RoutePoint(
+                        latitude = result.latitude,
+                        longitude = result.longitude,
+                    )
+                }
+
+                when (points.size) {
+                    0 -> Unit
+                    1 -> cameraState.moveTo(
+                        latitude = points.first().latitude,
+                        longitude = points.first().longitude,
+                        zoom = 16f,
+                    )
+                    else -> cameraState.showRouteOverview(points)
+                }
+            }
+
             is MapScreenState.RoutePreview -> {
                 // ルートが揃ったタイミングで下の LaunchedEffect がカメラをフィットさせる
             }

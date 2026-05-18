@@ -23,6 +23,9 @@ sealed interface MapUiEvent {
     data class OnHistorySelected(val history: SearchHistory) : MapUiEvent
     data class OnRemoveHistory(val id: String) : MapUiEvent
 
+    /** テキスト検索結果一覧から地点を選択する。 */
+    data class OnSearchResultSelected(val item: SearchResultItem) : MapUiEvent
+
     data class OnRouteSearch(
         val item: SearchResultItem,
         val latitude: Double?,

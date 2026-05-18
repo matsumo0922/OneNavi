@@ -150,6 +150,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnSuggestionSelected -> handleSuggestionSelected(event.suggestion)
             is MapUiEvent.OnHistorySelected -> handleHistorySelected(event.history)
             is MapUiEvent.OnRemoveHistory -> handleRemoveHistory(event.id)
+            is MapUiEvent.OnSearchResultSelected -> handleSearchResultSelected(event.item)
             is MapUiEvent.OnRouteSearch -> handleRouteSearch(event.item, event.latitude, event.longitude)
             is MapUiEvent.OnRouteIndexChanged -> handleRouteIndexChanged(event.index)
             is MapUiEvent.OnNavigationStart -> handleNavigationStart()
@@ -205,6 +206,12 @@ private class UiEventDelegate(
                 .onFailure {
                     Napier.e(it, TAG) { "Failed to retrieve history. id: ${history.id}" }
                 }
+        }
+    }
+
+    private fun handleSearchResultSelected(result: SearchResultItem) {
+        scope.launch {
+            handleResultSelected(result)
         }
     }
 

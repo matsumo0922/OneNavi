@@ -31,6 +31,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapControls
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapPlaceDetailSheet
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapRoutePreviewSheet
+import me.matsumo.onenavi.feature.map.components.bottomsheet.MapSearchResultsSheet
 import me.matsumo.onenavi.feature.map.components.content.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.content.MapRoutePreviewContent
 import me.matsumo.onenavi.feature.map.components.topappbar.MapWaypointSearchScreen
@@ -229,7 +230,15 @@ private fun MapScreenBottomSheetContent(
             )
         }
 
-        is MapScreenState.SearchResultsList -> TODO()
+        is MapScreenState.SearchResultsList -> {
+            MapSearchResultsSheet(
+                modifier = modifier,
+                query = screenState.query,
+                results = screenState.results,
+                onUiEvent = onUiEvent,
+            )
+        }
+
         is MapScreenState.RoutePreview -> {
             val ready = routePreviewState as? RoutePreviewState.Ready
             if (ready != null) {
