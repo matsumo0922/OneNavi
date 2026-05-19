@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.core.navigation.extnav
 
+import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,9 +47,17 @@ class ExtNavGuidanceTracker {
      */
     @Suppress("unused")
     fun attach(payload: ExtNavRoutePayload, route: RouteDetail) {
-        attachedRoute = buildAttachedRoute(payload, route)
+        val attached = buildAttachedRoute(payload, route)
+        attachedRoute = attached
         lastProjection = null
         _snapshot.value = null
+
+        Napier.i(tag = TAG) {
+            "attach: routeId=${route.id}, geometryPoints=${route.geometry.size}, " +
+                "guidancePoints=${payload.routeGuidance.guidancePoints.size}, " +
+                "intersections=${payload.routeGuidance.intersections.size}, " +
+                "totalGeometryMeters=${attached.totalGeometryMetres.roundToInt()}"
+        }
     }
 
     /**
@@ -64,20 +73,35 @@ class ExtNavGuidanceTracker {
             previousProjection = lastProjection,
         )
 
-        lastProjection = projection
-        _snapshot.value = buildSnapshot(
+        val snapshot = buildSnapshot(
             attached = attached,
             projection = projection,
             location = location,
         )
+        lastProjection = projection
+        _snapshot.value = snapshot
+
+        Napier.i(tag = TAG) {
+            "onLocation: routeId=${attached.route.id}, " +
+                "raw=${location.latitude},${location.longitude}, " +
+                "segment=${snapshot.matchedSegmentIndex}, " +
+                "currentMeters=${snapshot.currentCumulativeMeters.roundToInt()}, " +
+                "remainingMeters=${snapshot.distanceRemainingMeters.roundToInt()}, " +
+                "projectionErrorMeters=${snapshot.projectionErrorMeters.roundToInt()}, " +
+                "nextGp=${snapshot.nextGuidancePointIndex}, " +
+                "offRoute=${snapshot.isOffRouteCandidate}"
+        }
     }
 
     /** attach 済み route、前回 projection、公開 snapshot を破棄する。 */
     @Suppress("unused")
     fun detach() {
+        val routeId = attachedRoute?.route?.id
         attachedRoute = null
         lastProjection = null
         _snapshot.value = null
+
+        Napier.i(tag = TAG) { "detach: routeId=${routeId ?: "none"}" }
     }
 
     // ---------------------------------------------------------------------
@@ -1072,6 +1096,9 @@ class ExtNavGuidanceTracker {
 
     /** Tracker 内の数値閾値と category 分類定義。 */
     private companion object {
+        /** Logcat で tracker のログを抽出するための tag。 */
+        private const val TAG: String = "ExtNavGuidanceTracker"
+
         /** haversine 距離計算で使う地球半径メートル。 */
         private const val EARTH_RADIUS_METRES: Double = 6_371_000.0
 

@@ -13,6 +13,7 @@ import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavAuthGateway
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavClientProvider
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
@@ -28,7 +29,13 @@ val navigationModule: Module = module {
     single { NavigationSdkManager(androidApplication(), get()) }
     single { CameraManager(get()) }
     single { NewRouteManager(routeRepository = get()) }
-    single { NewGuidanceManager() }
+    single { ExtNavGuidanceTracker() }
+    single {
+        NewGuidanceManager(
+            routeRegistry = get(),
+            guidanceTracker = get(),
+        )
+    }
     single<HttpClient>(qualifier = named("googleCloudTts")) {
         HttpClient(OkHttp) {
             install(HttpTimeout) {
