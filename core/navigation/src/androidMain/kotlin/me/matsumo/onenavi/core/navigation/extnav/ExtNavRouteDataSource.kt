@@ -312,7 +312,7 @@ class ExtNavRouteDataSource(
             totalGeometryMetres = totalGeometryMetres,
         )
 
-        val distanceMapper = PiecewiseDistanceMapper(distanceAnchors)
+        val distanceMapper = RouteDistanceMapper(distanceAnchors)
 
         val entryEventMetres = buildExpresswayEntryEventMetres(
             routeGuidance = routeGuidance,
@@ -322,7 +322,7 @@ class ExtNavRouteDataSource(
 
         val boundaryEstimates = roadClassStretches
             .dropLast(1)
-            .map { stretch -> distanceMapper.map(stretch.endMetres) }
+            .map { stretch -> distanceMapper.mapSourceToGeometry(stretch.endMetres) }
 
         var previousBoundaryIndex = 0
         val boundaryIndices = roadClassStretches.dropLast(1).mapIndexed { stretchIndex, stretch ->
@@ -965,15 +965,6 @@ private data class NamedStreetStretch(
 )
 
 /**
- * サマリ距離と polyline 距離の対応点。
- */
-@Immutable
-private data class DistanceAnchor(
-    val sourceMetres: Double,
-    val geometryMetres: Double,
-)
-
-/**
  * polyline に射影済みの交差点。
  */
 @Immutable
@@ -995,31 +986,6 @@ private data class InterchangeNameHint(
     val entryName: String?,
     val exitName: String?,
 )
-
-/**
- * アンカー間を線形補間する距離変換器。
- */
-private class PiecewiseDistanceMapper(
-    private val anchors: List<DistanceAnchor>,
-) {
-    fun map(sourceMetres: Double): Double {
-        if (anchors.isEmpty()) return 0.0
-        if (sourceMetres <= anchors.first().sourceMetres) return anchors.first().geometryMetres
-        if (sourceMetres >= anchors.last().sourceMetres) return anchors.last().geometryMetres
-
-        for (anchorIndex in 1 until anchors.size) {
-            val upperAnchor = anchors[anchorIndex]
-            if (sourceMetres <= upperAnchor.sourceMetres) {
-                val lowerAnchor = anchors[anchorIndex - 1]
-                val sourceSpanMetres = upperAnchor.sourceMetres - lowerAnchor.sourceMetres
-                if (sourceSpanMetres <= 0.0) return lowerAnchor.geometryMetres
-                val ratio = (sourceMetres - lowerAnchor.sourceMetres) / sourceSpanMetres
-                return lowerAnchor.geometryMetres + (upperAnchor.geometryMetres - lowerAnchor.geometryMetres) * ratio
-            }
-        }
-        return anchors.last().geometryMetres
-    }
-}
 
 /**
  * ExtNav 由来のルート 1 本分のペイロード。`Guidance.routes` の 1 要素に対応する。
