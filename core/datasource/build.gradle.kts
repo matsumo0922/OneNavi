@@ -26,6 +26,7 @@ kotlin {
             implementation(libs.ktor.core)
             implementation(libs.ktor.content.negotiation)
             implementation(libs.ktor.serialization.json)
+            implementation(libs.kotlinx.coroutines.play.services)
 
             implementation(libs.androidx.room.runtime)
             implementation(libs.androidx.sqlite.bundled)
@@ -34,6 +35,7 @@ kotlin {
             implementation(libs.androidx.datastore.proto)
             implementation(libs.ktor.okhttp)
             implementation(libs.google.navigation)
+            implementation(libs.play.services.location)
             implementation("com.google.android.libraries.places:places:${libs.versions.googlePlaces.get()}") {
                 exclude(group = "com.google.android.gms", module = "play-services-maps")
             }

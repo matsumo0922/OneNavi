@@ -11,6 +11,7 @@ import me.matsumo.onenavi.core.datasource.SearchDataSource
 import me.matsumo.onenavi.core.datasource.SearchHistoryDataSource
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelperImpl
+import me.matsumo.onenavi.core.datasource.location.CurrentLocationDataSource
 import me.matsumo.onenavi.core.model.AppConfig
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
@@ -20,6 +21,7 @@ import org.koin.dsl.module
 val dataSourceModule = module {
     singleOf(::AppSettingDataSource)
     singleOf(::SearchHistoryDataSource)
+    singleOf(::CurrentLocationDataSource)
 
     single {
         HttpClient {

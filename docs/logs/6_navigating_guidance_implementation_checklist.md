@@ -51,17 +51,17 @@
 
 Tracker の origin smoke は通ったので、次は実 GPS tick を流して進捗が変わるかを確認する。
 
-- [ ] `FusedLocationProviderClient` を `callbackFlow<UserLocation>` でラップする
-- [ ] `lastKnown(): UserLocation?` を実装する
-- [ ] interval / minDistance の引数を持つ
-- [ ] 権限チェックは呼び出し側責務にする
-- [ ] Flow 側では provider callback の解除を確実に行う
+- [x] `FusedLocationProviderClient` を `callbackFlow<UserLocation>` でラップする
+- [x] `lastKnown(): UserLocation?` を実装する
+- [x] interval / minDistance の引数を持つ
+- [x] 権限チェックは呼び出し側責務にする
+- [x] Flow 側では provider callback の解除を確実に行う
 
 受け入れ条件:
 
 - [ ] `locationUpdates()` を collect すると 1 秒間隔相当で tick が流れる
-- [ ] `lastKnown()` が取れない場合は null
-- [ ] `compileDebugKotlinAndroid` が通る
+- [x] `lastKnown()` が取れない場合は null
+- [x] `compileDebugKotlinAndroid` が通る
 
 ### 2.3 `NewGuidanceManager` 接続
 
@@ -194,7 +194,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 
 ### 2.10 DI
 
-- [ ] `CurrentLocationDataSource` を datasource module に登録する
+- [x] `CurrentLocationDataSource` を datasource module に登録する
 - [x] `ExtNavGuidanceTracker` を navigation module に登録する
 - [ ] `ExtNavGuidanceMapper` を必要に応じて登録、または internal object として使う
 - [ ] `ExtNavGuidanceBootstrap` を登録する
