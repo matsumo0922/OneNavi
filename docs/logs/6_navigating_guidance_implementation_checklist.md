@@ -25,48 +25,104 @@
 - [x] `ExtNavRerouteDecision`
 - [x] `ExtNavAnnouncement`
 - [x] `RouteDistanceMapper`
+- [x] `ExtNavGuidanceTracker` の初期実装（attach / origin tick / snapshot）
+- [x] `ExtNavGuidanceTracker` の DI 登録
+- [x] `NewGuidanceManager` から tracker へ origin tick を流す smoke 接続
 
 ---
 
-## 2. 次に実装するクラス
+## 2. 次の実装順
 
-### 2.1 `ExtNavGuidanceTracker`
+### 2.1 route id / registry session 化
 
-現行の `ExtNavGuidanceTracker` は暫定実装扱い。下記を満たした時点で完了とする。
+ナビ開始ログで `routeId=Recommended` のままになっている。再検索時の payload 取り違えを避けるため、実 GPS 接続前に直す。
 
-- [ ] `attach(payload, route)` で route geometry の累積距離を作る
-- [ ] `attach(payload, route)` で GP の `distanceFromStartMetres` を geometry 距離に射影する
-- [ ] `attach(payload, route)` で intersection の位置を geometry 距離に射影する
-- [ ] `RouteDistanceMapper` に始点 / 終点 anchor を渡す
-- [ ] 中間 anchor が取れる場合は道路名境界 / intersection 対応も `RouteDistanceMapper` に渡す
-- [ ] `onLocation(location)` で raw GPS を route geometry の最近接 segment に投影する
-- [ ] 初回 tick は全 segment を探索し、2 tick 目以降は前回 segment から前方探索する
-- [ ] GPS jitter による小さな後退は hysteresis で抑制する
-- [ ] `currentCumulativeMeters` / `distanceRemainingMeters` / `matchedSegmentIndex` を更新する
-- [ ] `snappedLocation` と `bearingDegrees` を `GuidanceProgress` に入れる
-- [ ] `durationRemainingSeconds` / `etaEpochMillis` を route 所要時間比率から計算する
-- [ ] `nextGuidancePointIndex` を GP 累積距離の二分探索で決める
-- [ ] `nextManeuver` / `followupManeuver` は `ExtNavGuidanceMapper` 経由で作る
-- [ ] mapper が埋められないデータは null / empty に倒す
-- [ ] off-route candidate は `projectionErrorMeters` / GPS 精度 / 速度 / bearing 差から 1 tick 分だけ判定する
-- [ ] reroute の確定、再探索、音声発話、ネットワーク I/O は持たない
-- [ ] `detach()` で attach 状態、前回 projection、snapshot を clear する
-- [ ] ログ出力は入れない
+- [ ] `ExtNavRouteRegistry.beginSession()` を追加し、検索開始時に旧 payload を clear する
+- [ ] `ExtNavRouteDataSource.searchRoutes()` で session id を作り、全 `RouteDetail.id` / `ExtNavRoutePayload.id` に含める
+- [ ] `routeGuidance.priority?.name ?: "route-${index}"` だけを route id にしない
+- [ ] `ExtNavRouteRegistryTest` を追加する
 
 受け入れ条件:
 
-- [ ] attach 前の `snapshot.value` は null
-- [ ] attach 後、`onLocation()` で `snapshot.value` が non-null になる
+- [ ] 連続で別検索しても古い payload を取得できない
+- [ ] ナビ開始ログの `routeId` が session id 付きになっている
+
+### 2.2 `CurrentLocationDataSource`
+
+Tracker の origin smoke は通ったので、次は実 GPS tick を流して進捗が変わるかを確認する。
+
+- [ ] `FusedLocationProviderClient` を `callbackFlow<UserLocation>` でラップする
+- [ ] `lastKnown(): UserLocation?` を実装する
+- [ ] interval / minDistance の引数を持つ
+- [ ] 権限チェックは呼び出し側責務にする
+- [ ] Flow 側では provider callback の解除を確実に行う
+
+受け入れ条件:
+
+- [ ] `locationUpdates()` を collect すると 1 秒間隔相当で tick が流れる
+- [ ] `lastKnown()` が取れない場合は null
+- [ ] `compileDebugKotlinAndroid` が通る
+
+### 2.3 `NewGuidanceManager` 接続
+
+- [x] `ExtNavRouteRegistry.get(route.id)` から payload を取得する
+- [x] `tracker.attach(payload, route)` を呼ぶ
+- [x] origin を 1 tick として `tracker.onLocation(location)` に流し、Logcat で smoke 確認できる
+- [ ] `locationDataSource.lastKnown()` で初期 tick を試す
+- [ ] lastKnown が null の場合は `ExtNavGuidanceBootstrap` を使う
+- [ ] `locationUpdates()` を collect して `tracker.onLocation(location)` に流す
+- [x] origin tick 直後の `tracker.snapshot.value` を `GuidanceState.Guiding(route, progress)` に反映する
+- [ ] `tracker.snapshot` を collect して `GuidanceState.Guiding(route, progress)` を継続更新する
+- [ ] snapshot を `ExtNavRerouteDetector` / `ExtNavAnnouncementScheduler` / 到着判定へ fan-out する
+- [x] stop / release で tracker を detach する
+- [ ] stop / release で session job、detector、scheduler を止める
+
+受け入れ条件:
+
+- [x] `startGuidance()` 直後に non-null progress が出る
+- [ ] GPS tick で残距離が減る
+- [x] `stopGuidance()` で `Idle`
+- [ ] reroute request 時は `Rerouting` を経て新 route に attach し直す
+
+### 2.4 `ExtNavGuidanceTracker`
+
+初期実装と origin tick smoke は完了。実 GPS / Fake GPS で連続 tick を確認した時点で完了扱いにする。
+
+- [x] `attach(payload, route)` で route geometry の累積距離を作る
+- [x] `attach(payload, route)` で GP の `distanceFromStartMetres` を geometry 距離に射影する
+- [x] `attach(payload, route)` で intersection の位置を geometry 距離に射影する
+- [x] `RouteDistanceMapper` に始点 / 終点 anchor を渡す
+- [ ] 中間 anchor が取れる場合は道路名境界 / intersection 対応も `RouteDistanceMapper` に渡す
+- [x] `onLocation(location)` で raw GPS を route geometry の最近接 segment に投影する
+- [x] 初回 tick は全 segment を探索し、2 tick 目以降は前回 segment から前方探索する
+- [x] GPS jitter による小さな後退は hysteresis で抑制する
+- [x] `currentCumulativeMeters` / `distanceRemainingMeters` / `matchedSegmentIndex` を更新する
+- [x] `snappedLocation` と `bearingDegrees` を `GuidanceProgress` に入れる
+- [x] `durationRemainingSeconds` / `etaEpochMillis` を route 所要時間比率から計算する
+- [x] `nextGuidancePointIndex` を GP 累積距離の二分探索で決める
+- [ ] `nextManeuver` / `followupManeuver` は `ExtNavGuidanceMapper` 経由で作る
+- [x] mapper が埋められないデータは null / empty に倒す
+- [x] off-route candidate は `projectionErrorMeters` / GPS 精度 / 速度 / bearing 差から 1 tick 分だけ判定する
+- [x] reroute の確定、再探索、音声発話、ネットワーク I/O は持たない
+- [x] `detach()` で attach 状態、前回 projection、snapshot を clear する
+- [x] Napier で `attach` / `onLocation` / `detach` の Logcat smoke を確認できる
+- [ ] 実 GPS 接続後、`onLocation` のログ頻度を必要に応じて throttle する
+
+受け入れ条件:
+
+- [x] attach 前の `snapshot.value` は null
+- [x] attach 後、`onLocation()` で `snapshot.value` が non-null になる
 - [ ] route 上の連続 GPS tick で `currentCumulativeMeters` が単調増加する
 - [ ] route 上の連続 GPS tick で `distanceRemainingMeters` が減る
-- [ ] route 上の GPS では `projectionErrorMeters` が十分小さい
+- [x] origin tick では `projectionErrorMeters = 0` になる
+- [ ] route 上の連続 GPS では `projectionErrorMeters` が十分小さい
 - [ ] GP 通過後に `nextGuidancePointIndex` が次の GP に切り替わる
 - [ ] GP が 0 件の route では `nextManeuver = null`
 - [ ] geometry が 0 点 / 1 点でも crash しない
 - [ ] route から外れた GPS で `isOffRouteCandidate = true` になりうる
 - [ ] `ExtNavGuidanceTrackerTest` で上記を確認する
 
-### 2.2 `ExtNavGuidanceMapper`
+### 2.5 `ExtNavGuidanceMapper`
 
 - [ ] `GuidancePoint.phrases[]` の category から `ManeuverType` を決める
 - [ ] geometry の前後 bearing から `ManeuverModifier` を決める
@@ -82,21 +138,7 @@
 - [ ] 不確実なデータは null / empty に倒す
 - [ ] `ExtNavGuidanceTracker` の簡易 maneuver 生成を mapper 呼び出しに置き換えられる
 
-### 2.3 `CurrentLocationDataSource`
-
-- [ ] `FusedLocationProviderClient` を `callbackFlow<UserLocation>` でラップする
-- [ ] `lastKnown(): UserLocation?` を実装する
-- [ ] interval / minDistance の引数を持つ
-- [ ] 権限チェックは呼び出し側責務にする
-- [ ] Flow 側では provider callback の解除を確実に行う
-
-受け入れ条件:
-
-- [ ] `locationUpdates()` を collect すると 1 秒間隔相当で tick が流れる
-- [ ] `lastKnown()` が取れない場合は null
-- [ ] `compileDebugKotlinAndroid` が通る
-
-### 2.4 `ExtNavGuidanceBootstrap`
+### 2.6 `ExtNavGuidanceBootstrap`
 
 - [ ] route origin 起点の `GuidanceProgress` を作る
 - [ ] 残距離 / 残時間 / ETA を route summary から詰める
@@ -108,7 +150,7 @@
 - [ ] 初回 GPS tick 前でも `GuidanceState.Guiding(route, progress)` を出せる
 - [ ] bootstrap 後の通常 tick で tracker snapshot に自然に置き換わる
 
-### 2.5 `ExtNavRerouteDetector`
+### 2.7 `ExtNavRerouteDetector`
 
 - [ ] `attach(route)` / `onSnapshot(snapshot)` / `detach()` を実装する
 - [ ] off-route candidate の連続 tick / 継続秒数を debounce する
@@ -124,7 +166,7 @@
 - [ ] cooldown 中は再要求しない
 - [ ] `rawLocation == null` では `Request` を出さない
 
-### 2.6 `ExtNavAnnouncementScheduler`
+### 2.8 `ExtNavAnnouncementScheduler`
 
 - [ ] `attach(payload, route)` で GP 累積距離と phrase slot を準備する
 - [ ] `onSnapshot(snapshot)` で予告 / 直前 / 通過 slot を判定する
@@ -138,7 +180,7 @@
 - [ ] GP 通過後に古い発話が enqueue されない
 - [ ] 速度に応じた先読み / 遅延が unit test で確認できる
 
-### 2.7 `ExtNavVoicePlayer`
+### 2.9 `ExtNavVoicePlayer`
 
 - [ ] `enqueue(ExtNavAnnouncement)` を実装する
 - [ ] `clear()` を実装する
@@ -150,39 +192,21 @@
 - [ ] `clear()` 後に未再生キューが残らない
 - [ ] TTS が使えない場合も scheduler 側を壊さない
 
-### 2.8 `NewGuidanceManager` 接続
-
-- [ ] `ExtNavRouteRegistry.get(route.id)` から payload を取得する
-- [ ] `tracker.attach(payload, route)` を呼ぶ
-- [ ] `locationDataSource.lastKnown()` で初期 tick を試す
-- [ ] lastKnown が null の場合は `ExtNavGuidanceBootstrap` を使う
-- [ ] `locationUpdates()` を collect して `tracker.onLocation(location)` に流す
-- [ ] `tracker.snapshot` を collect して `GuidanceState.Guiding(route, progress)` を更新する
-- [ ] snapshot を `ExtNavRerouteDetector` / `ExtNavAnnouncementScheduler` / 到着判定へ fan-out する
-- [ ] stop / release で session job、tracker、detector、scheduler を止める
-
-受け入れ条件:
-
-- [ ] `startGuidance()` 直後に non-null progress が出る
-- [ ] GPS tick で残距離が減る
-- [ ] `stopGuidance()` で `Idle`
-- [ ] reroute request 時は `Rerouting` を経て新 route に attach し直す
-
-### 2.9 DI
+### 2.10 DI
 
 - [ ] `CurrentLocationDataSource` を datasource module に登録する
-- [ ] `ExtNavGuidanceTracker` を navigation module に登録する
+- [x] `ExtNavGuidanceTracker` を navigation module に登録する
 - [ ] `ExtNavGuidanceMapper` を必要に応じて登録、または internal object として使う
 - [ ] `ExtNavGuidanceBootstrap` を登録する
 - [ ] `ExtNavRerouteDetector` を登録する
 - [ ] `ExtNavAnnouncementScheduler` を登録する
 - [ ] `ExtNavVoicePlayer` の具象実装を登録する
-- [ ] `NewGuidanceManager` の constructor を更新する
+- [x] `NewGuidanceManager` の constructor を更新する
 
 受け入れ条件:
 
 - [ ] app 起動時の Koin 解決で落ちない
-- [ ] `MapViewModel` から `NewGuidanceManager` が取得できる
+- [x] `MapViewModel` から `NewGuidanceManager` が取得できる
 
 ---
 
@@ -216,6 +240,7 @@
 
 ### Manual / Fake GPS
 
+- [x] ナビ開始時に Logcat で `attach` / `onLocation` / `Tracker initial snapshot` が出る
 - [ ] ルート上を進むと `currentCumulativeMeters` が単調増加する
 - [ ] ルート上を進むと `distanceRemainingMeters` が減る
 - [ ] 次 GP の距離が減り、通過後に次 GP へ切り替わる
@@ -232,7 +257,19 @@ rtk ./gradlew :core:navigation:compileDebugKotlinAndroid
 ```
 
 ```bash
+rtk ./gradlew :core:navigation:detekt
+```
+
+```bash
+rtk ./gradlew :composeApp:compileDebugKotlinAndroid
+```
+
+```bash
 rtk ./gradlew :core:navigation:testDebugUnitTest --tests me.matsumo.onenavi.core.navigation.extnav.RouteDistanceMapperTest
+```
+
+```bash
+rtk adb logcat -s NewGuidanceManager ExtNavGuidanceTracker
 ```
 
 ```bash
@@ -254,3 +291,6 @@ rtk git diff --cached | grep -iEf .claude/forbidden.txt
 - `ExtNavGuidanceTracker` の `LaneGuidance` / `DirectionSign` / `HighwayPanel` は mapper 実装後に埋める。
 - `RouteDistanceMapper` は中間アンカーを受け取れるが、tracker 側はまず始点 / 終点アンカーで動かす。
   GP のズレが大きい route では mapper に中間アンカーを渡す処理を追加する。
+- 現在の route id は `Recommended` など priority 名だけなので、実 GPS 接続前に session id 付きへ変更する。
+- `ExtNavGuidanceTracker.onLocation` は現時点では smoke 用に毎 tick `Napier.i` を出す。実 GPS 接続後、
+  ログ量が多い場合は throttle または debug 専用化する。
