@@ -124,11 +124,6 @@ class NewGuidanceManager(
             return null
         }
 
-        Napier.i(tag = TAG) {
-            "Tracker initial snapshot: routeId=${route.id}, " +
-                "remainingMeters=${snapshot.progress.distanceRemainingMeters}, " +
-                "nextGp=${snapshot.nextGuidancePointIndex}"
-        }
         return snapshot.progress
     }
 
@@ -187,12 +182,6 @@ class NewGuidanceManager(
                     route = route,
                     progress = snapshot.progress,
                 )
-                Napier.i(tag = TAG) {
-                    "Tracker snapshot applied: routeId=${route.id}, " +
-                        "remainingMeters=${snapshot.progress.distanceRemainingMeters}, " +
-                        "traveledMeters=${snapshot.progress.traveledMeters}, " +
-                        "nextGp=${snapshot.nextGuidancePointIndex}"
-                }
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -228,28 +217,21 @@ class NewGuidanceManager(
 
         return scope.launch {
             try {
-                Napier.i(tag = TAG) { "Location collection started: routeId=${route.id}" }
                 val lastKnownLocation = dataSource.lastKnown()
                 if (lastKnownLocation != null) {
                     forwardLocationTick(
-                        route = route,
                         tracker = tracker,
                         location = lastKnownLocation,
-                        source = LocationTickSource.LAST_KNOWN,
                         sessionId = sessionId,
                     )
-                } else if (isActiveSession(sessionId)) {
-                    Napier.i(tag = TAG) { "No lastKnown location. Waiting for location updates." }
                 }
 
                 if (!isActiveSession(sessionId)) return@launch
 
                 dataSource.locationUpdates().collect { location ->
                     forwardLocationTick(
-                        route = route,
                         tracker = tracker,
                         location = location,
-                        source = LocationTickSource.UPDATE,
                         sessionId = sessionId,
                     )
                 }
@@ -268,26 +250,17 @@ class NewGuidanceManager(
     /**
      * 1 件の位置 tick を tracker へ投入する。
      *
-     * @param route 案内対象ルート
      * @param tracker 位置 tick の投入先
      * @param location 端末から得た位置
-     * @param source tick の発生元
      * @param sessionId この案内開始に対応する session id
      */
     private fun forwardLocationTick(
-        route: RouteDetail,
         tracker: ExtNavGuidanceTracker,
         location: UserLocation,
-        source: LocationTickSource,
         sessionId: Long,
     ) {
         if (!isActiveSession(sessionId)) return
 
-        Napier.i(tag = TAG) {
-            "Forward location tick: routeId=${route.id}, source=${source.logValue}, " +
-                "raw=${location.latitude},${location.longitude}, " +
-                "accuracyMeters=${location.accuracyMeters}, speedMps=${location.speedMps}"
-        }
         tracker.onLocation(location)
     }
 
@@ -340,22 +313,6 @@ class NewGuidanceManager(
     ) {
         Napier.w(tag = TAG, throwable = error) { "Guidance $source failed: routeId=$routeId" }
         _state.value = GuidanceState.Failed("guidance $source failed")
-    }
-
-    /**
-     * 位置 tick の発生元。
-     *
-     * @param logValue Logcat に出す短い値
-     */
-    private enum class LocationTickSource(
-        val logValue: String,
-    ) {
-
-        /** 端末が保持していた直近位置。 */
-        LAST_KNOWN(logValue = "lastKnown"),
-
-        /** 連続位置更新 callback から届いた位置。 */
-        UPDATE(logValue = "update"),
     }
 
     /**

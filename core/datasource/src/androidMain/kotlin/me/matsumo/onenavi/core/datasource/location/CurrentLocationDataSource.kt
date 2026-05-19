@@ -88,10 +88,6 @@ class CurrentLocationDataSource(context: Context) {
             )
             val callback = buildLocationCallback()
 
-            Napier.i(tag = TAG) {
-                "locationUpdates start: intervalMillis=$intervalMillis, minDistanceMeters=$minDistanceMeters"
-            }
-
             locationProviderClient
                 .requestLocationUpdates(request, callback, Looper.getMainLooper())
                 .addOnFailureListener { error ->
@@ -101,7 +97,6 @@ class CurrentLocationDataSource(context: Context) {
 
             awaitClose {
                 locationProviderClient.removeLocationUpdates(callback)
-                Napier.i(tag = TAG) { "locationUpdates stop" }
             }
         }.buffer(Channel.CONFLATED)
     }
@@ -134,9 +129,7 @@ class CurrentLocationDataSource(context: Context) {
                     .mapNotNull { location -> location.toUserLocation() }
                     .forEach { userLocation ->
                         val sendResult = trySend(userLocation)
-                        if (sendResult.isFailure) {
-                            Napier.w(tag = TAG) { "locationUpdates send failed" }
-                        }
+                        if (sendResult.isFailure) return@forEach
                     }
             }
         }
