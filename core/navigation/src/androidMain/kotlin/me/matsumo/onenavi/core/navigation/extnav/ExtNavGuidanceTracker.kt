@@ -27,6 +27,7 @@ import kotlin.math.sqrt
  * このクラスの責務は「現在地を route geometry に投影して [ExtNavProgressSnapshot] を更新する」
  * ところまで。リルート確定、音声発話、再探索、ネットワーク I/O は持たない。
  */
+@Suppress("unused")
 class ExtNavGuidanceTracker {
 
     private val _snapshot = MutableStateFlow<ExtNavProgressSnapshot?>(null)
@@ -43,6 +44,7 @@ class ExtNavGuidanceTracker {
      * tick ごとの計算を軽くするため、ここで geometry の累積距離、GP の geometry 距離、
      * intersection の geometry 距離を事前計算する。
      */
+    @Suppress("unused")
     fun attach(payload: ExtNavRoutePayload, route: RouteDetail) {
         attachedRoute = buildAttachedRoute(payload, route)
         lastProjection = null
@@ -52,6 +54,7 @@ class ExtNavGuidanceTracker {
     /**
      * GPS 位置を 1 tick 投入し、ルート上の snappedLocation / 残距離 / 次 GP などを更新する。
      */
+    @Suppress("unused")
     fun onLocation(location: UserLocation) {
         val attached = attachedRoute ?: return
         val projection = projectLocation(
@@ -70,6 +73,7 @@ class ExtNavGuidanceTracker {
     }
 
     /** attach 済み route、前回 projection、公開 snapshot を破棄する。 */
+    @Suppress("unused")
     fun detach() {
         attachedRoute = null
         lastProjection = null
@@ -827,10 +831,11 @@ class ExtNavGuidanceTracker {
      */
     private fun maneuverModifier(bearingDiffDegrees: Float): ManeuverModifier {
         val absDiffDegrees = abs(bearingDiffDegrees)
+
         return when {
             absDiffDegrees <= STRAIGHT_MAX_DEGREES -> ManeuverModifier.STRAIGHT
-            absDiffDegrees <= SLIGHT_MAX_DEGREES -> ManeuverModifier.SLIGHT_RIGHT.takeIf { bearingDiffDegrees >= 0f } ?: ManeuverModifier.SLIGHT_LEFT
-            absDiffDegrees <= TURN_MAX_DEGREES -> ManeuverModifier.RIGHT.takeIf { bearingDiffDegrees >= 0f } ?: ManeuverModifier.LEFT
+            absDiffDegrees <= SLIGHT_MAX_DEGREES -> if (bearingDiffDegrees >= 0f) ManeuverModifier.SLIGHT_RIGHT else ManeuverModifier.SLIGHT_LEFT
+            absDiffDegrees <= TURN_MAX_DEGREES -> if (bearingDiffDegrees >= 0f) ManeuverModifier.RIGHT else ManeuverModifier.LEFT
             else -> ManeuverModifier.UTURN
         }
     }
@@ -949,8 +954,8 @@ class ExtNavGuidanceTracker {
      * @return 2 点間距離メートル
      */
     private fun haversineMetres(from: RoutePoint, to: RoutePoint): Double {
-        val fromLatRadians = Math.toRadians(from.latitude)
-        val toLatRadians = Math.toRadians(to.latitude)
+        val fromLatRadians = latitudeRadians(from)
+        val toLatRadians = latitudeRadians(to)
         val deltaLatRadians = Math.toRadians(to.latitude - from.latitude)
         val deltaLngRadians = Math.toRadians(to.longitude - from.longitude)
         val haversineTerm = sin(deltaLatRadians / 2.0) * sin(deltaLatRadians / 2.0) +
@@ -966,14 +971,22 @@ class ExtNavGuidanceTracker {
      * @return 0 度以上 360 度未満の方位角
      */
     private fun bearingDegrees(from: RoutePoint, to: RoutePoint): Float {
-        val fromLatRadians = Math.toRadians(from.latitude)
-        val toLatRadians = Math.toRadians(to.latitude)
+        val fromLatRadians = latitudeRadians(from)
+        val toLatRadians = latitudeRadians(to)
         val deltaLngRadians = Math.toRadians(to.longitude - from.longitude)
         val y = sin(deltaLngRadians) * cos(toLatRadians)
         val x = cos(fromLatRadians) * sin(toLatRadians) -
             sin(fromLatRadians) * cos(toLatRadians) * cos(deltaLngRadians)
         return ((Math.toDegrees(atan2(y, x)) + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES).toFloat()
     }
+
+    /**
+     * route point の緯度をラジアンへ変換する。
+     *
+     * @param point 変換対象 point
+     * @return 緯度ラジアン
+     */
+    private fun latitudeRadians(point: RoutePoint): Double = Math.toRadians(point.latitude)
 
     /**
      * 方位差を -180 度から 180 度の範囲へ正規化する。
@@ -998,7 +1011,7 @@ class ExtNavGuidanceTracker {
      * @param guidancePointMetres GP index ごとの geometry 累積距離
      * @param intersections geometry 距離に snap 済みの intersection anchors
      */
-    private data class AttachedRoute(
+    private class AttachedRoute(
         val payload: ExtNavRoutePayload,
         val route: RouteDetail,
         val cumulativeMetres: DoubleArray,
