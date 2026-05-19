@@ -70,6 +70,7 @@ class MapViewModel(
     val newRoutePreviewState: StateFlow<RoutePreviewState> = newRouteManager.state
 
     /** Guidance 期の state machine を提供する ([GuidanceState])。 */
+    @Suppress("unused")
     val newGuidanceState: StateFlow<GuidanceState> = newGuidanceManager.state
 
     private val uiEventDelegate = UiEventDelegate(
@@ -102,8 +103,9 @@ class MapViewModel(
 
     private fun setScreenStates(states: List<MapScreenState>) {
         val nextStates = states.ifEmpty { listOf(MapScreenState.Browsing) }
+        val nextState = nextStates.last()
 
-        if (nextStates.last() is MapScreenState.Browsing) {
+        if (nextState is MapScreenState.Browsing) {
             _uiState.update { uiState ->
                 uiState.copy(
                     query = null,
@@ -118,10 +120,6 @@ class MapViewModel(
     override fun onCleared() {
         super.onCleared()
         newGuidanceManager.release()
-    }
-
-    companion object {
-        private const val TAG = "MapViewModel"
     }
 }
 
@@ -367,6 +365,10 @@ private class UiEventDelegate(
 
     private fun handleNavigationStop() {
         newGuidanceManager.stopGuidance()
+
+        if (screenStates.value.lastOrNull() is MapScreenState.Navigating) {
+            popScreenState()
+        }
     }
 
     private fun handleRoutePreviewDismissed() {

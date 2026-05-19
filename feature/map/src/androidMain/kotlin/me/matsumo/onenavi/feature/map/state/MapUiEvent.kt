@@ -47,7 +47,11 @@ sealed interface MapUiEvent {
     ) : MapUiEvent
 
     data class OnRouteIndexChanged(val index: Int) : MapUiEvent
+
+    /** 選択中のルートでナビゲーションを開始する。 */
     data object OnNavigationStart : MapUiEvent
+
+    /** ナビゲーションを停止し、ナビゲーション画面を閉じる。 */
     data object OnNavigationStop : MapUiEvent
 
     /** ルートプレビューを閉じて直前の画面へ戻る。 */

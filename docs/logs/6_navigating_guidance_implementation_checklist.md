@@ -68,14 +68,15 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [x] `ExtNavRouteRegistry.get(route.id)` から payload を取得する
 - [x] `tracker.attach(payload, route)` を呼ぶ
 - [x] origin を 1 tick として `tracker.onLocation(location)` に流し、Logcat で smoke 確認できる
-- [ ] `locationDataSource.lastKnown()` で初期 tick を試す
+- [x] `locationDataSource.lastKnown()` で初期 tick を試す
 - [ ] lastKnown が null の場合は `ExtNavGuidanceBootstrap` を使う
-- [ ] `locationUpdates()` を collect して `tracker.onLocation(location)` に流す
+- [x] `locationUpdates()` を collect して `tracker.onLocation(location)` に流す
 - [x] origin tick 直後の `tracker.snapshot.value` を `GuidanceState.Guiding(route, progress)` に反映する
-- [ ] `tracker.snapshot` を collect して `GuidanceState.Guiding(route, progress)` を継続更新する
+- [x] `tracker.snapshot` を collect して `GuidanceState.Guiding(route, progress)` を継続更新する
 - [ ] snapshot を `ExtNavRerouteDetector` / `ExtNavAnnouncementScheduler` / 到着判定へ fan-out する
 - [x] stop / release で tracker を detach する
-- [ ] stop / release で session job、detector、scheduler を止める
+- [x] stop / release で session job を止める
+- [ ] stop / release で detector、scheduler を止める
 
 受け入れ条件:
 
@@ -269,7 +270,7 @@ rtk ./gradlew :core:navigation:testDebugUnitTest --tests me.matsumo.onenavi.core
 ```
 
 ```bash
-rtk adb logcat -s NewGuidanceManager ExtNavGuidanceTracker
+rtk adb logcat -s NewGuidanceManager ExtNavGuidanceTracker CurrentLocationDataSource
 ```
 
 ```bash
@@ -291,6 +292,6 @@ rtk git diff --cached | grep -iEf .claude/forbidden.txt
 - `ExtNavGuidanceTracker` の `LaneGuidance` / `DirectionSign` / `HighwayPanel` は mapper 実装後に埋める。
 - `RouteDistanceMapper` は中間アンカーを受け取れるが、tracker 側はまず始点 / 終点アンカーで動かす。
   GP のズレが大きい route では mapper に中間アンカーを渡す処理を追加する。
-- 現在の route id は `Recommended` など priority 名だけなので、実 GPS 接続前に session id 付きへ変更する。
+- 現在の route id は `Recommended` など priority 名だけなので、継続走行テストを詰める前に session id 付きへ変更する。
 - `ExtNavGuidanceTracker.onLocation` は現時点では smoke 用に毎 tick `Napier.i` を出す。実 GPS 接続後、
   ログ量が多い場合は throttle または debug 専用化する。

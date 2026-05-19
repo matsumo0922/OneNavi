@@ -34,6 +34,7 @@ val navigationModule: Module = module {
         NewGuidanceManager(
             routeRegistry = get(),
             guidanceTracker = get(),
+            locationDataSource = get(),
         )
     }
     single<HttpClient>(qualifier = named("googleCloudTts")) {

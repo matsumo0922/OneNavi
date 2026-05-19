@@ -33,6 +33,7 @@ import me.matsumo.onenavi.feature.map.components.bottomsheet.MapPlaceDetailSheet
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapRoutePreviewSheet
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapSearchResultsSheet
 import me.matsumo.onenavi.feature.map.components.content.MapBrowsingContent
+import me.matsumo.onenavi.feature.map.components.content.MapNavigationContent
 import me.matsumo.onenavi.feature.map.components.content.MapRoutePreviewContent
 import me.matsumo.onenavi.feature.map.components.topappbar.MapWaypointSearchScreen
 import me.matsumo.onenavi.feature.map.state.MapCameraState
@@ -82,7 +83,10 @@ fun MapScreen(modifier: Modifier = Modifier) {
         ),
     )
 
-    NavigationEventHandler(navigationState, isBackEnabled = hasScreenStateStack) {
+    NavigationEventHandler(
+        state = navigationState,
+        isBackEnabled = hasScreenStateStack && screenState !is MapScreenState.Navigating,
+    ) {
         viewModel.popScreenState()
     }
 
@@ -206,7 +210,7 @@ private fun MapScreenContent(
         is MapScreenState.Browsing,
         is MapScreenState.PlaceDetails,
         is MapScreenState.SearchResultsList,
-        -> {
+            -> {
             MapBrowsingContent(
                 modifier = modifier,
                 cameraState = cameraState,
@@ -224,7 +228,13 @@ private fun MapScreenContent(
             )
         }
 
-        is MapScreenState.Navigating -> Unit
+        is MapScreenState.Navigating -> {
+            MapNavigationContent(
+                modifier = modifier,
+                onUiEvent = onUiEvent,
+            )
+        }
+
         is MapScreenState.Arrived -> Unit
     }
 }

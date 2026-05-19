@@ -11,6 +11,7 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
@@ -42,11 +43,25 @@ class CurrentLocationDataSource(context: Context) {
      * @return 直近位置を変換した [UserLocation]。取得できない場合は null
      */
     @SuppressLint("MissingPermission")
-    suspend fun lastKnown(): UserLocation? = runCatching {
-        locationProviderClient.lastLocation.await()?.toUserLocation()
-    }.onFailure { error ->
+    suspend fun lastKnown(): UserLocation? {
+        return try {
+            locationProviderClient.lastLocation.await()?.toUserLocation()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            logLastKnownFailure(error)
+            null
+        }
+    }
+
+    /**
+     * lastKnown の取得失敗を記録する。
+     *
+     * @param error 位置取得 task から返った失敗
+     */
+    private fun logLastKnownFailure(error: Throwable) {
         Napier.w(tag = TAG, throwable = error) { "lastKnown failed" }
-    }.getOrNull()
+    }
 
     /**
      * 現在地の連続更新を [Flow] として返す。
