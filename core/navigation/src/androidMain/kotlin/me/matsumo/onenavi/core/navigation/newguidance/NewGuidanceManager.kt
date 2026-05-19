@@ -1,10 +1,13 @@
 package me.matsumo.onenavi.core.navigation.newguidance
 
 import io.github.aakira.napier.Napier
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RouteDetail
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 
 /**
@@ -23,7 +26,10 @@ class NewGuidanceManager {
     /** 指定ルートで案内を開始する。 */
     fun startGuidance(route: RouteDetail) {
         Napier.i(tag = TAG) { "Guidance started: routeId=${route.id}" }
-        _state.value = GuidanceState.Guiding
+        _state.value = GuidanceState.Guiding(
+            route = route,
+            progress = route.toInitialProgress(),
+        )
     }
 
     /** 案内を停止して Idle に戻す。 */
@@ -40,3 +46,20 @@ class NewGuidanceManager {
         const val TAG = "NewGuidanceManager"
     }
 }
+
+private fun RouteDetail.toInitialProgress(): GuidanceProgress = GuidanceProgress(
+    distanceRemainingMeters = distanceMeters.toInt(),
+    durationRemainingSeconds = durationSeconds.toInt(),
+    etaEpochMillis = System.currentTimeMillis() + durationSeconds.toLong() * 1_000L,
+    traveledMeters = 0,
+    snappedLocation = origin,
+    bearingDegrees = 0f,
+    nextManeuver = null,
+    followupManeuver = null,
+    lanes = persistentListOf(),
+    directionSign = null,
+    highwayPanel = null,
+    currentRoadName = null,
+    currentRoadClass = roadClassSegments.firstOrNull()?.roadClass ?: RoadClass.ORDINARY,
+    currentSpeedLimitKmh = null,
+)

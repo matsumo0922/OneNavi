@@ -6,6 +6,7 @@ import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 
 /**
  * [NewGuidanceManager] の state machine テスト。
@@ -21,9 +22,14 @@ class NewGuidanceManagerTest {
 
     @Test
     fun `startGuidance で Guiding になる`() {
-        manager.startGuidance(route = buildRoute())
+        val route = buildRoute()
+        manager.startGuidance(route = route)
 
-        assertEquals(GuidanceState.Guiding, manager.state.value)
+        val state = assertIs<GuidanceState.Guiding>(manager.state.value)
+        assertEquals(route, state.route)
+        assertEquals(route.distanceMeters.toInt(), state.progress.distanceRemainingMeters)
+        assertEquals(route.durationSeconds.toInt(), state.progress.durationRemainingSeconds)
+        assertEquals(route.origin, state.progress.snappedLocation)
     }
 
     @Test
