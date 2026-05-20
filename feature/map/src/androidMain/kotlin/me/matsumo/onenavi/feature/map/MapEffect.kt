@@ -12,14 +12,17 @@ import me.matsumo.onenavi.feature.map.components.MapMarker
 import me.matsumo.onenavi.feature.map.components.MapNumberedMarker
 import me.matsumo.onenavi.feature.map.components.MapPolyline
 import me.matsumo.onenavi.feature.map.components.MapPolylineStyle
+import me.matsumo.onenavi.feature.map.components.MapVehiclePuck
 import me.matsumo.onenavi.feature.map.components.callout.MapRoutePreviewCallOutMarkerEffect
 import me.matsumo.onenavi.feature.map.state.MapScreenState
+import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 
 @Composable
 internal fun MapEffect(
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
     guidanceState: GuidanceState,
+    vehicleLocationState: VehicleLocationState?,
     googleMap: GoogleMap,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
@@ -61,6 +64,14 @@ internal fun MapEffect(
             )
         }
         is MapScreenState.Arrived -> Unit
+    }
+
+    if (vehicleLocationState != null) {
+        MapVehiclePuck(
+            googleMap = googleMap,
+            vehicleLocationState = vehicleLocationState,
+            zIndex = VEHICLE_PUCK_Z_INDEX,
+        )
     }
 }
 
@@ -162,3 +173,4 @@ private fun RoutePolylineEffect(
 }
 
 private const val SEARCH_RESULT_MARKER_Z_INDEX = 11_000f
+private const val VEHICLE_PUCK_Z_INDEX = 12_000f

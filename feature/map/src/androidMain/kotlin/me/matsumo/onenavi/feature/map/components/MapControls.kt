@@ -29,10 +29,12 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.GoogleMap
 import me.matsumo.onenavi.feature.map.state.MapCameraState
+import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 
 @Composable
 internal fun MapControls(
     cameraState: MapCameraState,
+    vehicleLocationState: VehicleLocationState?,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -63,7 +65,7 @@ internal fun MapControls(
 
             FloatingActionButton(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                onClick = cameraState::followMyLocation,
+                onClick = { cameraState.followVehicleLocation(vehicleLocationState) },
             ) {
                 Icon(
                     imageVector = if (cameraState.cameraState.isFollowingMyLocation) {

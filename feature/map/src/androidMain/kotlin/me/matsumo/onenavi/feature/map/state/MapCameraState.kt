@@ -2,30 +2,20 @@ package me.matsumo.onenavi.feature.map.state
 
 import android.animation.TimeInterpolator
 import android.animation.ValueAnimator
-import android.annotation.SuppressLint
-import android.os.Looper
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.core.animation.doOnEnd
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.FollowMyLocationOptions
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import me.matsumo.onenavi.core.model.RoutePoint
@@ -43,33 +33,13 @@ import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.pow
 
-@SuppressLint("MissingPermission")
 @Composable
 internal fun rememberMapCameraState(): MapCameraState {
-    val context = LocalContext.current
     val density = LocalDensity.current.density
     val state = remember { MapCameraState() }
 
     SideEffect {
         state.updateDensity(density)
-    }
-
-    DisposableEffect(context) {
-        val client = LocationServices.getFusedLocationProviderClient(context)
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L).build()
-
-        val callback: LocationCallback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                result.lastLocation?.also {
-                    state.updateMyLocation(it.latitude, it.longitude)
-                }
-            }
-        }
-
-        client.requestLocationUpdates(request, callback, Looper.getMainLooper())
-        onDispose {
-            client.removeLocationUpdates(callback)
-        }
     }
 
     return state
@@ -82,8 +52,8 @@ internal class MapCameraState internal constructor() {
     private var cameraAnimator: ValueAnimator? = null
     private var mapViewWidthPx: Int = 0
     private var density: Float = DEFAULT_DENSITY
-    private var isNavigatorReady: Boolean = false
-    private var hasPendingFollowMyLocation: Boolean = false
+    private var lastVehicleLocationState: VehicleLocationState? = null
+    private var isMovingCameraToVehicleLocation: Boolean = false
 
     var cameraState by mutableStateOf(HomeMapCameraState())
         private set
@@ -91,14 +61,10 @@ internal class MapCameraState internal constructor() {
     fun attachMap(googleMap: GoogleMap) {
         this.googleMap = googleMap
 
-        if (isNavigatorReady) {
-            followMyLocation()
-        } else {
-            hasPendingFollowMyLocation = true
-        }
-
         googleMap.setOnCameraMoveStartedListener { reason ->
-            if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
+            val isGesture = reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE
+            if (!isMovingCameraToVehicleLocation && isGesture) {
+                cameraAnimator?.cancel()
                 cameraState = cameraState.copy(isFollowingMyLocation = false)
             }
         }
@@ -108,13 +74,6 @@ internal class MapCameraState internal constructor() {
         googleMap.setOnCameraIdleListener {
             updateCameraPosition(googleMap.cameraPosition)
         }
-    }
-
-    fun updateMyLocation(latitude: Double, longitude: Double) {
-        cameraState = cameraState.copy(
-            myLocationLatitude = latitude,
-            myLocationLongitude = longitude,
-        )
     }
 
     /** 地図ビューの実ピクセル幅を記録する。fly-to のビューポート幅算出に使う。 */
@@ -131,36 +90,28 @@ internal class MapCameraState internal constructor() {
         googleMap?.setPadding(start, top, end, bottom)
     }
 
-    @SuppressLint("MissingPermission")
-    fun followMyLocation() {
-        val map = googleMap ?: return
-        if (!isNavigatorReady) {
-            hasPendingFollowMyLocation = true
-            return
-        }
-
-        val options = FollowMyLocationOptions.builder()
-            .setZoomLevel(cameraState.zoom)
-            .build()
-
-        map.followMyLocation(cameraState.perspective, options)
+    fun followVehicleLocation(vehicleLocationState: VehicleLocationState?) {
+        cameraAnimator?.cancel()
         cameraState = cameraState.copy(isFollowingMyLocation = true)
+        updateVehicleLocation(vehicleLocationState)
     }
 
-    /** Navigation SDK の Navigator 初期化完了を通知する。保留中の追従要求があればここで実行する。 */
-    fun onNavigatorReady() {
-        if (isNavigatorReady) return
-        isNavigatorReady = true
+    fun updateVehicleLocation(vehicleLocationState: VehicleLocationState?) {
+        if (vehicleLocationState == null) return
 
-        if (hasPendingFollowMyLocation) {
-            hasPendingFollowMyLocation = false
-            followMyLocation()
+        lastVehicleLocationState = vehicleLocationState
+        cameraState = cameraState.copy(
+            myLocationLatitude = vehicleLocationState.location.latitude,
+            myLocationLongitude = vehicleLocationState.location.longitude,
+        )
+
+        if (cameraState.isFollowingMyLocation) {
+            moveCameraToVehicleLocation(vehicleLocationState)
         }
     }
 
     fun setPerspective(perspective: Int) {
         cameraState = cameraState.copy(perspective = perspective)
-        followMyLocation()
     }
 
     fun zoomIn() {
@@ -232,12 +183,13 @@ internal class MapCameraState internal constructor() {
             longitude = cameraPosition.target.longitude,
             bearing = cameraPosition.bearing.toDouble(),
             zoom = cameraPosition.zoom,
+            isFollowingMyLocation = cameraState.isFollowingMyLocation &&
+                (isMovingCameraToVehicleLocation || !isCameraAwayFromVehicle(cameraPosition)),
         )
     }
 
     private fun changeZoom(targetZoom: Float) {
         val map = googleMap ?: return
-        val wasTracking = cameraState.isFollowingMyLocation
         val current = map.cameraPosition
 
         val target = CameraPosition.Builder()
@@ -249,8 +201,56 @@ internal class MapCameraState internal constructor() {
 
         animateCameraTo(
             target = target,
-            onFinished = { if (wasTracking) followMyLocation() },
+            onFinished = { cameraState = cameraState.copy(isFollowingMyLocation = false) },
         )
+    }
+
+    private fun moveCameraToVehicleLocation(vehicleLocationState: VehicleLocationState) {
+        val map = googleMap ?: return
+        val current = map.cameraPosition
+        val target = CameraPosition.Builder()
+            .target(
+                LatLng(
+                    vehicleLocationState.location.latitude,
+                    vehicleLocationState.location.longitude,
+                ),
+            )
+            .zoom(cameraState.zoom)
+            .bearing(vehicleBearingDegrees(vehicleLocationState, current))
+            .tilt(vehicleTiltDegrees())
+            .build()
+
+        isMovingCameraToVehicleLocation = true
+        try {
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(target))
+        } finally {
+            isMovingCameraToVehicleLocation = false
+        }
+    }
+
+    private fun isCameraAwayFromVehicle(cameraPosition: CameraPosition): Boolean {
+        val vehicleLocationState = lastVehicleLocationState ?: return false
+        val isLatitudeAway = abs(
+            cameraPosition.target.latitude - vehicleLocationState.location.latitude,
+        ) > VEHICLE_CAMERA_CENTER_TOLERANCE_DEGREES
+        val isLongitudeAway = abs(
+            cameraPosition.target.longitude - vehicleLocationState.location.longitude,
+        ) > VEHICLE_CAMERA_CENTER_TOLERANCE_DEGREES
+
+        return isLatitudeAway || isLongitudeAway
+    }
+
+    private fun vehicleBearingDegrees(
+        vehicleLocationState: VehicleLocationState,
+        current: CameraPosition,
+    ): Float = when (cameraState.perspective) {
+        GoogleMap.CameraPerspective.TOP_DOWN_NORTH_UP -> 0f
+        else -> vehicleLocationState.bearingDegrees ?: current.bearing
+    }
+
+    private fun vehicleTiltDegrees(): Float = when (cameraState.perspective) {
+        GoogleMap.CameraPerspective.TILTED -> VEHICLE_TILTED_CAMERA_DEGREES
+        else -> 0f
     }
 
     /**
@@ -456,6 +456,8 @@ internal class MapCameraState internal constructor() {
         private const val MAX_FLY_TO_DURATION_MS = 3000L
 
         private const val DEFAULT_DENSITY = 1f
+        private const val VEHICLE_TILTED_CAMERA_DEGREES = 45f
+        private const val VEHICLE_CAMERA_CENTER_TOLERANCE_DEGREES = 0.00002
     }
 }
 

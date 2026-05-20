@@ -13,12 +13,14 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiState
+import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 
 @Composable
 internal fun MapCameraEffect(
     uiState: MapUiState,
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
+    vehicleLocationState: VehicleLocationState?,
     cameraState: MapCameraState,
 ) {
     val density = LocalDensity.current
@@ -53,10 +55,16 @@ internal fun MapCameraEffect(
         routeOverviewPoints?.let { cameraState.showRouteOverview(it) }
     }
 
+    LaunchedEffect(vehicleLocationState) {
+        if (screenState is MapScreenState.Browsing || screenState is MapScreenState.Navigating) {
+            cameraState.updateVehicleLocation(vehicleLocationState)
+        }
+    }
+
     LaunchedEffect(screenState) {
         when (screenState) {
             is MapScreenState.Browsing -> {
-                cameraState.followMyLocation()
+                cameraState.followVehicleLocation(vehicleLocationState)
             }
 
             is MapScreenState.PlaceDetails -> {
@@ -90,7 +98,7 @@ internal fun MapCameraEffect(
                 // ルートが揃ったタイミングで下の LaunchedEffect がカメラをフィットさせる
             }
             is MapScreenState.Navigating -> {
-                // TODO
+                cameraState.followVehicleLocation(vehicleLocationState)
             }
             is MapScreenState.Arrived -> {
                 // TODO

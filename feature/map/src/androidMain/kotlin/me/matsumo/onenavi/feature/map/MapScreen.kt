@@ -54,6 +54,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
     val hasScreenStateStack by viewModel.hasScreenStateStack.collectAsStateWithLifecycle()
     val routePreviewState by viewModel.newRoutePreviewState.collectAsStateWithLifecycle()
     val guidanceState by viewModel.newGuidanceState.collectAsStateWithLifecycle()
+    val vehicleLocationState by viewModel.vehicleLocationState.collectAsStateWithLifecycle()
 
     val navigationBarHeightDp = WindowInsets.navigationBars
         .asPaddingValues()
@@ -107,6 +108,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
             uiState = uiState,
             screenState = screenState,
             routePreviewState = routePreviewState,
+            vehicleLocationState = vehicleLocationState,
             cameraState = cameraState,
         )
     }
@@ -163,6 +165,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                         screenState = screenState,
                         routePreviewState = routePreviewState,
                         guidanceState = guidanceState,
+                        vehicleLocationState = vehicleLocationState,
                         googleMap = it,
                         topAppBarHeightPx = uiState.topAppBarHeight,
                         bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
@@ -185,6 +188,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                         .padding(bottom = controlsBottomPadding)
                         .fillMaxSize(),
                     cameraState = cameraState,
+                    vehicleLocationState = vehicleLocationState,
                 )
             }
         }
@@ -212,7 +216,7 @@ private fun MapScreenContent(
         is MapScreenState.Browsing,
         is MapScreenState.PlaceDetails,
         is MapScreenState.SearchResultsList,
-            -> {
+        -> {
             MapBrowsingContent(
                 modifier = modifier,
                 cameraState = cameraState,
