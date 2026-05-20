@@ -11,6 +11,7 @@ import androidx.compose.runtime.Immutable
  * @param speedMps 速度。取得できない場合は null
  * @param accuracyMeters 水平精度
  * @param timestampMillis 位置情報の計測時刻
+ * @param elapsedRealtimeNanos 位置情報の monotonic clock 時刻。取得できない場合は null
  */
 @Immutable
 data class UserLocation(
@@ -20,4 +21,5 @@ data class UserLocation(
     val speedMps: Float?,
     val accuracyMeters: Float,
     val timestampMillis: Long,
+    val elapsedRealtimeNanos: Long?,
 )

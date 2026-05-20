@@ -135,6 +135,12 @@ private fun RoadSnappedLocationProvider.locationUpdates(): Flow<VehicleLocationS
     awaitClose { removeLocationListener(listener) }
 }.buffer(Channel.CONFLATED)
 
+/**
+ * SDK location extras から自車位置の取得元を判定する。
+ *
+ * @param defaultRoadSnapped extras が無い場合に road-snapped とみなすか
+ * @return 地図表示に使う自車位置 source
+ */
 private fun Location.vehicleLocationSource(defaultRoadSnapped: Boolean): VehicleLocationSource {
     val extras = extras
     val isRoadSnapped = if (extras?.containsKey(isRoadSnappedKey) == true) {
@@ -150,8 +156,15 @@ private fun Location.vehicleLocationSource(defaultRoadSnapped: Boolean): Vehicle
     }
 }
 
+/** SDK location extras から road-snapped 判定を読む key。 */
 private val isRoadSnappedKey = RoadSnappedLocationProvider.LocationListener.IS_ROAD_SNAPPED_KEY
 
+/**
+ * Android location を地図表示用の自車位置 state に変換する。
+ *
+ * @param source location の取得元
+ * @return 緯度経度が有効な場合の自車位置 state。無効な場合は null
+ */
 private fun Location.toVehicleLocationState(source: VehicleLocationSource): VehicleLocationState? {
     if (!latitude.isFinite() || !longitude.isFinite()) return null
 
@@ -165,10 +178,19 @@ private fun Location.toVehicleLocationState(source: VehicleLocationSource): Vehi
         timestampMillis = time
             .takeIf { timestampMillis -> timestampMillis > 0L }
             ?: System.currentTimeMillis(),
+        elapsedRealtimeNanos = elapsedRealtimeNanos
+            .takeIf { elapsedRealtimeNanos -> elapsedRealtimeNanos > 0L },
+        speedMps = speed.takeIf { hasSpeed() },
+        routeProgressMeters = null,
         source = source,
     )
 }
 
+/**
+ * raw GPS の [UserLocation] を地図表示用の自車位置 state に変換する。
+ *
+ * @return raw GPS 由来の自車位置 state
+ */
 private fun UserLocation.toVehicleLocationState(): VehicleLocationState = VehicleLocationState(
     location = RoutePoint(
         latitude = latitude,
@@ -177,5 +199,8 @@ private fun UserLocation.toVehicleLocationState(): VehicleLocationState = Vehicl
     bearingDegrees = bearingDegrees,
     accuracyMeters = accuracyMeters,
     timestampMillis = timestampMillis,
+    elapsedRealtimeNanos = elapsedRealtimeNanos,
+    speedMps = speedMps,
+    routeProgressMeters = null,
     source = VehicleLocationSource.RAW_GPS,
 )

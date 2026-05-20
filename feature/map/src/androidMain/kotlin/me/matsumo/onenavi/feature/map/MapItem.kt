@@ -56,7 +56,10 @@ internal fun MapItem(
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { size ->
-                    cameraState.updateViewportWidth(size.width)
+                    cameraState.updateViewportSize(
+                        widthPx = size.width,
+                        heightPx = size.height,
+                    )
                 },
             factory = {
                 mapView.apply {

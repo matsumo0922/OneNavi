@@ -171,6 +171,8 @@ private fun Location.toUserLocation(): UserLocation? {
         timestampMillis = time
             .takeIf { timestampMillis -> timestampMillis > 0L }
             ?: System.currentTimeMillis(),
+        elapsedRealtimeNanos = elapsedRealtimeNanos
+            .takeIf { elapsedRealtimeNanos -> elapsedRealtimeNanos > 0L },
     )
 }
 

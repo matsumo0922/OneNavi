@@ -12,11 +12,26 @@ import me.matsumo.onenavi.feature.map.components.MapMarker
 import me.matsumo.onenavi.feature.map.components.MapNumberedMarker
 import me.matsumo.onenavi.feature.map.components.MapPolyline
 import me.matsumo.onenavi.feature.map.components.MapPolylineStyle
-import me.matsumo.onenavi.feature.map.components.MapVehiclePuck
+import me.matsumo.onenavi.feature.map.components.MapVehiclePoseEffect
 import me.matsumo.onenavi.feature.map.components.callout.MapRoutePreviewCallOutMarkerEffect
+import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 
+/**
+ * GoogleMap 上に画面状態に応じた overlay を描画する。
+ *
+ * @param screenState 現在の地図画面状態
+ * @param routePreviewState Preview 期のルート候補状態
+ * @param guidanceState Guidance 期の案内状態
+ * @param vehicleLocationState 最新の自車位置
+ * @param googleMap overlay 描画先の GoogleMap
+ * @param cameraState 自車 pose を追従カメラへ反映する state holder
+ * @param topAppBarHeightPx ルート選択 callout が避ける上部バー高さ
+ * @param bottomSheetPeekHeight ルート選択 callout が避ける bottom sheet 高さ
+ * @param onRouteSelected ルート候補が選択された時の callback
+ * @param modifier callout overlay 用 modifier
+ */
 @Composable
 internal fun MapEffect(
     screenState: MapScreenState,
@@ -24,6 +39,7 @@ internal fun MapEffect(
     guidanceState: GuidanceState,
     vehicleLocationState: VehicleLocationState?,
     googleMap: GoogleMap,
+    cameraState: MapCameraState,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
     onRouteSelected: (Int) -> Unit,
@@ -67,14 +83,27 @@ internal fun MapEffect(
     }
 
     if (vehicleLocationState != null) {
-        MapVehiclePuck(
+        val routeGeometry = (guidanceState as? GuidanceState.Guiding)
+            ?.route
+            ?.geometry
+            ?: persistentListOf()
+
+        MapVehiclePoseEffect(
             googleMap = googleMap,
+            cameraState = cameraState,
             vehicleLocationState = vehicleLocationState,
+            routeGeometry = routeGeometry,
             zIndex = VEHICLE_PUCK_Z_INDEX,
         )
     }
 }
 
+/**
+ * 地点詳細画面の marker を描画する。
+ *
+ * @param screenState 地点詳細画面 state
+ * @param googleMap marker 描画先の GoogleMap
+ */
 @Composable
 private fun PlaceDetailsEffect(
     screenState: MapScreenState.PlaceDetails,
@@ -88,6 +117,12 @@ private fun PlaceDetailsEffect(
     )
 }
 
+/**
+ * 検索結果一覧の numbered marker を描画する。
+ *
+ * @param screenState 検索結果一覧画面 state
+ * @param googleMap marker 描画先の GoogleMap
+ */
 @Composable
 private fun SearchResultsListEffect(
     screenState: MapScreenState.SearchResultsList,
@@ -105,6 +140,17 @@ private fun SearchResultsListEffect(
     }
 }
 
+/**
+ * ルート Preview 画面の waypoint marker、route polyline、callout を描画する。
+ *
+ * @param screenState ルート Preview 画面 state
+ * @param routePreviewState Preview 期のルート候補状態
+ * @param googleMap overlay 描画先の GoogleMap
+ * @param topAppBarHeightPx callout が避ける上部バー高さ
+ * @param bottomSheetPeekHeight callout が避ける bottom sheet 高さ
+ * @param onRouteSelected ルート候補が選択された時の callback
+ * @param modifier callout overlay 用 modifier
+ */
 @Composable
 private fun RoutePreviewEffect(
     screenState: MapScreenState.RoutePreview,
@@ -143,6 +189,12 @@ private fun RoutePreviewEffect(
     )
 }
 
+/**
+ * Navigation 画面の route polyline を描画する。
+ *
+ * @param guidanceState Guidance 期の案内状態
+ * @param googleMap polyline 描画先の GoogleMap
+ */
 @Composable
 private fun NavigationEffect(
     guidanceState: GuidanceState,
@@ -157,6 +209,13 @@ private fun NavigationEffect(
     )
 }
 
+/**
+ * route geometry を road class / congestion ごとに塗り分けて描画する。
+ *
+ * @param googleMap polyline 描画先の GoogleMap
+ * @param route 描画対象 route
+ * @param isSelected 選択中 route として描画するか
+ */
 @Composable
 private fun RoutePolylineEffect(
     googleMap: GoogleMap,
@@ -172,5 +231,8 @@ private fun RoutePolylineEffect(
     )
 }
 
+/** 検索結果 marker の zIndex 起点。 */
 private const val SEARCH_RESULT_MARKER_Z_INDEX = 11_000f
+
+/** 自車 marker の zIndex。 */
 private const val VEHICLE_PUCK_Z_INDEX = 12_000f

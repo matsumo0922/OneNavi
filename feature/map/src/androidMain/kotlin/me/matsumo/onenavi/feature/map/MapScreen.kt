@@ -167,6 +167,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                         guidanceState = guidanceState,
                         vehicleLocationState = vehicleLocationState,
                         googleMap = it,
+                        cameraState = cameraState,
                         topAppBarHeightPx = uiState.topAppBarHeight,
                         bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
                         onRouteSelected = { index ->

@@ -151,11 +151,19 @@ class MapViewModel(
     }
 }
 
+/**
+ * Guidance 進捗を地図表示用の自車位置 tick に変換する。
+ *
+ * @return route-snapped の自車位置 state
+ */
 private fun GuidanceProgress.toVehicleLocationState(): VehicleLocationState = VehicleLocationState(
     location = snappedLocation,
     bearingDegrees = bearingDegrees,
     accuracyMeters = null,
-    timestampMillis = System.currentTimeMillis(),
+    timestampMillis = locationTimestampMillis,
+    elapsedRealtimeNanos = locationElapsedRealtimeNanos,
+    speedMps = vehicleSpeedMps,
+    routeProgressMeters = currentCumulativeMeters,
     source = VehicleLocationSource.ROUTE_SNAPPED,
 )
 

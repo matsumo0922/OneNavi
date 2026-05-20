@@ -368,8 +368,12 @@ class ExtNavGuidanceTracker {
             durationRemainingSeconds = durationRemainingSeconds,
             etaEpochMillis = location.timestampMillis + durationRemainingSeconds.toLong() * MILLIS_PER_SECOND,
             traveledMeters = projection.currentCumulativeMeters.roundToInt(),
+            currentCumulativeMeters = projection.currentCumulativeMeters,
             snappedLocation = projection.snappedLocation,
             bearingDegrees = location.bearingDegrees ?: projection.segmentBearingDegrees,
+            locationTimestampMillis = location.timestampMillis,
+            locationElapsedRealtimeNanos = location.elapsedRealtimeNanos,
+            vehicleSpeedMps = location.speedMps,
             nextManeuver = nextGuidancePointIndex?.let { guidancePointIndex ->
                 buildManeuverInfo(
                     attached = attached,

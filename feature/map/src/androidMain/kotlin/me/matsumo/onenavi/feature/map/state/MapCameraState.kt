@@ -28,11 +28,21 @@ import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ZOOM
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.MAX_FLY_TO_DURATION_MS
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.MIN_FLY_TO_DURATION_MS
 import kotlin.math.abs
+import kotlin.math.asin
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
+/**
+ * GoogleMap 用のカメラ状態 holder を Compose 上で保持する。
+ *
+ * @return remember 済みの [MapCameraState]
+ */
 @Composable
 internal fun rememberMapCameraState(): MapCameraState {
     val density = LocalDensity.current.density
@@ -45,29 +55,40 @@ internal fun rememberMapCameraState(): MapCameraState {
     return state
 }
 
+/**
+ * GoogleMap のカメラ操作と UI 表示用カメラ状態を仲介する state holder。
+ */
 @Stable
 internal class MapCameraState internal constructor() {
 
     private var googleMap: GoogleMap? = null
     private var cameraAnimator: ValueAnimator? = null
     private var mapViewWidthPx: Int = 0
+    private var mapViewHeightPx: Int = 0
     private var density: Float = DEFAULT_DENSITY
-    private var lastVehicleLocationState: VehicleLocationState? = null
-    private var isMovingCameraToVehicleLocation: Boolean = false
-    private var isAnimatingCameraToVehicleLocation: Boolean = false
+    private var lastVehiclePose: VehiclePose? = null
+    private var isUserGestureInProgress: Boolean = false
+    private var wasFollowingBeforeUserGesture: Boolean = false
+    private var userGestureStartCameraPosition: CameraPosition? = null
 
     var cameraState by mutableStateOf(HomeMapCameraState())
         private set
 
+    /**
+     * 操作対象の GoogleMap を接続し、カメラ移動 listener を登録する。
+     *
+     * @param googleMap 接続する GoogleMap
+     */
     fun attachMap(googleMap: GoogleMap) {
         this.googleMap = googleMap
 
         googleMap.setOnCameraMoveStartedListener { reason ->
             val isGesture = reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE
             if (isGesture) {
-                isAnimatingCameraToVehicleLocation = false
                 cameraAnimator?.cancel()
-                cameraState = cameraState.copy(isFollowingMyLocation = false)
+                isUserGestureInProgress = true
+                wasFollowingBeforeUserGesture = cameraState.isFollowingMyLocation
+                userGestureStartCameraPosition = googleMap.cameraPosition
             }
         }
         googleMap.setOnCameraMoveListener {
@@ -75,12 +96,19 @@ internal class MapCameraState internal constructor() {
         }
         googleMap.setOnCameraIdleListener {
             updateCameraPosition(googleMap.cameraPosition)
+            finishUserGestureIfNeeded(googleMap.cameraPosition)
         }
     }
 
-    /** 地図ビューの実ピクセル幅を記録する。fly-to のビューポート幅算出に使う。 */
-    fun updateViewportWidth(widthPx: Int) {
+    /**
+     * 地図ビューの実ピクセルサイズを記録する。
+     *
+     * @param widthPx 地図ビューの幅（px）
+     * @param heightPx 地図ビューの高さ（px）
+     */
+    fun updateViewportSize(widthPx: Int, heightPx: Int) {
         mapViewWidthPx = widthPx
+        mapViewHeightPx = heightPx
     }
 
     /** 画面密度を記録する。GoogleMap の zoom は dp 基準なので fly-to で px → dp 換算に使う。 */
@@ -88,42 +116,90 @@ internal class MapCameraState internal constructor() {
         this.density = density
     }
 
+    /**
+     * GoogleMap の描画 padding を更新する。
+     *
+     * @param top 上端 padding（px）
+     * @param bottom 下端 padding（px）
+     * @param start 左端 padding（px）
+     * @param end 右端 padding（px）
+     */
     fun updatePadding(top: Int, bottom: Int, start: Int, end: Int) {
         googleMap?.setPadding(start, top, end, bottom)
     }
 
+    /**
+     * 自車位置の追従を開始する。
+     *
+     * @param vehicleLocationState 追従開始時に寄せる自車位置。未取得の場合は次の pose 更新を待つ
+     */
     fun followVehicleLocation(vehicleLocationState: VehicleLocationState?) {
         cameraAnimator?.cancel()
         cameraState = cameraState.copy(isFollowingMyLocation = true)
-        updateVehicleLocation(vehicleLocationState)
-    }
-
-    fun updateVehicleLocation(vehicleLocationState: VehicleLocationState?) {
-        if (vehicleLocationState == null) return
-
-        lastVehicleLocationState = vehicleLocationState
-        cameraState = cameraState.copy(
-            myLocationLatitude = vehicleLocationState.location.latitude,
-            myLocationLongitude = vehicleLocationState.location.longitude,
-        )
-
-        if (cameraState.isFollowingMyLocation) {
-            flyCameraToVehicleLocation(vehicleLocationState)
+        if (vehicleLocationState != null) {
+            flyCameraToVehiclePose(vehicleLocationState.toVehiclePose())
         }
     }
 
+    /**
+     * 自車位置 tick からカメラ状態の自車座標だけを更新する。
+     *
+     * @param vehicleLocationState 最新の自車位置。null の場合は何もしない
+     */
+    fun updateVehicleLocation(vehicleLocationState: VehicleLocationState?) {
+        vehicleLocationState?.let { state -> updateVehiclePose(state.toVehiclePose()) }
+    }
+
+    /**
+     * 画面表示用 pose を反映する。
+     *
+     * 追従中で明示的なカメラアニメーションが走っていない場合は、同じ pose へカメラ中心も追従させる。
+     *
+     * @param vehiclePose frame 時点の自車 pose
+     */
+    fun updateVehiclePose(vehiclePose: VehiclePose) {
+        lastVehiclePose = vehiclePose
+        cameraState = cameraState.copy(
+            myLocationLatitude = vehiclePose.location.latitude,
+            myLocationLongitude = vehiclePose.location.longitude,
+        )
+
+        if (cameraState.isFollowingMyLocation && cameraAnimator == null && !isUserGestureInProgress) {
+            val current = googleMap?.cameraPosition ?: return
+            moveVehicleCamera(vehicleCameraPosition(vehiclePose = vehiclePose, current = current))
+        }
+    }
+
+    /**
+     * カメラ perspective を切り替える。
+     *
+     * @param perspective [GoogleMap.CameraPerspective] の値
+     */
     fun setPerspective(perspective: Int) {
         cameraState = cameraState.copy(perspective = perspective)
     }
 
+    /**
+     * カメラを 1 段階拡大する。
+     */
     fun zoomIn() {
         changeZoom((cameraState.zoom + 1f).coerceIn(MIN_ZOOM, MAX_ZOOM))
     }
 
+    /**
+     * カメラを 1 段階縮小する。
+     */
     fun zoomOut() {
         changeZoom((cameraState.zoom - 1f).coerceIn(MIN_ZOOM, MAX_ZOOM))
     }
 
+    /**
+     * 指定位置へカメラを移動する。
+     *
+     * @param latitude 移動先緯度
+     * @param longitude 移動先経度
+     * @param zoom 移動後ズーム値
+     */
     fun moveTo(latitude: Double, longitude: Double, zoom: Float = cameraState.zoom) {
         flyCameraTo(
             target = CameraPosition.Builder()
@@ -179,24 +255,35 @@ internal class MapCameraState internal constructor() {
         }
     }
 
+    /**
+     * GoogleMap から通知された現在カメラ位置を UI state に反映する。
+     *
+     * @param cameraPosition GoogleMap の現在カメラ位置
+     */
     private fun updateCameraPosition(cameraPosition: CameraPosition) {
         cameraState = cameraState.copy(
             latitude = cameraPosition.target.latitude,
             longitude = cameraPosition.target.longitude,
             bearing = cameraPosition.bearing.toDouble(),
             zoom = cameraPosition.zoom,
-            isFollowingMyLocation = cameraState.isFollowingMyLocation &&
-                (
-                    isAnimatingCameraToVehicleLocation ||
-                        isMovingCameraToVehicleLocation ||
-                        !isCameraAwayFromVehicle(cameraPosition)
-                    ),
+            isFollowingMyLocation = cameraState.isFollowingMyLocation,
         )
     }
 
+    /**
+     * 現在の中心を保ったまま指定ズームへ移動する。
+     *
+     * @param targetZoom 移動先ズーム値
+     */
     private fun changeZoom(targetZoom: Float) {
         val map = googleMap ?: return
         val current = map.cameraPosition
+        val followPose = lastVehiclePose.takeIf { cameraState.isFollowingMyLocation }
+
+        if (followPose != null) {
+            animateFollowZoomTo(targetZoom = targetZoom)
+            return
+        }
 
         val target = CameraPosition.Builder()
             .target(current.target)
@@ -207,68 +294,309 @@ internal class MapCameraState internal constructor() {
 
         animateCameraTo(
             target = target,
-            onFinished = { cameraState = cameraState.copy(isFollowingMyLocation = false) },
         )
     }
 
-    private fun flyCameraToVehicleLocation(vehicleLocationState: VehicleLocationState) {
-        val current = googleMap?.cameraPosition ?: return
-        val target = CameraPosition.Builder()
-            .target(
-                LatLng(
-                    vehicleLocationState.location.latitude,
-                    vehicleLocationState.location.longitude,
-                ),
-            )
-            .zoom(cameraState.zoom)
-            .bearing(vehicleBearingDegrees(vehicleLocationState, current))
-            .tilt(vehicleTiltDegrees())
-            .build()
-
-        flyCameraTo(
-            target = target,
-            durationMs = VEHICLE_CAMERA_ANIMATION_DURATION_MS,
-            keepFollowingMyLocation = true,
-            moveCamera = { _, cameraPosition -> moveVehicleCamera(cameraPosition) },
-            onStarted = { isAnimatingCameraToVehicleLocation = true },
-            onFinished = { isAnimatingCameraToVehicleLocation = false },
-        )
-    }
-
-    private fun moveVehicleCamera(cameraPosition: CameraPosition) {
+    /**
+     * follow 中の zoom button 操作を、自車追従 target を更新しながらアニメーションする。
+     *
+     * zoom 中も [lastVehiclePose] を毎 frame 読み直すことで、終了時に現在地へ瞬間移動しないようにする。
+     *
+     * @param targetZoom 移動先 zoom 値
+     */
+    private fun animateFollowZoomTo(targetZoom: Float) {
         val map = googleMap ?: return
-        isMovingCameraToVehicleLocation = true
-        try {
-            map.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
-        } finally {
-            isMovingCameraToVehicleLocation = false
+        val start = map.cameraPosition
+        val totalDurationMs = cameraZoomDurationMs(zoomDelta = abs(targetZoom - start.zoom))
+        val easing = DecelerateInterpolator(CAMERA_DECELERATE_FACTOR)
+
+        clearUserGesture()
+        cameraState = cameraState.copy(isFollowingMyLocation = true)
+        cameraAnimator?.cancel()
+
+        cameraAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = totalDurationMs
+            interpolator = LinearInterpolator()
+
+            addUpdateListener { anim ->
+                val fraction = easing.getInterpolation(anim.animatedValue as Float)
+                val zoom = lerp(start.zoom, targetZoom, fraction)
+                val current = map.cameraPosition
+                val vehiclePose = lastVehiclePose
+
+                val cameraPosition = if (vehiclePose == null) {
+                    CameraPosition.Builder()
+                        .target(current.target)
+                        .zoom(zoom)
+                        .bearing(current.bearing)
+                        .tilt(current.tilt)
+                        .build()
+                } else {
+                    vehicleCameraPosition(
+                        vehiclePose = vehiclePose,
+                        current = current,
+                        zoom = zoom,
+                    )
+                }
+
+                moveVehicleCamera(cameraPosition)
+            }
+            doOnEnd {
+                if (cameraAnimator == this) {
+                    cameraAnimator = null
+                }
+                cameraState = cameraState.copy(isFollowingMyLocation = true)
+            }
+            start()
         }
     }
 
-    private fun isCameraAwayFromVehicle(cameraPosition: CameraPosition): Boolean {
-        val vehicleLocationState = lastVehicleLocationState ?: return false
-        val isLatitudeAway = abs(
-            cameraPosition.target.latitude - vehicleLocationState.location.latitude,
-        ) > VEHICLE_CAMERA_CENTER_TOLERANCE_DEGREES
-        val isLongitudeAway = abs(
-            cameraPosition.target.longitude - vehicleLocationState.location.longitude,
-        ) > VEHICLE_CAMERA_CENTER_TOLERANCE_DEGREES
+    /**
+     * user gesture 終了時に自車追従を維持するか判定する。
+     *
+     * zoom gesture は指の位置を中心に zoom されるため追従を解除する。pan gesture は
+     * map target が自車追従 target から離れた場合だけ追従を解除する。
+     *
+     * @param cameraPosition gesture 終了時点の camera position
+     */
+    private fun finishUserGestureIfNeeded(cameraPosition: CameraPosition) {
+        if (!isUserGestureInProgress) return
 
-        return isLatitudeAway || isLongitudeAway
+        val hasZoomChanged = userGestureStartCameraPosition
+            ?.let { start -> start.zoom != cameraPosition.zoom }
+            ?: false
+        val shouldKeepFollowing = wasFollowingBeforeUserGesture &&
+            !hasZoomChanged &&
+            !isCameraTargetAwayFromVehicle(cameraPosition)
+
+        cameraState = cameraState.copy(isFollowingMyLocation = shouldKeepFollowing)
+        clearUserGesture()
     }
 
+    /**
+     * user gesture の一時状態を破棄する。
+     */
+    private fun clearUserGesture() {
+        isUserGestureInProgress = false
+        wasFollowingBeforeUserGesture = false
+        userGestureStartCameraPosition = null
+    }
+
+    /**
+     * 追従開始時の自車位置へ既存の fly-to 経路で寄せる。
+     *
+     * @param vehiclePose 寄せ先の自車 pose
+     */
+    private fun flyCameraToVehiclePose(vehiclePose: VehiclePose) {
+        val current = googleMap?.cameraPosition ?: return
+
+        flyCameraTo(
+            target = vehicleCameraPosition(vehiclePose = vehiclePose, current = current),
+            keepFollowingMyLocation = true,
+            moveCamera = { _, cameraPosition -> moveVehicleCamera(cameraPosition) },
+        )
+    }
+
+    /**
+     * 自車追従用のカメラ位置を作る。
+     *
+     * @param vehiclePose frame 時点の自車 pose
+     * @param current 現在のカメラ位置
+     * @param zoom 設定する zoom 値
+     * @return perspective と現在ズームを反映したカメラ位置
+     */
+    private fun vehicleCameraPosition(
+        vehiclePose: VehiclePose,
+        current: CameraPosition,
+        zoom: Float = cameraState.zoom,
+    ): CameraPosition = CameraPosition.Builder()
+        .target(vehicleCameraTarget(vehiclePose = vehiclePose, zoom = zoom))
+        .zoom(zoom)
+        .bearing(vehicleBearingDegrees(vehiclePose, current))
+        .tilt(vehicleTiltDegrees())
+        .build()
+
+    /**
+     * 自車が画面手前側に表示されるよう、3D 追従時は進行方向の少し先を camera target にする。
+     *
+     * @param vehiclePose frame 時点の自車 pose
+     * @param zoom camera target 算出に使う zoom 値
+     * @return GoogleMap に渡す camera target
+     */
+    private fun vehicleCameraTarget(vehiclePose: VehiclePose, zoom: Float = cameraState.zoom): LatLng {
+        val bearingDegrees = vehiclePose.bearingDegrees
+        if (cameraState.perspective != GoogleMap.CameraPerspective.TILTED || bearingDegrees == null) {
+            return LatLng(
+                vehiclePose.location.latitude,
+                vehiclePose.location.longitude,
+            )
+        }
+
+        val viewportHeightDp = mapViewHeightPx.toDouble() / density
+        if (viewportHeightDp <= 0.0) {
+            return LatLng(
+                vehiclePose.location.latitude,
+                vehiclePose.location.longitude,
+            )
+        }
+
+        val forwardMeters = viewportHeightDp *
+            (VEHICLE_SCREEN_ANCHOR_Y_FRACTION - SCREEN_CENTER_Y_FRACTION) *
+            metersPerDp(latitude = vehiclePose.location.latitude, zoom = zoom)
+
+        return destinationPoint(
+            origin = vehiclePose.location,
+            bearingDegrees = bearingDegrees,
+            distanceMeters = forwardMeters,
+        )
+    }
+
+    /**
+     * 自車追従用のカメラ移動を即時反映する。
+     *
+     * @param cameraPosition 次に表示するカメラ位置
+     */
+    private fun moveVehicleCamera(cameraPosition: CameraPosition) {
+        val map = googleMap ?: return
+        map.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
+    }
+
+    /**
+     * camera target が自車追従時の target から離れているかを返す。
+     *
+     * @param cameraPosition 判定対象の camera position
+     * @return 追従解除相当まで離れている場合 true
+     */
+    private fun isCameraTargetAwayFromVehicle(cameraPosition: CameraPosition): Boolean {
+        val vehiclePose = lastVehiclePose ?: return false
+        val expectedTarget = vehicleCameraTarget(vehiclePose)
+        val distanceMeters = haversineMeters(
+            from = expectedTarget,
+            to = cameraPosition.target,
+        )
+        val toleranceMeters = followGestureTargetToleranceMeters(
+            latitude = expectedTarget.latitude,
+            zoom = cameraPosition.zoom,
+        )
+
+        return toleranceMeters > 0.0 && distanceMeters > toleranceMeters
+    }
+
+    /**
+     * 現在の perspective に応じた自車追従カメラの bearing を返す。
+     *
+     * @param vehiclePose frame 時点の自車 pose
+     * @param current 現在のカメラ位置
+     * @return 次に設定する camera bearing
+     */
     private fun vehicleBearingDegrees(
-        vehicleLocationState: VehicleLocationState,
+        vehiclePose: VehiclePose,
         current: CameraPosition,
     ): Float = when (cameraState.perspective) {
         GoogleMap.CameraPerspective.TOP_DOWN_NORTH_UP -> 0f
-        else -> vehicleLocationState.bearingDegrees ?: current.bearing
+        else -> vehiclePose.bearingDegrees ?: current.bearing
     }
 
+    /**
+     * 現在の perspective に応じた自車追従カメラの tilt を返す。
+     *
+     * @return 次に設定する camera tilt
+     */
     private fun vehicleTiltDegrees(): Float = when (cameraState.perspective) {
         GoogleMap.CameraPerspective.TILTED -> VEHICLE_TILTED_CAMERA_DEGREES
         else -> 0f
     }
+
+    /**
+     * 指定 latitude / zoom での 1dp あたり地上距離を返す。
+     *
+     * @param latitude 緯度
+     * @param zoom GoogleMap の zoom
+     * @return 1dp が表す地上距離（m）
+     */
+    private fun metersPerDp(latitude: Double, zoom: Float): Double {
+        val latitudeRadians = Math.toRadians(latitude)
+        return cos(latitudeRadians) *
+            EARTH_CIRCUMFERENCE_METERS /
+            (WORLD_TILE_SIZE_DP * 2.0.pow(zoom.toDouble()))
+    }
+
+    /**
+     * follow 中 gesture 後に追従維持を許容する camera target の距離閾値を返す。
+     *
+     * @param latitude 判定地点の緯度
+     * @param zoom GoogleMap の zoom
+     * @return viewport 高さに比例した距離閾値（m）
+     */
+    private fun followGestureTargetToleranceMeters(latitude: Double, zoom: Float): Double {
+        val viewportHeightDp = mapViewHeightPx.toDouble() / density
+        if (viewportHeightDp <= 0.0) return 0.0
+
+        return viewportHeightDp *
+            FOLLOW_GESTURE_TARGET_TOLERANCE_FRACTION *
+            metersPerDp(latitude = latitude, zoom = zoom)
+    }
+
+    /**
+     * 2 点間の球面距離を Haversine で計算する。
+     *
+     * @param from 始点
+     * @param to 終点
+     * @return 2 点間距離（m）
+     */
+    private fun haversineMeters(from: LatLng, to: LatLng): Double {
+        val fromLatitude = Math.toRadians(from.latitude)
+        val toLatitude = Math.toRadians(to.latitude)
+        val latitudeDelta = Math.toRadians(to.latitude - from.latitude)
+        val longitudeDelta = Math.toRadians(to.longitude - from.longitude)
+        val haversine = sin(latitudeDelta / 2).let { value -> value * value } +
+            cos(fromLatitude) * cos(toLatitude) *
+            sin(longitudeDelta / 2).let { value -> value * value }
+
+        return EARTH_RADIUS_METERS * 2.0 * atan2(sqrt(haversine), sqrt(1.0 - haversine))
+    }
+
+    /**
+     * 始点から指定距離だけ指定方位へ進んだ地点を返す。
+     *
+     * @param origin 始点
+     * @param bearingDegrees 北を 0 度とする時計回り方位
+     * @param distanceMeters 移動距離（m）
+     * @return 移動後の緯度経度
+     */
+    private fun destinationPoint(
+        origin: RoutePoint,
+        bearingDegrees: Float,
+        distanceMeters: Double,
+    ): LatLng {
+        val angularDistance = distanceMeters / EARTH_RADIUS_METERS
+        val bearingRadians = Math.toRadians(bearingDegrees.toDouble())
+        val originLatitude = Math.toRadians(origin.latitude)
+        val originLongitude = Math.toRadians(origin.longitude)
+        val targetLatitude = asin(
+            sin(originLatitude) * cos(angularDistance) +
+                cos(originLatitude) * sin(angularDistance) * cos(bearingRadians),
+        )
+        val targetLongitude = originLongitude + atan2(
+            sin(bearingRadians) * sin(angularDistance) * cos(originLatitude),
+            cos(angularDistance) - sin(originLatitude) * sin(targetLatitude),
+        )
+
+        return LatLng(
+            Math.toDegrees(targetLatitude),
+            normalizeLongitude(Math.toDegrees(targetLongitude)),
+        )
+    }
+
+    /**
+     * 経度を -180〜180 度へ正規化する。
+     *
+     * @param longitude 正規化前の経度
+     * @return 正規化後の経度
+     */
+    private fun normalizeLongitude(longitude: Double): Double =
+        ((longitude + LONGITUDE_NORMALIZE_OFFSET_DEGREES) % FULL_CIRCLE_DEGREES) -
+            HALF_CIRCLE_DEGREES
 
     /**
      * カメラを [target] へ van Wijk–Nuij "Smooth and efficient zooming and panning" の経路で移動させる。
@@ -368,7 +696,12 @@ internal class MapCameraState internal constructor() {
                         .build(),
                 )
             }
-            doOnEnd { onFinished() }
+            doOnEnd {
+                if (cameraAnimator == this) {
+                    cameraAnimator = null
+                }
+                onFinished()
+            }
             start()
         }
     }
@@ -443,17 +776,56 @@ internal class MapCameraState internal constructor() {
                         .build(),
                 )
             }
-            doOnEnd { onFinished() }
+            doOnEnd {
+                if (cameraAnimator == this) {
+                    cameraAnimator = null
+                }
+                onFinished()
+            }
             start()
         }
     }
 
+    /**
+     * tick 単位の自車位置を表示用 pose に変換する。
+     *
+     * @return tick が持つ位置・向きから作った [VehiclePose]
+     */
+    private fun VehicleLocationState.toVehiclePose(): VehiclePose = VehiclePose(
+        location = location,
+        bearingDegrees = bearingDegrees,
+    )
+
+    /**
+     * 2 つの数値を線形補間する。
+     *
+     * @param from 開始値
+     * @param to 終了値
+     * @param fraction 補間率
+     * @return 補間後の値
+     */
     private fun lerp(from: Double, to: Double, fraction: Float): Double =
         from + (to - from) * fraction
 
+    /**
+     * 2 つの数値を線形補間する。
+     *
+     * @param from 開始値
+     * @param to 終了値
+     * @param fraction 補間率
+     * @return 補間後の値
+     */
     private fun lerp(from: Float, to: Float, fraction: Float): Float =
         from + (to - from) * fraction
 
+    /**
+     * 360 度境界をまたぐ場合も短い回転方向で方位角を補間する。
+     *
+     * @param from 開始角度
+     * @param to 終了角度
+     * @param fraction 補間率
+     * @return 0〜360 度に正規化した補間後角度
+     */
     private fun lerpAngle(from: Float, to: Float, fraction: Float): Float {
         val diff = ((to - from + 540f) % 360f) - 180f
         return (from + diff * fraction + 360f) % 360f
@@ -466,12 +838,25 @@ internal class MapCameraState internal constructor() {
     }
 
     companion object {
+        /** GoogleMap に許容する最小ズーム値。 */
         private const val MIN_ZOOM = 2f
+
+        /** GoogleMap に許容する最大ズーム値。 */
         private const val MAX_ZOOM = 21f
+
+        /** ルート全体表示時に画面端へ確保する既定 padding（px）。 */
         private const val ROUTE_OVERVIEW_PADDING_PX = 64
+
+        /** 通常の pan アニメーション時間（ms）。 */
         private const val CAMERA_PAN_DURATION_MS = 3000L
+
+        /** 最大ズーム差のときに使う zoom アニメーション時間（ms）。 */
         private const val CAMERA_ZOOM_DURATION_MS = 10000L
+
+        /** zoom アニメーション時間を最大にするズーム差。 */
         private const val FULL_ZOOM_DELTA = 10f
+
+        /** camera animation に使う減速補間の強さ。 */
         private const val CAMERA_DECELERATE_FACTOR = 2.5f
 
         /**
@@ -492,10 +877,38 @@ internal class MapCameraState internal constructor() {
         /** fly-to の所要時間の上限（ms）。地球の裏側へ飛ぶときに何秒も待たされないように。 */
         private const val MAX_FLY_TO_DURATION_MS = 3000L
 
+        /** density が未通知の間に使う既定値。 */
         private const val DEFAULT_DENSITY = 1f
+
+        /** 3D 表示時のカメラ tilt。 */
         private const val VEHICLE_TILTED_CAMERA_DEGREES = 45f
-        private const val VEHICLE_CAMERA_CENTER_TOLERANCE_DEGREES = 0.00002
-        private const val VEHICLE_CAMERA_ANIMATION_DURATION_MS = 800L
+
+        /** 画面中心の縦位置を 0〜1 で表した値。 */
+        private const val SCREEN_CENTER_Y_FRACTION = 0.5
+
+        /** 3D 追従時に自車を置きたい画面上の縦位置。 */
+        private const val VEHICLE_SCREEN_ANCHOR_Y_FRACTION = 0.65
+
+        /** follow 中の gesture 後に追従維持を許容する viewport 高さ比。 */
+        private const val FOLLOW_GESTURE_TARGET_TOLERANCE_FRACTION = 0.12
+
+        /** Web Mercator zoom 0 の tile size。 */
+        private const val WORLD_TILE_SIZE_DP = 256.0
+
+        /** 地表距離計算に使う平均地球半径（m）。 */
+        private const val EARTH_RADIUS_METERS = 6_371_008.8
+
+        /** Web Mercator の地表解像度計算に使う地球円周（m）。 */
+        private const val EARTH_CIRCUMFERENCE_METERS = 40_030_228.884
+
+        /** 経度正規化で 0 未満の剰余を避けるための offset。 */
+        private const val LONGITUDE_NORMALIZE_OFFSET_DEGREES = 540.0
+
+        /** 経度正規化に使う半周分の角度。 */
+        private const val HALF_CIRCLE_DEGREES = 180.0
+
+        /** 経度正規化に使う 1 周分の角度。 */
+        private const val FULL_CIRCLE_DEGREES = 360.0
     }
 }
 
@@ -523,6 +936,11 @@ data class HomeMapCameraState(
     val isFollowingMyLocation: Boolean = false,
 )
 
+/** 初期カメラ位置の緯度。 */
 private const val DEFAULT_LATITUDE = 35.681236
+
+/** 初期カメラ位置の経度。 */
 private const val DEFAULT_LONGITUDE = 139.767125
+
+/** 初期カメラズーム。 */
 private const val DEFAULT_CAMERA_ZOOM = 15f

@@ -15,6 +15,15 @@ import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 
+/**
+ * 画面状態の変化を GoogleMap カメラ操作へ変換する。
+ *
+ * @param uiState map screen の UI state
+ * @param screenState 現在の地図画面状態
+ * @param routePreviewState Preview 期のルート候補状態
+ * @param vehicleLocationState 最新の自車位置
+ * @param cameraState カメラ操作を保持する state holder
+ */
 @Composable
 internal fun MapCameraEffect(
     uiState: MapUiState,
@@ -53,12 +62,6 @@ internal fun MapCameraEffect(
     // RoutePreview
     LaunchedEffect(routeOverviewPoints, uiState.topAppBarHeight, uiState.bottomSheetPeekHeight) {
         routeOverviewPoints?.let { cameraState.showRouteOverview(it) }
-    }
-
-    LaunchedEffect(vehicleLocationState) {
-        if (screenState is MapScreenState.Browsing || screenState is MapScreenState.Navigating) {
-            cameraState.updateVehicleLocation(vehicleLocationState)
-        }
     }
 
     LaunchedEffect(screenState) {

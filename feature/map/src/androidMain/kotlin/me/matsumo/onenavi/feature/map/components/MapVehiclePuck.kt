@@ -1,46 +1,60 @@
 package me.matsumo.onenavi.feature.map.components
 
-import android.animation.ValueAnimator
-import android.view.animation.LinearInterpolator
+import android.os.SystemClock
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.core.animation.doOnEnd
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.isActive
+import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.ic_vehicle_puck
 import me.matsumo.onenavi.feature.map.components.callout.rememberMapComposeBitmapDescriptor
+import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
+import me.matsumo.onenavi.feature.map.state.VehiclePose
+import me.matsumo.onenavi.feature.map.state.VehiclePoseEstimator
 import org.jetbrains.compose.resources.painterResource
 
+/**
+ * 自車アイコンと追従カメラを frame ごとの推定 pose で更新する。
+ *
+ * @param googleMap 描画先の GoogleMap
+ * @param cameraState カメラ追従状態
+ * @param vehicleLocationState 最新の自車位置 tick
+ * @param routeGeometry 案内中 route の geometry。案内中以外は空でよい
+ * @param zIndex 自車アイコンの zIndex
+ */
 @Composable
-internal fun MapVehiclePuck(
+internal fun MapVehiclePoseEffect(
     googleMap: GoogleMap,
+    cameraState: MapCameraState,
     vehicleLocationState: VehicleLocationState,
+    routeGeometry: ImmutableList<RoutePoint>,
     zIndex: Float,
 ) {
     val icon = rememberVehiclePuckIcon()
+    val estimator = remember(googleMap) { VehiclePoseEstimator() }
     val markerState = remember(googleMap, icon) {
         mutableStateOf<Marker?>(null)
-    }
-    val animatorState = remember(googleMap, icon) {
-        mutableStateOf<ValueAnimator?>(null)
     }
     val position = LatLng(
         vehicleLocationState.location.latitude,
         vehicleLocationState.location.longitude,
     )
-    val bearingDegrees = vehicleLocationState.bearingDegrees
 
     DisposableEffect(googleMap, icon) {
         markerState.value = googleMap.addMarker(
@@ -49,12 +63,11 @@ internal fun MapVehiclePuck(
                 .anchor(0.5f, 0.5f)
                 .flat(true)
                 .icon(icon)
+                .rotation(vehicleLocationState.bearingDegrees ?: 0f)
                 .zIndex(zIndex),
         )
 
         onDispose {
-            animatorState.value?.cancel()
-            animatorState.value = null
             markerState.value?.remove()
             markerState.value = null
         }
@@ -65,47 +78,36 @@ internal fun MapVehiclePuck(
         marker.zIndex = zIndex
     }
 
-    DisposableEffect(markerState.value, position, bearingDegrees) {
-        val marker = markerState.value
-        if (marker == null) {
-            onDispose {}
-        } else {
-            val startPosition = marker.position
-            val startRotation = marker.rotation
-            val targetRotation = bearingDegrees ?: startRotation
+    LaunchedEffect(vehicleLocationState, routeGeometry) {
+        val nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+        estimator.updateSample(
+            sample = vehicleLocationState,
+            routeGeometry = routeGeometry,
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+        )
+        estimator.estimate(nowElapsedRealtimeNanos)?.let { pose ->
+            markerState.value?.updatePose(pose)
+            cameraState.updateVehiclePose(pose)
+        }
+    }
 
-            animatorState.value?.cancel()
+    LaunchedEffect(markerState.value, estimator, cameraState) {
+        while (isActive) {
+            withFrameNanos { }
+            val marker = markerState.value ?: continue
+            val pose = estimator.estimate(SystemClock.elapsedRealtimeNanos()) ?: continue
 
-            val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = VEHICLE_PUCK_ANIMATION_DURATION_MS
-                interpolator = LinearInterpolator()
-                addUpdateListener { animation ->
-                    val fraction = animation.animatedValue as Float
-                    marker.position = LatLng(
-                        lerp(startPosition.latitude, position.latitude, fraction),
-                        lerp(startPosition.longitude, position.longitude, fraction),
-                    )
-                    marker.rotation = lerpAngle(startRotation, targetRotation, fraction)
-                }
-                doOnEnd {
-                    if (animatorState.value == this) {
-                        animatorState.value = null
-                    }
-                }
-            }
-
-            animatorState.value = animator
-            animator.start()
-
-            onDispose {
-                if (animatorState.value == animator) {
-                    animator.cancel()
-                }
-            }
+            marker.updatePose(pose)
+            cameraState.updateVehiclePose(pose)
         }
     }
 }
 
+/**
+ * Compose resources の自車アイコンを GoogleMap marker 用の bitmap descriptor に変換する。
+ *
+ * @return 自車アイコン marker に設定する bitmap descriptor
+ */
 @Composable
 private fun rememberVehiclePuckIcon(): BitmapDescriptor {
     return rememberMapComposeBitmapDescriptor("vehicle-puck") {
@@ -117,13 +119,20 @@ private fun rememberVehiclePuckIcon(): BitmapDescriptor {
     }
 }
 
-private fun lerp(from: Double, to: Double, fraction: Float): Double =
-    from + (to - from) * fraction
-
-private fun lerpAngle(from: Float, to: Float, fraction: Float): Float {
-    val diff = ((to - from + 540f) % 360f) - 180f
-    return (from + diff * fraction + 360f) % 360f
+/**
+ * marker に表示 pose を反映する。
+ *
+ * @param pose frame 時点の表示 pose
+ */
+private fun Marker.updatePose(pose: VehiclePose) {
+    position = LatLng(
+        pose.location.latitude,
+        pose.location.longitude,
+    )
+    pose.bearingDegrees?.let { bearingDegrees ->
+        rotation = bearingDegrees
+    }
 }
 
+/** 自車アイコンの表示サイズ。 */
 private val VEHICLE_PUCK_SIZE = 64.dp
-private const val VEHICLE_PUCK_ANIMATION_DURATION_MS = 800L

@@ -24,6 +24,9 @@ enum class VehicleLocationSource {
  * @param bearingDegrees 進行方向。取得できない場合は null
  * @param accuracyMeters 水平精度。取得できない場合は null
  * @param timestampMillis 位置情報の計測時刻
+ * @param elapsedRealtimeNanos 位置情報の monotonic clock 時刻。取得できない場合は null
+ * @param speedMps 自車速度。取得できない場合は null
+ * @param routeProgressMeters route geometry 上の累積距離。route-snapped 位置でない場合は null
  * @param source 位置情報の取得元
  */
 @Immutable
@@ -32,5 +35,8 @@ data class VehicleLocationState(
     val bearingDegrees: Float?,
     val accuracyMeters: Float?,
     val timestampMillis: Long,
+    val elapsedRealtimeNanos: Long?,
+    val speedMps: Float?,
+    val routeProgressMeters: Double?,
     val source: VehicleLocationSource,
 )

@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.core.navigation.newguidance
 
+import android.os.SystemClock
 import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
@@ -343,6 +344,7 @@ private fun RouteDetail.toOriginUserLocation(): UserLocation = UserLocation(
     speedMps = null,
     accuracyMeters = 0f,
     timestampMillis = System.currentTimeMillis(),
+    elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
 )
 
 /**
@@ -355,8 +357,12 @@ private fun RouteDetail.toInitialProgress(): GuidanceProgress = GuidanceProgress
     durationRemainingSeconds = durationSeconds.toInt(),
     etaEpochMillis = System.currentTimeMillis() + durationSeconds.toLong() * 1_000L,
     traveledMeters = 0,
+    currentCumulativeMeters = 0.0,
     snappedLocation = origin,
     bearingDegrees = 0f,
+    locationTimestampMillis = System.currentTimeMillis(),
+    locationElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+    vehicleSpeedMps = null,
     nextManeuver = null,
     followupManeuver = null,
     lanes = persistentListOf(),
