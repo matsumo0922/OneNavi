@@ -60,28 +60,28 @@
 案内中の正は `GuidanceState.Guiding.progress.snappedLocation`、案内中以外の正は SDK road-snapped location とする。
 Preview 中の route geometry に現在地を勝手に投影しない。
 
-- [ ] `VehicleLocationSource` を追加し、`RouteSnapped` / `SdkRoadSnapped` / `RawGps` を表現する
-- [ ] `VehicleLocationState` を追加し、座標、方位、精度、時刻、source を保持する
-- [ ] `RoadSnappedLocationProvider` を `callbackFlow` でラップし、collect 中だけ listener を登録する
-- [ ] `RoadSnappedLocationProvider.LocationListener.IS_ROAD_SNAPPED_KEY` が取れる場合は `SdkRoadSnapped` / `RawGps` の判定に使う
-- [ ] SDK provider が未初期化、または road-snapped event が来ない場合は raw GPS fallback を使えるようにする
-- [ ] `MapViewModel` で `GuidanceState` と SDK / raw GPS 由来の位置 state を合成し、`vehicleLocationState` を公開する
-- [ ] `GuidanceState.Guiding` 中は `Guiding.progress.snappedLocation` / `bearingDegrees` から `VehicleLocationState(source = RouteSnapped)` を作る
-- [ ] `GuidanceState.Guiding` 以外では SDK / raw GPS 由来の `VehicleLocationState` をそのまま使う
-- [ ] `MapEffect` の自車アイコン effect は `vehicleLocationState` だけを見る
-- [ ] 案内中 / 非案内中とも SDK / GoogleMap の my-location layer とは二重表示しない
-- [ ] 自車アイコン asset を compose resources の vector XML として追加する
-- [ ] 過去の `ic_vehicle_puck.xml` を compose resources に移植する
-- [ ] 移植元は `4b4cfe6` の `feature/home/src/androidMain/res/drawable/ic_vehicle_puck.xml` とし、64dp / 64 viewport の影付き・白縁・青系矢印 puck の見た目を使う
-- [ ] compose resources で gradient / `aapt:attr` が扱いにくい場合は、単色 fill に落として描画安定性を優先する
-- [ ] 自車アイコンは route polyline より前面、callout / 操作 UI より背面の zIndex に置く
+- [x] `VehicleLocationSource` を追加し、`ROUTE_SNAPPED` / `SDK_ROAD_SNAPPED` / `RAW_GPS` を表現する
+- [x] `VehicleLocationState` を追加し、座標、方位、精度、時刻、source を保持する
+- [x] `RoadSnappedLocationProvider` を `callbackFlow` でラップし、collect 中だけ listener を登録する
+- [x] `RoadSnappedLocationProvider.LocationListener.IS_ROAD_SNAPPED_KEY` が取れる場合は `SDK_ROAD_SNAPPED` / `RAW_GPS` の判定に使う
+- [x] SDK provider が未初期化、または road-snapped event が来ない場合は raw GPS fallback を使えるようにする
+- [x] `MapViewModel` で `GuidanceState` と SDK / raw GPS 由来の位置 state を合成し、`vehicleLocationState` を公開する
+- [x] `GuidanceState.Guiding` 中は `Guiding.progress.snappedLocation` / `bearingDegrees` から `VehicleLocationState(source = ROUTE_SNAPPED)` を作る
+- [x] `GuidanceState.Guiding` 以外では SDK / raw GPS 由来の `VehicleLocationState` をそのまま使う
+- [x] `MapEffect` の自車アイコン effect は `vehicleLocationState` だけを見る
+- [x] 案内中 / 非案内中とも SDK / GoogleMap の my-location layer とは二重表示しない
+- [x] 自車アイコン asset を compose resources の vector XML として追加する
+- [x] 過去の `ic_vehicle_puck.xml` を compose resources に移植する
+- [x] 移植元は `4b4cfe6` の `feature/home/src/androidMain/res/drawable/ic_vehicle_puck.xml` とし、64dp / 64 viewport の影付き・白縁・青系矢印 puck の見た目を使う
+- [x] compose resources で gradient / `aapt:attr` が扱いにくい場合は、単色 fill に落として描画安定性を優先する
+- [x] 自車アイコンは route polyline より前面、callout / 操作 UI より背面の zIndex に置く
 
 受け入れ条件:
 
 - [ ] 地図 UI は自車アイコン座標を `VehicleLocationState` からだけ読む
-- [ ] 案内中の `VehicleLocationState.source` は `RouteSnapped`
+- [ ] 案内中の `VehicleLocationState.source` は `ROUTE_SNAPPED`
 - [ ] 案内中の自車アイコンが route geometry 上の `snappedLocation` に表示される
-- [ ] 案内中以外の `VehicleLocationState.source` は `SdkRoadSnapped` または `RawGps`
+- [ ] 案内中以外の `VehicleLocationState.source` は `SDK_ROAD_SNAPPED` または `RAW_GPS`
 - [ ] 案内中以外は Preview route に現在地が吸着しない
 - [ ] `bearingDegrees` 更新で自車アイコンの向きが変わる
 - [ ] 案内中 / 非案内中で自車アイコンが二重表示されない
@@ -113,7 +113,7 @@ TBT バナー、ETA、停止ボタンなどの UI は後回しにする。
 
 - [ ] ナビ開始時に route 全体が一度カメラに収まる
 - [ ] GPS tick 更新でカメラ中心が `VehicleLocationState.location` に追従する
-- [ ] リルート後は新 route 全体が一度収まり、その後は `VehicleLocationState(source = RouteSnapped)` に追従する
+- [ ] リルート後は新 route 全体が一度収まり、その後は `VehicleLocationState(source = ROUTE_SNAPPED)` に追従する
 - [ ] `GuidanceState` が案内中でないときは案内中カメラ制御を止める
 - [ ] 案内中に 3D / 真上モードを切り替えられる
 - [ ] 案内地点に近づくと自動で真上モードかつ拡大表示になる
