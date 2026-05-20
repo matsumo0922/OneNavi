@@ -13,6 +13,8 @@
 - 案内中の通常 GPS tick では ROUTE / GUIDE を再取得しない。
 - 渋滞・規制 overlay は tracker / `GuidanceProgress` に混ぜない。
 - `GuidanceProgress` は UI 向け、`ExtNavProgressSnapshot` は周辺コンポーネント向け。
+- `GuidanceProgress.snappedLocation` は案内 route geometry 上に投影した位置であり、案内中以外の現在地モデルにはしない。
+- 地図表示用の自車位置は `VehicleLocationState` を正とし、案内中は route-snapped、案内中以外は SDK road-snapped / raw GPS を内部で切り替える。
 
 ---
 
@@ -51,17 +53,52 @@
 - [ ] `GuidanceState.Guiding.route` がリルート後の route に変わると polyline も置き換わる
 - [ ] `GuidanceState.Idle` / `Rerouting` / `Failed` では案内中 route line を誤って残さない
 
-### 2.2 案内中のカメラ制御
+### 2.2 地図向け自車位置 state の統一
 
-polyline 描画と同じタイミングで、リルート確認に必要な最低限のカメラ制御だけを入れる。
-TBT バナー、ETA、停止ボタン、自車マーカーなどの UI は後回しにする。
+地図 UI は `GuidanceProgress` と SDK 現在地レイヤーを直接切り替えない。
+自車アイコン・カメラは常に `VehicleLocationState` だけを読み、state の生成元を内部で切り替える。
+案内中の正は `GuidanceState.Guiding.progress.snappedLocation`、案内中以外の正は SDK road-snapped location とする。
+Preview 中の route geometry に現在地を勝手に投影しない。
+
+- [ ] `VehicleLocationSource` を追加し、`RouteSnapped` / `SdkRoadSnapped` / `RawGps` を表現する
+- [ ] `VehicleLocationState` を追加し、座標、方位、精度、時刻、source を保持する
+- [ ] `RoadSnappedLocationProvider` を `callbackFlow` でラップし、collect 中だけ listener を登録する
+- [ ] `RoadSnappedLocationProvider.LocationListener.IS_ROAD_SNAPPED_KEY` が取れる場合は `SdkRoadSnapped` / `RawGps` の判定に使う
+- [ ] SDK provider が未初期化、または road-snapped event が来ない場合は raw GPS fallback を使えるようにする
+- [ ] `MapViewModel` で `GuidanceState` と SDK / raw GPS 由来の位置 state を合成し、`vehicleLocationState` を公開する
+- [ ] `GuidanceState.Guiding` 中は `Guiding.progress.snappedLocation` / `bearingDegrees` から `VehicleLocationState(source = RouteSnapped)` を作る
+- [ ] `GuidanceState.Guiding` 以外では SDK / raw GPS 由来の `VehicleLocationState` をそのまま使う
+- [ ] `MapEffect` の自車アイコン effect は `vehicleLocationState` だけを見る
+- [ ] 案内中 / 非案内中とも SDK / GoogleMap の my-location layer とは二重表示しない
+- [ ] 自車アイコン asset を compose resources の vector XML として追加する
+- [ ] 過去の `ic_vehicle_puck.xml` を compose resources に移植する
+- [ ] 移植元は `4b4cfe6` の `feature/home/src/androidMain/res/drawable/ic_vehicle_puck.xml` とし、64dp / 64 viewport の影付き・白縁・青系矢印 puck の見た目を使う
+- [ ] compose resources で gradient / `aapt:attr` が扱いにくい場合は、単色 fill に落として描画安定性を優先する
+- [ ] 自車アイコンは route polyline より前面、callout / 操作 UI より背面の zIndex に置く
+
+受け入れ条件:
+
+- [ ] 地図 UI は自車アイコン座標を `VehicleLocationState` からだけ読む
+- [ ] 案内中の `VehicleLocationState.source` は `RouteSnapped`
+- [ ] 案内中の自車アイコンが route geometry 上の `snappedLocation` に表示される
+- [ ] 案内中以外の `VehicleLocationState.source` は `SdkRoadSnapped` または `RawGps`
+- [ ] 案内中以外は Preview route に現在地が吸着しない
+- [ ] `bearingDegrees` 更新で自車アイコンの向きが変わる
+- [ ] 案内中 / 非案内中で自車アイコンが二重表示されない
+- [ ] map 画面を離れる、または collect が止まると SDK road-snapped listener が解除される
+
+### 2.3 案内中のカメラ制御
+
+自車位置を `VehicleLocationState` に統一した後、リルート確認に必要な最低限のカメラ制御を入れる。
+TBT バナー、ETA、停止ボタンなどの UI は後回しにする。
 案内中カメラは通常追従と案内地点接近時の一時フォーカスを分け、ユーザーが選んだ 3D / 真上モードと
 ズーム値を接近フォーカス解除後に復元できるようにする。
 
 - [ ] `MapCameraEffect` に `guidanceState: GuidanceState` を渡す
+- [ ] `MapCameraEffect` に `vehicleLocationState: VehicleLocationState?` を渡す
 - [ ] `GuidanceState.Guiding.route.id` が変わったときだけ `Guiding.route.geometry` を `showRouteOverview()` で収める
-- [ ] `GuidanceState.Guiding.progress.snappedLocation` を案内中カメラの追従 target にする
-- [ ] `GuidanceState.Guiding.progress.bearingDegrees` を案内中カメラの bearing に使う
+- [ ] `VehicleLocationState.location` を案内中カメラの追従 target にする
+- [ ] `VehicleLocationState.bearingDegrees` を案内中カメラの bearing に使う
 - [ ] `MapCameraState` に案内中 target / bearing / zoom / tilt を指定できる API を追加する
 - [ ] 案内中でも 3D モードと真上モードを手動で切り替えられる
 - [ ] 手動で選んだ通常モードと通常ズーム値を `MapCameraState` に保持する
@@ -75,15 +112,15 @@ TBT バナー、ETA、停止ボタン、自車マーカーなどの UI は後回
 受け入れ条件:
 
 - [ ] ナビ開始時に route 全体が一度カメラに収まる
-- [ ] GPS tick 更新でカメラ中心が `progress.snappedLocation` に追従する
-- [ ] リルート後は新 route 全体が一度収まり、その後は新 route 上の `snappedLocation` に追従する
+- [ ] GPS tick 更新でカメラ中心が `VehicleLocationState.location` に追従する
+- [ ] リルート後は新 route 全体が一度収まり、その後は `VehicleLocationState(source = RouteSnapped)` に追従する
 - [ ] `GuidanceState` が案内中でないときは案内中カメラ制御を止める
 - [ ] 案内中に 3D / 真上モードを切り替えられる
 - [ ] 案内地点に近づくと自動で真上モードかつ拡大表示になる
 - [ ] 案内地点通過後に、接近前のモードとズーム値へ戻る
 - [ ] 次の案内地点でも同じフォーカス動作を 1 回だけ行う
 
-### 2.3 route id / registry session 化
+### 2.4 route id / registry session 化
 
 ナビ開始ログで `routeId=Recommended` のままになっている。連続検索やリルート検証での payload 取り違えを避けるために直す。
 
@@ -97,7 +134,7 @@ TBT バナー、ETA、停止ボタン、自車マーカーなどの UI は後回
 - [ ] 連続で別検索しても古い payload を取得できない
 - [ ] ナビ開始ログの `routeId` が session id 付きになっている
 
-### 2.4 `CurrentLocationDataSource`
+### 2.5 `CurrentLocationDataSource`
 
 Tracker の origin smoke は通ったので、次は実 GPS tick を流して進捗が変わるかを確認する。
 
@@ -113,7 +150,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [x] `lastKnown()` が取れない場合は null
 - [x] `compileDebugKotlinAndroid` が通る
 
-### 2.5 `NewGuidanceManager` 接続
+### 2.6 `NewGuidanceManager` 接続
 
 - [x] `ExtNavRouteRegistry.get(route.id)` から payload を取得する
 - [x] `tracker.attach(payload, route)` を呼ぶ
@@ -135,7 +172,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [x] `stopGuidance()` で `Idle`
 - [ ] reroute request 時は `Rerouting` を経て新 route に attach し直す
 
-### 2.6 `ExtNavGuidanceTracker`
+### 2.7 `ExtNavGuidanceTracker`
 
 初期実装と origin tick smoke は完了。実 GPS / Fake GPS で連続 tick を確認した時点で完了扱いにする。
 
@@ -171,7 +208,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [ ] route から外れた GPS で `isOffRouteCandidate = true` になりうる
 - [ ] `ExtNavGuidanceTrackerTest` で上記を確認する
 
-### 2.7 `ExtNavGuidanceMapper`
+### 2.8 `ExtNavGuidanceMapper`
 
 - [ ] `GuidancePoint.phrases[]` の category から `ManeuverType` を決める
 - [ ] geometry の前後 bearing から `ManeuverModifier` を決める
@@ -187,7 +224,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [ ] 不確実なデータは null / empty に倒す
 - [ ] `ExtNavGuidanceTracker` の簡易 maneuver 生成を mapper 呼び出しに置き換えられる
 
-### 2.8 `ExtNavGuidanceBootstrap`
+### 2.9 `ExtNavGuidanceBootstrap`
 
 - [ ] route origin 起点の `GuidanceProgress` を作る
 - [ ] 残距離 / 残時間 / ETA を route summary から詰める
@@ -199,7 +236,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [ ] 初回 GPS tick 前でも `GuidanceState.Guiding(route, progress)` を出せる
 - [ ] bootstrap 後の通常 tick で tracker snapshot に自然に置き換わる
 
-### 2.9 `ExtNavRerouteDetector`
+### 2.10 `ExtNavRerouteDetector`
 
 - [ ] `attach(route)` / `onSnapshot(snapshot)` / `detach()` を実装する
 - [ ] off-route candidate の連続 tick / 継続秒数を debounce する
@@ -215,7 +252,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [ ] cooldown 中は再要求しない
 - [ ] `rawLocation == null` では `Request` を出さない
 
-### 2.10 `ExtNavAnnouncementScheduler`
+### 2.11 `ExtNavAnnouncementScheduler`
 
 - [ ] `attach(payload, route)` で GP 累積距離と phrase slot を準備する
 - [ ] `onSnapshot(snapshot)` で予告 / 直前 / 通過 slot を判定する
@@ -229,7 +266,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [ ] GP 通過後に古い発話が enqueue されない
 - [ ] 速度に応じた先読み / 遅延が unit test で確認できる
 
-### 2.11 `ExtNavVoicePlayer`
+### 2.12 `ExtNavVoicePlayer`
 
 - [ ] `enqueue(ExtNavAnnouncement)` を実装する
 - [ ] `clear()` を実装する
@@ -241,7 +278,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [ ] `clear()` 後に未再生キューが残らない
 - [ ] TTS が使えない場合も scheduler 側を壊さない
 
-### 2.12 DI
+### 2.13 DI
 
 - [x] `CurrentLocationDataSource` を datasource module に登録する
 - [x] `ExtNavGuidanceTracker` を navigation module に登録する
@@ -261,16 +298,11 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 
 ## 3. 後回しの UI / Map 接続
 
-- [ ] `GuidanceState.Guiding.progress.snappedLocation` を自車マーカーに使う
 - [ ] 目的地マーカー / 経由地マーカーを案内中 map layer に出す
 - [ ] `progress.nextManeuver == null` なら TBT バナーを非表示にする
 - [ ] ETA / 停止ボタンは `nextManeuver == null` でも表示する
 - [ ] `Rerouting` 中の表示を決める
 - [ ] `Arrived` 中の表示を決める
-
-受け入れ条件:
-
-- [ ] 自車マーカーが raw GPS ではなく snappedLocation で動く
 
 ---
 
