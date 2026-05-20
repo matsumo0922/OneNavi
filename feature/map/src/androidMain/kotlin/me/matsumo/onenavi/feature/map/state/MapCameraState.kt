@@ -54,6 +54,7 @@ internal class MapCameraState internal constructor() {
     private var density: Float = DEFAULT_DENSITY
     private var lastVehicleLocationState: VehicleLocationState? = null
     private var isMovingCameraToVehicleLocation: Boolean = false
+    private var isAnimatingCameraToVehicleLocation: Boolean = false
 
     var cameraState by mutableStateOf(HomeMapCameraState())
         private set
@@ -63,7 +64,8 @@ internal class MapCameraState internal constructor() {
 
         googleMap.setOnCameraMoveStartedListener { reason ->
             val isGesture = reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE
-            if (!isMovingCameraToVehicleLocation && isGesture) {
+            if (isGesture) {
+                isAnimatingCameraToVehicleLocation = false
                 cameraAnimator?.cancel()
                 cameraState = cameraState.copy(isFollowingMyLocation = false)
             }
@@ -106,7 +108,7 @@ internal class MapCameraState internal constructor() {
         )
 
         if (cameraState.isFollowingMyLocation) {
-            moveCameraToVehicleLocation(vehicleLocationState)
+            flyCameraToVehicleLocation(vehicleLocationState)
         }
     }
 
@@ -184,7 +186,11 @@ internal class MapCameraState internal constructor() {
             bearing = cameraPosition.bearing.toDouble(),
             zoom = cameraPosition.zoom,
             isFollowingMyLocation = cameraState.isFollowingMyLocation &&
-                (isMovingCameraToVehicleLocation || !isCameraAwayFromVehicle(cameraPosition)),
+                (
+                    isAnimatingCameraToVehicleLocation ||
+                        isMovingCameraToVehicleLocation ||
+                        !isCameraAwayFromVehicle(cameraPosition)
+                    ),
         )
     }
 
@@ -205,9 +211,8 @@ internal class MapCameraState internal constructor() {
         )
     }
 
-    private fun moveCameraToVehicleLocation(vehicleLocationState: VehicleLocationState) {
-        val map = googleMap ?: return
-        val current = map.cameraPosition
+    private fun flyCameraToVehicleLocation(vehicleLocationState: VehicleLocationState) {
+        val current = googleMap?.cameraPosition ?: return
         val target = CameraPosition.Builder()
             .target(
                 LatLng(
@@ -220,9 +225,21 @@ internal class MapCameraState internal constructor() {
             .tilt(vehicleTiltDegrees())
             .build()
 
+        flyCameraTo(
+            target = target,
+            durationMs = VEHICLE_CAMERA_ANIMATION_DURATION_MS,
+            keepFollowingMyLocation = true,
+            moveCamera = { _, cameraPosition -> moveVehicleCamera(cameraPosition) },
+            onStarted = { isAnimatingCameraToVehicleLocation = true },
+            onFinished = { isAnimatingCameraToVehicleLocation = false },
+        )
+    }
+
+    private fun moveVehicleCamera(cameraPosition: CameraPosition) {
+        val map = googleMap ?: return
         isMovingCameraToVehicleLocation = true
         try {
-            map.moveCamera(CameraUpdateFactory.newCameraPosition(target))
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
         } finally {
             isMovingCameraToVehicleLocation = false
         }
@@ -269,6 +286,11 @@ internal class MapCameraState internal constructor() {
         target: CameraPosition,
         durationMs: Long? = null,
         zoomEasing: TimeInterpolator? = null,
+        keepFollowingMyLocation: Boolean = false,
+        moveCamera: (GoogleMap, CameraPosition) -> Unit = { map, cameraPosition ->
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
+        },
+        onStarted: () -> Unit = {},
         onFinished: () -> Unit = {},
     ) {
         val map = googleMap ?: return
@@ -278,6 +300,9 @@ internal class MapCameraState internal constructor() {
                 target = target,
                 panDurationMs = durationMs,
                 zoomDurationMs = durationMs,
+                keepFollowingMyLocation = keepFollowingMyLocation,
+                moveCamera = moveCamera,
+                onStarted = onStarted,
                 onFinished = onFinished,
             )
             return
@@ -296,11 +321,17 @@ internal class MapCameraState internal constructor() {
         }
 
         val path = VanWijkZoomPath.of(startViewport, endViewport, rho = CAMERA_FLY_TO_RHO)
-        val totalDurationMs = (durationMs ?: (path.naturalDurationMs() * CAMERA_FLY_TO_SPEED_SCALE).toLong()).coerceIn(MIN_FLY_TO_DURATION_MS, MAX_FLY_TO_DURATION_MS)
+        val totalDurationMs = durationMs
+            ?: (path.naturalDurationMs() * CAMERA_FLY_TO_SPEED_SCALE)
+                .toLong()
+                .coerceIn(MIN_FLY_TO_DURATION_MS, MAX_FLY_TO_DURATION_MS)
         val easing = DecelerateInterpolator(CAMERA_DECELERATE_FACTOR)
 
-        cameraState = cameraState.copy(isFollowingMyLocation = false)
+        if (!keepFollowingMyLocation) {
+            cameraState = cameraState.copy(isFollowingMyLocation = false)
+        }
         cameraAnimator?.cancel()
+        onStarted()
 
         cameraAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = totalDurationMs
@@ -322,20 +353,19 @@ internal class MapCameraState internal constructor() {
                 val zoom = (ln(viewportWidthDp / widthWorldPx) / ln(2.0)).toFloat()
                     .coerceIn(MIN_ZOOM, MAX_ZOOM)
 
-                map.moveCamera(
-                    CameraUpdateFactory.newCameraPosition(
-                        CameraPosition.Builder()
-                            .target(
-                                LatLng(
-                                    WebMercatorProjection.worldYToLatitude(viewport.worldY),
-                                    WebMercatorProjection.worldXToLongitude(viewport.worldX),
-                                ),
-                            )
-                            .zoom(zoom)
-                            .bearing(lerpAngle(start.bearing, target.bearing, arcFraction))
-                            .tilt(lerp(start.tilt, target.tilt, arcFraction))
-                            .build(),
-                    ),
+                moveCamera(
+                    map,
+                    CameraPosition.Builder()
+                        .target(
+                            LatLng(
+                                WebMercatorProjection.worldYToLatitude(viewport.worldY),
+                                WebMercatorProjection.worldXToLongitude(viewport.worldX),
+                            ),
+                        )
+                        .zoom(zoom)
+                        .bearing(lerpAngle(start.bearing, target.bearing, arcFraction))
+                        .tilt(lerp(start.tilt, target.tilt, arcFraction))
+                        .build(),
                 )
             }
             doOnEnd { onFinished() }
@@ -367,6 +397,11 @@ internal class MapCameraState internal constructor() {
         target: CameraPosition,
         panDurationMs: Long? = null,
         zoomDurationMs: Long? = null,
+        keepFollowingMyLocation: Boolean = false,
+        moveCamera: (GoogleMap, CameraPosition) -> Unit = { map, cameraPosition ->
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
+        },
+        onStarted: () -> Unit = {},
         onFinished: () -> Unit = {},
     ) {
         val map = googleMap ?: return
@@ -377,8 +412,11 @@ internal class MapCameraState internal constructor() {
         val totalDurationMs = max(resolvedPanDurationMs, resolvedZoomDurationMs)
         val easing = DecelerateInterpolator(CAMERA_DECELERATE_FACTOR)
 
-        cameraState = cameraState.copy(isFollowingMyLocation = false)
+        if (!keepFollowingMyLocation) {
+            cameraState = cameraState.copy(isFollowingMyLocation = false)
+        }
         cameraAnimator?.cancel()
+        onStarted()
 
         cameraAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = totalDurationMs
@@ -395,15 +433,14 @@ internal class MapCameraState internal constructor() {
                 val bearing = lerpAngle(start.bearing, target.bearing, panFraction)
                 val tilt = lerp(start.tilt, target.tilt, panFraction)
 
-                map.moveCamera(
-                    CameraUpdateFactory.newCameraPosition(
-                        CameraPosition.Builder()
-                            .target(LatLng(lat, lng))
-                            .zoom(zoom)
-                            .bearing(bearing)
-                            .tilt(tilt)
-                            .build(),
-                    ),
+                moveCamera(
+                    map,
+                    CameraPosition.Builder()
+                        .target(LatLng(lat, lng))
+                        .zoom(zoom)
+                        .bearing(bearing)
+                        .tilt(tilt)
+                        .build(),
                 )
             }
             doOnEnd { onFinished() }
@@ -458,6 +495,7 @@ internal class MapCameraState internal constructor() {
         private const val DEFAULT_DENSITY = 1f
         private const val VEHICLE_TILTED_CAMERA_DEGREES = 45f
         private const val VEHICLE_CAMERA_CENTER_TOLERANCE_DEGREES = 0.00002
+        private const val VEHICLE_CAMERA_ANIMATION_DURATION_MS = 800L
     }
 }
 
