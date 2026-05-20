@@ -35,6 +35,7 @@ import org.jetbrains.compose.resources.painterResource
  * @param googleMap 描画先の GoogleMap
  * @param cameraState カメラ追従状態
  * @param vehicleLocationState 最新の自車位置 tick
+ * @param routeKey 案内中 route を識別する key。案内中以外は null
  * @param routeGeometry 案内中 route の geometry。案内中以外は空でよい
  * @param zIndex 自車アイコンの zIndex
  */
@@ -43,6 +44,7 @@ internal fun MapVehiclePoseEffect(
     googleMap: GoogleMap,
     cameraState: MapCameraState,
     vehicleLocationState: VehicleLocationState,
+    routeKey: String?,
     routeGeometry: ImmutableList<RoutePoint>,
     zIndex: Float,
 ) {
@@ -78,10 +80,11 @@ internal fun MapVehiclePoseEffect(
         marker.zIndex = zIndex
     }
 
-    LaunchedEffect(vehicleLocationState, routeGeometry) {
+    LaunchedEffect(vehicleLocationState, routeKey, routeGeometry) {
         val nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
         estimator.updateSample(
             sample = vehicleLocationState,
+            routeKey = routeKey,
             routeGeometry = routeGeometry,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
         )

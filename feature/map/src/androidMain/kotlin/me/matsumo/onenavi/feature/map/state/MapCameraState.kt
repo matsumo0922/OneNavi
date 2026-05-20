@@ -28,15 +28,11 @@ import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ZOOM
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.MAX_FLY_TO_DURATION_MS
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.MIN_FLY_TO_DURATION_MS
 import kotlin.math.abs
-import kotlin.math.asin
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.pow
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
  * GoogleMap 用のカメラ状態 holder を Compose 上で保持する。
@@ -139,15 +135,6 @@ internal class MapCameraState internal constructor() {
         if (vehicleLocationState != null) {
             flyCameraToVehiclePose(vehicleLocationState.toVehiclePose())
         }
-    }
-
-    /**
-     * 自車位置 tick からカメラ状態の自車座標だけを更新する。
-     *
-     * @param vehicleLocationState 最新の自車位置。null の場合は何もしない
-     */
-    fun updateVehicleLocation(vehicleLocationState: VehicleLocationState?) {
-        vehicleLocationState?.let { state -> updateVehiclePose(state.toVehiclePose()) }
     }
 
     /**
@@ -354,8 +341,9 @@ internal class MapCameraState internal constructor() {
     /**
      * user gesture 終了時に自車追従を維持するか判定する。
      *
-     * zoom gesture は指の位置を中心に zoom されるため追従を解除する。pan gesture は
-     * map target が自車追従 target から離れた場合だけ追従を解除する。
+     * zoom gesture は指の位置を中心に zoom されるため追従を解除する。rotate / tilt gesture も
+     * ユーザーが見たい向きを明示した操作なので追従を解除する。pan gesture は map target が
+     * 自車追従 target から離れた場合だけ追従を解除する。
      *
      * @param cameraPosition gesture 終了時点の camera position
      */
@@ -365,8 +353,23 @@ internal class MapCameraState internal constructor() {
         val hasZoomChanged = userGestureStartCameraPosition
             ?.let { start -> start.zoom != cameraPosition.zoom }
             ?: false
+        val hasBearingChanged = userGestureStartCameraPosition
+            ?.let { start ->
+                angleDistanceDegrees(
+                    from = start.bearing,
+                    to = cameraPosition.bearing,
+                ) > CAMERA_GESTURE_BEARING_TOLERANCE_DEGREES
+            }
+            ?: false
+        val hasTiltChanged = userGestureStartCameraPosition
+            ?.let { start ->
+                abs(start.tilt - cameraPosition.tilt) > CAMERA_GESTURE_TILT_TOLERANCE_DEGREES
+            }
+            ?: false
         val shouldKeepFollowing = wasFollowingBeforeUserGesture &&
             !hasZoomChanged &&
+            !hasBearingChanged &&
+            !hasTiltChanged &&
             !isCameraTargetAwayFromVehicle(cameraPosition)
 
         cameraState = cameraState.copy(isFollowingMyLocation = shouldKeepFollowing)
@@ -444,7 +447,7 @@ internal class MapCameraState internal constructor() {
             (VEHICLE_SCREEN_ANCHOR_Y_FRACTION - SCREEN_CENTER_Y_FRACTION) *
             metersPerDp(latitude = vehiclePose.location.latitude, zoom = zoom)
 
-        return destinationPoint(
+        return MapGeodesy.destinationLatLng(
             origin = vehiclePose.location,
             bearingDegrees = bearingDegrees,
             distanceMeters = forwardMeters,
@@ -470,7 +473,7 @@ internal class MapCameraState internal constructor() {
     private fun isCameraTargetAwayFromVehicle(cameraPosition: CameraPosition): Boolean {
         val vehiclePose = lastVehiclePose ?: return false
         val expectedTarget = vehicleCameraTarget(vehiclePose)
-        val distanceMeters = haversineMeters(
+        val distanceMeters = MapGeodesy.haversineMeters(
             from = expectedTarget,
             to = cameraPosition.target,
         )
@@ -536,67 +539,6 @@ internal class MapCameraState internal constructor() {
             FOLLOW_GESTURE_TARGET_TOLERANCE_FRACTION *
             metersPerDp(latitude = latitude, zoom = zoom)
     }
-
-    /**
-     * 2 点間の球面距離を Haversine で計算する。
-     *
-     * @param from 始点
-     * @param to 終点
-     * @return 2 点間距離（m）
-     */
-    private fun haversineMeters(from: LatLng, to: LatLng): Double {
-        val fromLatitude = Math.toRadians(from.latitude)
-        val toLatitude = Math.toRadians(to.latitude)
-        val latitudeDelta = Math.toRadians(to.latitude - from.latitude)
-        val longitudeDelta = Math.toRadians(to.longitude - from.longitude)
-        val haversine = sin(latitudeDelta / 2).let { value -> value * value } +
-            cos(fromLatitude) * cos(toLatitude) *
-            sin(longitudeDelta / 2).let { value -> value * value }
-
-        return EARTH_RADIUS_METERS * 2.0 * atan2(sqrt(haversine), sqrt(1.0 - haversine))
-    }
-
-    /**
-     * 始点から指定距離だけ指定方位へ進んだ地点を返す。
-     *
-     * @param origin 始点
-     * @param bearingDegrees 北を 0 度とする時計回り方位
-     * @param distanceMeters 移動距離（m）
-     * @return 移動後の緯度経度
-     */
-    private fun destinationPoint(
-        origin: RoutePoint,
-        bearingDegrees: Float,
-        distanceMeters: Double,
-    ): LatLng {
-        val angularDistance = distanceMeters / EARTH_RADIUS_METERS
-        val bearingRadians = Math.toRadians(bearingDegrees.toDouble())
-        val originLatitude = Math.toRadians(origin.latitude)
-        val originLongitude = Math.toRadians(origin.longitude)
-        val targetLatitude = asin(
-            sin(originLatitude) * cos(angularDistance) +
-                cos(originLatitude) * sin(angularDistance) * cos(bearingRadians),
-        )
-        val targetLongitude = originLongitude + atan2(
-            sin(bearingRadians) * sin(angularDistance) * cos(originLatitude),
-            cos(angularDistance) - sin(originLatitude) * sin(targetLatitude),
-        )
-
-        return LatLng(
-            Math.toDegrees(targetLatitude),
-            normalizeLongitude(Math.toDegrees(targetLongitude)),
-        )
-    }
-
-    /**
-     * 経度を -180〜180 度へ正規化する。
-     *
-     * @param longitude 正規化前の経度
-     * @return 正規化後の経度
-     */
-    private fun normalizeLongitude(longitude: Double): Double =
-        ((longitude + LONGITUDE_NORMALIZE_OFFSET_DEGREES) % FULL_CIRCLE_DEGREES) -
-            HALF_CIRCLE_DEGREES
 
     /**
      * カメラを [target] へ van Wijk–Nuij "Smooth and efficient zooming and panning" の経路で移動させる。
@@ -831,6 +773,16 @@ internal class MapCameraState internal constructor() {
         return (from + diff * fraction + 360f) % 360f
     }
 
+    /**
+     * 2 つの方位角の最短差分を絶対値で返す。
+     *
+     * @param from 開始角度
+     * @param to 終了角度
+     * @return 0〜180 度の差分
+     */
+    private fun angleDistanceDegrees(from: Float, to: Float): Float =
+        abs(((to - from + 540f) % 360f) - 180f)
+
     /** ズーム差に応じて zoom 側のアニメーション時間を [CAMERA_PAN_DURATION_MS]〜[CAMERA_ZOOM_DURATION_MS] の範囲で線形に決める。 */
     private fun cameraZoomDurationMs(zoomDelta: Float): Long {
         val ratio = (zoomDelta / FULL_ZOOM_DELTA).coerceIn(0f, 1f)
@@ -892,23 +844,17 @@ internal class MapCameraState internal constructor() {
         /** follow 中の gesture 後に追従維持を許容する viewport 高さ比。 */
         private const val FOLLOW_GESTURE_TARGET_TOLERANCE_FRACTION = 0.12
 
+        /** gesture による bearing 変更として扱う最小角度。 */
+        private const val CAMERA_GESTURE_BEARING_TOLERANCE_DEGREES = 1f
+
+        /** gesture による tilt 変更として扱う最小角度。 */
+        private const val CAMERA_GESTURE_TILT_TOLERANCE_DEGREES = 1f
+
         /** Web Mercator zoom 0 の tile size。 */
         private const val WORLD_TILE_SIZE_DP = 256.0
 
-        /** 地表距離計算に使う平均地球半径（m）。 */
-        private const val EARTH_RADIUS_METERS = 6_371_008.8
-
         /** Web Mercator の地表解像度計算に使う地球円周（m）。 */
         private const val EARTH_CIRCUMFERENCE_METERS = 40_030_228.884
-
-        /** 経度正規化で 0 未満の剰余を避けるための offset。 */
-        private const val LONGITUDE_NORMALIZE_OFFSET_DEGREES = 540.0
-
-        /** 経度正規化に使う半周分の角度。 */
-        private const val HALF_CIRCLE_DEGREES = 180.0
-
-        /** 経度正規化に使う 1 周分の角度。 */
-        private const val FULL_CIRCLE_DEGREES = 360.0
     }
 }
 

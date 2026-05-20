@@ -2,13 +2,11 @@ package me.matsumo.onenavi.feature.map.state
 
 import me.matsumo.onenavi.core.model.RoutePoint
 import kotlin.math.absoluteValue
-import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sign
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
  * 低頻度の位置 tick から、画面描画時点の自車 pose を推定する。
@@ -19,6 +17,7 @@ import kotlin.math.sqrt
 internal class VehiclePoseEstimator {
 
     private var routeMeterIndex: RouteMeterIndex? = null
+    private var routeKeyRef: String? = null
     private var routeGeometryRef: List<RoutePoint>? = null
     private var previousSample: TimedVehicleLocation? = null
     private var latestSample: TimedVehicleLocation? = null
@@ -32,11 +31,13 @@ internal class VehiclePoseEstimator {
      * 新しい自車位置 tick を登録する。
      *
      * @param sample tracker または位置 provider から届いた自車位置
+     * @param routeKey 案内中 route を識別する key。案内中以外は null
      * @param routeGeometry 案内中 route の geometry。案内中以外は空でよい
      * @param nowElapsedRealtimeNanos sample が monotonic 時刻を持たない場合に補完する現在時刻
      */
     fun updateSample(
         sample: VehicleLocationState,
+        routeKey: String?,
         routeGeometry: List<RoutePoint>,
         nowElapsedRealtimeNanos: Long,
     ) {
@@ -45,9 +46,24 @@ internal class VehiclePoseEstimator {
             elapsedRealtimeNanos = sample.elapsedRealtimeNanos ?: nowElapsedRealtimeNanos,
         )
         val previousLatestSample = latestSample
+        val previousRouteKey = routeKeyRef
         val isRouteChanged = updateRouteGeometryIfNeeded(
             sample = sample,
+            routeKey = routeKey,
             routeGeometry = routeGeometry,
+        )
+        val hasProgressDiscontinuity = hasRouteProgressDiscontinuity(
+            previous = previousLatestSample,
+            next = nextSample,
+        )
+        val shouldResetProgress = isRouteChanged || hasProgressDiscontinuity
+        val shouldResetBearing = shouldResetBearingForRouteSession(
+            previousRouteKey = previousRouteKey,
+            nextRouteKey = routeKey,
+            nextSample = nextSample,
+        ) || shouldResetBearingForRouteProgressReset(
+            hasProgressDiscontinuity = hasProgressDiscontinuity,
+            nextSample = nextSample,
         )
 
         latestSampleIntervalSeconds = sampleIntervalSeconds(
@@ -55,11 +71,14 @@ internal class VehiclePoseEstimator {
             previous = previousLatestSample,
         ) ?: latestSampleIntervalSeconds
 
-        previousSample = if (isRouteChanged) null else previousLatestSample
+        previousSample = if (shouldResetProgress) null else previousLatestSample
         latestSample = nextSample
 
-        if (displayRouteProgressMeters == null) {
+        if (shouldResetProgress || displayRouteProgressMeters == null) {
             displayRouteProgressMeters = nextSample.state.routeProgressMeters
+        }
+        if (shouldResetBearing) {
+            displayBearingDegrees = null
         }
         if (nextSample.state.routeProgressMeters == null && displayFreeLocation == null) {
             displayFreeLocation = nextSample.state.location
@@ -119,20 +138,23 @@ internal class VehiclePoseEstimator {
      * target 方位へ連続補間させる。
      *
      * @param sample tracker または位置 provider から届いた自車位置
+     * @param routeKey 案内中 route を識別する key。案内中以外は null
      * @param routeGeometry 案内中 route の geometry
      * @return route geometry を更新した場合は true
      */
     private fun updateRouteGeometryIfNeeded(
         sample: VehicleLocationState,
+        routeKey: String?,
         routeGeometry: List<RoutePoint>,
     ): Boolean {
         if (shouldKeepCurrentRouteGeometry(sample = sample, routeGeometry = routeGeometry)) {
             return false
         }
 
-        if (routeGeometryRef == routeGeometry) return false
+        if (routeKeyRef == routeKey && routeGeometryRef == routeGeometry) return false
 
         val routeGeometrySnapshot = routeGeometry.toList()
+        routeKeyRef = routeKey
         routeGeometryRef = routeGeometrySnapshot
         routeMeterIndex = RouteMeterIndex.from(routeGeometrySnapshot)
         displayRouteProgressMeters = null
@@ -141,6 +163,72 @@ internal class VehiclePoseEstimator {
         }
 
         return true
+    }
+
+    /**
+     * route 進捗の不連続を検知する。
+     *
+     * 同一 geometry の案内再開始や同一 route id の再利用では、route geometry だけでは表示状態を
+     * reset できない。進捗が大きく戻った場合は別セッション相当として位置の表示状態を reset する。
+     *
+     * @param previous 1 つ前の tick。未取得の場合は null
+     * @param next 最新 tick
+     * @return 表示中の route 進捗を reset すべき場合は true
+     */
+    private fun hasRouteProgressDiscontinuity(
+        previous: TimedVehicleLocation?,
+        next: TimedVehicleLocation,
+    ): Boolean {
+        val previousProgressMeters = previous?.state?.routeProgressMeters ?: return false
+        val nextProgressMeters = next.state.routeProgressMeters ?: return false
+
+        return previousProgressMeters - nextProgressMeters > ROUTE_PROGRESS_RESET_BACKWARD_METERS
+    }
+
+    /**
+     * route セッション切替時に表示方位を reset すべきかを返す。
+     *
+     * 走行中の reroute では現在の表示方位から新 route の方位へ補間したい。一方、同じ geometry で案内を
+     * 始点付近から再開始した場合は、前セッション終端の表示方位を引き継がない方が自然になる。
+     *
+     * @param previousRouteKey 直前に保持していた route key
+     * @param nextRouteKey 最新 tick に紐づく route key
+     * @param nextSample 最新 tick
+     * @return 表示方位を reset すべき場合は true
+     */
+    private fun shouldResetBearingForRouteSession(
+        previousRouteKey: String?,
+        nextRouteKey: String?,
+        nextSample: TimedVehicleLocation,
+    ): Boolean {
+        if (previousRouteKey == null || nextRouteKey == null || previousRouteKey == nextRouteKey) {
+            return false
+        }
+
+        val nextProgressMeters = nextSample.state.routeProgressMeters ?: return false
+
+        return nextProgressMeters <= ROUTE_SESSION_START_PROGRESS_METERS
+    }
+
+    /**
+     * route 進捗の reset に合わせて表示方位も reset すべきかを返す。
+     *
+     * 同じ route key が再利用されても、進捗が始点付近へ大きく戻った場合は前セッションの方位を
+     * 引き継がない方が自然になる。
+     *
+     * @param hasProgressDiscontinuity route 進捗が大きく戻ったか
+     * @param nextSample 最新 tick
+     * @return 表示方位を reset すべき場合は true
+     */
+    private fun shouldResetBearingForRouteProgressReset(
+        hasProgressDiscontinuity: Boolean,
+        nextSample: TimedVehicleLocation,
+    ): Boolean {
+        if (!hasProgressDiscontinuity) return false
+
+        val nextProgressMeters = nextSample.state.routeProgressMeters ?: return false
+
+        return nextProgressMeters <= ROUTE_SESSION_START_PROGRESS_METERS
     }
 
     /**
@@ -225,7 +313,7 @@ internal class VehiclePoseEstimator {
             toElapsedRealtimeNanos = nowElapsedRealtimeNanos,
         )
 
-        return destinationPoint(
+        return MapGeodesy.destinationPoint(
             origin = latest.state.location,
             bearingDegrees = bearingDegrees,
             distanceMeters = speedMps * elapsedSeconds,
@@ -251,7 +339,7 @@ internal class VehiclePoseEstimator {
     ): RoutePoint {
         if (frameElapsedSeconds <= 0.0) return currentLocation
 
-        val errorMeters = haversineMeters(currentLocation, targetLocation)
+        val errorMeters = MapGeodesy.haversineMeters(currentLocation, targetLocation)
         if (errorMeters == 0.0) return currentLocation
 
         val correctionSpeedMps = sampleIntervalSeconds
@@ -261,7 +349,7 @@ internal class VehiclePoseEstimator {
         val maxStepMeters = (baseSpeedMps + correctionSpeedMps) * frameElapsedSeconds
         if (errorMeters <= maxStepMeters) return targetLocation
 
-        return destinationPoint(
+        return MapGeodesy.destinationPoint(
             origin = currentLocation,
             bearingDegrees = bearingDegrees(currentLocation, targetLocation),
             distanceMeters = maxStepMeters,
@@ -509,7 +597,7 @@ internal class VehiclePoseEstimator {
         )
         if (elapsedSeconds <= 0.0) return null
 
-        return haversineMeters(previousLocation, latest.state.location) / elapsedSeconds
+        return MapGeodesy.haversineMeters(previousLocation, latest.state.location) / elapsedSeconds
     }
 
     /**
@@ -666,7 +754,7 @@ internal class VehiclePoseEstimator {
                     add(totalMeters)
 
                     for (index in 1 until points.size) {
-                        totalMeters += haversineMeters(points[index - 1], points[index])
+                        totalMeters += MapGeodesy.haversineMeters(points[index - 1], points[index])
                         add(totalMeters)
                     }
                 }
@@ -693,26 +781,6 @@ private fun elapsedSeconds(
 ): Double = (toElapsedRealtimeNanos - fromElapsedRealtimeNanos)
     .coerceAtLeast(0L)
     .toDouble() / NANOS_PER_SECOND
-
-/**
- * 2 点間の球面距離を Haversine で計算する。
- *
- * @param from 始点
- * @param to 終点
- * @return 2 点間距離（m）
- */
-private fun haversineMeters(from: RoutePoint, to: RoutePoint): Double {
-    val fromLatitude = Math.toRadians(from.latitude)
-    val toLatitude = Math.toRadians(to.latitude)
-    val latitudeDelta = Math.toRadians(to.latitude - from.latitude)
-    val longitudeDelta = Math.toRadians(to.longitude - from.longitude)
-
-    val haversine = sin(latitudeDelta / 2).let { value -> value * value } +
-        cos(fromLatitude) * cos(toLatitude) *
-        sin(longitudeDelta / 2).let { value -> value * value }
-
-    return EARTH_RADIUS_METERS * 2.0 * atan2(sqrt(haversine), sqrt(1.0 - haversine))
-}
 
 /**
  * 2 点を結ぶ初期方位を返す。
@@ -766,48 +834,6 @@ private fun normalizeBearingDegrees(bearingDegrees: Float): Float =
     ((bearingDegrees + FULL_CIRCLE_DEGREES.toFloat()) % FULL_CIRCLE_DEGREES.toFloat())
 
 /**
- * 始点から指定距離だけ指定方位へ進んだ地点を返す。
- *
- * @param origin 始点
- * @param bearingDegrees 北を 0 度とする時計回り方位
- * @param distanceMeters 移動距離（m）
- * @return 移動後の緯度経度
- */
-private fun destinationPoint(
-    origin: RoutePoint,
-    bearingDegrees: Float,
-    distanceMeters: Double,
-): RoutePoint {
-    val angularDistance = distanceMeters / EARTH_RADIUS_METERS
-    val bearingRadians = Math.toRadians(bearingDegrees.toDouble())
-    val originLatitude = Math.toRadians(origin.latitude)
-    val originLongitude = Math.toRadians(origin.longitude)
-    val targetLatitude = asin(
-        sin(originLatitude) * cos(angularDistance) +
-            cos(originLatitude) * sin(angularDistance) * cos(bearingRadians),
-    )
-    val targetLongitude = originLongitude + atan2(
-        sin(bearingRadians) * sin(angularDistance) * cos(originLatitude),
-        cos(angularDistance) - sin(originLatitude) * sin(targetLatitude),
-    )
-
-    return RoutePoint(
-        latitude = Math.toDegrees(targetLatitude),
-        longitude = normalizeLongitude(Math.toDegrees(targetLongitude)),
-    )
-}
-
-/**
- * 経度を -180〜180 度へ正規化する。
- *
- * @param longitude 正規化前の経度
- * @return 正規化後の経度
- */
-private fun normalizeLongitude(longitude: Double): Double =
-    ((longitude + LONGITUDE_NORMALIZE_OFFSET_DEGREES) % FULL_CIRCLE_DEGREES) -
-        HALF_CIRCLE_DEGREES
-
-/**
  * 2 つの数値を線形補間する。
  *
  * @param from 開始値
@@ -821,23 +847,23 @@ private fun lerp(from: Double, to: Double, fraction: Double): Double =
 /** 1 秒あたりの nanosecond 数。 */
 private const val NANOS_PER_SECOND = 1_000_000_000.0
 
-/** Haversine 計算に使う平均地球半径（m）。 */
-private const val EARTH_RADIUS_METERS = 6_371_008.8
-
 /** 方位を正規化するための 1 周分の角度。 */
 private const val FULL_CIRCLE_DEGREES = 360.0
 
 /** 経度正規化に使う半周分の角度。 */
 private const val HALF_CIRCLE_DEGREES = 180.0
 
-/** 経度正規化で 0 未満の剰余を避けるための offset。 */
-private const val LONGITUDE_NORMALIZE_OFFSET_DEGREES = 540.0
-
 /** 方位差を -180〜180 度へ正規化するための offset。 */
 private const val ANGLE_DELTA_NORMALIZE_OFFSET_DEGREES = 540.0
 
 /** route geometry として扱うために必要な最小点数。 */
 private const val MIN_ROUTE_GEOMETRY_POINT_COUNT = 2
+
+/** route 進捗がこの距離以上戻った場合に別セッション相当として reset する距離。 */
+private const val ROUTE_PROGRESS_RESET_BACKWARD_METERS = 100.0
+
+/** route key 切替時に案内再開始とみなす始点付近の進捗距離。 */
+private const val ROUTE_SESSION_START_PROGRESS_METERS = 50.0
 
 /** 角速度の基準にする 1 直角分の角度。 */
 private const val RIGHT_ANGLE_DEGREES = 90.0

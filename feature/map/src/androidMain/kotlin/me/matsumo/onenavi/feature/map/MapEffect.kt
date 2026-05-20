@@ -83,7 +83,8 @@ internal fun MapEffect(
     }
 
     if (vehicleLocationState != null) {
-        val routeGeometry = (guidanceState as? GuidanceState.Guiding)
+        val guiding = guidanceState as? GuidanceState.Guiding
+        val routeGeometry = guiding
             ?.route
             ?.geometry
             ?: persistentListOf()
@@ -92,6 +93,7 @@ internal fun MapEffect(
             googleMap = googleMap,
             cameraState = cameraState,
             vehicleLocationState = vehicleLocationState,
+            routeKey = guiding?.route?.id,
             routeGeometry = routeGeometry,
             zIndex = VEHICLE_PUCK_Z_INDEX,
         )
