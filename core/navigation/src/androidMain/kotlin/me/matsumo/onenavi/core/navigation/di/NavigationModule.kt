@@ -8,7 +8,6 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import me.matsumo.drive.supporter.api.core.model.LogLevel
 import me.matsumo.onenavi.core.datasource.RouteDataSource
-import me.matsumo.onenavi.core.navigation.CameraManager
 import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavAuthGateway
@@ -27,7 +26,6 @@ import org.koin.dsl.module
 val navigationModule: Module = module {
     single { RouteManager() }
     single { NavigationSdkManager(androidApplication(), get()) }
-    single { CameraManager(get()) }
     single { NewRouteManager(routeRepository = get()) }
     single { ExtNavGuidanceTracker() }
     single {
