@@ -55,12 +55,21 @@
 
 polyline 描画と同じタイミングで、リルート確認に必要な最低限のカメラ制御だけを入れる。
 TBT バナー、ETA、停止ボタン、自車マーカーなどの UI は後回しにする。
+案内中カメラは通常追従と案内地点接近時の一時フォーカスを分け、ユーザーが選んだ 3D / 真上モードと
+ズーム値を接近フォーカス解除後に復元できるようにする。
 
 - [ ] `MapCameraEffect` に `guidanceState: GuidanceState` を渡す
 - [ ] `GuidanceState.Guiding.route.id` が変わったときだけ `Guiding.route.geometry` を `showRouteOverview()` で収める
 - [ ] `GuidanceState.Guiding.progress.snappedLocation` を案内中カメラの追従 target にする
 - [ ] `GuidanceState.Guiding.progress.bearingDegrees` を案内中カメラの bearing に使う
 - [ ] `MapCameraState` に案内中 target / bearing / zoom / tilt を指定できる API を追加する
+- [ ] 案内中でも 3D モードと真上モードを手動で切り替えられる
+- [ ] 手動で選んだ通常モードと通常ズーム値を `MapCameraState` に保持する
+- [ ] `progress.nextManeuver.distanceToManeuverMeters` が接近閾値以下になったら案内地点フォーカスを開始する
+- [ ] 案内地点フォーカス中は自動で真上モードにし、案内地点確認用のズーム値へ自動拡大する
+- [ ] `nextGuidancePointIndex` が変わる、または対象 GP を通過したら案内地点フォーカスを解除する
+- [ ] 案内地点フォーカス解除後は、フォーカス前の 3D / 真上モードとズーム値へ戻す
+- [ ] 案内地点フォーカス中にユーザーが手動操作した場合の解除 / 継続ルールを決める
 - [ ] GPS tick ごとに route 全体 fit を再実行せず、route 差し替え時と現在地追従を分ける
 
 受け入れ条件:
@@ -69,6 +78,10 @@ TBT バナー、ETA、停止ボタン、自車マーカーなどの UI は後回
 - [ ] GPS tick 更新でカメラ中心が `progress.snappedLocation` に追従する
 - [ ] リルート後は新 route 全体が一度収まり、その後は新 route 上の `snappedLocation` に追従する
 - [ ] `GuidanceState` が案内中でないときは案内中カメラ制御を止める
+- [ ] 案内中に 3D / 真上モードを切り替えられる
+- [ ] 案内地点に近づくと自動で真上モードかつ拡大表示になる
+- [ ] 案内地点通過後に、接近前のモードとズーム値へ戻る
+- [ ] 次の案内地点でも同じフォーカス動作を 1 回だけ行う
 
 ### 2.3 route id / registry session 化
 
