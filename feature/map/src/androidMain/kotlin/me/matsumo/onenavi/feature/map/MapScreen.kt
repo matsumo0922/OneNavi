@@ -53,6 +53,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
     val screenState by viewModel.currentScreenState.collectAsStateWithLifecycle()
     val hasScreenStateStack by viewModel.hasScreenStateStack.collectAsStateWithLifecycle()
     val routePreviewState by viewModel.newRoutePreviewState.collectAsStateWithLifecycle()
+    val guidanceState by viewModel.newGuidanceState.collectAsStateWithLifecycle()
 
     val navigationBarHeightDp = WindowInsets.navigationBars
         .asPaddingValues()
@@ -161,6 +162,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxSize(),
                         screenState = screenState,
                         routePreviewState = routePreviewState,
+                        guidanceState = guidanceState,
                         googleMap = it,
                         topAppBarHeightPx = uiState.topAppBarHeight,
                         bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,

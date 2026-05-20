@@ -38,12 +38,12 @@
 リルートの実走 / Fake GPS 確認を先に行うため、TBT バナーや ETA などの UI より先に、
 案内中の地図へ `GuidanceState.Guiding.route` を反映する。
 
-- [ ] `MapScreen` で `MapViewModel.newGuidanceState` を collect する
-- [ ] `MapEffect` に `guidanceState: GuidanceState` を渡す
-- [ ] `MapEffect` の `Navigating` 分岐で `GuidanceState.Guiding.route.geometry` を `MapPolyline` で描画する
-- [ ] 案内中 polyline は `Guiding.route.roadClassSegments` / `Guiding.route.congestionSegments` を渡して描画する
-- [ ] `GuidanceState.Guiding.route` が差し替わったら、古い polyline を破棄して新しい geometry を描画する
-- [ ] `RoutePreviewState` に依存せず、案内中は `GuidanceState.Guiding.route` だけを route line の正とする
+- [x] `MapScreen` で `MapViewModel.newGuidanceState` を collect する
+- [x] `MapEffect` に `guidanceState: GuidanceState` を渡す
+- [x] `MapEffect` の `Navigating` 分岐で `GuidanceState.Guiding.route.geometry` を `MapPolyline` で描画する
+- [x] 案内中 polyline は `Guiding.route.roadClassSegments` / `Guiding.route.congestionSegments` を渡して描画する
+- [x] `GuidanceState.Guiding.route` が差し替わったら、古い polyline を破棄して新しい geometry を描画する
+- [x] `RoutePreviewState` に依存せず、案内中は `GuidanceState.Guiding.route` だけを route line の正とする
 
 受け入れ条件:
 

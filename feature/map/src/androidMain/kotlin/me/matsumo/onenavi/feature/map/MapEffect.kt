@@ -5,6 +5,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import com.google.android.gms.maps.GoogleMap
 import kotlinx.collections.immutable.persistentListOf
+import me.matsumo.onenavi.core.model.RouteDetail
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapMarker
 import me.matsumo.onenavi.feature.map.components.MapNumberedMarker
@@ -17,6 +19,7 @@ import me.matsumo.onenavi.feature.map.state.MapScreenState
 internal fun MapEffect(
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
+    guidanceState: GuidanceState,
     googleMap: GoogleMap,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
@@ -51,7 +54,12 @@ internal fun MapEffect(
                 onRouteSelected = onRouteSelected,
             )
         }
-        is MapScreenState.Navigating -> Unit
+        is MapScreenState.Navigating -> {
+            NavigationEffect(
+                guidanceState = guidanceState,
+                googleMap = googleMap,
+            )
+        }
         is MapScreenState.Arrived -> Unit
     }
 }
@@ -106,14 +114,10 @@ private fun RoutePreviewEffect(
 
     if (routePreviewState is RoutePreviewState.Ready) {
         for ((routeIndex, route) in routePreviewState.routes.withIndex()) {
-            val isSelected = routeIndex == routePreviewState.selectedIndex
-
-            MapPolyline(
+            RoutePolylineEffect(
                 googleMap = googleMap,
-                points = route.geometry,
-                style = if (isSelected) MapPolylineStyle.Selected else MapPolylineStyle.Unselected,
-                roadClassSegments = if (isSelected) route.roadClassSegments else persistentListOf(),
-                congestionSegments = if (isSelected) route.congestionSegments else persistentListOf(),
+                route = route,
+                isSelected = routeIndex == routePreviewState.selectedIndex,
             )
         }
     }
@@ -125,6 +129,35 @@ private fun RoutePreviewEffect(
         topAppBarHeightPx = topAppBarHeightPx,
         bottomSheetPeekHeight = bottomSheetPeekHeight,
         onRouteSelected = onRouteSelected,
+    )
+}
+
+@Composable
+private fun NavigationEffect(
+    guidanceState: GuidanceState,
+    googleMap: GoogleMap,
+) {
+    val guiding = guidanceState as? GuidanceState.Guiding ?: return
+
+    RoutePolylineEffect(
+        googleMap = googleMap,
+        route = guiding.route,
+        isSelected = true,
+    )
+}
+
+@Composable
+private fun RoutePolylineEffect(
+    googleMap: GoogleMap,
+    route: RouteDetail,
+    isSelected: Boolean,
+) {
+    MapPolyline(
+        googleMap = googleMap,
+        points = route.geometry,
+        style = if (isSelected) MapPolylineStyle.Selected else MapPolylineStyle.Unselected,
+        roadClassSegments = if (isSelected) route.roadClassSegments else persistentListOf(),
+        congestionSegments = if (isSelected) route.congestionSegments else persistentListOf(),
     )
 }
 
