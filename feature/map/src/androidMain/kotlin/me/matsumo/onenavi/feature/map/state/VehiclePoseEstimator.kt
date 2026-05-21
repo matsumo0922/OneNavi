@@ -53,7 +53,11 @@ internal class VehiclePoseEstimator {
             previous = previousLatestSample,
             next = nextSample,
         )
-        val shouldResetProgress = isRouteChanged || hasProgressDiscontinuity
+        val hasRouteProgressResumed = hasRouteProgressResumed(
+            previous = previousLatestSample,
+            next = nextSample,
+        )
+        val shouldResetProgress = isRouteChanged || hasProgressDiscontinuity || hasRouteProgressResumed
         val shouldResetBearing = shouldResetBearingForRouteSession(
             previousRouteKey = previousRouteKey,
             nextRouteKey = routeKey,
@@ -180,6 +184,27 @@ internal class VehiclePoseEstimator {
         val nextProgressMeters = next.state.routeProgressMeters ?: return false
 
         return previousProgressMeters - nextProgressMeters > ROUTE_PROGRESS_RESET_BACKWARD_METERS
+    }
+
+    /**
+     * route 外表示から route-snapped 表示へ戻ったかを返す。
+     *
+     * route 逸脱中は [displayRouteProgressMeters] を進めないため、復帰時に古い route 進捗から
+     * catch-up させると自車アイコンが route 上を急スライドして見える。route progress が再開した
+     * tick では、表示進捗を最新の snap 進捗に合わせて再開する。
+     *
+     * @param previous 1 つ前の tick。未取得の場合は null
+     * @param next 最新 tick
+     * @return route progress が null から非 null へ復帰した場合は true
+     */
+    private fun hasRouteProgressResumed(
+        previous: TimedVehicleLocation?,
+        next: TimedVehicleLocation,
+    ): Boolean {
+        val previousProgressMeters = previous?.state?.routeProgressMeters
+        val nextProgressMeters = next.state.routeProgressMeters
+
+        return previousProgressMeters == null && nextProgressMeters != null
     }
 
     /**

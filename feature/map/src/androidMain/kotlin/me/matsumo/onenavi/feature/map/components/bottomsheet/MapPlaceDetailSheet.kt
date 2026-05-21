@@ -146,8 +146,8 @@ internal fun MapPlaceDetailSheet(
                     onUiEvent(
                         MapUiEvent.OnRouteSearch(
                             item = selectedResult,
-                            latitude = cameraState.cameraState.myLocationLatitude,
-                            longitude = cameraState.cameraState.myLocationLongitude,
+                            latitude = cameraState.myLocationLatitude,
+                            longitude = cameraState.myLocationLongitude,
                         ),
                     )
                 },

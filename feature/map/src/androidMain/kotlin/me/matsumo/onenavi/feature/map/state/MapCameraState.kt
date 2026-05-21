@@ -55,6 +55,14 @@ internal class MapCameraState internal constructor() {
     var cameraState by mutableStateOf(MapCameraSnapshot())
         private set
 
+    /** 最後に受け取った自車位置の緯度。未取得の場合は初期緯度を返す。 */
+    val myLocationLatitude: Double
+        get() = lastVehiclePose?.location?.latitude ?: DEFAULT_LATITUDE
+
+    /** 最後に受け取った自車位置の経度。未取得の場合は初期経度を返す。 */
+    val myLocationLongitude: Double
+        get() = lastVehiclePose?.location?.longitude ?: DEFAULT_LONGITUDE
+
     /**
      * 操作対象の GoogleMap を接続し、カメラ移動 listener を登録する。
      *
@@ -207,10 +215,6 @@ internal class MapCameraState internal constructor() {
      */
     fun updateVehiclePose(vehiclePose: VehiclePose) {
         lastVehiclePose = vehiclePose
-        cameraState = cameraState.copy(
-            myLocationLatitude = vehiclePose.location.latitude,
-            myLocationLongitude = vehiclePose.location.longitude,
-        )
 
         if (cameraState.isFollowingMyLocation && !isCameraTransitionInProgress() && !gestureController.isGestureInProgress) {
             val current = googleMap?.cameraPosition ?: return
@@ -318,8 +322,6 @@ internal class MapCameraState internal constructor() {
      */
     private fun updateCameraPosition(cameraPosition: CameraPosition) {
         cameraState = cameraState.copy(
-            latitude = cameraPosition.target.latitude,
-            longitude = cameraPosition.target.longitude,
             bearing = cameraPosition.bearing.toDouble(),
             zoom = cameraPosition.zoom,
             isFollowingMyLocation = cameraState.isFollowingMyLocation,
@@ -648,21 +650,13 @@ internal class MapCameraState internal constructor() {
 /**
  * 地図カメラの現在状態。
  *
- * @param latitude カメラ中心の緯度
- * @param longitude カメラ中心の経度
- * @param myLocationLatitude 自分の位置の緯度
- * @param myLocationLongitude 自分の位置の経度
  * @param zoom 現在のズーム値
  * @param bearing 現在のカメラの向き
  * @param perspective GoogleMap.CameraPerspective
  * @param isFollowingMyLocation マップカメラが現在自分の位置に追従しているかどうか
  */
 @Stable
-data class MapCameraSnapshot(
-    val latitude: Double = DEFAULT_LATITUDE,
-    val longitude: Double = DEFAULT_LONGITUDE,
-    val myLocationLatitude: Double = DEFAULT_LATITUDE,
-    val myLocationLongitude: Double = DEFAULT_LONGITUDE,
+internal data class MapCameraSnapshot(
     val zoom: Float = DEFAULT_CAMERA_ZOOM,
     val bearing: Double = 0.0,
     val perspective: Int = GoogleMap.CameraPerspective.TILTED,
