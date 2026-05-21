@@ -208,7 +208,7 @@ export class ControlsManager {
     this.statusPollHandle = setInterval(async () => {
       const status = await getStatus();
       const el = document.getElementById("connection-status")!;
-      if (status) {
+      if (status?.active) {
         el.textContent = "\u25CF Connected";
         el.className = "connected";
       } else {
