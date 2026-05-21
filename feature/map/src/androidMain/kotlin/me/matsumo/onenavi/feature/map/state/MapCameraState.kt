@@ -151,6 +151,63 @@ internal class MapCameraState internal constructor() {
     }
 
     /**
+     * 案内開始時のカメラを 3D 追従状態へ初期化する。
+     *
+     * 現在の perspective / zoom に関わらず、3D 表示・既定ズームへアニメーションする。自車位置が
+     * 取得済みなら案内中用の画面手前側 target へ寄せ、未取得なら現在の camera target のまま
+     * 3D と既定ズームだけを先に反映する。
+     *
+     * @param vehicleLocationState 案内開始時点の自車位置。未取得の場合は次の pose 更新を待つ
+     */
+    fun startGuidanceCamera(vehicleLocationState: VehicleLocationState?) {
+        val map = googleMap
+        cameraAnimator?.cancel()
+        map?.stopAnimation()
+        clearUserGesture()
+        isGuidanceCameraActive = true
+        cameraState = cameraState.copy(
+            perspective = GoogleMap.CameraPerspective.TILTED,
+            isFollowingMyLocation = true,
+        )
+
+        val current = map?.cameraPosition
+        val vehiclePose = vehicleLocationState?.toVehiclePose() ?: lastVehiclePose
+        val target = if (current != null && vehiclePose != null) {
+            vehicleCameraPosition(
+                vehiclePose = vehiclePose,
+                current = current,
+                zoom = DEFAULT_CAMERA_ZOOM,
+                perspective = GoogleMap.CameraPerspective.TILTED,
+            )
+        } else if (current != null) {
+            CameraPosition.Builder()
+                .target(current.target)
+                .zoom(DEFAULT_CAMERA_ZOOM)
+                .bearing(current.bearing)
+                .tilt(vehicleTiltDegrees(GoogleMap.CameraPerspective.TILTED))
+                .build()
+        } else {
+            null
+        }
+
+        if (target == null) return
+        val activeMap = map ?: return
+
+        flyCameraTo(
+            target = target,
+            keepFollowingMyLocation = true,
+            moveCamera = { _, cameraPosition -> moveVehicleCamera(cameraPosition) },
+            onFinished = {
+                updateCameraPosition(activeMap.cameraPosition)
+                cameraState = cameraState.copy(
+                    perspective = GoogleMap.CameraPerspective.TILTED,
+                    isFollowingMyLocation = true,
+                )
+            },
+        )
+    }
+
+    /**
      * 画面表示用 pose を反映する。
      *
      * 追従中で明示的なカメラアニメーションが走っていない場合は、同じ pose へカメラ中心も追従させる。

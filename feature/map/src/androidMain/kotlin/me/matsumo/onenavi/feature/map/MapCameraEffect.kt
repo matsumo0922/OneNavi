@@ -106,7 +106,7 @@ internal fun MapCameraEffect(
                 // ルートが揃ったタイミングで下の LaunchedEffect がカメラをフィットさせる
             }
             is MapScreenState.Navigating -> {
-                cameraState.followVehicleLocation(vehicleLocationState)
+                cameraState.startGuidanceCamera(vehicleLocationState)
             }
             is MapScreenState.Arrived -> {
                 // TODO
