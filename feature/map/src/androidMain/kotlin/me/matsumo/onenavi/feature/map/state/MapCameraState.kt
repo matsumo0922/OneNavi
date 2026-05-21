@@ -17,7 +17,6 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR
-import kotlin.math.abs
 
 /**
  * GoogleMap 用のカメラ状態 holder を Compose 上で保持する。
@@ -48,12 +47,10 @@ internal class MapCameraState internal constructor() {
         viewportWidthDpProvider = { mapViewWidthPx.toDouble() / density },
     )
     private val vehicleCameraPositionFactory = VehicleCameraPositionFactory()
+    private val gestureController = MapCameraGestureController()
     private var mapViewWidthPx: Int = 0
     private var density: Float = DEFAULT_DENSITY
     private var lastVehiclePose: VehiclePose? = null
-    private var isUserGestureInProgress: Boolean = false
-    private var wasFollowingBeforeUserGesture: Boolean = false
-    private var userGestureStartCameraPosition: CameraPosition? = null
 
     var cameraState by mutableStateOf(MapCameraSnapshot())
         private set
@@ -67,12 +64,13 @@ internal class MapCameraState internal constructor() {
         this.googleMap = googleMap
 
         googleMap.setOnCameraMoveStartedListener { reason ->
-            val isGesture = reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE
+            val isGesture = gestureController.onCameraMoveStarted(
+                reason = reason,
+                isFollowingMyLocation = cameraState.isFollowingMyLocation,
+                cameraPosition = googleMap.cameraPosition,
+            )
             if (isGesture) {
                 cameraAnimator.cancel()
-                isUserGestureInProgress = true
-                wasFollowingBeforeUserGesture = cameraState.isFollowingMyLocation
-                userGestureStartCameraPosition = googleMap.cameraPosition
             }
         }
         googleMap.setOnCameraMoveListener {
@@ -80,7 +78,12 @@ internal class MapCameraState internal constructor() {
         }
         googleMap.setOnCameraIdleListener {
             updateCameraPosition(googleMap.cameraPosition)
-            finishUserGestureIfNeeded(googleMap.cameraPosition)
+            gestureController.finishIfNeeded(
+                cameraPosition = googleMap.cameraPosition,
+                isCameraTargetAwayFromVehicle = ::isCameraTargetAwayFromVehicle,
+            )?.let { shouldKeepFollowing ->
+                cameraState = cameraState.copy(isFollowingMyLocation = shouldKeepFollowing)
+            }
         }
     }
 
@@ -151,7 +154,7 @@ internal class MapCameraState internal constructor() {
         val map = googleMap
         cameraAnimator.cancel()
         map?.stopAnimation()
-        clearUserGesture()
+        gestureController.clear()
         vehicleCameraPositionFactory.setGuidanceCameraActive(true)
         cameraState = cameraState.copy(
             perspective = GoogleMap.CameraPerspective.TILTED,
@@ -209,7 +212,7 @@ internal class MapCameraState internal constructor() {
             myLocationLongitude = vehiclePose.location.longitude,
         )
 
-        if (cameraState.isFollowingMyLocation && !isCameraTransitionInProgress() && !isUserGestureInProgress) {
+        if (cameraState.isFollowingMyLocation && !isCameraTransitionInProgress() && !gestureController.isGestureInProgress) {
             val current = googleMap?.cameraPosition ?: return
             moveVehicleCamera(vehicleCameraPosition(vehiclePose = vehiclePose, current = current))
         }
@@ -359,7 +362,7 @@ internal class MapCameraState internal constructor() {
      */
     private fun animateFollowZoomTo(targetZoom: Float) {
         val map = googleMap ?: return
-        clearUserGesture()
+        gestureController.clear()
         cameraState = cameraState.copy(isFollowingMyLocation = true)
 
         cameraAnimator.animateFollowZoomTo(
@@ -392,53 +395,6 @@ internal class MapCameraState internal constructor() {
     }
 
     /**
-     * user gesture 終了時に自車追従を維持するか判定する。
-     *
-     * zoom gesture は指の位置を中心に zoom されるため追従を解除する。rotate / tilt gesture も
-     * ユーザーが見たい向きを明示した操作なので追従を解除する。pan gesture は map target が
-     * 自車追従 target から離れた場合だけ追従を解除する。
-     *
-     * @param cameraPosition gesture 終了時点の camera position
-     */
-    private fun finishUserGestureIfNeeded(cameraPosition: CameraPosition) {
-        if (!isUserGestureInProgress) return
-
-        val hasZoomChanged = userGestureStartCameraPosition
-            ?.let { start -> start.zoom != cameraPosition.zoom }
-            ?: false
-        val hasBearingChanged = userGestureStartCameraPosition
-            ?.let { start ->
-                MapGeodesy.angleDistanceDegrees(
-                    from = start.bearing,
-                    to = cameraPosition.bearing,
-                ) > CAMERA_GESTURE_BEARING_TOLERANCE_DEGREES
-            }
-            ?: false
-        val hasTiltChanged = userGestureStartCameraPosition
-            ?.let { start ->
-                abs(start.tilt - cameraPosition.tilt) > CAMERA_GESTURE_TILT_TOLERANCE_DEGREES
-            }
-            ?: false
-        val shouldKeepFollowing = wasFollowingBeforeUserGesture &&
-            !hasZoomChanged &&
-            !hasBearingChanged &&
-            !hasTiltChanged &&
-            !isCameraTargetAwayFromVehicle(cameraPosition)
-
-        cameraState = cameraState.copy(isFollowingMyLocation = shouldKeepFollowing)
-        clearUserGesture()
-    }
-
-    /**
-     * user gesture の一時状態を破棄する。
-     */
-    private fun clearUserGesture() {
-        isUserGestureInProgress = false
-        wasFollowingBeforeUserGesture = false
-        userGestureStartCameraPosition = null
-    }
-
-    /**
      * 自前 animator が動作中かを返す。
      *
      * @return カメラ遷移中で自車追従の即時 moveCamera を止めるべきなら true
@@ -468,7 +424,7 @@ internal class MapCameraState internal constructor() {
         }
 
         cameraAnimator.cancel()
-        clearUserGesture()
+        gestureController.clear()
         map.stopAnimation()
         cameraState = cameraState.copy(
             perspective = perspective,
@@ -714,12 +670,6 @@ internal class MapCameraState internal constructor() {
 
         /** コンパス button による 3D heading-up / 2D north-up 切り替え animation 時間（ms）。 */
         private const val COMPASS_PERSPECTIVE_ANIMATION_DURATION_MS = 500L
-
-        /** gesture による bearing 変更として扱う最小角度。 */
-        private const val CAMERA_GESTURE_BEARING_TOLERANCE_DEGREES = 1f
-
-        /** gesture による tilt 変更として扱う最小角度。 */
-        private const val CAMERA_GESTURE_TILT_TOLERANCE_DEGREES = 1f
     }
 }
 
