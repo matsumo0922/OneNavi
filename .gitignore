@@ -65,3 +65,6 @@ xcuserdata
 iosApp/OneNavi/Info.plist
 iosApp/ShareExtension/Info.plist
 iosApp/Pods
+
+# Claude Code
+.claude/worktrees
