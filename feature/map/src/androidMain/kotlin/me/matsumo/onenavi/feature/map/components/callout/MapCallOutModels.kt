@@ -65,6 +65,7 @@ internal data class MapCallOutPreviousPlacement(
  * @param priority 配置優先度。大きいほど先に配置される
  * @param zIndexPriority 描画優先度。null の場合は [priority] を使う
  * @param contentKey slot content を bitmap 化し直すための描画キー
+ * @param allowsOffscreenPlacement 画面外に projected された候補も marker として配置する場合 true
  * @param supportedTailSides 許可する tail 側。空の場合は下側左右を使う
  * @param previousPlacement 前回配置。ちらつき抑制の reward に使う
  */
@@ -75,6 +76,7 @@ internal data class MapCallOutRequest(
     val priority: Int = 0,
     val zIndexPriority: Int? = null,
     val contentKey: String? = null,
+    val allowsOffscreenPlacement: Boolean = false,
     val supportedTailSides: ImmutableList<MapCallOutTailSide> = DEFAULT_MAP_CALLOUT_TAIL_SIDES,
     val previousPlacement: MapCallOutPreviousPlacement? = null,
 )

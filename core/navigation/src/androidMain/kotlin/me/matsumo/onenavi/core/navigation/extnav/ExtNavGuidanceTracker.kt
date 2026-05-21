@@ -464,6 +464,11 @@ class ExtNavGuidanceTracker {
             cumulativeMetres = attached.cumulativeMetres,
             targetMetres = guidancePointMetres,
         )
+        val guidancePointLocation = routePointAt(
+            route = attached.route,
+            cumulativeMetres = attached.cumulativeMetres,
+            targetMetres = guidancePointMetres,
+        )
 
         return GuidanceManeuverInfo(
             type = maneuverType(
@@ -472,6 +477,7 @@ class ExtNavGuidanceTracker {
                 bearingDiffDegrees = bearingDiffDegrees,
             ),
             modifier = maneuverModifier(bearingDiffDegrees),
+            location = guidancePointLocation,
             distanceToManeuverMeters = (guidancePointMetres - currentCumulativeMeters)
                 .coerceAtLeast(0.0)
                 .roundToInt(),
@@ -1064,6 +1070,44 @@ class ExtNavGuidanceTracker {
         val afterBearing = bearingDegrees(route.geometry[afterIndex], route.geometry[afterIndex + 1])
 
         return normalizeDegrees(afterBearing - beforeBearing)
+    }
+
+    /**
+     * route geometry 上の累積距離から座標を補間する。
+     *
+     * @param route 座標を求める route
+     * @param cumulativeMetres geometry index ごとの累積距離
+     * @param targetMetres 座標を求める geometry 累積距離
+     * @return route geometry 上の座標。geometry が無い場合は route origin
+     */
+    private fun routePointAt(
+        route: RouteDetail,
+        cumulativeMetres: DoubleArray,
+        targetMetres: Double,
+    ): RoutePoint {
+        val geometry = route.geometry
+        if (geometry.isEmpty()) return route.origin
+        if (geometry.size == 1 || cumulativeMetres.size <= 1) return geometry.first()
+
+        val coercedTargetMetres = targetMetres.coerceIn(0.0, cumulativeMetres.last())
+        val segmentIndex = segmentIndexAt(
+            cumulativeMetres = cumulativeMetres,
+            targetMetres = coercedTargetMetres,
+        ).coerceIn(0, geometry.lastIndex - 1)
+        val segmentStartMetres = cumulativeMetres[segmentIndex]
+        val segmentEndMetres = cumulativeMetres[segmentIndex + 1]
+        val segmentMetres = segmentEndMetres - segmentStartMetres
+        val ratio = if (segmentMetres > 0.0) {
+            ((coercedTargetMetres - segmentStartMetres) / segmentMetres).coerceIn(0.0, 1.0)
+        } else {
+            0.0
+        }
+
+        return interpolateRoutePoint(
+            start = geometry[segmentIndex],
+            end = geometry[segmentIndex + 1],
+            ratio = ratio,
+        )
     }
 
     // ---------------------------------------------------------------------

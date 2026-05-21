@@ -46,6 +46,7 @@ internal class MapCameraAnimator(
      * ただのイージングになる。bearing / tilt は経路とは別チャンネルで線形補間する。
      *
      * @param target 移動先 camera position
+     * @param targetProvider frame ごとに移動先を更新する provider。null なら [target] を固定終点として使う
      * @param durationMs アニメーション時間（ms）。null なら経路長から自動算出する
      * @param zoomEasing zoom だけを弧長から切り離して補間する場合の easing。通常は null
      * @param moveCamera frame ごとの camera 適用処理
@@ -55,6 +56,7 @@ internal class MapCameraAnimator(
      */
     fun flyTo(
         target: CameraPosition,
+        targetProvider: (() -> CameraPosition)? = null,
         durationMs: Long? = null,
         zoomEasing: TimeInterpolator? = null,
         moveCamera: (GoogleMap, CameraPosition) -> Unit = DEFAULT_MOVE_CAMERA,
@@ -70,19 +72,20 @@ internal class MapCameraAnimator(
         }
 
         val start = map.cameraPosition
+        val initialTarget = targetProvider?.invoke() ?: target
         val startViewport = flyToViewport(viewportWidthDp, start.target, start.zoom)
-        val endViewport = flyToViewport(viewportWidthDp, target.target, target.zoom)
-        val isSamePose = startViewport == endViewport &&
-            start.bearing == target.bearing &&
-            start.tilt == target.tilt
+        val initialEndViewport = flyToViewport(viewportWidthDp, initialTarget.target, initialTarget.zoom)
+        val isSamePose = startViewport == initialEndViewport &&
+            start.bearing == initialTarget.bearing &&
+            start.tilt == initialTarget.tilt
         if (isSamePose) {
             onFinished()
             return
         }
 
-        val path = VanWijkZoomPath.of(startViewport, endViewport, rho = CAMERA_FLY_TO_RHO)
+        val initialPath = VanWijkZoomPath.of(startViewport, initialEndViewport, rho = CAMERA_FLY_TO_RHO)
         val totalDurationMs = durationMs
-            ?: (path.naturalDurationMs() * CAMERA_FLY_TO_SPEED_SCALE)
+            ?: (initialPath.naturalDurationMs() * CAMERA_FLY_TO_SPEED_SCALE)
                 .toLong()
                 .coerceIn(MIN_FLY_TO_DURATION_MS, MAX_FLY_TO_DURATION_MS)
         val easing = DecelerateInterpolator(CAMERA_DECELERATE_FACTOR)
@@ -97,13 +100,24 @@ internal class MapCameraAnimator(
             addUpdateListener { animation ->
                 val rawFraction = animation.animatedValue as Float
                 val arcFraction = easing.getInterpolation(rawFraction)
-                val viewport = path.at(arcFraction.toDouble())
+                val frameTarget = targetProvider?.invoke() ?: target
+                val frameEndViewport = if (targetProvider == null) {
+                    initialEndViewport
+                } else {
+                    flyToViewport(viewportWidthDp, frameTarget.target, frameTarget.zoom)
+                }
+                val framePath = if (targetProvider == null) {
+                    initialPath
+                } else {
+                    VanWijkZoomPath.of(startViewport, frameEndViewport, rho = CAMERA_FLY_TO_RHO)
+                }
+                val viewport = framePath.at(arcFraction.toDouble())
                 val widthWorldPx = if (zoomEasing == null) {
                     viewport.viewportWidthWorldPx
                 } else {
                     zoomViewportWidth(
                         startViewport = startViewport,
-                        endViewport = endViewport,
+                        endViewport = frameEndViewport,
                         rawFraction = rawFraction,
                         zoomEasing = zoomEasing,
                     )
@@ -121,8 +135,8 @@ internal class MapCameraAnimator(
                             ),
                         )
                         .zoom(zoom)
-                        .bearing(MapInterpolation.lerpAngleDegrees(start.bearing, target.bearing, arcFraction))
-                        .tilt(MapInterpolation.lerp(start.tilt, target.tilt, arcFraction))
+                        .bearing(MapInterpolation.lerpAngleDegrees(start.bearing, frameTarget.bearing, arcFraction))
+                        .tilt(MapInterpolation.lerp(start.tilt, frameTarget.tilt, arcFraction))
                         .build(),
                 )
             }
@@ -138,6 +152,7 @@ internal class MapCameraAnimator(
      * 現在地追従ではない通常 zoom 操作に使う。
      *
      * @param target 移動先 camera position
+     * @param targetProvider frame ごとに移動先を更新する provider。null なら [target] を固定終点として使う
      * @param panDurationMs pan の所要時間（ms）。null なら既定値
      * @param zoomDurationMs zoom の所要時間（ms）。null ならズーム差から自動算出
      * @param moveCamera frame ごとの camera 適用処理
@@ -146,6 +161,7 @@ internal class MapCameraAnimator(
      */
     fun animateTo(
         target: CameraPosition,
+        targetProvider: (() -> CameraPosition)? = null,
         panDurationMs: Long? = null,
         zoomDurationMs: Long? = null,
         moveCamera: (GoogleMap, CameraPosition) -> Unit = DEFAULT_MOVE_CAMERA,
@@ -154,8 +170,9 @@ internal class MapCameraAnimator(
     ) {
         val map = mapProvider() ?: return
         val start = map.cameraPosition
+        val initialTarget = targetProvider?.invoke() ?: target
         val resolvedPanDurationMs = panDurationMs ?: CAMERA_PAN_DURATION_MS
-        val resolvedZoomDurationMs = zoomDurationMs ?: cameraZoomDurationMs(zoomDelta = abs(target.zoom - start.zoom))
+        val resolvedZoomDurationMs = zoomDurationMs ?: cameraZoomDurationMs(zoomDelta = abs(initialTarget.zoom - start.zoom))
         val totalDurationMs = max(resolvedPanDurationMs, resolvedZoomDurationMs)
         val easing = DecelerateInterpolator(CAMERA_DECELERATE_FACTOR)
 
@@ -170,11 +187,12 @@ internal class MapCameraAnimator(
                 val elapsedMs = (animation.animatedValue as Float) * totalDurationMs
                 val panFraction = easing.getInterpolation((elapsedMs / resolvedPanDurationMs).coerceAtMost(1f))
                 val zoomFraction = easing.getInterpolation((elapsedMs / resolvedZoomDurationMs).coerceAtMost(1f))
-                val lat = MapInterpolation.lerp(start.target.latitude, target.target.latitude, panFraction)
-                val lng = MapInterpolation.lerp(start.target.longitude, target.target.longitude, panFraction)
-                val zoom = MapInterpolation.lerp(start.zoom, target.zoom, zoomFraction)
-                val bearing = MapInterpolation.lerpAngleDegrees(start.bearing, target.bearing, panFraction)
-                val tilt = MapInterpolation.lerp(start.tilt, target.tilt, panFraction)
+                val frameTarget = targetProvider?.invoke() ?: target
+                val lat = MapInterpolation.lerp(start.target.latitude, frameTarget.target.latitude, panFraction)
+                val lng = MapInterpolation.lerp(start.target.longitude, frameTarget.target.longitude, panFraction)
+                val zoom = MapInterpolation.lerp(start.zoom, frameTarget.zoom, zoomFraction)
+                val bearing = MapInterpolation.lerpAngleDegrees(start.bearing, frameTarget.bearing, panFraction)
+                val tilt = MapInterpolation.lerp(start.tilt, frameTarget.tilt, panFraction)
 
                 moveCamera(
                     map,

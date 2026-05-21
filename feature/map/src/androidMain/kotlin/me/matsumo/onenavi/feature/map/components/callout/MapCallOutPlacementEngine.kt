@@ -342,7 +342,7 @@ internal object MapCallOutPlacementEngine {
         val bodyBounds = bounds.deflate(tailLengthPx + shadowPaddingPx)
         val viewportRatio = viewportIntersectionRatio(bodyBounds, viewport)
 
-        if (viewportRatio <= MIN_VIEWPORT_RATIO) return null
+        if (!request.allowsOffscreenPlacement && viewportRatio <= MIN_VIEWPORT_RATIO) return null
         if (placed.any { it.bodyBounds.inflate(CALLOUT_COLLISION_MARGIN_PX).overlaps(bodyBounds) }) return null
 
         val polylineCoverage = polylineCoverageRatio(

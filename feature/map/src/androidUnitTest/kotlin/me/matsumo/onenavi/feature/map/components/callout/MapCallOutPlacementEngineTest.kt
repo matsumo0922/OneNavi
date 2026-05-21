@@ -38,6 +38,52 @@ class MapCallOutPlacementEngineTest {
     }
 
     @Test
+    fun pointFixedRejectsOffscreenPointByDefault() {
+        val offscreenPoint = Offset(800f, 220f)
+        val placements = MapCallOutPlacementEngine.place(
+            requests = listOf(
+                MapCallOutRequest(
+                    id = "fixed",
+                    target = MapCallOutTarget.PointFixed(offscreenPoint.toRoutePoint()),
+                ),
+            ),
+            sizes = listOf(IntSize(96, 48)),
+            viewportSize = ViewportSize,
+            viewport = Viewport,
+            tailLengthPx = TailLengthPx,
+            shadowPaddingPx = ShadowPaddingPx,
+            project = ::projectForTest,
+        )
+
+        assertTrue(placements.isEmpty())
+    }
+
+    @Test
+    fun pointFixedAllowsOffscreenPointWhenRequested() {
+        val offscreenPoint = Offset(800f, 220f)
+        val routePoint = offscreenPoint.toRoutePoint()
+        val placements = MapCallOutPlacementEngine.place(
+            requests = listOf(
+                MapCallOutRequest(
+                    id = "fixed",
+                    target = MapCallOutTarget.PointFixed(routePoint),
+                    allowsOffscreenPlacement = true,
+                ),
+            ),
+            sizes = listOf(IntSize(96, 48)),
+            viewportSize = ViewportSize,
+            viewport = Viewport,
+            tailLengthPx = TailLengthPx,
+            shadowPaddingPx = ShadowPaddingPx,
+            project = ::projectForTest,
+        )
+
+        assertEquals(1, placements.size)
+        assertEquals(offscreenPoint, placements.single().tip)
+        assertEquals(routePoint, placements.single().position)
+    }
+
+    @Test
     fun polylineMovableChoosesTipOnPolyline() {
         val placements = MapCallOutPlacementEngine.place(
             requests = listOf(

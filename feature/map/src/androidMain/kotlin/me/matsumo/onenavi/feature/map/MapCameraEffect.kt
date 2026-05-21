@@ -9,6 +9,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
+import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
@@ -21,6 +23,7 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
  * @param uiState map screen の UI state
  * @param screenState 現在の地図画面状態
  * @param routePreviewState Preview 期のルート候補状態
+ * @param guidanceState Guidance 期の案内状態
  * @param vehicleLocationState 最新の自車位置
  * @param cameraState カメラ操作を保持する state holder
  */
@@ -29,6 +32,7 @@ internal fun MapCameraEffect(
     uiState: MapUiState,
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
+    guidanceState: GuidanceState,
     vehicleLocationState: VehicleLocationState?,
     cameraState: MapCameraState,
 ) {
@@ -40,6 +44,59 @@ internal fun MapCameraEffect(
 
     LaunchedEffect(isGuidanceCameraActive) {
         cameraState.setGuidanceCameraActive(isGuidanceCameraActive)
+    }
+
+    val guiding = guidanceState as? GuidanceState.Guiding
+    val nextManeuver = guiding?.progress?.nextManeuver
+    val guidancePointIndex = nextManeuver?.guidancePointIndex
+    val distanceToManeuverMeters = nextManeuver?.distanceToManeuverMeters
+    val isOnRoute = guiding?.progress?.routeMatchState == RouteMatchState.ON_ROUTE
+    val isManeuverPassed = distanceToManeuverMeters != null &&
+        distanceToManeuverMeters <= GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS
+    val shouldStartManeuverFocus = isGuidanceCameraActive &&
+        isOnRoute &&
+        guidancePointIndex != null &&
+        distanceToManeuverMeters != null &&
+        distanceToManeuverMeters > GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS &&
+        distanceToManeuverMeters <= GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS
+
+    LaunchedEffect(guiding?.route?.id) {
+        cameraState.clearGuidanceManeuverFocus()
+    }
+
+    LaunchedEffect(guidancePointIndex, shouldStartManeuverFocus) {
+        cameraState.updateGuidanceManeuverFocusTarget(
+            guidancePointIndex = guidancePointIndex,
+            restoreCamera = !shouldStartManeuverFocus,
+        )
+    }
+
+    LaunchedEffect(
+        isGuidanceCameraActive,
+        guiding?.route?.id,
+        guidancePointIndex,
+        isOnRoute,
+        isManeuverPassed,
+        shouldStartManeuverFocus,
+    ) {
+        if (!isGuidanceCameraActive || guiding == null || guidancePointIndex == null) {
+            cameraState.clearGuidanceManeuverFocus()
+            return@LaunchedEffect
+        }
+
+        if (!isOnRoute) {
+            cameraState.finishGuidanceManeuverFocusForRouteMismatch(guidancePointIndex)
+            return@LaunchedEffect
+        }
+
+        if (isManeuverPassed) {
+            cameraState.finishGuidanceManeuverFocusIfPassed(guidancePointIndex)
+            return@LaunchedEffect
+        }
+
+        if (shouldStartManeuverFocus) {
+            cameraState.startGuidanceManeuverFocusIfNeeded(guidancePointIndex)
+        }
     }
 
     LaunchedEffect(uiState.bottomSheetPeekHeight, uiState.topAppBarHeight, screenState) {
@@ -114,3 +171,9 @@ internal fun MapCameraEffect(
         }
     }
 }
+
+/** 案内地点フォーカスを開始する残距離（m）。 */
+private const val GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS = 100
+
+/** 案内地点を通過済みと扱う残距離（m）。 */
+private const val GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS = 0
