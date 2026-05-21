@@ -9,6 +9,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
+import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
@@ -21,6 +23,7 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
  * @param uiState map screen の UI state
  * @param screenState 現在の地図画面状態
  * @param routePreviewState Preview 期のルート候補状態
+ * @param guidanceState Guidance 期の案内状態
  * @param vehicleLocationState 最新の自車位置
  * @param cameraState カメラ操作を保持する state holder
  */
@@ -29,6 +32,7 @@ internal fun MapCameraEffect(
     uiState: MapUiState,
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
+    guidanceState: GuidanceState,
     vehicleLocationState: VehicleLocationState?,
     cameraState: MapCameraState,
 ) {
@@ -40,6 +44,28 @@ internal fun MapCameraEffect(
 
     LaunchedEffect(isGuidanceCameraActive) {
         cameraState.setGuidanceCameraActive(isGuidanceCameraActive)
+    }
+
+    val guiding = guidanceState as? GuidanceState.Guiding
+    val nextManeuver = guiding?.progress?.nextManeuver
+    val isOnRoute = guiding?.progress?.routeMatchState == RouteMatchState.ON_ROUTE
+
+    LaunchedEffect(
+        isGuidanceCameraActive,
+        guiding?.route?.id,
+        nextManeuver?.guidancePointIndex,
+        nextManeuver?.distanceToManeuverMeters,
+        isOnRoute,
+    ) {
+        if (isGuidanceCameraActive && guiding != null) {
+            cameraState.updateGuidanceManeuverFocus(
+                guidancePointIndex = nextManeuver?.guidancePointIndex,
+                distanceToManeuverMeters = nextManeuver?.distanceToManeuverMeters,
+                isOnRoute = isOnRoute,
+            )
+        } else {
+            cameraState.clearGuidanceManeuverFocus()
+        }
     }
 
     LaunchedEffect(uiState.bottomSheetPeekHeight, uiState.topAppBarHeight, screenState) {

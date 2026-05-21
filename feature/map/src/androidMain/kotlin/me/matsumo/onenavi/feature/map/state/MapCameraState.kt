@@ -3,6 +3,7 @@ package me.matsumo.onenavi.feature.map.state
 import android.animation.TimeInterpolator
 import android.view.animation.DecelerateInterpolator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -51,6 +52,8 @@ internal class MapCameraState internal constructor() {
     private var mapViewWidthPx: Int = 0
     private var density: Float = DEFAULT_DENSITY
     private var lastVehiclePose: VehiclePose? = null
+    private var guidanceManeuverCameraFocus: GuidanceManeuverCameraFocus? = null
+    private var suppressedGuidanceManeuverFocusIndex: Int? = null
 
     var cameraState by mutableStateOf(MapCameraSnapshot())
         private set
@@ -79,6 +82,7 @@ internal class MapCameraState internal constructor() {
             )
             if (isGesture) {
                 cameraAnimator.cancel()
+                cancelGuidanceManeuverFocusByGesture()
             }
         }
         googleMap.setOnCameraMoveListener {
@@ -137,6 +141,63 @@ internal class MapCameraState internal constructor() {
     }
 
     /**
+     * 次の案内地点に対する一時的なカメラフォーカスを更新する。
+     *
+     * @param guidancePointIndex 次の案内地点 index。案内対象が無い場合は null
+     * @param distanceToManeuverMeters 次の案内地点までの距離。案内対象が無い場合は null
+     * @param isOnRoute 現在位置が案内 route 上にある場合 true
+     */
+    fun updateGuidanceManeuverFocus(
+        guidancePointIndex: Int?,
+        distanceToManeuverMeters: Int?,
+        isOnRoute: Boolean,
+    ) {
+        val activeFocus = guidanceManeuverCameraFocus
+
+        if (guidancePointIndex == null || distanceToManeuverMeters == null || !isOnRoute) {
+            if (activeFocus != null) {
+                finishGuidanceManeuverFocus(restoreCamera = true)
+            }
+            if (guidancePointIndex == null) {
+                suppressedGuidanceManeuverFocusIndex = null
+            }
+            return
+        }
+
+        if (suppressedGuidanceManeuverFocusIndex != null && suppressedGuidanceManeuverFocusIndex != guidancePointIndex) {
+            suppressedGuidanceManeuverFocusIndex = null
+        }
+
+        if (
+            activeFocus?.guidancePointIndex == guidancePointIndex &&
+            distanceToManeuverMeters <= GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS
+        ) {
+            finishGuidanceManeuverFocus(restoreCamera = true)
+            return
+        }
+
+        if (activeFocus?.guidancePointIndex == guidancePointIndex) return
+
+        if (activeFocus != null) {
+            finishGuidanceManeuverFocus(restoreCamera = true)
+        }
+
+        if (suppressedGuidanceManeuverFocusIndex == guidancePointIndex) return
+        if (distanceToManeuverMeters <= GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS) return
+        if (distanceToManeuverMeters > GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS) return
+
+        startGuidanceManeuverFocus(guidancePointIndex)
+    }
+
+    /**
+     * 案内地点フォーカスを解除する。
+     */
+    fun clearGuidanceManeuverFocus() {
+        finishGuidanceManeuverFocus(restoreCamera = true)
+        suppressedGuidanceManeuverFocusIndex = null
+    }
+
+    /**
      * 自車位置の追従を開始する。
      *
      * @param vehicleLocationState 追従開始時に寄せる自車位置。未取得の場合は次の pose 更新を待つ
@@ -163,6 +224,8 @@ internal class MapCameraState internal constructor() {
         cameraAnimator.cancel()
         map?.stopAnimation()
         gestureController.clear()
+        guidanceManeuverCameraFocus = null
+        suppressedGuidanceManeuverFocusIndex = null
         vehicleCameraPositionFactory.setGuidanceCameraActive(true)
         cameraState = cameraState.copy(
             perspective = GoogleMap.CameraPerspective.TILTED,
@@ -218,8 +281,119 @@ internal class MapCameraState internal constructor() {
 
         if (cameraState.isFollowingMyLocation && !isCameraTransitionInProgress() && !gestureController.isGestureInProgress) {
             val current = googleMap?.cameraPosition ?: return
-            moveVehicleCamera(vehicleCameraPosition(vehiclePose = vehiclePose, current = current))
+            val focus = guidanceManeuverCameraFocus
+            val targetZoom = if (focus != null) GUIDANCE_MANEUVER_FOCUS_ZOOM else cameraState.zoom
+            val targetPerspective = if (focus != null) {
+                GoogleMap.CameraPerspective.TOP_DOWN_NORTH_UP
+            } else {
+                cameraState.perspective
+            }
+            moveVehicleCamera(
+                vehicleCameraPosition(
+                    vehiclePose = vehiclePose,
+                    current = current,
+                    zoom = targetZoom,
+                    perspective = targetPerspective,
+                ),
+            )
         }
+    }
+
+    /**
+     * 案内地点接近時の真上・拡大フォーカスを開始する。
+     *
+     * @param guidancePointIndex フォーカス対象の案内地点 index
+     */
+    private fun startGuidanceManeuverFocus(guidancePointIndex: Int) {
+        val map = googleMap ?: return
+        val current = map.cameraPosition
+
+        guidanceManeuverCameraFocus = GuidanceManeuverCameraFocus(
+            guidancePointIndex = guidancePointIndex,
+            restoreCameraPosition = current,
+            restorePerspective = cameraState.perspective,
+            restoreZoom = cameraState.zoom,
+            restoreFollowingMyLocation = cameraState.isFollowingMyLocation,
+        )
+
+        cameraAnimator.cancel()
+        map.stopAnimation()
+        gestureController.clear()
+        cameraState = cameraState.copy(
+            zoom = GUIDANCE_MANEUVER_FOCUS_ZOOM,
+            perspective = GoogleMap.CameraPerspective.TOP_DOWN_NORTH_UP,
+            isFollowingMyLocation = true,
+        )
+
+        flyCameraTo(
+            target = guidanceManeuverFocusCameraPosition(current),
+            durationMs = GUIDANCE_MANEUVER_FOCUS_ANIMATION_DURATION_MS,
+            keepFollowingMyLocation = true,
+            moveCamera = { _, cameraPosition -> moveVehicleCamera(cameraPosition) },
+            onFinished = {
+                updateCameraPosition(map.cameraPosition)
+                cameraState = cameraState.copy(
+                    perspective = GoogleMap.CameraPerspective.TOP_DOWN_NORTH_UP,
+                    isFollowingMyLocation = true,
+                )
+            },
+        )
+    }
+
+    /**
+     * 案内地点フォーカスを終了する。
+     *
+     * @param restoreCamera true の場合、フォーカス開始前の camera state へ戻す
+     */
+    private fun finishGuidanceManeuverFocus(restoreCamera: Boolean) {
+        val focus = guidanceManeuverCameraFocus ?: return
+        guidanceManeuverCameraFocus = null
+
+        if (restoreCamera) {
+            restoreGuidanceManeuverCamera(focus)
+        }
+    }
+
+    /**
+     * ユーザー gesture によって案内地点フォーカスを終了する。
+     */
+    private fun cancelGuidanceManeuverFocusByGesture() {
+        val focus = guidanceManeuverCameraFocus ?: return
+
+        suppressedGuidanceManeuverFocusIndex = focus.guidancePointIndex
+        guidanceManeuverCameraFocus = null
+    }
+
+    /**
+     * 案内地点フォーカス開始前の camera state へ戻す。
+     *
+     * @param focus 復元に使うフォーカス状態
+     */
+    private fun restoreGuidanceManeuverCamera(focus: GuidanceManeuverCameraFocus) {
+        val map = googleMap ?: return
+
+        cameraAnimator.cancel()
+        map.stopAnimation()
+        gestureController.clear()
+        cameraState = cameraState.copy(
+            zoom = focus.restoreZoom,
+            perspective = focus.restorePerspective,
+            isFollowingMyLocation = focus.restoreFollowingMyLocation,
+        )
+
+        flyCameraTo(
+            target = restoredGuidanceManeuverCameraPosition(focus),
+            durationMs = GUIDANCE_MANEUVER_FOCUS_ANIMATION_DURATION_MS,
+            keepFollowingMyLocation = focus.restoreFollowingMyLocation,
+            moveCamera = { _, cameraPosition -> moveVehicleCamera(cameraPosition) },
+            onFinished = {
+                updateCameraPosition(map.cameraPosition)
+                cameraState = cameraState.copy(
+                    perspective = focus.restorePerspective,
+                    isFollowingMyLocation = focus.restoreFollowingMyLocation,
+                )
+            },
+        )
     }
 
     /**
@@ -485,6 +659,53 @@ internal class MapCameraState internal constructor() {
     )
 
     /**
+     * 案内地点フォーカス中のカメラ位置を作る。
+     *
+     * @param current 現在のカメラ位置
+     * @return 真上・拡大表示のカメラ位置
+     */
+    private fun guidanceManeuverFocusCameraPosition(current: CameraPosition): CameraPosition {
+        val vehiclePose = lastVehiclePose
+        if (vehiclePose != null) {
+            return vehicleCameraPosition(
+                vehiclePose = vehiclePose,
+                current = current,
+                zoom = GUIDANCE_MANEUVER_FOCUS_ZOOM,
+                perspective = GoogleMap.CameraPerspective.TOP_DOWN_NORTH_UP,
+            )
+        }
+
+        return CameraPosition.Builder()
+            .target(current.target)
+            .zoom(GUIDANCE_MANEUVER_FOCUS_ZOOM)
+            .bearing(0f)
+            .tilt(0f)
+            .build()
+    }
+
+    /**
+     * 案内地点フォーカス解除時の復元カメラ位置を作る。
+     *
+     * @param focus 復元に使うフォーカス状態
+     * @return 復元先のカメラ位置
+     */
+    private fun restoredGuidanceManeuverCameraPosition(focus: GuidanceManeuverCameraFocus): CameraPosition {
+        val current = googleMap?.cameraPosition ?: focus.restoreCameraPosition
+        val vehiclePose = lastVehiclePose
+
+        if (focus.restoreFollowingMyLocation && vehiclePose != null) {
+            return vehicleCameraPosition(
+                vehiclePose = vehiclePose,
+                current = current,
+                zoom = focus.restoreZoom,
+                perspective = focus.restorePerspective,
+            )
+        }
+
+        return focus.restoreCameraPosition
+    }
+
+    /**
      * 現在の中心・ズームを維持したまま、指定 perspective の tilt / bearing を反映したカメラ位置を作る。
      *
      * @param current 現在のカメラ位置
@@ -644,8 +865,38 @@ internal class MapCameraState internal constructor() {
 
         /** コンパス button による 3D heading-up / 2D north-up 切り替え animation 時間（ms）。 */
         private const val COMPASS_PERSPECTIVE_ANIMATION_DURATION_MS = 500L
+
+        /** 案内地点フォーカスを開始する残距離（m）。 */
+        private const val GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS = 300
+
+        /** 案内地点を通過済みと扱う残距離（m）。 */
+        private const val GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS = 0
+
+        /** 案内地点フォーカス中の zoom。 */
+        private const val GUIDANCE_MANEUVER_FOCUS_ZOOM = 18f
+
+        /** 案内地点フォーカス開始 / 復元 animation 時間（ms）。 */
+        private const val GUIDANCE_MANEUVER_FOCUS_ANIMATION_DURATION_MS = 500L
     }
 }
+
+/**
+ * 案内地点接近時の一時フォーカス状態。
+ *
+ * @param guidancePointIndex フォーカス対象の案内地点 index
+ * @param restoreCameraPosition フォーカス解除時に戻すカメラ位置
+ * @param restorePerspective フォーカス解除時に戻す perspective
+ * @param restoreZoom フォーカス解除時に戻す zoom
+ * @param restoreFollowingMyLocation フォーカス解除時に戻す自車追従状態
+ */
+@Immutable
+private data class GuidanceManeuverCameraFocus(
+    val guidancePointIndex: Int,
+    val restoreCameraPosition: CameraPosition,
+    val restorePerspective: Int,
+    val restoreZoom: Float,
+    val restoreFollowingMyLocation: Boolean,
+)
 
 /**
  * 地図カメラの現在状態。

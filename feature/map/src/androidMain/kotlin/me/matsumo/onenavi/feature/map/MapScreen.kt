@@ -108,6 +108,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
             uiState = uiState,
             screenState = screenState,
             routePreviewState = routePreviewState,
+            guidanceState = guidanceState,
             vehicleLocationState = vehicleLocationState,
             cameraState = cameraState,
         )
