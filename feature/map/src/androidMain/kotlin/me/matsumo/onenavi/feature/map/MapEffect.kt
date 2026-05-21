@@ -13,6 +13,7 @@ import me.matsumo.onenavi.feature.map.components.MapNumberedMarker
 import me.matsumo.onenavi.feature.map.components.MapPolyline
 import me.matsumo.onenavi.feature.map.components.MapPolylineStyle
 import me.matsumo.onenavi.feature.map.components.MapVehiclePoseEffect
+import me.matsumo.onenavi.feature.map.components.callout.MapGuidanceManeuverCallOutMarkerEffect
 import me.matsumo.onenavi.feature.map.components.callout.MapRoutePreviewCallOutMarkerEffect
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
@@ -75,8 +76,11 @@ internal fun MapEffect(
         }
         is MapScreenState.Navigating -> {
             NavigationEffect(
+                modifier = modifier,
                 guidanceState = guidanceState,
                 googleMap = googleMap,
+                topAppBarHeightPx = topAppBarHeightPx,
+                bottomSheetPeekHeight = bottomSheetPeekHeight,
             )
         }
         is MapScreenState.Arrived -> Unit
@@ -192,15 +196,21 @@ private fun RoutePreviewEffect(
 }
 
 /**
- * Navigation 画面の route polyline を描画する。
+ * Navigation 画面の route polyline と案内地点 callout を描画する。
  *
  * @param guidanceState Guidance 期の案内状態
- * @param googleMap polyline 描画先の GoogleMap
+ * @param googleMap overlay 描画先の GoogleMap
+ * @param topAppBarHeightPx callout が避ける上部バー高さ
+ * @param bottomSheetPeekHeight callout が避ける bottom sheet 高さ
+ * @param modifier callout overlay 用 modifier
  */
 @Composable
 private fun NavigationEffect(
     guidanceState: GuidanceState,
     googleMap: GoogleMap,
+    topAppBarHeightPx: Int,
+    bottomSheetPeekHeight: Dp,
+    modifier: Modifier = Modifier,
 ) {
     val guiding = guidanceState as? GuidanceState.Guiding ?: return
 
@@ -208,6 +218,14 @@ private fun NavigationEffect(
         googleMap = googleMap,
         route = guiding.route,
         isSelected = true,
+    )
+
+    MapGuidanceManeuverCallOutMarkerEffect(
+        modifier = modifier,
+        googleMap = googleMap,
+        guidanceState = guidanceState,
+        topAppBarHeightPx = topAppBarHeightPx,
+        bottomSheetPeekHeight = bottomSheetPeekHeight,
     )
 }
 

@@ -313,14 +313,14 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 次の案内地点とその次の案内地点に CallOut を表示する。CallOut は地図上の案内地点に tail を固定し、
 カメラフォーカスは次の案内地点のみを対象にする。
 
-- [ ] `GuidanceManeuverInfo` に案内地点座標を追加する、または map 表示専用の `GuidancePointCallOutState` を追加する
-- [ ] `ExtNavGuidanceTracker.buildManeuverInfo()` で GP の geometry 累積距離から案内地点座標を算出して渡す
-- [ ] `progress.nextManeuver` / `progress.followupManeuver` から最大 2 件の案内地点 CallOut request を作る
-- [ ] CallOut の target は `MapCallOutTarget.PointFixed` を使い、tail 先端を案内地点座標に固定する
-- [ ] CallOut の優先度は「次の案内地点 > その次の案内地点」とし、route preview callout より案内中 CallOut を優先表示する
-- [ ] CallOut の文言は方向種別 + 交差点名を基本にし、交差点名が無い場合は「次の案内」「その次の案内」などへ fallback する
+- [x] `GuidanceManeuverInfo` に案内地点座標を追加する、または map 表示専用の `GuidancePointCallOutState` を追加する
+- [x] `ExtNavGuidanceTracker.buildManeuverInfo()` で GP の geometry 累積距離から案内地点座標を算出して渡す
+- [x] `progress.nextManeuver` / `progress.followupManeuver` から最大 2 件の案内地点 CallOut request を作る
+- [x] CallOut の target は `MapCallOutTarget.PointFixed` を使い、tail 先端を案内地点座標に固定する
+- [x] CallOut の優先度は「次の案内地点 > その次の案内地点」とし、route preview callout より案内中 CallOut を優先表示する
+- [x] CallOut の表示は方向アイコン + 交差点名を基本にし、交差点名が無い場合はアイコンのみを表示する
 - [ ] 距離を表示する場合は 50m などの粗い bucket に丸め、1m 単位の更新で marker bitmap を作り直さない
-- [ ] `MapEffect` の `Navigating` 分岐で案内地点 CallOut を描画し、`GuidanceState.Guiding` 以外では破棄する
+- [x] `MapEffect` の `Navigating` 分岐で案内地点 CallOut を描画し、`GuidanceState.Guiding` 以外では破棄する
 - [ ] `MapCameraEffect` に `guidanceState: GuidanceState` を渡し、`Guiding.progress.nextManeuver` からフォーカス判定する
 - [ ] `MapCameraState` に案内地点フォーカス状態を追加し、フォーカス前の perspective / zoom / 追従状態を保持する
 - [ ] `distanceToManeuverMeters <= 300` で対象 GP に 1 回だけフォーカスし、真上モード + 案内地点確認用ズームへ `flyCameraTo` する

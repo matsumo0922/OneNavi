@@ -1,19 +1,12 @@
 package me.matsumo.onenavi.feature.map.components.callout
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -120,39 +113,28 @@ private fun MapRoutePreviewPlaceholderCallOut(
         minuteLabel = stringResource(Res.string.common_unit_minute),
     )
 
-    MapCallOut(
+    MapSelectedCallOutContentFrame(
         modifier = modifier,
         tailSide = tailSide,
-        backgroundColor = Color.White,
-        contentColor = Color.Black,
-        contentPadding = PaddingValues(0.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(2.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(if (isSelected) SelectedCallOutColor else Color.Transparent)
-                .padding(8.dp, 4.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column {
+        isSelected = isSelected,
+    ) { contentColor ->
+        Column {
+            Text(
+                text = duration,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelLarge,
+                color = contentColor,
+            )
+
+            routeDetail.tollFee?.let {
                 Text(
-                    text = duration,
+                    text = formatYen(it),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (isSelected) Color.White else Color.Black,
+                    color = contentColor,
                 )
-
-                routeDetail.tollFee?.let {
-                    Text(
-                        text = formatYen(it),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (isSelected) Color.White else Color.Black,
-                    )
-                }
             }
         }
     }
@@ -174,8 +156,6 @@ private fun RouteDetail.toCallOutRequest(
         contentKey = if (isSelected) SELECTED_CONTENT_KEY else UNSELECTED_CONTENT_KEY,
     )
 }
-
-private val SelectedCallOutColor = Color(0xFF1A73E8)
 
 private const val MIN_ROUTE_CALLOUT_POLYLINE_POINTS = 2
 private const val SELECTED_ROUTE_CALLOUT_Z_INDEX_PRIORITY = 100
