@@ -55,37 +55,45 @@ internal class MapCameraGestureController {
     ): Boolean? {
         if (!isGestureInProgress) return null
 
-        val startPosition = gestureStartCameraPosition
-        var shouldKeepFollowing = false
-
-        if (wasFollowingBeforeGesture && startPosition != null) {
-            shouldKeepFollowing = true
-
-            if (startPosition.zoom != cameraPosition.zoom) {
-                shouldKeepFollowing = false
-            }
-
-            val bearingDeltaDegrees = MapGeodesy.angleDistanceDegrees(
-                from = startPosition.bearing,
-                to = cameraPosition.bearing,
-            )
-            if (bearingDeltaDegrees > CAMERA_GESTURE_BEARING_TOLERANCE_DEGREES) {
-                shouldKeepFollowing = false
-            }
-
-            val tiltDeltaDegrees = abs(startPosition.tilt - cameraPosition.tilt)
-            if (tiltDeltaDegrees > CAMERA_GESTURE_TILT_TOLERANCE_DEGREES) {
-                shouldKeepFollowing = false
-            }
-
-            if (isCameraTargetAwayFromVehicle(cameraPosition)) {
-                shouldKeepFollowing = false
-            }
-        }
-
+        val shouldKeepFollowing = shouldKeepFollowingAfterGesture(
+            cameraPosition = cameraPosition,
+            isCameraTargetAwayFromVehicle = isCameraTargetAwayFromVehicle,
+        )
         clear()
 
         return shouldKeepFollowing
+    }
+
+    /**
+     * gesture 終了後も自車追従を維持できるかを返す。
+     *
+     * @param cameraPosition gesture 終了時点の camera position
+     * @param isCameraTargetAwayFromVehicle camera target が自車追従 target から離れているかを返す関数
+     * @return 自車追従を維持できる場合 true
+     */
+    private fun shouldKeepFollowingAfterGesture(
+        cameraPosition: CameraPosition,
+        isCameraTargetAwayFromVehicle: (CameraPosition) -> Boolean,
+    ): Boolean {
+        val startPosition = gestureStartCameraPosition
+        if (!wasFollowingBeforeGesture || startPosition == null) return false
+
+        if (startPosition.zoom != cameraPosition.zoom) return false
+
+        val bearingDeltaDegrees = MapGeodesy.angleDistanceDegrees(
+            from = startPosition.bearing,
+            to = cameraPosition.bearing,
+        )
+        if (bearingDeltaDegrees > CAMERA_GESTURE_BEARING_TOLERANCE_DEGREES) {
+            return false
+        }
+
+        val tiltDeltaDegrees = abs(startPosition.tilt - cameraPosition.tilt)
+        if (tiltDeltaDegrees > CAMERA_GESTURE_TILT_TOLERANCE_DEGREES) {
+            return false
+        }
+
+        return !isCameraTargetAwayFromVehicle(cameraPosition)
     }
 
     /**

@@ -134,13 +134,43 @@ internal class VehicleCameraPositionFactory {
      * @param zoom GoogleMap の zoom
      * @return viewport 高さに比例した距離閾値（m）
      */
-    fun followGestureTargetToleranceMeters(latitude: Double, zoom: Float): Double {
+    private fun followGestureTargetToleranceMeters(latitude: Double, zoom: Float): Double {
         val viewportHeightDp = viewportHeightPx.toDouble() / density
         if (viewportHeightDp <= 0.0) return 0.0
 
         return viewportHeightDp *
             FOLLOW_GESTURE_TARGET_TOLERANCE_FRACTION *
             metersPerDp(latitude = latitude, zoom = zoom)
+    }
+
+    /**
+     * camera target が自車追従時の target から離れているかを返す。
+     *
+     * @param cameraPosition 判定対象の camera position
+     * @param vehiclePose frame 時点の自車 pose
+     * @param perspective camera target 算出に使う perspective
+     * @return 追従解除相当まで離れている場合 true
+     */
+    fun isCameraTargetAwayFromVehicle(
+        cameraPosition: CameraPosition,
+        vehiclePose: VehiclePose,
+        perspective: Int,
+    ): Boolean {
+        val expectedTarget = vehicleCameraTarget(
+            vehiclePose = vehiclePose,
+            zoom = cameraPosition.zoom,
+            perspective = perspective,
+        )
+        val distanceMeters = MapGeodesy.haversineMeters(
+            from = expectedTarget,
+            to = cameraPosition.target,
+        )
+        val toleranceMeters = followGestureTargetToleranceMeters(
+            latitude = expectedTarget.latitude,
+            zoom = cameraPosition.zoom,
+        )
+
+        return toleranceMeters > 0.0 && distanceMeters > toleranceMeters
     }
 
     /**

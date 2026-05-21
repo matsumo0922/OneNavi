@@ -106,18 +106,19 @@ internal class RouteMeterIndex private constructor(
         fun from(points: List<RoutePoint>): RouteMeterIndex? {
             if (!canBuild(points)) return null
 
-            val cumulativeMeters = buildList(capacity = points.size) {
+            val pointSnapshot = points.toList()
+            val cumulativeMeters = buildList(capacity = pointSnapshot.size) {
                 var totalMeters = 0.0
                 add(totalMeters)
 
-                for (index in 1 until points.size) {
-                    totalMeters += MapGeodesy.haversineMeters(points[index - 1], points[index])
+                for (index in 1 until pointSnapshot.size) {
+                    totalMeters += MapGeodesy.haversineMeters(pointSnapshot[index - 1], pointSnapshot[index])
                     add(totalMeters)
                 }
             }
 
             return RouteMeterIndex(
-                points = points,
+                points = pointSnapshot,
                 cumulativeMeters = cumulativeMeters,
             )
         }

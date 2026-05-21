@@ -483,19 +483,6 @@ internal class MapCameraState internal constructor() {
     )
 
     /**
-     * 自車追従用の camera target を作る。
-     *
-     * @param vehiclePose frame 時点の自車 pose
-     * @return GoogleMap に渡す camera target
-     */
-    private fun vehicleCameraTarget(vehiclePose: VehiclePose): LatLng =
-        vehicleCameraPositionFactory.vehicleCameraTarget(
-            vehiclePose = vehiclePose,
-            zoom = cameraState.zoom,
-            perspective = cameraState.perspective,
-        )
-
-    /**
      * 現在の中心・ズームを維持したまま、指定 perspective の tilt / bearing を反映したカメラ位置を作る。
      *
      * @param current 現在のカメラ位置
@@ -528,31 +515,13 @@ internal class MapCameraState internal constructor() {
      */
     private fun isCameraTargetAwayFromVehicle(cameraPosition: CameraPosition): Boolean {
         val vehiclePose = lastVehiclePose ?: return false
-        val expectedTarget = vehicleCameraTarget(vehiclePose)
-        val distanceMeters = MapGeodesy.haversineMeters(
-            from = expectedTarget,
-            to = cameraPosition.target,
-        )
-        val toleranceMeters = followGestureTargetToleranceMeters(
-            latitude = expectedTarget.latitude,
-            zoom = cameraPosition.zoom,
-        )
 
-        return toleranceMeters > 0.0 && distanceMeters > toleranceMeters
+        return vehicleCameraPositionFactory.isCameraTargetAwayFromVehicle(
+            cameraPosition = cameraPosition,
+            vehiclePose = vehiclePose,
+            perspective = cameraState.perspective,
+        )
     }
-
-    /**
-     * follow 中 gesture 後に追従維持を許容する camera target の距離閾値を返す。
-     *
-     * @param latitude 判定地点の緯度
-     * @param zoom GoogleMap の zoom
-     * @return viewport 高さに比例した距離閾値（m）
-     */
-    private fun followGestureTargetToleranceMeters(latitude: Double, zoom: Float): Double =
-        vehicleCameraPositionFactory.followGestureTargetToleranceMeters(
-            latitude = latitude,
-            zoom = zoom,
-        )
 
     /**
      * カメラを [target] へ van Wijk–Nuij "Smooth and efficient zooming and panning" の経路で移動させる。
