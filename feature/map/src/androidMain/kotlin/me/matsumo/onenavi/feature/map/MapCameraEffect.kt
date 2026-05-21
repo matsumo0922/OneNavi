@@ -36,6 +36,11 @@ internal fun MapCameraEffect(
     val statusBarHeightPadding = WindowInsets.statusBars
         .asPaddingValues()
         .calculateTopPadding()
+    val isGuidanceCameraActive = screenState is MapScreenState.Navigating
+
+    LaunchedEffect(isGuidanceCameraActive) {
+        cameraState.setGuidanceCameraActive(isGuidanceCameraActive)
+    }
 
     LaunchedEffect(uiState.bottomSheetPeekHeight, uiState.topAppBarHeight, screenState) {
         val top = uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }
