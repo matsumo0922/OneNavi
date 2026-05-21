@@ -37,15 +37,18 @@ internal fun MapGuidanceManeuverCallOutMarkerEffect(
     val guiding = guidanceState as? GuidanceState.Guiding ?: return
     val density = LocalDensity.current
     val topPadding = with(density) { topAppBarHeightPx.toDp() } + GUIDANCE_CALLOUT_VIEWPORT_PADDING
+    val nextManeuver = guiding.progress.nextManeuver
+    val followupManeuver = guiding.progress.followupManeuver
 
     val maneuvers = remember(
-        guiding.progress.nextManeuver,
-        guiding.progress.followupManeuver,
+        guiding.route.id,
+        nextManeuver?.guidancePointIndex,
+        followupManeuver?.guidancePointIndex,
     ) {
         listOfNotNull(
-            guiding.progress.nextManeuver,
-            guiding.progress.followupManeuver,
-        ).take(MAX_GUIDANCE_CALLOUT_COUNT)
+            nextManeuver,
+            followupManeuver,
+        )
     }
 
     val requests = remember(guiding.route.id, maneuvers) {
@@ -149,7 +152,6 @@ private val GUIDANCE_CALLOUT_CONTENT_SPACING = 6.dp
 private val GUIDANCE_CALLOUT_MAX_WIDTH = 196.dp
 private val GUIDANCE_CALLOUT_TEXT_MAX_WIDTH = 160.dp
 
-private const val MAX_GUIDANCE_CALLOUT_COUNT = 2
 private const val GUIDANCE_CALLOUT_PRIORITY_BASE = 200
 private const val GUIDANCE_CALLOUT_Z_INDEX_PRIORITY_BASE = 200
 private const val CONTENT_KEY_SEPARATOR = "|"

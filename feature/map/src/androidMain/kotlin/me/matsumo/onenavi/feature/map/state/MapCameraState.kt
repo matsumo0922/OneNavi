@@ -144,12 +144,19 @@ internal class MapCameraState internal constructor() {
      * 案内地点フォーカスの対象 GP を更新する。
      *
      * @param guidancePointIndex 次の案内地点 index。案内対象が無い場合は null
+     * @param restoreCamera active focus を解除する場合、フォーカス前の camera state へ戻すか。
+     *   false の場合は次のフォーカス開始時に復元情報を引き継げるよう active focus を維持する
      */
-    fun updateGuidanceManeuverFocusTarget(guidancePointIndex: Int?) {
+    fun updateGuidanceManeuverFocusTarget(
+        guidancePointIndex: Int?,
+        restoreCamera: Boolean = true,
+    ) {
         val activeFocus = guidanceManeuverCameraFocus
 
         if (activeFocus != null && activeFocus.guidancePointIndex != guidancePointIndex) {
-            finishGuidanceManeuverFocus(restoreCamera = true)
+            if (restoreCamera) {
+                finishGuidanceManeuverFocus(restoreCamera = true)
+            }
         }
 
         if (guidancePointIndex == null) {
@@ -176,11 +183,14 @@ internal class MapCameraState internal constructor() {
         if (activeFocus?.guidancePointIndex == guidancePointIndex) return
 
         if (activeFocus != null) {
-            finishGuidanceManeuverFocus(restoreCamera = true)
+            finishGuidanceManeuverFocus(restoreCamera = false)
         }
 
         handledGuidanceManeuverFocusIndex = guidancePointIndex
-        startGuidanceManeuverFocus(guidancePointIndex)
+        startGuidanceManeuverFocus(
+            guidancePointIndex = guidancePointIndex,
+            inheritedFocus = activeFocus,
+        )
     }
 
     /**
@@ -191,6 +201,21 @@ internal class MapCameraState internal constructor() {
     fun finishGuidanceManeuverFocusIfPassed(guidancePointIndex: Int) {
         val activeFocus = guidanceManeuverCameraFocus ?: return
         if (activeFocus.guidancePointIndex == guidancePointIndex) {
+            finishGuidanceManeuverFocus(restoreCamera = true)
+        }
+    }
+
+    /**
+     * 一時的な route mismatch でフォーカスを解除する。
+     *
+     * 同じ案内地点へ戻った直後に再フォーカスしないよう、対象 GP は処理済みとして保持する。
+     *
+     * @param guidancePointIndex route mismatch が起きた案内地点 index
+     */
+    fun finishGuidanceManeuverFocusForRouteMismatch(guidancePointIndex: Int) {
+        val activeFocus = guidanceManeuverCameraFocus ?: return
+        if (activeFocus.guidancePointIndex == guidancePointIndex) {
+            handledGuidanceManeuverFocusIndex = guidancePointIndex
             finishGuidanceManeuverFocus(restoreCamera = true)
         }
     }
@@ -306,17 +331,22 @@ internal class MapCameraState internal constructor() {
      * 案内地点接近時の真上・拡大フォーカスを開始する。
      *
      * @param guidancePointIndex フォーカス対象の案内地点 index
+     * @param inheritedFocus 前の案内地点フォーカスから引き継ぐ復元情報
      */
-    private fun startGuidanceManeuverFocus(guidancePointIndex: Int) {
+    private fun startGuidanceManeuverFocus(
+        guidancePointIndex: Int,
+        inheritedFocus: GuidanceManeuverCameraFocus? = null,
+    ) {
         val map = googleMap ?: return
         val current = map.cameraPosition
 
         guidanceManeuverCameraFocus = GuidanceManeuverCameraFocus(
             guidancePointIndex = guidancePointIndex,
-            restoreCameraPosition = current,
-            restorePerspective = cameraState.perspective,
-            restoreZoom = cameraState.zoom,
-            restoreFollowingMyLocation = cameraState.isFollowingMyLocation,
+            restoreCameraPosition = inheritedFocus?.restoreCameraPosition ?: current,
+            restorePerspective = inheritedFocus?.restorePerspective ?: cameraState.perspective,
+            restoreZoom = inheritedFocus?.restoreZoom ?: cameraState.zoom,
+            restoreFollowingMyLocation = inheritedFocus?.restoreFollowingMyLocation
+                ?: cameraState.isFollowingMyLocation,
         )
 
         cameraAnimator.cancel()

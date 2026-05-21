@@ -64,8 +64,11 @@ internal fun MapCameraEffect(
         cameraState.clearGuidanceManeuverFocus()
     }
 
-    LaunchedEffect(guidancePointIndex) {
-        cameraState.updateGuidanceManeuverFocusTarget(guidancePointIndex)
+    LaunchedEffect(guidancePointIndex, shouldStartManeuverFocus) {
+        cameraState.updateGuidanceManeuverFocusTarget(
+            guidancePointIndex = guidancePointIndex,
+            restoreCamera = !shouldStartManeuverFocus,
+        )
     }
 
     LaunchedEffect(
@@ -76,8 +79,13 @@ internal fun MapCameraEffect(
         isManeuverPassed,
         shouldStartManeuverFocus,
     ) {
-        if (!isGuidanceCameraActive || guiding == null || !isOnRoute || guidancePointIndex == null) {
+        if (!isGuidanceCameraActive || guiding == null || guidancePointIndex == null) {
             cameraState.clearGuidanceManeuverFocus()
+            return@LaunchedEffect
+        }
+
+        if (!isOnRoute) {
+            cameraState.finishGuidanceManeuverFocusForRouteMismatch(guidancePointIndex)
             return@LaunchedEffect
         }
 
