@@ -20,6 +20,7 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
+import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 
 /**
  * Guidance 期 (案内中) のマネージャ。
@@ -371,4 +372,6 @@ private fun RouteDetail.toInitialProgress(): GuidanceProgress = GuidanceProgress
     currentRoadName = null,
     currentRoadClass = roadClassSegments.firstOrNull()?.roadClass ?: RoadClass.ORDINARY,
     currentSpeedLimitKmh = null,
+    routeMatchState = RouteMatchState.ON_ROUTE,
+    projectionErrorMeters = 0.0,
 )

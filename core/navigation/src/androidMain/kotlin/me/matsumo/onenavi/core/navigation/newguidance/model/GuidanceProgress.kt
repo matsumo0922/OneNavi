@@ -26,6 +26,8 @@ import me.matsumo.onenavi.core.model.RoutePoint
  * @param currentRoadName 走行中道路名
  * @param currentRoadClass 走行中道路種別
  * @param currentSpeedLimitKmh 現在区間の制限速度
+ * @param routeMatchState 現在位置と案内 route の一致状態
+ * @param projectionErrorMeters 生位置と route-snapped 位置の距離。計算できない場合は null
  */
 @Immutable
 data class GuidanceProgress(
@@ -47,4 +49,6 @@ data class GuidanceProgress(
     val currentRoadName: String?,
     val currentRoadClass: RoadClass,
     val currentSpeedLimitKmh: Int?,
+    val routeMatchState: RouteMatchState = RouteMatchState.ON_ROUTE,
+    val projectionErrorMeters: Double? = null,
 )

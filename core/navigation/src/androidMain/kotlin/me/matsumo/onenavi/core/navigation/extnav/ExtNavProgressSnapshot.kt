@@ -3,6 +3,7 @@ package me.matsumo.onenavi.core.navigation.extnav
 import androidx.compose.runtime.Immutable
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
+import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 
 /**
  * Tracker が周辺コンポーネントへ渡す projection snapshot。
@@ -15,6 +16,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
  * @param projectionErrorMeters 生位置と snap 点の距離
  * @param locationTimestampMillis 位置 tick の時刻
  * @param vehicleSpeedMps 車速
+ * @param routeMatchState 現在位置と案内 route の一致状態
  * @param isOffRouteCandidate debounce 前のオフルート候補
  * @param nextGuidancePointIndex 次の案内ポイント index
  */
@@ -28,6 +30,7 @@ data class ExtNavProgressSnapshot(
     val projectionErrorMeters: Double,
     val locationTimestampMillis: Long,
     val vehicleSpeedMps: Float?,
+    val routeMatchState: RouteMatchState,
     val isOffRouteCandidate: Boolean,
     val nextGuidancePointIndex: Int?,
 )

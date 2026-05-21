@@ -12,6 +12,7 @@ import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceManeuverInfo
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
+import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -37,6 +38,7 @@ class ExtNavGuidanceTracker {
 
     private var attachedRoute: AttachedRoute? = null
     private var lastProjection: RouteProjection? = null
+    private var offRouteCandidate: OffRouteCandidate? = null
 
     /**
      * 案内対象の route と、Preview 時にキャッシュした外部ナビ API ライブラリ由来 payload を紐付ける。
@@ -49,6 +51,7 @@ class ExtNavGuidanceTracker {
         val attached = buildAttachedRoute(payload, route)
         attachedRoute = attached
         lastProjection = null
+        offRouteCandidate = null
         _snapshot.value = null
     }
 
@@ -79,6 +82,7 @@ class ExtNavGuidanceTracker {
     fun detach() {
         attachedRoute = null
         lastProjection = null
+        offRouteCandidate = null
         _snapshot.value = null
     }
 
@@ -288,12 +292,25 @@ class ExtNavGuidanceTracker {
             attached = attached,
             projection = projection,
         )
+        val offRouteCandidate = isOffRouteCandidate(
+            projection = projection,
+            location = location,
+            attached = attached,
+        )
+        val routeMatchState = updateRouteMatchState(
+            attached = attached,
+            projection = projection,
+            location = location,
+            isOffRouteCandidate = offRouteCandidate,
+            nextGuidancePointIndex = nextGuidancePointIndex,
+        )
         val progress = buildProgress(
             attached = attached,
             projection = projection,
             location = location,
             distanceRemainingMetres = distanceRemainingMetres,
             nextGuidancePointIndex = nextGuidancePointIndex,
+            routeMatchState = routeMatchState,
         )
 
         return ExtNavProgressSnapshot(
@@ -305,11 +322,8 @@ class ExtNavGuidanceTracker {
             projectionErrorMeters = projection.projectionErrorMeters,
             locationTimestampMillis = location.timestampMillis,
             vehicleSpeedMps = location.speedMps,
-            isOffRouteCandidate = isOffRouteCandidate(
-                projection = projection,
-                location = location,
-                attached = attached,
-            ),
+            routeMatchState = routeMatchState,
+            isOffRouteCandidate = offRouteCandidate,
             nextGuidancePointIndex = nextGuidancePointIndex,
         )
     }
@@ -348,6 +362,7 @@ class ExtNavGuidanceTracker {
      * @param location 今回 tick の生 GPS
      * @param distanceRemainingMetres 事前算出済みの残距離
      * @param nextGuidancePointIndex 次 GP index
+     * @param routeMatchState 現在位置と案内 route の一致状態
      * @return UI 表示用の案内進捗
      */
     private fun buildProgress(
@@ -356,6 +371,7 @@ class ExtNavGuidanceTracker {
         location: UserLocation,
         distanceRemainingMetres: Double,
         nextGuidancePointIndex: Int?,
+        routeMatchState: RouteMatchState,
     ): GuidanceProgress {
         val durationRemainingSeconds = remainingDurationSeconds(
             route = attached.route,
@@ -395,6 +411,8 @@ class ExtNavGuidanceTracker {
                 matchedSegmentIndex = projection.matchedSegmentIndex,
             ),
             currentSpeedLimitKmh = null,
+            routeMatchState = routeMatchState,
+            projectionErrorMeters = projection.projectionErrorMeters,
         )
     }
 
@@ -767,26 +785,201 @@ class ExtNavGuidanceTracker {
         attached: AttachedRoute,
     ): Boolean {
         if (remainingDistanceMetres(attached, projection) <= ARRIVAL_SUPPRESSION_METRES) return false
-        if (location.accuracyMeters > MAX_OFF_ROUTE_ACCURACY_METRES) return false
-        if ((location.speedMps ?: 0f) < MIN_OFF_ROUTE_SPEED_MPS) return false
-        if (projection.projectionErrorMeters < offRouteErrorThreshold(location)) return false
+        if (location.hasTooCoarseAccuracyForOffRoute()) return false
+        if (location.hasTooSlowSpeedForOffRoute()) return false
 
-        val bearingDegrees = location.bearingDegrees ?: return true
-        val bearingDiffDegrees = abs(normalizeDegrees(bearingDegrees - projection.segmentBearingDegrees))
-
-        return bearingDiffDegrees >= OFF_ROUTE_BEARING_DIFF_DEGREES
+        return projection.projectionErrorMeters >= offRouteCandidateThreshold(location)
     }
 
     /**
-     * GPS 精度を加味した off-route 判定用の横ズレ閾値を返す。
+     * off-route 候補の継続状態を更新し、今回 tick の route match 状態を返す。
+     *
+     * candidate 閾値を超えた時点で表示は実位置側へ戻せるようにし、confirmed 閾値を超える状態が
+     * 複数 tick / 一定時間続いた場合だけリルート対象として確定する。
+     *
+     * @param attached attach 済み route 情報
+     * @param projection 今回 tick の projection
+     * @param location 今回 tick の生 GPS
+     * @param isOffRouteCandidate 今回 tick が off-route 候補か
+     * @param nextGuidancePointIndex 次 GP index
+     * @return debounce 後の route match 状態
+     */
+    private fun updateRouteMatchState(
+        attached: AttachedRoute,
+        projection: RouteProjection,
+        location: UserLocation,
+        isOffRouteCandidate: Boolean,
+        nextGuidancePointIndex: Int?,
+    ): RouteMatchState {
+        if (!isOffRouteCandidate) {
+            clearOffRouteCandidate()
+            return RouteMatchState.ON_ROUTE
+        }
+
+        val previous = offRouteCandidate
+        val candidate = previous
+            ?.advance(timestampMillis = location.timestampMillis)
+            ?: OffRouteCandidate(
+                firstTimestampMillis = location.timestampMillis,
+                latestTimestampMillis = location.timestampMillis,
+                sampleCount = 1,
+            )
+
+        offRouteCandidate = candidate
+
+        return if (isOffRouteConfirmedSample(
+                attached = attached,
+                projection = projection,
+                location = location,
+                candidate = candidate,
+                nextGuidancePointIndex = nextGuidancePointIndex,
+            )
+        ) {
+            RouteMatchState.OFF_ROUTE_CONFIRMED
+        } else {
+            RouteMatchState.OFF_ROUTE_CANDIDATE
+        }
+    }
+
+    /**
+     * 確定 off-route として扱うかを返す。
+     *
+     * 通常区間では 50m または accuracy x2.5 を超える逸脱が 2 秒以上 / 3 tick 以上続いた場合に確定する。
+     * 案内地点や交差点付近では、間違えて曲がったケースを早く拾うため、方位差が十分大きければ 2 tick で確定する。
+     *
+     * @param attached attach 済み route 情報
+     * @param projection 今回 tick の projection
+     * @param location 今回 tick の生 GPS
+     * @param candidate 継続中の off-route 候補
+     * @param nextGuidancePointIndex 次 GP index
+     * @return リルート対象として確定できる場合 true
+     */
+    private fun isOffRouteConfirmedSample(
+        attached: AttachedRoute,
+        projection: RouteProjection,
+        location: UserLocation,
+        candidate: OffRouteCandidate,
+        nextGuidancePointIndex: Int?,
+    ): Boolean {
+        val exceedsConfirmedDistance = projection.projectionErrorMeters >= offRouteConfirmedThreshold(location)
+        val hasEnoughSamples = candidate.sampleCount >= OFF_ROUTE_CONFIRMATION_SAMPLE_COUNT
+        val hasEnoughDuration = candidate.sampleCount >= OFF_ROUTE_MIN_DURATION_SAMPLE_COUNT &&
+            candidate.durationMillis >= OFF_ROUTE_CONFIRMATION_DURATION_MILLIS
+
+        if (exceedsConfirmedDistance && (hasEnoughSamples || hasEnoughDuration)) {
+            return true
+        }
+
+        return isNearDecisionPoint(
+            attached = attached,
+            projection = projection,
+            nextGuidancePointIndex = nextGuidancePointIndex,
+        ) &&
+            hasWrongDirection(projection = projection, location = location) &&
+            candidate.sampleCount >= OFF_ROUTE_DECISION_POINT_CONFIRMATION_SAMPLE_COUNT
+    }
+
+    /**
+     * off-route candidate とみなす横ズレ閾値を返す。
      *
      * @param location 今回 tick の生 GPS
-     * @return off-route 候補とみなす projection error 閾値
+     * @return 表示を実位置側へ戻し始める projection error 閾値
      */
-    private fun offRouteErrorThreshold(location: UserLocation): Double = max(
-        MIN_OFF_ROUTE_ERROR_METRES,
-        location.accuracyMeters * OFF_ROUTE_ACCURACY_MULTIPLIER,
+    private fun offRouteCandidateThreshold(location: UserLocation): Double = max(
+        MIN_OFF_ROUTE_CANDIDATE_ERROR_METRES,
+        location.usableAccuracyMeters() * OFF_ROUTE_CANDIDATE_ACCURACY_MULTIPLIER,
     )
+
+    /**
+     * off-route confirmed とみなす横ズレ閾値を返す。
+     *
+     * @param location 今回 tick の生 GPS
+     * @return リルート対象として確定する projection error 閾値
+     */
+    private fun offRouteConfirmedThreshold(location: UserLocation): Double = max(
+        MIN_OFF_ROUTE_CONFIRMED_ERROR_METRES,
+        location.usableAccuracyMeters() * OFF_ROUTE_CONFIRMED_ACCURACY_MULTIPLIER,
+    )
+
+    /**
+     * off-route 判定に使うには精度値が粗すぎるかを返す。
+     *
+     * @return 精度値が有効かつ上限を超える場合 true
+     */
+    private fun UserLocation.hasTooCoarseAccuracyForOffRoute(): Boolean =
+        accuracyMeters.isFinite() && accuracyMeters > MAX_OFF_ROUTE_ACCURACY_METRES
+
+    /**
+     * off-route 判定に使うには速度が遅すぎるかを返す。
+     *
+     * speed が取れない provider でも Fake GPS / 一部端末で逸脱検知できるよう、無効値や null は
+     * 速度 gate では落とさない。
+     *
+     * @return 有効な速度が下限を下回る場合 true
+     */
+    private fun UserLocation.hasTooSlowSpeedForOffRoute(): Boolean =
+        speedMps?.takeIf { speed -> speed.isFinite() }?.let { speed -> speed < MIN_OFF_ROUTE_SPEED_MPS } == true
+
+    /**
+     * off-route 閾値計算に使う水平精度を返す。
+     *
+     * @return 有効な水平精度。無効値の場合は保守的な既定値
+     */
+    private fun UserLocation.usableAccuracyMeters(): Double =
+        accuracyMeters
+            .takeIf { accuracy -> accuracy.isFinite() && accuracy >= 0f }
+            ?.toDouble()
+            ?: DEFAULT_OFF_ROUTE_ACCURACY_METRES
+
+    /**
+     * 現在 projection が案内判断点の近くにあるかを返す。
+     *
+     * @param attached attach 済み route 情報
+     * @param projection 今回 tick の projection
+     * @param nextGuidancePointIndex 次 GP index
+     * @return 案内地点または交差点の近傍なら true
+     */
+    private fun isNearDecisionPoint(
+        attached: AttachedRoute,
+        projection: RouteProjection,
+        nextGuidancePointIndex: Int?,
+    ): Boolean {
+        val nearGuidancePoint = nextGuidancePointIndex
+            ?.let { guidancePointIndex ->
+                abs(attached.guidancePointMetres[guidancePointIndex] - projection.currentCumulativeMeters) <=
+                    DECISION_POINT_RADIUS_METRES
+            }
+            ?: false
+        if (nearGuidancePoint) return true
+
+        return attached.intersections.any { intersection ->
+            abs(intersection.geometryMetres - projection.currentCumulativeMeters) <= DECISION_POINT_RADIUS_METRES
+        }
+    }
+
+    /**
+     * GPS bearing と route segment bearing が大きく異なるかを返す。
+     *
+     * @param projection 今回 tick の projection
+     * @param location 今回 tick の生 GPS
+     * @return 方位差から誤進行方向とみなせる場合 true
+     */
+    private fun hasWrongDirection(
+        projection: RouteProjection,
+        location: UserLocation,
+    ): Boolean {
+        val bearingDegrees = location.bearingDegrees ?: return false
+        val bearingDiffDegrees = abs(normalizeDegrees(bearingDegrees - projection.segmentBearingDegrees))
+
+        return bearingDiffDegrees >= OFF_ROUTE_DECISION_POINT_BEARING_DIFF_DEGREES
+    }
+
+    /**
+     * off-route 候補の継続状態を破棄する。
+     */
+    private fun clearOffRouteCandidate() {
+        offRouteCandidate = null
+    }
 
     /**
      * matched segment index から現在走行中の道路種別を求める。
@@ -1066,6 +1259,35 @@ class ExtNavGuidanceTracker {
     )
 
     /**
+     * off-route 候補が継続している期間を保持する。
+     *
+     * @param firstTimestampMillis 候補が始まった tick の時刻
+     * @param latestTimestampMillis 直近 candidate tick の時刻
+     * @param sampleCount candidate tick の連続数
+     */
+    private data class OffRouteCandidate(
+        val firstTimestampMillis: Long,
+        val latestTimestampMillis: Long,
+        val sampleCount: Int,
+    ) {
+
+        /** 候補が継続している時間（ms）。 */
+        val durationMillis: Long
+            get() = latestTimestampMillis - firstTimestampMillis
+
+        /**
+         * 次の candidate tick を反映した状態を返す。
+         *
+         * @param timestampMillis 新しい tick の時刻
+         * @return tick 数と最終時刻を更新した candidate
+         */
+        fun advance(timestampMillis: Long): OffRouteCandidate = copy(
+            latestTimestampMillis = timestampMillis,
+            sampleCount = sampleCount + 1,
+        )
+    }
+
+    /**
      * 緯度経度差分を平面メートル座標へ近似変換する係数。
      *
      * @param latitudeMetresPerDegree 緯度 1 度あたりのメートル
@@ -1111,17 +1333,41 @@ class ExtNavGuidanceTracker {
         /** off-route 判定を許可する最大 GPS 精度値。 */
         private const val MAX_OFF_ROUTE_ACCURACY_METRES: Float = 50f
 
+        /** accuracy が無効値の場合に off-route 閾値計算へ使う既定精度。 */
+        private const val DEFAULT_OFF_ROUTE_ACCURACY_METRES: Double = 10.0
+
         /** off-route 判定を許可する最小速度。 */
         private const val MIN_OFF_ROUTE_SPEED_MPS: Float = 1.5f
 
-        /** off-route 判定で使う最小 projection error。 */
-        private const val MIN_OFF_ROUTE_ERROR_METRES: Double = 30.0
+        /** off-route candidate とみなす最小 projection error。 */
+        private const val MIN_OFF_ROUTE_CANDIDATE_ERROR_METRES: Double = 25.0
 
-        /** GPS 精度から projection error 閾値を増やす倍率。 */
-        private const val OFF_ROUTE_ACCURACY_MULTIPLIER: Double = 1.5
+        /** GPS 精度から candidate 閾値を増やす倍率。 */
+        private const val OFF_ROUTE_CANDIDATE_ACCURACY_MULTIPLIER: Double = 2.0
 
-        /** off-route 判定で使う GPS bearing と segment bearing の最小差分。 */
-        private const val OFF_ROUTE_BEARING_DIFF_DEGREES: Float = 70f
+        /** off-route confirmed とみなす最小 projection error。 */
+        private const val MIN_OFF_ROUTE_CONFIRMED_ERROR_METRES: Double = 50.0
+
+        /** GPS 精度から confirmed 閾値を増やす倍率。 */
+        private const val OFF_ROUTE_CONFIRMED_ACCURACY_MULTIPLIER: Double = 2.5
+
+        /** confirmed 判定に必要な off-route candidate の連続 tick 数。 */
+        private const val OFF_ROUTE_CONFIRMATION_SAMPLE_COUNT: Int = 3
+
+        /** confirmed 判定で時間条件を許可する最小 tick 数。 */
+        private const val OFF_ROUTE_MIN_DURATION_SAMPLE_COUNT: Int = 2
+
+        /** confirmed 判定に必要な off-route candidate 継続時間。 */
+        private const val OFF_ROUTE_CONFIRMATION_DURATION_MILLIS: Long = 2_000L
+
+        /** 案内判断点付近で confirmed 判定に必要な連続 tick 数。 */
+        private const val OFF_ROUTE_DECISION_POINT_CONFIRMATION_SAMPLE_COUNT: Int = 2
+
+        /** 案内地点・交差点付近として扱う route 上距離。 */
+        private const val DECISION_POINT_RADIUS_METRES: Double = 40.0
+
+        /** 案内判断点付近で使う GPS bearing と segment bearing の最小差分。 */
+        private const val OFF_ROUTE_DECISION_POINT_BEARING_DIFF_DEGREES: Float = 45f
 
         /** 方位差から turn とみなす最小角度。 */
         private const val TURN_BEARING_DIFF_DEGREES: Float = 30f

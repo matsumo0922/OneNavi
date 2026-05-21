@@ -8,17 +8,15 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -32,17 +30,16 @@ import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
-import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.repository.SearchRepository
 import me.matsumo.onenavi.feature.map.location.VehicleLocationDataSource
+import me.matsumo.onenavi.feature.map.state.GuidanceVehicleLocationSelector
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.RoutePreviewTopBarMode
-import me.matsumo.onenavi.feature.map.state.VehicleLocationSource
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 import java.util.*
 import kotlin.time.Duration.Companion.milliseconds
@@ -81,20 +78,36 @@ class MapViewModel(
     @Suppress("unused")
     val newGuidanceState: StateFlow<GuidanceState> = newGuidanceManager.state
 
-    /** 地図 UI が読む自車位置。案内中は route-snapped、案内中以外は SDK / raw GPS 由来になる。 */
-    @OptIn(ExperimentalCoroutinesApi::class)
+    private val deviceVehicleLocationState: StateFlow<VehicleLocationState?> = vehicleLocationDataSource
+        .locationUpdates()
+        .map<VehicleLocationState, VehicleLocationState?> { location -> location }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = null,
+        )
+
+    /**
+     * 地図 UI が読む自車位置。
+     *
+     * 案内中も SDK road-snapped / raw GPS の実位置 stream は維持し、route 上にいる間だけ
+     * `GuidanceProgress.snappedLocation` を表示する。route 逸脱候補以上では古い route への吸着を止め、
+     * 実位置 stream を優先する。
+     */
     internal val vehicleLocationState: StateFlow<VehicleLocationState?> = newGuidanceState
-        .flatMapLatest { guidanceState ->
+        .combine(deviceVehicleLocationState) { guidanceState, deviceLocationState ->
             when (guidanceState) {
-                is GuidanceState.Guiding -> flowOf(guidanceState.progress.toVehicleLocationState())
+                is GuidanceState.Guiding -> GuidanceVehicleLocationSelector.select(
+                    progress = guidanceState.progress,
+                    deviceLocationState = deviceLocationState,
+                )
                 GuidanceState.Arrived,
                 is GuidanceState.Failed,
                 GuidanceState.Idle,
                 GuidanceState.Rerouting,
-                -> vehicleLocationDataSource.locationUpdates()
+                -> deviceLocationState
             }
         }
-        .map<VehicleLocationState, VehicleLocationState?> { location -> location }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
@@ -150,22 +163,6 @@ class MapViewModel(
         newGuidanceManager.release()
     }
 }
-
-/**
- * Guidance 進捗を地図表示用の自車位置 tick に変換する。
- *
- * @return route-snapped の自車位置 state
- */
-private fun GuidanceProgress.toVehicleLocationState(): VehicleLocationState = VehicleLocationState(
-    location = snappedLocation,
-    bearingDegrees = bearingDegrees,
-    accuracyMeters = null,
-    timestampMillis = locationTimestampMillis,
-    elapsedRealtimeNanos = locationElapsedRealtimeNanos,
-    speedMps = vehicleSpeedMps,
-    routeProgressMeters = currentCumulativeMeters,
-    source = VehicleLocationSource.ROUTE_SNAPPED,
-)
 
 private class UiEventDelegate(
     private val searchRepository: SearchRepository,
