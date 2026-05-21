@@ -203,6 +203,8 @@ private fun Location.toVehicleLocationState(source: VehicleLocationSource): Vehi
         speedMps = speed.takeIf { hasSpeed() },
         routeProgressMeters = null,
         source = source,
+        routeMatchState = null,
+        projectionErrorMeters = null,
     )
 }
 
@@ -223,4 +225,6 @@ private fun UserLocation.toVehicleLocationState(): VehicleLocationState = Vehicl
     speedMps = speedMps,
     routeProgressMeters = null,
     source = VehicleLocationSource.RAW_GPS,
+    routeMatchState = null,
+    projectionErrorMeters = null,
 )

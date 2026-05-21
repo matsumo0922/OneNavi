@@ -15,6 +15,9 @@ import me.matsumo.onenavi.core.model.RoutePoint
  * @param currentCumulativeMeters route geometry 上の現在累積距離
  * @param snappedLocation ルート上に snap した自車位置
  * @param bearingDegrees 自車マーカーの向き
+ * @param observedLocation 位置情報プロバイダから観測した実位置。取得できない場合は null
+ * @param observedBearingDegrees 観測位置の進行方向。取得できない場合は null
+ * @param observedAccuracyMeters 観測位置の水平精度。取得できない場合は null
  * @param locationTimestampMillis 位置情報の計測時刻
  * @param locationElapsedRealtimeNanos 位置情報の monotonic clock 時刻。取得できない場合は null
  * @param vehicleSpeedMps 自車速度。取得できない場合は null
@@ -38,6 +41,9 @@ data class GuidanceProgress(
     val currentCumulativeMeters: Double,
     val snappedLocation: RoutePoint,
     val bearingDegrees: Float,
+    val observedLocation: RoutePoint?,
+    val observedBearingDegrees: Float?,
+    val observedAccuracyMeters: Float?,
     val locationTimestampMillis: Long,
     val locationElapsedRealtimeNanos: Long?,
     val vehicleSpeedMps: Float?,
@@ -49,6 +55,6 @@ data class GuidanceProgress(
     val currentRoadName: String?,
     val currentRoadClass: RoadClass,
     val currentSpeedLimitKmh: Int?,
-    val routeMatchState: RouteMatchState = RouteMatchState.ON_ROUTE,
-    val projectionErrorMeters: Double? = null,
+    val routeMatchState: RouteMatchState,
+    val projectionErrorMeters: Double?,
 )

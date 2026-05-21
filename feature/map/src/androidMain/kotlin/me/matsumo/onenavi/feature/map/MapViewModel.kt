@@ -8,15 +8,17 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -78,34 +80,22 @@ class MapViewModel(
     @Suppress("unused")
     val newGuidanceState: StateFlow<GuidanceState> = newGuidanceManager.state
 
-    private val deviceVehicleLocationState: StateFlow<VehicleLocationState?> = vehicleLocationDataSource
-        .locationUpdates()
-        .map<VehicleLocationState, VehicleLocationState?> { location -> location }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = null,
-        )
-
     /**
      * 地図 UI が読む自車位置。
      *
-     * 案内中も SDK road-snapped / raw GPS の実位置 stream は維持し、route 上にいる間だけ
-     * `GuidanceProgress.snappedLocation` を表示する。route 逸脱候補以上では古い route への吸着を止め、
-     * 実位置 stream を優先する。
+     * 案内中は `GuidanceProgress` から表示位置を作るため、map 側の SDK road-snapped listener は
+     * collect しない。案内中でない場合だけ SDK road-snapped / raw GPS の stream を読む。
      */
+    @OptIn(ExperimentalCoroutinesApi::class)
     internal val vehicleLocationState: StateFlow<VehicleLocationState?> = newGuidanceState
-        .combine(deviceVehicleLocationState) { guidanceState, deviceLocationState ->
+        .flatMapLatest { guidanceState ->
             when (guidanceState) {
-                is GuidanceState.Guiding -> GuidanceVehicleLocationSelector.select(
-                    progress = guidanceState.progress,
-                    deviceLocationState = deviceLocationState,
-                )
+                is GuidanceState.Guiding -> flowOf(GuidanceVehicleLocationSelector.select(guidanceState.progress))
                 GuidanceState.Arrived,
                 is GuidanceState.Failed,
                 GuidanceState.Idle,
                 GuidanceState.Rerouting,
-                -> deviceLocationState
+                -> vehicleLocationDataSource.locationUpdates()
             }
         }
         .stateIn(

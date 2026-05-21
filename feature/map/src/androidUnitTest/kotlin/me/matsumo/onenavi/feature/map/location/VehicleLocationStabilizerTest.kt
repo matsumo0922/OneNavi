@@ -151,6 +151,8 @@ class VehicleLocationStabilizerTest {
         speedMps = speedMps,
         routeProgressMeters = null,
         source = source,
+        routeMatchState = null,
+        projectionErrorMeters = null,
     )
 
     private companion object {

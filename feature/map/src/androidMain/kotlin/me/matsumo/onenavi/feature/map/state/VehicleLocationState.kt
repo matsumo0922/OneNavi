@@ -29,7 +29,7 @@ enum class VehicleLocationSource {
  * @param speedMps 自車速度。取得できない場合は null
  * @param routeProgressMeters route geometry 上の累積距離。route-snapped 位置でない場合は null
  * @param source 位置情報の取得元
- * @param routeMatchState 現在位置と案内 route の一致状態
+ * @param routeMatchState 現在位置と案内 route の一致状態。案内中でない場合は null
  * @param projectionErrorMeters 生位置と route-snapped 位置の距離。計算できない場合は null
  */
 @Immutable
@@ -42,6 +42,6 @@ data class VehicleLocationState(
     val speedMps: Float?,
     val routeProgressMeters: Double?,
     val source: VehicleLocationSource,
-    val routeMatchState: RouteMatchState = RouteMatchState.ON_ROUTE,
-    val projectionErrorMeters: Double? = null,
+    val routeMatchState: RouteMatchState?,
+    val projectionErrorMeters: Double?,
 )
