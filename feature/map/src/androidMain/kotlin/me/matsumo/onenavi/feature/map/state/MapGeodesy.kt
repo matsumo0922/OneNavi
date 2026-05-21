@@ -25,24 +25,8 @@ internal object MapGeodesy {
     /** 経度正規化に使う 1 周分の角度。 */
     private const val FULL_CIRCLE_DEGREES = 360.0
 
-    /**
-     * 2 点間の球面距離を Haversine で計算する。
-     *
-     * @param from 始点
-     * @param to 終点
-     * @return 2 点間距離（m）
-     */
-    fun haversineMeters(from: RoutePoint, to: RoutePoint): Double {
-        val fromLatitude = Math.toRadians(from.latitude)
-        val toLatitude = Math.toRadians(to.latitude)
-        val latitudeDelta = Math.toRadians(to.latitude - from.latitude)
-        val longitudeDelta = Math.toRadians(to.longitude - from.longitude)
-        val haversine = sin(latitudeDelta / 2).let { value -> value * value } +
-            cos(fromLatitude) * cos(toLatitude) *
-            sin(longitudeDelta / 2).let { value -> value * value }
-
-        return EARTH_RADIUS_METERS * 2.0 * atan2(sqrt(haversine), sqrt(1.0 - haversine))
-    }
+    /** 方位差を -180〜180 度へ正規化するための offset。 */
+    private const val ANGLE_DELTA_NORMALIZE_OFFSET_DEGREES = 540.0
 
     /**
      * 2 点間の球面距離を Haversine で計算する。
@@ -51,17 +35,87 @@ internal object MapGeodesy {
      * @param to 終点
      * @return 2 点間距離（m）
      */
-    fun haversineMeters(from: LatLng, to: LatLng): Double {
+    fun haversineMeters(from: RoutePoint, to: RoutePoint): Double = haversineMeters(
+        fromLatitude = from.latitude,
+        fromLongitude = from.longitude,
+        toLatitude = to.latitude,
+        toLongitude = to.longitude,
+    )
+
+    /**
+     * 2 点間の球面距離を Haversine で計算する。
+     *
+     * @param from 始点
+     * @param to 終点
+     * @return 2 点間距離（m）
+     */
+    fun haversineMeters(from: LatLng, to: LatLng): Double = haversineMeters(
+        fromLatitude = from.latitude,
+        fromLongitude = from.longitude,
+        toLatitude = to.latitude,
+        toLongitude = to.longitude,
+    )
+
+    /**
+     * 2 点を結ぶ初期方位を返す。
+     *
+     * @param from 始点
+     * @param to 終点
+     * @return 北を 0 度とする時計回り方位
+     */
+    fun bearingDegrees(from: RoutePoint, to: RoutePoint): Float {
         val fromLatitude = Math.toRadians(from.latitude)
         val toLatitude = Math.toRadians(to.latitude)
-        val latitudeDelta = Math.toRadians(to.latitude - from.latitude)
         val longitudeDelta = Math.toRadians(to.longitude - from.longitude)
-        val haversine = sin(latitudeDelta / 2).let { value -> value * value } +
-            cos(fromLatitude) * cos(toLatitude) *
-            sin(longitudeDelta / 2).let { value -> value * value }
+        val y = sin(longitudeDelta) * cos(toLatitude)
+        val x = cos(fromLatitude) * sin(toLatitude) -
+            sin(fromLatitude) * cos(toLatitude) * cos(longitudeDelta)
 
-        return EARTH_RADIUS_METERS * 2.0 * atan2(sqrt(haversine), sqrt(1.0 - haversine))
+        return normalizeBearingDegrees(Math.toDegrees(atan2(y, x)).toFloat())
     }
+
+    /**
+     * 2 点を結ぶ初期方位を返す。
+     *
+     * @param from 始点。null の場合は null
+     * @param to 終点
+     * @return 北を 0 度とする時計回り方位。始点が無い場合や同一点の場合は null
+     */
+    fun bearingDegreesOrNull(from: RoutePoint?, to: RoutePoint): Float? {
+        if (from == null || from == to) return null
+
+        return bearingDegrees(from = from, to = to)
+    }
+
+    /**
+     * 方位角を 0〜360 度へ正規化する。
+     *
+     * @param bearingDegrees 正規化前の方位
+     * @return 正規化後の方位
+     */
+    fun normalizeBearingDegrees(bearingDegrees: Float): Float =
+        ((bearingDegrees + FULL_CIRCLE_DEGREES.toFloat()) % FULL_CIRCLE_DEGREES.toFloat())
+
+    /**
+     * 2 つの方位角の最短差分を返す。
+     *
+     * @param from 開始方位
+     * @param to 目標方位
+     * @return -180〜180 度の差分
+     */
+    fun shortestAngleDeltaDegrees(from: Float, to: Float): Float =
+        ((to - from + ANGLE_DELTA_NORMALIZE_OFFSET_DEGREES) % FULL_CIRCLE_DEGREES - HALF_CIRCLE_DEGREES)
+            .toFloat()
+
+    /**
+     * 2 つの方位角の最短差分を絶対値で返す。
+     *
+     * @param from 開始方位
+     * @param to 目標方位
+     * @return 0〜180 度の差分
+     */
+    fun angleDistanceDegrees(from: Float, to: Float): Float =
+        kotlin.math.abs(shortestAngleDeltaDegrees(from = from, to = to))
 
     /**
      * 始点から指定距離だけ指定方位へ進んだ地点を返す。
@@ -129,4 +183,30 @@ internal object MapGeodesy {
     fun normalizeLongitude(longitude: Double): Double =
         ((longitude + LONGITUDE_NORMALIZE_OFFSET_DEGREES) % FULL_CIRCLE_DEGREES) -
             HALF_CIRCLE_DEGREES
+
+    /**
+     * 2 点間の球面距離を Haversine で計算する。
+     *
+     * @param fromLatitude 始点緯度
+     * @param fromLongitude 始点経度
+     * @param toLatitude 終点緯度
+     * @param toLongitude 終点経度
+     * @return 2 点間距離（m）
+     */
+    private fun haversineMeters(
+        fromLatitude: Double,
+        fromLongitude: Double,
+        toLatitude: Double,
+        toLongitude: Double,
+    ): Double {
+        val fromLatitudeRadians = Math.toRadians(fromLatitude)
+        val toLatitudeRadians = Math.toRadians(toLatitude)
+        val latitudeDelta = Math.toRadians(toLatitude - fromLatitude)
+        val longitudeDelta = Math.toRadians(toLongitude - fromLongitude)
+        val haversine = sin(latitudeDelta / 2).let { value -> value * value } +
+            cos(fromLatitudeRadians) * cos(toLatitudeRadians) *
+            sin(longitudeDelta / 2).let { value -> value * value }
+
+        return EARTH_RADIUS_METERS * 2.0 * atan2(sqrt(haversine), sqrt(1.0 - haversine))
+    }
 }

@@ -2,11 +2,8 @@ package me.matsumo.onenavi.feature.map.state
 
 import me.matsumo.onenavi.core.model.RoutePoint
 import kotlin.math.absoluteValue
-import kotlin.math.atan2
-import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sign
-import kotlin.math.sin
 
 /**
  * 低頻度の位置 tick から、画面描画時点の自車 pose を推定する。
@@ -282,7 +279,10 @@ internal class VehiclePoseEstimator {
         return VehiclePose(
             location = nextLocation,
             bearingDegrees = displayBearingDegrees(
-                targetBearingDegrees = latest.state.bearingDegrees ?: bearingDegreesOrNull(currentLocation, targetLocation),
+                targetBearingDegrees = latest.state.bearingDegrees ?: MapGeodesy.bearingDegreesOrNull(
+                    from = currentLocation,
+                    to = targetLocation,
+                ),
                 sampleIntervalSeconds = sampleIntervalSeconds,
                 frameElapsedSeconds = frameElapsedSeconds,
             ),
@@ -306,7 +306,10 @@ internal class VehiclePoseEstimator {
             ?: derivedFreeSpeedMps(latest = latest, previous = previous)
             ?: return latest.state.location
         val bearingDegrees = latest.state.bearingDegrees
-            ?: bearingDegreesOrNull(previous?.state?.location, latest.state.location)
+            ?: MapGeodesy.bearingDegreesOrNull(
+                from = previous?.state?.location,
+                to = latest.state.location,
+            )
             ?: return latest.state.location
         val elapsedSeconds = elapsedSeconds(
             fromElapsedRealtimeNanos = latest.elapsedRealtimeNanos,
@@ -351,7 +354,7 @@ internal class VehiclePoseEstimator {
 
         return MapGeodesy.destinationPoint(
             origin = currentLocation,
-            bearingDegrees = bearingDegrees(currentLocation, targetLocation),
+            bearingDegrees = MapGeodesy.bearingDegrees(from = currentLocation, to = targetLocation),
             distanceMeters = maxStepMeters,
         )
     }
@@ -477,7 +480,7 @@ internal class VehiclePoseEstimator {
         val current = displayBearingDegrees ?: return target.also { bearingDegrees ->
             displayBearingDegrees = bearingDegrees
         }
-        val deltaDegrees = shortestAngleDeltaDegrees(from = current, to = target)
+        val deltaDegrees = MapGeodesy.shortestAngleDeltaDegrees(from = current, to = target)
         if (deltaDegrees == 0f || frameElapsedSeconds <= 0.0) {
             displayBearingDegrees = current
             return current
@@ -496,7 +499,7 @@ internal class VehiclePoseEstimator {
         )
         val next = current + deltaDegrees.sign * stepDegrees
 
-        return normalizeBearingDegrees(next).also { bearingDegrees ->
+        return MapGeodesy.normalizeBearingDegrees(next).also { bearingDegrees ->
             displayBearingDegrees = bearingDegrees
         }
     }
@@ -700,15 +703,15 @@ internal class VehiclePoseEstimator {
                 0.0
             }
             val segmentBearingDegrees = if (segmentMeters > 0.0) {
-                bearingDegrees(segmentStart, segmentEnd)
+                MapGeodesy.bearingDegrees(segmentStart, segmentEnd)
             } else {
                 fallbackBearingDegrees
             }
 
             return VehiclePose(
                 location = RoutePoint(
-                    latitude = lerp(segmentStart.latitude, segmentEnd.latitude, fraction),
-                    longitude = lerp(segmentStart.longitude, segmentEnd.longitude, fraction),
+                    latitude = MapInterpolation.lerp(segmentStart.latitude, segmentEnd.latitude, fraction),
+                    longitude = MapInterpolation.lerp(segmentStart.longitude, segmentEnd.longitude, fraction),
                 ),
                 bearingDegrees = segmentBearingDegrees,
             )
@@ -778,83 +781,10 @@ internal class VehiclePoseEstimator {
 private fun elapsedSeconds(
     fromElapsedRealtimeNanos: Long,
     toElapsedRealtimeNanos: Long,
-): Double = (toElapsedRealtimeNanos - fromElapsedRealtimeNanos)
-    .coerceAtLeast(0L)
-    .toDouble() / NANOS_PER_SECOND
-
-/**
- * 2 点を結ぶ初期方位を返す。
- *
- * @param from 始点
- * @param to 終点
- * @return 北を 0 度とする時計回り方位
- */
-private fun bearingDegrees(from: RoutePoint, to: RoutePoint): Float {
-    val fromLatitude = Math.toRadians(from.latitude)
-    val toLatitude = Math.toRadians(to.latitude)
-    val longitudeDelta = Math.toRadians(to.longitude - from.longitude)
-    val y = sin(longitudeDelta) * cos(toLatitude)
-    val x = cos(fromLatitude) * sin(toLatitude) -
-        sin(fromLatitude) * cos(toLatitude) * cos(longitudeDelta)
-
-    return ((Math.toDegrees(atan2(y, x)) + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES).toFloat()
-}
-
-/**
- * 2 点を結ぶ初期方位を返す。
- *
- * @param from 始点。null の場合は null
- * @param to 終点
- * @return 北を 0 度とする時計回り方位。始点が無い場合や同一点の場合は null
- */
-private fun bearingDegreesOrNull(from: RoutePoint?, to: RoutePoint): Float? {
-    if (from == null || from == to) return null
-
-    return bearingDegrees(from = from, to = to)
-}
-
-/**
- * 2 つの方位角の最短差分を返す。
- *
- * @param from 開始方位
- * @param to 目標方位
- * @return -180〜180 度の差分
- */
-private fun shortestAngleDeltaDegrees(from: Float, to: Float): Float =
-    ((to - from + ANGLE_DELTA_NORMALIZE_OFFSET_DEGREES) % FULL_CIRCLE_DEGREES - HALF_CIRCLE_DEGREES)
-        .toFloat()
-
-/**
- * 方位角を 0〜360 度へ正規化する。
- *
- * @param bearingDegrees 正規化前の方位
- * @return 正規化後の方位
- */
-private fun normalizeBearingDegrees(bearingDegrees: Float): Float =
-    ((bearingDegrees + FULL_CIRCLE_DEGREES.toFloat()) % FULL_CIRCLE_DEGREES.toFloat())
-
-/**
- * 2 つの数値を線形補間する。
- *
- * @param from 開始値
- * @param to 終了値
- * @param fraction 補間率
- * @return 補間後の値
- */
-private fun lerp(from: Double, to: Double, fraction: Double): Double =
-    from + (to - from) * fraction
-
-/** 1 秒あたりの nanosecond 数。 */
-private const val NANOS_PER_SECOND = 1_000_000_000.0
-
-/** 方位を正規化するための 1 周分の角度。 */
-private const val FULL_CIRCLE_DEGREES = 360.0
-
-/** 経度正規化に使う半周分の角度。 */
-private const val HALF_CIRCLE_DEGREES = 180.0
-
-/** 方位差を -180〜180 度へ正規化するための offset。 */
-private const val ANGLE_DELTA_NORMALIZE_OFFSET_DEGREES = 540.0
+): Double = MapTime.elapsedSeconds(
+    fromElapsedRealtimeNanos = fromElapsedRealtimeNanos,
+    toElapsedRealtimeNanos = toElapsedRealtimeNanos,
+)
 
 /** route geometry として扱うために必要な最小点数。 */
 private const val MIN_ROUTE_GEOMETRY_POINT_COUNT = 2

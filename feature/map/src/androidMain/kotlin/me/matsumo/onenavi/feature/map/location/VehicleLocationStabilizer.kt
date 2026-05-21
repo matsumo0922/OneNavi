@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.feature.map.location
 
 import me.matsumo.onenavi.feature.map.state.MapGeodesy
+import me.matsumo.onenavi.feature.map.state.MapTime
 import me.matsumo.onenavi.feature.map.state.VehicleLocationSource
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 import kotlin.math.max
@@ -169,7 +170,9 @@ internal class VehicleLocationStabilizer(
      */
     private fun VehicleLocationState.withStableBearing(previous: VehicleLocationState?): VehicleLocationState {
         val nextBearing = when {
-            bearingDegrees != null && hasReliableCourseBearing(previous) -> bearingDegrees.normalizedBearing()
+            bearingDegrees != null && hasReliableCourseBearing(previous) -> MapGeodesy.normalizeBearingDegrees(
+                bearingDegrees,
+            )
             shouldRetainPreviousBearing(previous) -> previous?.bearingDegrees
             else -> null
         }
@@ -282,14 +285,16 @@ internal class VehicleLocationStabilizer(
         val candidateElapsedNanos = candidate.elapsedRealtimeNanos
 
         if (elapsedNanos != null && candidateElapsedNanos != null) {
-            return (candidateElapsedNanos - elapsedNanos)
-                .coerceAtLeast(0L)
-                .toDouble() / NANOS_PER_SECOND
+            return MapTime.elapsedSeconds(
+                fromElapsedRealtimeNanos = elapsedNanos,
+                toElapsedRealtimeNanos = candidateElapsedNanos,
+            )
         }
 
-        return (candidate.timestampMillis - timestampMillis)
-            .coerceAtLeast(0L)
-            .toDouble() / MILLIS_PER_SECOND
+        return MapTime.elapsedWallClockSeconds(
+            fromTimestampMillis = timestampMillis,
+            toTimestampMillis = candidate.timestampMillis,
+        )
     }
 
     /**
@@ -415,14 +420,6 @@ internal class VehicleLocationStabilizer(
             ?: DEFAULT_ACCURACY_BUFFER_METERS
 
     /**
-     * 方位角を 0〜360 度へ正規化する。
-     *
-     * @return 正規化後の方位角
-     */
-    private fun Float.normalizedBearing(): Float =
-        ((this + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES)
-
-    /**
      * stabilizer の判定値をまとめる companion object。
      */
     private companion object {
@@ -480,14 +477,5 @@ internal class VehicleLocationStabilizer(
 
         /** accuracy が無い provider に使う保守的な距離 buffer。 */
         const val DEFAULT_ACCURACY_BUFFER_METERS = 8.0
-
-        /** 1 秒あたりの nanosecond 数。 */
-        const val NANOS_PER_SECOND = 1_000_000_000.0
-
-        /** 1 秒あたりの millisecond 数。 */
-        const val MILLIS_PER_SECOND = 1_000.0
-
-        /** 方位角の 1 周分。 */
-        const val FULL_CIRCLE_DEGREES = 360f
     }
 }
