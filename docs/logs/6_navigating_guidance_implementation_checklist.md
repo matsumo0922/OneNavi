@@ -1,6 +1,7 @@
 # Navigating Guidance Implementation Checklist
 
 > 作成日: 2026-05-19
+> 更新日: 2026-05-21
 > 参照仕様: `docs/spec/28_navigating_state_and_guidance_progress_design.md`
 > 目的: 別環境でも実装の残タスクと受け入れ条件を追えるようにする。仕様本文ではなく作業チェックリスト。
 
@@ -33,7 +34,7 @@
 
 ---
 
-## 2. 次の実装順
+## 2. 実装チェックリスト
 
 ### 2.1 案内中の route polyline 描画
 
@@ -49,9 +50,9 @@
 
 受け入れ条件:
 
-- [ ] ナビ開始直後に選択 route の polyline が地図に表示される
-- [ ] `GuidanceState.Guiding.route` がリルート後の route に変わると polyline も置き換わる
-- [ ] `GuidanceState.Idle` / `Rerouting` / `Failed` では案内中 route line を誤って残さない
+- [x] ナビ開始直後に選択 route の polyline が地図に表示される
+- [x] `GuidanceState.Guiding.route` がリルート後の route に変わると polyline も置き換わる
+- [x] `GuidanceState.Idle` / `Rerouting` / `Failed` では案内中 route line を誤って残さない
 
 ### 2.2 地図向け自車位置 state の統一
 
@@ -78,30 +79,40 @@ Preview 中の route geometry に現在地を勝手に投影しない。
 
 受け入れ条件:
 
-- [ ] 地図 UI は自車アイコン座標を `VehicleLocationState` からだけ読む
-- [ ] 案内中の `VehicleLocationState.source` は `ROUTE_SNAPPED`
-- [ ] 案内中の自車アイコンが route geometry 上の `snappedLocation` に表示される
-- [ ] 案内中以外の `VehicleLocationState.source` は `SDK_ROAD_SNAPPED` または `RAW_GPS`
-- [ ] 案内中以外は Preview route に現在地が吸着しない
-- [ ] `bearingDegrees` 更新で自車アイコンの向きが変わる
-- [ ] 案内中 / 非案内中で自車アイコンが二重表示されない
+- [x] 地図 UI は自車アイコン座標を `VehicleLocationState` からだけ読む
+- [x] 案内中の `VehicleLocationState.source` は `ROUTE_SNAPPED`
+- [x] 案内中の自車アイコンが route geometry 上の `snappedLocation` に表示される
+- [x] 案内中以外の `VehicleLocationState.source` は `SDK_ROAD_SNAPPED` または `RAW_GPS`
+- [x] 案内中以外は Preview route に現在地が吸着しない
+- [x] `bearingDegrees` 更新で自車アイコンの向きが変わる
+- [x] 案内中 / 非案内中で自車アイコンが二重表示されない
 - [ ] map 画面を離れる、または collect が止まると SDK road-snapped listener が解除される
 
 ### 2.3 案内中のカメラ制御
 
 自車位置を `VehicleLocationState` に統一した後、リルート確認に必要な最低限のカメラ制御を入れる。
 TBT バナー、ETA、停止ボタンなどの UI は後回しにする。
-案内中カメラは通常追従と案内地点接近時の一時フォーカスを分け、ユーザーが選んだ 3D / 真上モードと
-ズーム値を接近フォーカス解除後に復元できるようにする。
+案内中カメラは `VehicleLocationState` を正として追従し、案内開始時は現在設定に関わらず
+3D / `DEFAULT_CAMERA_ZOOM` にアニメーションする。通常時の自車アイコンは padding 考慮後の画面中心に置き、
+案内中 3D のときだけ画面手前側に見える target 補正を行う。
+案内地点接近時の一時フォーカスでは、ユーザーが選んだ 3D / 真上モードとズーム値を
+フォーカス解除後に復元できるようにする。
 
-- [ ] `MapCameraEffect` に `guidanceState: GuidanceState` を渡す
-- [ ] `MapCameraEffect` に `vehicleLocationState: VehicleLocationState?` を渡す
-- [ ] `GuidanceState.Guiding.route.id` が変わったときだけ `Guiding.route.geometry` を `showRouteOverview()` で収める
-- [ ] `VehicleLocationState.location` を案内中カメラの追従 target にする
-- [ ] `VehicleLocationState.bearingDegrees` を案内中カメラの bearing に使う
-- [ ] `MapCameraState` に案内中 target / bearing / zoom / tilt を指定できる API を追加する
-- [ ] 案内中でも 3D モードと真上モードを手動で切り替えられる
-- [ ] 手動で選んだ通常モードと通常ズーム値を `MapCameraState` に保持する
+- [x] `MapCameraEffect` に `vehicleLocationState: VehicleLocationState?` を渡す
+- [x] `VehicleLocationState.location` を案内中カメラの追従 target にする
+- [x] `VehicleLocationState.bearingDegrees` を案内中カメラの bearing に使う
+- [x] `MapCameraState` に案内開始時 target / bearing / zoom / tilt を指定する API を追加する
+- [x] ナビ開始時は現在設定に関わらず 3D / `DEFAULT_CAMERA_ZOOM` へアニメーションする
+- [x] 通常時は 3D / ノースアップとも自車アイコンが padding 考慮後の画面中心に表示される
+- [x] 案内中 3D のみ自車アイコンが画面中央より手前側に表示されるよう target を補正する
+- [x] コンパス button で 3D heading-up / 2D north-up を手動で切り替えられる
+- [x] コンパス button 操作後は自車追従へ復帰する
+- [x] コンパス button の切り替えは `flyCameraTo` と同じ減衰補間でアニメーションする
+- [x] follow 中の `+` / `-` zoom 操作では追従を維持する
+- [x] gesture zoom / rotate / tilt はユーザー操作として追従を解除する
+- [x] 自車アイコンと follow 中カメラは frame ごとの推定 pose で滑らかに更新する
+- [x] 静止時の GPS / heading ブレ、古い lastKnown、粗い初期 fix、遠距離 jump を抑制する
+- [ ] 手動で選んだ通常モードと通常ズーム値を案内地点フォーカス復元用に `MapCameraState` に保持する
 - [ ] `progress.nextManeuver.distanceToManeuverMeters` が接近閾値以下になったら案内地点フォーカスを開始する
 - [ ] 案内地点フォーカス中は自動で真上モードにし、案内地点確認用のズーム値へ自動拡大する
 - [ ] `nextGuidancePointIndex` が変わる、または対象 GP を通過したら案内地点フォーカスを解除する
@@ -111,11 +122,11 @@ TBT バナー、ETA、停止ボタンなどの UI は後回しにする。
 
 受け入れ条件:
 
-- [ ] ナビ開始時に route 全体が一度カメラに収まる
-- [ ] GPS tick 更新でカメラ中心が `VehicleLocationState.location` に追従する
-- [ ] リルート後は新 route 全体が一度収まり、その後は `VehicleLocationState(source = ROUTE_SNAPPED)` に追従する
-- [ ] `GuidanceState` が案内中でないときは案内中カメラ制御を止める
-- [ ] 案内中に 3D / 真上モードを切り替えられる
+- [x] ナビ開始時に 3D / `DEFAULT_CAMERA_ZOOM` へアニメーションする
+- [x] GPS tick 更新でカメラ中心が `VehicleLocationState.location` に追従する
+- [ ] リルート後は新 route geometry の polyline に置き換わり、その後は `VehicleLocationState(source = ROUTE_SNAPPED)` に追従する
+- [x] `GuidanceState` が案内中でないときは案内中カメラ制御を止める
+- [x] 案内中に 3D / 真上モードを切り替えられる
 - [ ] 案内地点に近づくと自動で真上モードかつ拡大表示になる
 - [ ] 案内地点通過後に、接近前のモードとズーム値へ戻る
 - [ ] 次の案内地点でも同じフォーカス動作を 1 回だけ行う
@@ -321,6 +332,10 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 ### Manual / Fake GPS
 
 - [x] ナビ開始時に `GuidanceState.Guiding` が出る
+- [x] ナビ開始時に選択 route の polyline が表示される
+- [x] ナビ開始時に 3D / `DEFAULT_CAMERA_ZOOM` へアニメーションする
+- [x] 案内中以外で静止時の位置ブレ・heading ブレが抑制される
+- [x] follow 中の自車アイコンとカメラが滑らかに追従する
 - [ ] ルート上を進むと `currentCumulativeMeters` が単調増加する
 - [ ] ルート上を進むと `distanceRemainingMeters` が減る
 - [ ] 次 GP の距離が減り、通過後に次 GP へ切り替わる
@@ -331,6 +346,14 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 ---
 
 ## 5. 確認コマンド
+
+```bash
+rtk ./gradlew :feature:map:compileDebugKotlinAndroid --no-configuration-cache
+```
+
+```bash
+rtk ./gradlew detekt --no-configuration-cache
+```
 
 ```bash
 rtk ./gradlew :core:navigation:compileDebugKotlinAndroid
