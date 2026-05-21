@@ -98,7 +98,8 @@ TBT バナー、ETA、停止ボタンなどの UI は後回しにする。
 案内地点接近時の一時フォーカスでは、ユーザーが選んだ 3D / 真上モードとズーム値を
 フォーカス解除後に復元できるようにする。
 フォーカス開始前から案内地点を視覚的に把握できるよう、次の案内地点とその次の案内地点の
-最大 2 件に CallOut を表示する。カメラは次の案内地点 300m 手前で真上表示かつ拡大表示へ切り替える。
+最大 2 件に CallOut を表示する。カメラは次の案内地点 100m 手前で heading-up の真上表示かつ
+拡大表示へ切り替える。
 
 - [x] `MapCameraEffect` に `vehicleLocationState: VehicleLocationState?` を渡す
 - [x] `VehicleLocationState.location` を案内中カメラの追従 target にする
@@ -115,10 +116,10 @@ TBT バナー、ETA、停止ボタンなどの UI は後回しにする。
 - [x] 自車アイコンと follow 中カメラは frame ごとの推定 pose で滑らかに更新する
 - [x] 静止時の GPS / heading ブレ、古い lastKnown、粗い初期 fix、遠距離 jump を抑制する
 - [x] 手動で選んだ通常モードと通常ズーム値を案内地点フォーカス復元用に `MapCameraState` に保持する
-- [x] `progress.nextManeuver.distanceToManeuverMeters <= 300m` になったら案内地点フォーカスを開始する
-- [x] 案内地点フォーカス中は自動で真上モードにし、案内地点確認用のズーム値へ自動拡大する
+- [x] `progress.nextManeuver.distanceToManeuverMeters <= 100m` になったら案内地点フォーカスを 1 回だけ開始する
+- [x] 案内地点フォーカス中は自動で heading-up の真上モードにし、案内地点確認用のズーム値へ自動拡大する
 - [x] `nextGuidancePointIndex` が変わる、または対象 GP を通過したら案内地点フォーカスを解除する
-- [x] 案内地点フォーカス解除後は、フォーカス前の 3D / 真上モードとズーム値へ戻す
+- [x] 案内地点フォーカス解除後は、フォーカス前の 3D / 真上モードとズーム値へ戻し、追従中は最新 pose の向き・傾きへ戻す
 - [x] 案内地点フォーカス中にユーザーが手動操作した場合の解除 / 継続ルールを決める
 - [ ] GPS tick ごとに route 全体 fit を再実行せず、route 差し替え時と現在地追従を分ける
 
@@ -129,8 +130,8 @@ TBT バナー、ETA、停止ボタンなどの UI は後回しにする。
 - [ ] リルート後は新 route geometry の polyline に置き換わり、その後は `VehicleLocationState(source = ROUTE_SNAPPED)` に追従する
 - [x] `GuidanceState` が案内中でないときは案内中カメラ制御を止める
 - [x] 案内中に 3D / 真上モードを切り替えられる
-- [x] 次の案内地点 300m 手前で自動で真上モードかつ拡大表示になる
-- [x] 案内地点通過後に、接近前のモードとズーム値へ戻る
+- [x] 次の案内地点 100m 手前で自動で heading-up の真上モードかつ拡大表示になる
+- [x] 案内地点通過後に、接近前のモードとズーム値へ戻り、追従中は最新 pose の向き・傾きへ戻る
 - [x] 次の案内地点でも同じフォーカス動作を 1 回だけ行う
 
 ### 2.4 route id / registry session 化
@@ -307,7 +308,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [ ] app 起動時の Koin 解決で落ちない
 - [x] `MapViewModel` から `NewGuidanceManager` が取得できる
 
-### 2.14 案内地点 CallOut と 300m カメラフォーカス
+### 2.14 案内地点 CallOut と 100m カメラフォーカス
 
 案内地点に近づく前から地図上で「どこで曲がるか」を把握できるよう、案内中 route 上の
 次の案内地点とその次の案内地点に CallOut を表示する。CallOut は地図上の案内地点に tail を固定し、
@@ -323,18 +324,20 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [x] `MapEffect` の `Navigating` 分岐で案内地点 CallOut を描画し、`GuidanceState.Guiding` 以外では破棄する
 - [x] `MapCameraEffect` に `guidanceState: GuidanceState` を渡し、`Guiding.progress.nextManeuver` からフォーカス判定する
 - [x] `MapCameraState` に案内地点フォーカス状態を追加し、フォーカス前の perspective / zoom / 追従状態を保持する
-- [x] `distanceToManeuverMeters <= 300` で対象 GP に 1 回だけフォーカスし、真上モード + 案内地点確認用ズームへ `flyCameraTo` する
-- [x] フォーカス中も自車位置追従は維持し、`updateVehiclePose` は真上モード + フォーカス zoom で camera target を更新する
+- [x] `distanceToManeuverMeters <= 100` で対象 GP に 1 回だけフォーカスし、heading-up の真上モード + 案内地点確認用ズームへ `flyCameraTo` する
+- [x] 案内地点フォーカス開始 / 復元は `flyCameraTo` の既定時間・減衰補間を使う
+- [x] 案内地点フォーカス開始 / 復元アニメーション中も、frame ごとに最新 pose から終点 target / bearing を更新する
+- [x] フォーカス中も自車位置追従は維持し、`updateVehiclePose` は heading-up の真上モード + フォーカス zoom で camera target を更新する
 - [x] 対象 `guidancePointIndex` が変わった、`distanceToManeuverMeters <= 0`、案内停止、またはユーザー gesture でフォーカスを解除する
 - [x] ユーザー gesture で解除した GP には再進入せず、次の GP に切り替わるまで通常追従を尊重する
-- [x] フォーカス解除後は保存していた perspective / zoom へ戻す。ただしユーザー gesture 解除時はユーザー操作後の状態を優先する
+- [x] フォーカス解除後は保存していた perspective / zoom へ戻す。追従中は最新 pose の target / bearing に追従し、ユーザー gesture 解除時はユーザー操作後の状態を優先する
 
 受け入れ条件:
 
 - [x] 案内中、次の案内地点とその次の案内地点に最大 2 件の CallOut が表示される
 - [x] GP 通過後は古い CallOut が消え、新しい次 / その次の案内地点へ更新される
 - [x] 案内地点 CallOut は route polyline より前面、自車アイコンより前面、操作 UI より背面に見える
-- [x] 次の案内地点 300m 手前で 1 回だけ真上 + 拡大表示へ切り替わる
+- [x] 次の案内地点 100m 手前で 1 回だけ heading-up の真上 + 拡大表示へ切り替わる
 - [x] 案内地点通過後、または次 GP へ切り替わった後に通常の追従モードへ戻る
 - [x] フォーカス中にユーザーが地図 gesture を行うと自動フォーカスが解除され、同じ GP では再度自動フォーカスしない
 - [x] route 逸脱中 (`OFF_ROUTE_CANDIDATE` / `OFF_ROUTE_CONFIRMED`) は古い route 上の GP フォーカスを開始しない

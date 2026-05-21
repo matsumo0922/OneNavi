@@ -139,6 +139,7 @@ private fun GuidanceManeuverInfo.toCallOutRequest(
             modifier.name,
             intersectionName.orEmpty(),
         ).joinToString(separator = CONTENT_KEY_SEPARATOR),
+        allowsOffscreenPlacement = true,
     )
 }
 

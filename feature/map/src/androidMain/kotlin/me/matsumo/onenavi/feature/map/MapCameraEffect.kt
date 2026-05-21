@@ -48,23 +48,46 @@ internal fun MapCameraEffect(
 
     val guiding = guidanceState as? GuidanceState.Guiding
     val nextManeuver = guiding?.progress?.nextManeuver
+    val guidancePointIndex = nextManeuver?.guidancePointIndex
+    val distanceToManeuverMeters = nextManeuver?.distanceToManeuverMeters
     val isOnRoute = guiding?.progress?.routeMatchState == RouteMatchState.ON_ROUTE
+    val isManeuverPassed = distanceToManeuverMeters != null &&
+        distanceToManeuverMeters <= GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS
+    val shouldStartManeuverFocus = isGuidanceCameraActive &&
+        isOnRoute &&
+        guidancePointIndex != null &&
+        distanceToManeuverMeters != null &&
+        distanceToManeuverMeters > GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS &&
+        distanceToManeuverMeters <= GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS
+
+    LaunchedEffect(guiding?.route?.id) {
+        cameraState.clearGuidanceManeuverFocus()
+    }
+
+    LaunchedEffect(guidancePointIndex) {
+        cameraState.updateGuidanceManeuverFocusTarget(guidancePointIndex)
+    }
 
     LaunchedEffect(
         isGuidanceCameraActive,
         guiding?.route?.id,
-        nextManeuver?.guidancePointIndex,
-        nextManeuver?.distanceToManeuverMeters,
+        guidancePointIndex,
         isOnRoute,
+        isManeuverPassed,
+        shouldStartManeuverFocus,
     ) {
-        if (isGuidanceCameraActive && guiding != null) {
-            cameraState.updateGuidanceManeuverFocus(
-                guidancePointIndex = nextManeuver?.guidancePointIndex,
-                distanceToManeuverMeters = nextManeuver?.distanceToManeuverMeters,
-                isOnRoute = isOnRoute,
-            )
-        } else {
+        if (!isGuidanceCameraActive || guiding == null || !isOnRoute || guidancePointIndex == null) {
             cameraState.clearGuidanceManeuverFocus()
+            return@LaunchedEffect
+        }
+
+        if (isManeuverPassed) {
+            cameraState.finishGuidanceManeuverFocusIfPassed(guidancePointIndex)
+            return@LaunchedEffect
+        }
+
+        if (shouldStartManeuverFocus) {
+            cameraState.startGuidanceManeuverFocusIfNeeded(guidancePointIndex)
         }
     }
 
@@ -140,3 +163,9 @@ internal fun MapCameraEffect(
         }
     }
 }
+
+/** 案内地点フォーカスを開始する残距離（m）。 */
+private const val GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS = 100
+
+/** 案内地点を通過済みと扱う残距離（m）。 */
+private const val GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS = 0
