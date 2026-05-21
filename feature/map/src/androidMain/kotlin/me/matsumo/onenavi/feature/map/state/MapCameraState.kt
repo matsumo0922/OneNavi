@@ -285,7 +285,7 @@ internal class MapCameraState internal constructor() {
     fun showRouteOverview(
         routePoints: List<RoutePoint>,
         paddingPx: Int = ROUTE_OVERVIEW_PADDING_PX,
-        durationMs: Long? = 1500,
+        durationMs: Long? = ROUTE_OVERVIEW_ANIMATION_DURATION_MS,
     ) {
         val map = googleMap ?: return
         if (routePoints.isEmpty()) return
@@ -627,6 +627,9 @@ internal class MapCameraState internal constructor() {
 
         /** ルート全体表示時に画面端へ確保する既定 padding（px）。 */
         private const val ROUTE_OVERVIEW_PADDING_PX = 64
+
+        /** ルート全体表示時の既定 animation 時間（ms）。 */
+        private const val ROUTE_OVERVIEW_ANIMATION_DURATION_MS = 1_500L
 
         /**
          * [showRouteOverview] の引きアニメで、ズームレベル（= log ビューポート幅）へ直接かける減速の強さ。

@@ -86,7 +86,7 @@ Preview 中の route geometry に現在地を勝手に投影しない。
 - [x] 案内中以外は Preview route に現在地が吸着しない
 - [x] `bearingDegrees` 更新で自車アイコンの向きが変わる
 - [x] 案内中 / 非案内中で自車アイコンが二重表示されない
-- [x] map 画面を離れる、または collect が止まると SDK road-snapped listener が解除される
+- [x] map 画面を離れる、または collect が止まって 5 秒猶予後に SDK road-snapped listener が解除される
 
 ### 2.3 案内中のカメラ制御
 

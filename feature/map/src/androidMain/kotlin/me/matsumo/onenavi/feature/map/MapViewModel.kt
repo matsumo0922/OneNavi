@@ -77,7 +77,6 @@ class MapViewModel(
     val newRoutePreviewState: StateFlow<RoutePreviewState> = newRouteManager.state
 
     /** Guidance 期の state machine を提供する ([GuidanceState])。 */
-    @Suppress("unused")
     val newGuidanceState: StateFlow<GuidanceState> = newGuidanceManager.state
 
     /**
@@ -100,7 +99,7 @@ class MapViewModel(
         }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(),
+            started = SharingStarted.WhileSubscribed(VEHICLE_LOCATION_SUBSCRIPTION_STOP_TIMEOUT_MILLIS),
             initialValue = null,
         )
 
@@ -516,6 +515,9 @@ private class UiEventDelegate(
 }
 
 private const val MAP_POINT_ID_PREFIX = "map-point:"
+
+/** 自車位置 stream の一時的な unsubscribe を許容する猶予時間（ms）。 */
+private const val VEHICLE_LOCATION_SUBSCRIPTION_STOP_TIMEOUT_MILLIS = 5_000L
 
 private fun createMapPointResult(
     placeId: String?,

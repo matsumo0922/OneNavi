@@ -88,20 +88,25 @@ internal fun MapVehiclePoseEffect(
             routeGeometry = routeGeometry,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
         )
-        estimator.estimate(nowElapsedRealtimeNanos)?.let { pose ->
-            markerState.value?.updatePose(pose)
-            cameraState.updateVehiclePose(pose)
-        }
+        updateEstimatedVehiclePose(
+            estimator = estimator,
+            marker = markerState.value,
+            cameraState = cameraState,
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+        )
     }
 
     LaunchedEffect(markerState.value, estimator, cameraState) {
         while (isActive) {
             withFrameNanos { }
             val marker = markerState.value ?: continue
-            val pose = estimator.estimate(SystemClock.elapsedRealtimeNanos()) ?: continue
 
-            marker.updatePose(pose)
-            cameraState.updateVehiclePose(pose)
+            updateEstimatedVehiclePose(
+                estimator = estimator,
+                marker = marker,
+                cameraState = cameraState,
+                nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+            )
         }
     }
 }
@@ -135,6 +140,26 @@ private fun Marker.updatePose(pose: VehiclePose) {
     pose.bearingDegrees?.let { bearingDegrees ->
         rotation = bearingDegrees
     }
+}
+
+/**
+ * 推定 pose を自車 marker と追従カメラへ反映する。
+ *
+ * @param estimator frame 時点の pose を推定する estimator
+ * @param marker 自車 marker。未生成の場合は camera のみ更新する
+ * @param cameraState 追従カメラ state
+ * @param nowElapsedRealtimeNanos 推定対象の monotonic clock 時刻
+ */
+private fun updateEstimatedVehiclePose(
+    estimator: VehiclePoseEstimator,
+    marker: Marker?,
+    cameraState: MapCameraState,
+    nowElapsedRealtimeNanos: Long,
+) {
+    val pose = estimator.estimate(nowElapsedRealtimeNanos) ?: return
+
+    marker?.updatePose(pose)
+    cameraState.updateVehiclePose(pose)
 }
 
 /** 自車アイコンの表示サイズ。 */
