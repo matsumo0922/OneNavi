@@ -13,18 +13,34 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiState
+import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 
+/**
+ * 画面状態の変化を GoogleMap カメラ操作へ変換する。
+ *
+ * @param uiState map screen の UI state
+ * @param screenState 現在の地図画面状態
+ * @param routePreviewState Preview 期のルート候補状態
+ * @param vehicleLocationState 最新の自車位置
+ * @param cameraState カメラ操作を保持する state holder
+ */
 @Composable
 internal fun MapCameraEffect(
     uiState: MapUiState,
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
+    vehicleLocationState: VehicleLocationState?,
     cameraState: MapCameraState,
 ) {
     val density = LocalDensity.current
     val statusBarHeightPadding = WindowInsets.statusBars
         .asPaddingValues()
         .calculateTopPadding()
+    val isGuidanceCameraActive = screenState is MapScreenState.Navigating
+
+    LaunchedEffect(isGuidanceCameraActive) {
+        cameraState.setGuidanceCameraActive(isGuidanceCameraActive)
+    }
 
     LaunchedEffect(uiState.bottomSheetPeekHeight, uiState.topAppBarHeight, screenState) {
         val top = uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }
@@ -56,7 +72,7 @@ internal fun MapCameraEffect(
     LaunchedEffect(screenState) {
         when (screenState) {
             is MapScreenState.Browsing -> {
-                cameraState.followMyLocation()
+                cameraState.followVehicleLocation(vehicleLocationState)
             }
 
             is MapScreenState.PlaceDetails -> {
@@ -90,7 +106,7 @@ internal fun MapCameraEffect(
                 // ルートが揃ったタイミングで下の LaunchedEffect がカメラをフィットさせる
             }
             is MapScreenState.Navigating -> {
-                // TODO
+                cameraState.startGuidanceCamera(vehicleLocationState)
             }
             is MapScreenState.Arrived -> {
                 // TODO

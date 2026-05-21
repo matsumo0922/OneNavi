@@ -8,6 +8,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -32,11 +35,14 @@ import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.repository.SearchRepository
+import me.matsumo.onenavi.feature.map.location.VehicleLocationDataSource
+import me.matsumo.onenavi.feature.map.state.GuidanceVehicleLocationSelector
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.RoutePreviewTopBarMode
+import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 import java.util.*
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -44,6 +50,7 @@ class MapViewModel(
     private val searchRepository: SearchRepository,
     private val newRouteManager: NewRouteManager,
     private val newGuidanceManager: NewGuidanceManager,
+    vehicleLocationDataSource: VehicleLocationDataSource,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MapUiState())
@@ -70,8 +77,31 @@ class MapViewModel(
     val newRoutePreviewState: StateFlow<RoutePreviewState> = newRouteManager.state
 
     /** Guidance 期の state machine を提供する ([GuidanceState])。 */
-    @Suppress("unused")
     val newGuidanceState: StateFlow<GuidanceState> = newGuidanceManager.state
+
+    /**
+     * 地図 UI が読む自車位置。
+     *
+     * 案内中は `GuidanceProgress` から表示位置を作るため、map 側の SDK road-snapped listener は
+     * collect しない。案内中でない場合だけ SDK road-snapped / raw GPS の stream を読む。
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    internal val vehicleLocationState: StateFlow<VehicleLocationState?> = newGuidanceState
+        .flatMapLatest { guidanceState ->
+            when (guidanceState) {
+                is GuidanceState.Guiding -> flowOf(GuidanceVehicleLocationSelector.select(guidanceState.progress))
+                GuidanceState.Arrived,
+                is GuidanceState.Failed,
+                GuidanceState.Idle,
+                GuidanceState.Rerouting,
+                -> vehicleLocationDataSource.locationUpdates()
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(VEHICLE_LOCATION_SUBSCRIPTION_STOP_TIMEOUT_MILLIS),
+            initialValue = null,
+        )
 
     private val uiEventDelegate = UiEventDelegate(
         searchRepository = searchRepository,
@@ -485,6 +515,9 @@ private class UiEventDelegate(
 }
 
 private const val MAP_POINT_ID_PREFIX = "map-point:"
+
+/** 自車位置 stream の一時的な unsubscribe を許容する猶予時間（ms）。 */
+private const val VEHICLE_LOCATION_SUBSCRIPTION_STOP_TIMEOUT_MILLIS = 5_000L
 
 private fun createMapPointResult(
     placeId: String?,

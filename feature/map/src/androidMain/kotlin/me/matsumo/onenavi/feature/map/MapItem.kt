@@ -17,15 +17,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.GoogleMapOptions
+import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PointOfInterest
-import com.google.android.libraries.navigation.NavigationView
-import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.feature.map.state.MapCameraState
-import org.koin.compose.koinInject
 
 @Composable
 internal fun MapItem(
@@ -36,27 +33,21 @@ internal fun MapItem(
     onMapLongClicked: (LatLng) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val navigationView = rememberNavigationViewWithLifecycle()
-    val navigationSdkManager = koinInject<NavigationSdkManager>()
-    val isNavigatorReady by navigationSdkManager.isNavigatorReady.collectAsStateWithLifecycle()
+    val mapView = rememberMapViewWithLifecycle()
+    MapViewLifecycleEffect(
+        mapView = mapView,
+        onClear = { onMapUpdate(null) },
+    )
 
     googleMap?.let {
-        MapEffect(
-            navigationView = navigationView,
+        GoogleMapEffect(
             googleMap = it,
             onPointOfInterestClicked = onPointOfInterestClicked,
             onMapLongClicked = onMapLongClicked,
-            onClear = { onMapUpdate(null) },
         )
 
         LaunchedEffect(it) {
             cameraState.attachMap(it)
-        }
-    }
-
-    LaunchedEffect(isNavigatorReady) {
-        if (isNavigatorReady) {
-            cameraState.onNavigatorReady()
         }
     }
 
@@ -65,10 +56,13 @@ internal fun MapItem(
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { size ->
-                    cameraState.updateViewportWidth(size.width)
+                    cameraState.updateViewportSize(
+                        widthPx = size.width,
+                        heightPx = size.height,
+                    )
                 },
             factory = {
-                navigationView.apply {
+                mapView.apply {
                     getMapAsync { map ->
                         onMapUpdate(map)
                     }
@@ -79,7 +73,7 @@ internal fun MapItem(
 }
 
 @Composable
-private fun rememberNavigationViewWithLifecycle(): NavigationView {
+private fun rememberMapViewWithLifecycle(): MapView {
     val context = LocalContext.current
 
     return remember(context) {
@@ -92,33 +86,19 @@ private fun rememberNavigationViewWithLifecycle(): NavigationView {
             .compassEnabled(false)
             .mapToolbarEnabled(false)
 
-        NavigationView(context, mapOptions).apply {
+        MapView(context, mapOptions).apply {
             onCreate(Bundle())
-
-            isNavigationUiEnabled = false
-
-            setHeaderEnabled(false)
-            setEtaCardEnabled(false)
-            setTripProgressBarEnabled(false)
-            setRecenterButtonEnabled(false)
-            setSpeedLimitIconEnabled(false)
-            setSpeedometerEnabled(false)
-            setTrafficIncidentCardsEnabled(false)
-            setTrafficPromptsEnabled(false)
         }
     }
 }
 
 @SuppressLint("MissingPermission")
 @Composable
-private fun MapEffect(
-    navigationView: NavigationView,
+private fun GoogleMapEffect(
     googleMap: GoogleMap,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
-    onClear: () -> Unit,
 ) {
-    val lifecycleOwner = LocalLifecycleOwner.current
     val currentOnPointOfInterestClicked by rememberUpdatedState(onPointOfInterestClicked)
     val currentOnMapLongClicked by rememberUpdatedState(onMapLongClicked)
 
@@ -126,7 +106,7 @@ private fun MapEffect(
         googleMap.mapType = GoogleMap.MAP_TYPE_NORMAL
         googleMap.isBuildingsEnabled = true
         googleMap.isTrafficEnabled = true
-        googleMap.isMyLocationEnabled = true
+        googleMap.isMyLocationEnabled = false
 
         googleMap.uiSettings.apply {
             isCompassEnabled = false
@@ -149,22 +129,82 @@ private fun MapEffect(
             googleMap.setOnMapLongClickListener(null)
         }
     }
+}
 
-    DisposableEffect(lifecycleOwner, navigationView) {
+@Composable
+private fun MapViewLifecycleEffect(
+    mapView: MapView,
+    onClear: () -> Unit,
+) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentOnClear by rememberUpdatedState(onClear)
+
+    DisposableEffect(lifecycleOwner, mapView) {
+        val lifecycle = lifecycleOwner.lifecycle
+        var isStarted = false
+        var isResumed = false
+        var isDestroyed = false
+
+        fun startMapView() {
+            if (!isStarted && !isDestroyed) {
+                mapView.onStart()
+                isStarted = true
+            }
+        }
+
+        fun resumeMapView() {
+            startMapView()
+            if (!isResumed && !isDestroyed) {
+                mapView.onResume()
+                isResumed = true
+            }
+        }
+
+        fun pauseMapView() {
+            if (isResumed && !isDestroyed) {
+                mapView.onPause()
+                isResumed = false
+            }
+        }
+
+        fun stopMapView() {
+            pauseMapView()
+            if (isStarted && !isDestroyed) {
+                mapView.onStop()
+                isStarted = false
+            }
+        }
+
+        fun destroyMapView() {
+            if (!isDestroyed) {
+                stopMapView()
+                mapView.onDestroy()
+                isDestroyed = true
+            }
+        }
+
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            startMapView()
+        }
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            resumeMapView()
+        }
+
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> navigationView.onStart()
-                Lifecycle.Event.ON_RESUME -> navigationView.onResume()
-                Lifecycle.Event.ON_PAUSE -> navigationView.onPause()
-                Lifecycle.Event.ON_STOP -> navigationView.onStop()
-                Lifecycle.Event.ON_DESTROY -> navigationView.onDestroy()
+                Lifecycle.Event.ON_START -> startMapView()
+                Lifecycle.Event.ON_RESUME -> resumeMapView()
+                Lifecycle.Event.ON_PAUSE -> pauseMapView()
+                Lifecycle.Event.ON_STOP -> stopMapView()
+                Lifecycle.Event.ON_DESTROY -> destroyMapView()
                 else -> Unit
             }
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
+        lifecycle.addObserver(observer)
         onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            onClear.invoke()
+            lifecycle.removeObserver(observer)
+            destroyMapView()
+            currentOnClear.invoke()
         }
     }
 }
