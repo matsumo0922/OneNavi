@@ -6,7 +6,6 @@ import com.google.android.libraries.navigation.RoadSnappedLocationProvider
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
@@ -16,6 +15,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.matsumo.onenavi.core.datasource.location.CurrentLocationDataSource
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.RoutePoint
@@ -28,7 +29,8 @@ import java.util.concurrent.atomic.AtomicLong
  * 地図表示用の自車位置を提供する data source。
  *
  * SDK road-snapped location を優先し、SDK provider が未初期化または更新停止している間だけ
- * raw GPS を fallback として流す。
+ * raw GPS を fallback として流す。UI に渡す前に古い fix、粗い fix、外れ値、静止時の bearing ぶれを
+ * [VehicleLocationStabilizer] で抑制する。
  */
 class VehicleLocationDataSource(
     private val navigationSdkManager: NavigationSdkManager,
@@ -43,12 +45,28 @@ class VehicleLocationDataSource(
      */
     fun locationUpdates(): Flow<VehicleLocationState> = channelFlow {
         val lastProviderUpdateElapsedMillis = AtomicLong(NO_PROVIDER_UPDATE)
+        val stabilizer = VehicleLocationStabilizer()
+        val stabilizerMutex = Mutex()
+
+        suspend fun emitStabilized(state: VehicleLocationState) {
+            val stabilizedState = stabilizerMutex.withLock {
+                stabilizer.stabilize(state)
+            } ?: return
+
+            send(stabilizedState)
+        }
 
         val providerJob = launch {
-            collectProviderLocations(lastProviderUpdateElapsedMillis)
+            collectProviderLocations(
+                lastProviderUpdateElapsedMillis = lastProviderUpdateElapsedMillis,
+                emitState = ::emitStabilized,
+            )
         }
         val rawGpsJob = launch {
-            collectRawGpsFallback(lastProviderUpdateElapsedMillis)
+            collectRawGpsFallback(
+                lastProviderUpdateElapsedMillis = lastProviderUpdateElapsedMillis,
+                emitState = ::emitStabilized,
+            )
         }
 
         awaitClose {
@@ -57,8 +75,9 @@ class VehicleLocationDataSource(
         }
     }.buffer(Channel.CONFLATED)
 
-    private suspend fun ProducerScope<VehicleLocationState>.collectProviderLocations(
+    private suspend fun collectProviderLocations(
         lastProviderUpdateElapsedMillis: AtomicLong,
+        emitState: suspend (VehicleLocationState) -> Unit,
     ) {
         try {
             navigationSdkManager.roadSnappedLocationProvider
@@ -67,7 +86,7 @@ class VehicleLocationDataSource(
                 .collectLatest { provider ->
                     provider.locationUpdates().collect { state ->
                         lastProviderUpdateElapsedMillis.set(SystemClock.elapsedRealtime())
-                        send(state)
+                        emitState(state)
                     }
                 }
         } catch (cancellation: CancellationException) {
@@ -77,21 +96,22 @@ class VehicleLocationDataSource(
         }
     }
 
-    private suspend fun ProducerScope<VehicleLocationState>.collectRawGpsFallback(
+    private suspend fun collectRawGpsFallback(
         lastProviderUpdateElapsedMillis: AtomicLong,
+        emitState: suspend (VehicleLocationState) -> Unit,
     ) {
         try {
             currentLocationDataSource.lastKnown()
                 ?.toVehicleLocationState()
                 ?.let { state ->
                     if (shouldEmitRawGps(lastProviderUpdateElapsedMillis)) {
-                        send(state)
+                        emitState(state)
                     }
                 }
 
             currentLocationDataSource.locationUpdates().collect { location ->
                 if (shouldEmitRawGps(lastProviderUpdateElapsedMillis)) {
-                    send(location.toVehicleLocationState())
+                    emitState(location.toVehicleLocationState())
                 }
             }
         } catch (cancellation: CancellationException) {
@@ -121,13 +141,13 @@ private fun RoadSnappedLocationProvider.locationUpdates(): Flow<VehicleLocationS
         override fun onLocationChanged(location: Location) {
             location
                 .toVehicleLocationState(source = location.vehicleLocationSource(defaultRoadSnapped = true))
+                ?.takeIf { state -> state.source == VehicleLocationSource.SDK_ROAD_SNAPPED }
                 ?.let { state -> trySend(state) }
         }
 
         override fun onRawLocationUpdate(location: Location) {
-            location
-                .toVehicleLocationState(source = VehicleLocationSource.RAW_GPS)
-                ?.let { state -> trySend(state) }
+            // Raw fallback は CurrentLocationDataSource に一本化し、SDK provider 由来の raw tick では
+            // road-snapped provider の freshness を更新しない。
         }
     }
 
