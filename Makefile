@@ -2,10 +2,11 @@
 
 SPEED ?= 60
 FAKE_GPS_DIR := dev-tools/fake-gps
-FAKE_GPS_PORT := 5556
+# Vite dev server (GPS ブリッジ middleware を内包) のポート
+FAKE_GPS_PORT := 5173
 ROUTE_COMPARE_DIR := dev-tools/route-compare
 
-.PHONY: detekt dhu route-demo-1 clean-dhu fake-gps fake-gps-setup fake-gps-dev fake-gps-forward fake-gps-status fake-gps-stop route-compare route-compare-setup route-compare-dev
+.PHONY: detekt dhu route-demo-1 clean-dhu fake-gps fake-gps-setup fake-gps-dev fake-gps-status fake-gps-stop route-compare route-compare-setup route-compare-dev
 
 detekt:
 	./gradlew detekt --auto-correct --continue
@@ -20,7 +21,7 @@ route-demo-1:
 clean-dhu:
 	rm -f dhu_pipe
 
-# ── Fake GPS ──
+# ── Fake GPS (Android Emulator) ──
 
 fake-gps-setup:
 	cd $(FAKE_GPS_DIR) && npm install
@@ -29,21 +30,16 @@ fake-gps-setup:
 		echo "[fake-gps] .env created. Set VITE_GOOGLE_API_KEY in $(FAKE_GPS_DIR)/.env"; \
 	fi
 
-fake-gps-forward:
-	adb forward tcp:$(FAKE_GPS_PORT) tcp:$(FAKE_GPS_PORT)
-	@echo "[fake-gps] ADB forward tcp:$(FAKE_GPS_PORT) -> device tcp:$(FAKE_GPS_PORT)"
-
-fake-gps-dev: fake-gps-forward
+fake-gps-dev:
 	cd $(FAKE_GPS_DIR) && npx vite
 
 fake-gps: fake-gps-setup fake-gps-dev
 
 fake-gps-status:
-	@curl -s --max-time 3 http://localhost:$(FAKE_GPS_PORT)/status | python3 -m json.tool 2>/dev/null || echo "[fake-gps] Not connected (server not running?)"
+	@curl -s --max-time 3 http://localhost:$(FAKE_GPS_PORT)/status | python3 -m json.tool 2>/dev/null || echo "[fake-gps] Not connected (dev server not running?)"
 
 fake-gps-stop:
 	@curl -s --max-time 3 -X POST http://localhost:$(FAKE_GPS_PORT)/stop | python3 -m json.tool 2>/dev/null || echo "[fake-gps] Not connected"
-	-adb forward --remove tcp:$(FAKE_GPS_PORT)
 
 # ── Route Compare (debug) ──
 
