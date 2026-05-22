@@ -1,0 +1,4 @@
+{
+  "title": "Navigation / 案内中 (Auto)",
+  "description": "docs/idea/android_auto/navigation/img_20.png をもとに、Android Auto の turn-by-turn 案内画面を横向きヘッドユニット UI として再現。密な街区地図・青ルート・信号・地名・マニューバ・右サイドの暗色操作レール・ズーム・下部 ETA カードを含む。横系2ビューポート（タブレット横/スマホ横）を実装。"
+}
