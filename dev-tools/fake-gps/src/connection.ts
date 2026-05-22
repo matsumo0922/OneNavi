@@ -1,4 +1,6 @@
-const BASE_URL = "http://localhost:5556";
+// Vite dev server に同居する emulator ブリッジ (vite.config.ts) へ送る。
+// 同一オリジンなので相対パスで良い。
+const BASE_URL = "";
 
 export interface LocationPayload {
   lat: number;
@@ -11,11 +13,13 @@ export interface LocationPayload {
 
 export interface StatusResponse {
   active: boolean;
+  serial?: string | null;
   lastLocation: LocationPayload | null;
 }
 
 /**
- * Android の FakeGpsServer に位置情報を送信する。
+ * emulator ブリッジに位置情報を送信する。
+ * ブリッジが NMEA に変換し `adb emu geo nmea` で emulator に注入する。
  */
 export async function sendLocation(payload: LocationPayload): Promise<boolean> {
   try {
@@ -31,7 +35,7 @@ export async function sendLocation(payload: LocationPayload): Promise<boolean> {
 }
 
 /**
- * FakeGpsServer の状態を取得する。
+ * emulator ブリッジの状態 (emulator 接続有無・最終送信位置) を取得する。
  */
 export async function getStatus(): Promise<StatusResponse | null> {
   try {
@@ -44,7 +48,8 @@ export async function getStatus(): Promise<StatusResponse | null> {
 }
 
 /**
- * Mock Provider を停止する。
+ * 位置送信を停止する (ブリッジ側の最終位置を破棄)。
+ * emulator は最後の位置を保持し続ける点に注意。
  */
 export async function stopMockProvider(): Promise<boolean> {
   try {

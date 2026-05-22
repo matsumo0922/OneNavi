@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "start": "node scripts/setup-adb.js && vite",
+    "start": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
