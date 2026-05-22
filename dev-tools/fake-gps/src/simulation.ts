@@ -21,6 +21,14 @@ type StateListener = (state: SimulationState) => void;
 const BASE_SPEED_KMH = 30;
 
 /**
+ * ルート / GPX 再生の tick 間隔 (ms)。
+ * 小さいほど 1 歩あたりの移動が短くなり emulator 上の現在地が滑らかに動く。
+ * その分 adb emu geo fix の呼び出し頻度が上がる (100ms = 10Hz)。
+ * adb emu geo fix は 1 回 ~12ms と軽いため 10Hz でも余裕がある。
+ */
+const TICK_INTERVAL_MS = 100;
+
+/**
  * シミュレーションエンジン。
  * ルート再生、GPX 再生、手動操作の 3 モードを管理する。
  */
@@ -182,8 +190,7 @@ export class SimulationEngine {
 
   private startTimer(): void {
     this.stopTimer();
-    // 1Hz (1 秒間隔)
-    this.timerHandle = setInterval(() => this.tick(), 1000);
+    this.timerHandle = setInterval(() => this.tick(), TICK_INTERVAL_MS);
     // 即座に最初の位置を送信
     this.tick();
   }
@@ -198,8 +205,9 @@ export class SimulationEngine {
   private tick(): void {
     if (this.playback !== "playing" || this.routePath.length < 2) return;
 
-    // 1 秒あたりの移動距離
-    const distPerTick = (BASE_SPEED_KMH * this.speedMultiplier * 1000) / 3600;
+    // tick 間隔あたりの移動距離 (速度はそのまま、刻みだけ細かくする)
+    const speedMetersPerSecond = (BASE_SPEED_KMH * this.speedMultiplier * 1000) / 3600;
+    const distPerTick = speedMetersPerSecond * (TICK_INTERVAL_MS / 1000);
     this.traveledDistance += distPerTick;
 
     const result = interpolateAlongPath(this.routePath, this.traveledDistance);
