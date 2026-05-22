@@ -1,0 +1,4 @@
+{
+  "title": "Settings（一部のみ実装）",
+  "description": "未実装ビューポートの「空」表示を確認するためのサンプル。phone-portrait と tablet-landscape のみ実装し、残り2つは空枠で表示される。"
+}
