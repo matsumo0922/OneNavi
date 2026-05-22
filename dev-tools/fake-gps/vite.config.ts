@@ -2,14 +2,27 @@ import { execFile } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { promisify } from "node:util";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
-import { buildGgaSentence, buildRmcSentence, type GpsFix } from "./src/nmea";
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * dev-tool から受け取る 1 点分の位置。
+ * bearing / speed も送られてくるが geo fix では使わない (fused provider が
+ * 連続する位置の差分から進行方向・速度を自動算出するため)。
+ */
+interface LocationFix {
+  lat: number;
+  lng: number;
+  altitude?: number;
+}
+
+/** geo fix に渡す衛星数 (fix quality を満たすためのダミー値)。 */
+const SATELLITE_COUNT = "12";
 
 /** 直近に解決した emulator のシリアル。adb 失敗時は null に戻して取り直す。 */
 let cachedSerial: string | null = null;
 /** 直近に注入した位置。/status で dev-tool 側に返す。 */
-let lastFix: GpsFix | null = null;
+let lastFix: LocationFix | null = null;
 
 /**
  * 対象 emulator のシリアルを解決する。
@@ -32,9 +45,27 @@ async function resolveEmulatorSerial(forceRefresh = false): Promise<string | nul
   return cachedSerial;
 }
 
-/** `adb -s <serial> emu geo nmea <sentence>` を実行する。 */
-async function sendNmea(serial: string, sentence: string): Promise<void> {
-  await execFileAsync("adb", ["-s", serial, "emu", "geo", "nmea", sentence]);
+/**
+ * `adb -s <serial> emu geo fix <lng> <lat> <alt> <satellites>` で位置を注入する。
+ * 引数は経度が先である点に注意。
+ *
+ * NOTE: emulator の `geo nmea` は OK を返しても位置に反映されない実装が多いため、
+ * 確実に動く `geo fix` を使う。bearing は注入できないが fused provider 側で
+ * 連続位置から算出される。
+ */
+async function sendGeoFix(serial: string, fix: LocationFix): Promise<void> {
+  const altitude = (fix.altitude ?? 0).toString();
+  await execFileAsync("adb", [
+    "-s",
+    serial,
+    "emu",
+    "geo",
+    "fix",
+    fix.lng.toString(),
+    fix.lat.toString(),
+    altitude,
+    SATELLITE_COUNT,
+  ]);
 }
 
 /** リクエストボディを JSON として読み取る。 */
@@ -63,16 +94,13 @@ function sendJson(response: ServerResponse, status: number, payload: unknown): v
 
 async function handleLocation(request: IncomingMessage, response: ServerResponse): Promise<void> {
   try {
-    const fix = (await readJsonBody(request)) as GpsFix;
+    const fix = (await readJsonBody(request)) as LocationFix;
     const serial = await resolveEmulatorSerial();
     if (!serial) {
       sendJson(response, 503, { success: false, error: "No emulator detected (adb devices)" });
       return;
     }
-    const now = new Date();
-    // GGA で位置を確定 → RMC で速度・進行方向を与える 2 文ペアで送る。
-    await sendNmea(serial, buildGgaSentence(fix, now));
-    await sendNmea(serial, buildRmcSentence(fix, now));
+    await sendGeoFix(serial, fix);
     lastFix = fix;
     sendJson(response, 200, { success: true });
   } catch (error) {
@@ -88,7 +116,7 @@ async function handleStatus(response: ServerResponse): Promise<void> {
 
 /**
  * ブラウザは `adb` を直接叩けないため、Vite dev server に同居する HTTP ブリッジを立てる。
- * dev-tool からの POST /location を NMEA に変換し、`adb emu geo nmea` で emulator に注入する。
+ * dev-tool からの POST /location を `adb emu geo fix` で emulator に注入する。
  */
 function emulatorGeoBridge(): Plugin {
   return {
