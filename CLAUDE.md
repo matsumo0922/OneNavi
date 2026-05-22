@@ -104,6 +104,21 @@ docs/idea/            — UI リファレンス画像
 docs/design/          — Pencil デザインファイル (.pen)
 ```
 
+## Dev Tools (`dev-tools/`)
+
+UI 確認・デバッグ用の独立した Vite ベース mini app 群。本番モジュールには統合されない。
+`make <name>` で起動する。
+
+| ツール | 用途 | ドキュメント |
+|---|---|---|
+| `dev-tools/ui-playground` | UI デザイン案をブラウザで一覧/詳細プレビュー | `docs/spec/29_ui_playground_dev_tool.md` |
+| `dev-tools/fake-gps` | エミュレータへ GPS を流す | `docs/spec/15_fake_gps_dev_tool.md` |
+| `dev-tools/route-compare` | 外部ルートと Routes API polyline の比較 | `docs/spec/23_route_compare_dev_tool.md` |
+
+**UI を新規に提案・作成するときは、Compose を書く前に `ui-playground` にデザイン案を
+HTML モックとして追加し、人間がブラウザで確認できるようにすること**（手順は
+`docs/spec/29_ui_playground_dev_tool.md` 参照）。`make ui-playground` で起動。
+
 ## Build & Run
 
 実装終了後は必ずビルドが通ることを確認すること。

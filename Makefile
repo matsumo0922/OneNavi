@@ -5,8 +5,9 @@ FAKE_GPS_DIR := dev-tools/fake-gps
 # Vite dev server (GPS ブリッジ middleware を内包) のポート
 FAKE_GPS_PORT := 5173
 ROUTE_COMPARE_DIR := dev-tools/route-compare
+UI_PLAYGROUND_DIR := dev-tools/ui-playground
 
-.PHONY: detekt dhu route-demo-1 clean-dhu fake-gps fake-gps-setup fake-gps-dev fake-gps-status fake-gps-stop route-compare route-compare-setup route-compare-dev
+.PHONY: detekt dhu route-demo-1 clean-dhu fake-gps fake-gps-setup fake-gps-dev fake-gps-status fake-gps-stop route-compare route-compare-setup route-compare-dev ui-playground ui-playground-setup ui-playground-dev
 
 detekt:
 	./gradlew detekt --auto-correct --continue
@@ -54,3 +55,13 @@ route-compare-dev:
 	cd $(ROUTE_COMPARE_DIR) && npx vite
 
 route-compare: route-compare-setup route-compare-dev
+
+# ── UI Playground (design preview) ──
+
+ui-playground-setup:
+	cd $(UI_PLAYGROUND_DIR) && npm install
+
+ui-playground-dev:
+	cd $(UI_PLAYGROUND_DIR) && npx vite
+
+ui-playground: ui-playground-setup ui-playground-dev
