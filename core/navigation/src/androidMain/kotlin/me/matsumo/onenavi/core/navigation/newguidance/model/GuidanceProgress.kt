@@ -23,6 +23,7 @@ import me.matsumo.onenavi.core.model.RoutePoint
  * @param vehicleSpeedMps 自車速度。取得できない場合は null
  * @param nextManeuver 次の案内。案内対象が無い場合は null
  * @param followupManeuver 次の次の案内。無い場合は null
+ * @param panelItems 案内中パネルに表示する現在地より先の行
  * @param lanes レーンガイダンス
  * @param directionSign 方面看板
  * @param highwayPanel IC / JCT / SA / PA パネル
@@ -49,6 +50,7 @@ data class GuidanceProgress(
     val vehicleSpeedMps: Float?,
     val nextManeuver: GuidanceManeuverInfo?,
     val followupManeuver: GuidanceManeuverInfo?,
+    val panelItems: ImmutableList<GuidancePanelItem>,
     val lanes: ImmutableList<LaneGuidance>,
     val directionSign: DirectionSign?,
     val highwayPanel: HighwayPanel?,

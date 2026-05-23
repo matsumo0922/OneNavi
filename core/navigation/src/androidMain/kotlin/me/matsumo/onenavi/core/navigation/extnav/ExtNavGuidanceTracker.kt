@@ -1,17 +1,25 @@
 package me.matsumo.onenavi.core.navigation.extnav
 
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
+import me.matsumo.drive.supporter.api.guidance.domain.GuideImageType
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.navigation.newguidance.model.FacilityPanelItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceManeuverInfo
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidancePanelFacility
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidancePanelItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
+import me.matsumo.onenavi.core.navigation.newguidance.model.ManeuverPanelItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -21,6 +29,10 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
+import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind as ExtNavGuidanceFacilityKind
+import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint as ExtNavGuidancePoint
+import me.matsumo.drive.supporter.api.guidance.domain.Intersection as ExtNavIntersection
+import me.matsumo.drive.supporter.api.guidance.domain.ManeuverDirection as ExtNavManeuverDirection
 
 /**
  * GPS tick をルート geometry 上の進捗 snapshot に変換する tracker。
@@ -108,21 +120,37 @@ class ExtNavGuidanceTracker {
             route = route,
             totalGeometryMetres = totalGeometryMetres,
         )
-
-        return AttachedRoute(
+        val guidancePointMetres = buildGuidancePointMetres(
+            payload = payload,
+            distanceMapper = distanceMapper,
+            totalGeometryMetres = totalGeometryMetres,
+        )
+        val intersections = buildIntersectionAnchors(
             payload = payload,
             route = route,
             cumulativeMetres = cumulativeMetres,
+        )
+        val maneuverEvents = buildManeuverEvents(
+            payload = payload,
+            route = route,
+            cumulativeMetres = cumulativeMetres,
+            guidancePointMetres = guidancePointMetres,
+            intersections = intersections,
+        )
+
+        return AttachedRoute(
+            route = route,
+            cumulativeMetres = cumulativeMetres,
             totalGeometryMetres = totalGeometryMetres,
-            guidancePointMetres = buildGuidancePointMetres(
-                payload = payload,
-                distanceMapper = distanceMapper,
-                totalGeometryMetres = totalGeometryMetres,
-            ),
-            intersections = buildIntersectionAnchors(
+            maneuverEvents = maneuverEvents,
+            panelEvents = buildPanelEvents(
                 payload = payload,
                 route = route,
                 cumulativeMetres = cumulativeMetres,
+                totalGeometryMetres = totalGeometryMetres,
+                guidancePointMetres = guidancePointMetres,
+                maneuverEvents = maneuverEvents,
+                intersections = intersections,
             ),
         )
     }
@@ -238,9 +266,172 @@ class ExtNavGuidanceTracker {
                 TrackerIntersection(
                     geometryMetres = cumulativeMetres[geometryIndex],
                     name = intersection.name,
+                    facility = intersection.panelFacility(),
                 )
             }
             .sortedBy { intersection -> intersection.geometryMetres }
+    }
+
+    /**
+     * GP 列から TBT とカメラフォーカスの対象にする進路選択イベントだけを抽出する。
+     *
+     * @param payload 外部ナビ API ライブラリ由来 payload
+     * @param route 案内対象 route
+     * @param cumulativeMetres geometry index ごとの累積距離
+     * @param guidancePointMetres GP index ごとの geometry 累積距離
+     * @param intersections geometry 距離に snap 済みの intersection anchors
+     * @return 進路選択を伴うイベント列
+     */
+    private fun buildManeuverEvents(
+        payload: ExtNavRoutePayload,
+        route: RouteDetail,
+        cumulativeMetres: DoubleArray,
+        guidancePointMetres: DoubleArray,
+        intersections: List<TrackerIntersection>,
+    ): List<TrackerManeuverEvent> = payload.routeGuidance.guidancePoints
+        .mapIndexedNotNull { guidancePointIndex, guidancePoint ->
+            val guidancePointMetresOnGeometry = guidancePointMetres.getOrNull(guidancePointIndex)
+                ?: return@mapIndexedNotNull null
+            val bearingDiffDegrees = bearingDiffAt(
+                route = route,
+                cumulativeMetres = cumulativeMetres,
+                targetMetres = guidancePointMetresOnGeometry,
+            )
+            val nearestIntersection = nearestIntersectionToGuidancePoint(
+                intersections = intersections,
+                guidancePointMetres = guidancePointMetresOnGeometry,
+            )
+            val facility = guidancePoint.panelFacility(nearestIntersection)
+            val isLastGuidancePoint = guidancePointIndex == payload.routeGuidance.guidancePoints.lastIndex
+
+            if (!guidancePoint.requiresManeuverEvent(
+                    isLastGuidancePoint = isLastGuidancePoint,
+                    bearingDiffDegrees = bearingDiffDegrees,
+                    facility = facility,
+                )
+            ) {
+                return@mapIndexedNotNull null
+            }
+
+            TrackerManeuverEvent(
+                id = "maneuver-$guidancePointIndex",
+                guidancePointIndex = guidancePointIndex,
+                geometryMetres = guidancePointMetresOnGeometry,
+                location = routePointAt(
+                    route = route,
+                    cumulativeMetres = cumulativeMetres,
+                    targetMetres = guidancePointMetresOnGeometry,
+                ),
+                type = maneuverType(
+                    categories = guidancePoint.categories(),
+                    isLastGuidancePoint = isLastGuidancePoint,
+                    bearingDiffDegrees = bearingDiffDegrees,
+                ),
+                modifier = maneuverModifier(bearingDiffDegrees),
+                intersectionName = nearestIntersection
+                    ?.name
+                    ?.takeIf { name -> name.isNotBlank() },
+                exitNumber = null,
+                roadClass = roadClassAt(
+                    route = route,
+                    cumulativeMetres = cumulativeMetres,
+                    targetMetres = guidancePointMetresOnGeometry,
+                ),
+                facility = facility,
+            )
+        }
+        .sortedBy { event -> event.geometryMetres }
+
+    /**
+     * パネルに出す進路選択イベントと通過施設イベントを 1 本の時系列にまとめる。
+     *
+     * @param payload 外部ナビ API ライブラリ由来 payload
+     * @param route 案内対象 route
+     * @param cumulativeMetres geometry index ごとの累積距離
+     * @param totalGeometryMetres geometry 上の最大距離
+     * @param guidancePointMetres GP index ごとの geometry 累積距離
+     * @param maneuverEvents 進路選択イベント列
+     * @param intersections geometry 距離に snap 済みの intersection anchors
+     * @return パネル行テンプレート列
+     */
+    private fun buildPanelEvents(
+        payload: ExtNavRoutePayload,
+        route: RouteDetail,
+        cumulativeMetres: DoubleArray,
+        totalGeometryMetres: Double,
+        guidancePointMetres: DoubleArray,
+        maneuverEvents: List<TrackerManeuverEvent>,
+        intersections: List<TrackerIntersection>,
+    ): List<TrackerPanelEvent> {
+        val maneuverPanelEvents = maneuverEvents.map { event ->
+            TrackerPanelEvent.Maneuver(event = event)
+        }
+        val intersectionFacilityEvents = intersections
+            .mapIndexedNotNull { intersectionIndex, intersection ->
+                val facility = intersection.facility ?: return@mapIndexedNotNull null
+                val geometryMetres = intersection.geometryMetres
+
+                if (facility == GuidancePanelFacility.TOLL_GATE &&
+                    intersection.name.isBlank() &&
+                    maneuverEvents.isNearManeuver(geometryMetres)
+                ) {
+                    return@mapIndexedNotNull null
+                }
+
+                val location = routePointAt(
+                    route = route,
+                    cumulativeMetres = cumulativeMetres,
+                    targetMetres = geometryMetres.coerceIn(0.0, totalGeometryMetres),
+                )
+                TrackerPanelEvent.Facility(
+                    id = "facility-$intersectionIndex-${facility.name}",
+                    geometryMetres = geometryMetres,
+                    location = location,
+                    name = intersection.panelFacilityName(facility),
+                    kind = facility,
+                    roadClass = roadClassAt(
+                        route = route,
+                        cumulativeMetres = cumulativeMetres,
+                        targetMetres = geometryMetres,
+                    ),
+                )
+            }
+        val guidancePointFacilityEvents = payload.routeGuidance.guidancePoints
+            .mapIndexedNotNull { guidancePointIndex, guidancePoint ->
+                val geometryMetres = guidancePointMetres.getOrNull(guidancePointIndex)
+                    ?: return@mapIndexedNotNull null
+                val nearestIntersection = nearestIntersectionToGuidancePoint(
+                    intersections = intersections,
+                    guidancePointMetres = geometryMetres,
+                )
+                val facility = guidancePoint.panelFacility(nearestIntersection)
+                    ?: return@mapIndexedNotNull null
+                val location = routePointAt(
+                    route = route,
+                    cumulativeMetres = cumulativeMetres,
+                    targetMetres = geometryMetres.coerceIn(0.0, totalGeometryMetres),
+                )
+
+                TrackerPanelEvent.Facility(
+                    id = "facility-gp-$guidancePointIndex-${facility.name}",
+                    geometryMetres = geometryMetres,
+                    location = location,
+                    name = nearestIntersection?.panelFacilityName(facility) ?: facility.defaultName(),
+                    kind = facility,
+                    roadClass = roadClassAt(
+                        route = route,
+                        cumulativeMetres = cumulativeMetres,
+                        targetMetres = geometryMetres,
+                    ),
+                )
+            }
+
+        return (maneuverPanelEvents + intersectionFacilityEvents + guidancePointFacilityEvents)
+            .filterNot { event ->
+                event is TrackerPanelEvent.Facility && maneuverEvents.isNearSameFacility(event)
+            }
+            .distinctBy { event -> event.dedupeKey() }
+            .sortedBy { event -> event.geometryMetres }
     }
 
     /**
@@ -288,7 +479,7 @@ class ExtNavGuidanceTracker {
             attached = attached,
             projection = projection,
         )
-        val nextGuidancePointIndex = nextGuidancePointIndex(
+        val nextManeuverEventIndex = nextManeuverEventIndex(
             attached = attached,
             projection = projection,
         )
@@ -302,14 +493,13 @@ class ExtNavGuidanceTracker {
             projection = projection,
             location = location,
             isOffRouteCandidate = offRouteCandidate,
-            nextGuidancePointIndex = nextGuidancePointIndex,
         )
         val progress = buildProgress(
             attached = attached,
             projection = projection,
             location = location,
             distanceRemainingMetres = distanceRemainingMetres,
-            nextGuidancePointIndex = nextGuidancePointIndex,
+            nextManeuverEventIndex = nextManeuverEventIndex,
             routeMatchState = routeMatchState,
         )
 
@@ -324,7 +514,9 @@ class ExtNavGuidanceTracker {
             vehicleSpeedMps = location.speedMps,
             routeMatchState = routeMatchState,
             isOffRouteCandidate = offRouteCandidate,
-            nextGuidancePointIndex = nextGuidancePointIndex,
+            nextGuidancePointIndex = nextManeuverEventIndex?.let { eventIndex ->
+                attached.maneuverEvents[eventIndex].guidancePointIndex
+            },
         )
     }
 
@@ -342,16 +534,16 @@ class ExtNavGuidanceTracker {
         .coerceAtLeast(0.0)
 
     /**
-     * 現在地より先にある最初の GP index を返す。
+     * 現在地より先にある最初の maneuver event index を返す。
      *
-     * @param attached GP の geometry 距離配列を持つ attach 済み情報
+     * @param attached maneuver event を持つ attach 済み情報
      * @param projection 現在 projection
-     * @return 次 GP index。最後の GP 通過後や GP なしの場合は null
+     * @return 次 maneuver event index。最後の event 通過後や event なしの場合は null
      */
-    private fun nextGuidancePointIndex(
+    private fun nextManeuverEventIndex(
         attached: AttachedRoute,
         projection: RouteProjection,
-    ): Int? = attached.guidancePointMetres
+    ): Int? = attached.maneuverEvents
         .firstIndexGreaterThan(projection.currentCumulativeMeters + NEXT_GP_EPSILON_METRES)
 
     /**
@@ -361,7 +553,7 @@ class ExtNavGuidanceTracker {
      * @param projection 今回 tick の projection
      * @param location 今回 tick の生 GPS
      * @param distanceRemainingMetres 事前算出済みの残距離
-     * @param nextGuidancePointIndex 次 GP index
+     * @param nextManeuverEventIndex 次マニューバ event index
      * @param routeMatchState 現在位置と案内 route の一致状態
      * @return UI 表示用の案内進捗
      */
@@ -370,7 +562,7 @@ class ExtNavGuidanceTracker {
         projection: RouteProjection,
         location: UserLocation,
         distanceRemainingMetres: Double,
-        nextGuidancePointIndex: Int?,
+        nextManeuverEventIndex: Int?,
         routeMatchState: RouteMatchState,
     ): GuidanceProgress {
         val durationRemainingSeconds = remainingDurationSeconds(
@@ -393,17 +585,21 @@ class ExtNavGuidanceTracker {
             locationTimestampMillis = location.timestampMillis,
             locationElapsedRealtimeNanos = location.elapsedRealtimeNanos,
             vehicleSpeedMps = location.speedMps,
-            nextManeuver = nextGuidancePointIndex?.let { guidancePointIndex ->
+            nextManeuver = nextManeuverEventIndex?.let { eventIndex ->
                 buildManeuverInfo(
-                    attached = attached,
-                    guidancePointIndex = guidancePointIndex,
+                    event = attached.maneuverEvents[eventIndex],
                     currentCumulativeMeters = projection.currentCumulativeMeters,
                 )
             },
             followupManeuver = buildFollowupManeuverInfo(
                 attached = attached,
-                nextGuidancePointIndex = nextGuidancePointIndex,
+                nextManeuverEventIndex = nextManeuverEventIndex,
                 currentCumulativeMeters = projection.currentCumulativeMeters,
+            ),
+            panelItems = buildPanelItems(
+                attached = attached,
+                currentCumulativeMeters = projection.currentCumulativeMeters,
+                timestampMillis = location.timestampMillis,
             ),
             lanes = persistentListOf(),
             directionSign = null,
@@ -423,21 +619,20 @@ class ExtNavGuidanceTracker {
      * 次 GP のさらに次にある follow-up maneuver を作る。
      *
      * @param attached attach 済み route 情報
-     * @param nextGuidancePointIndex 次 GP index
+     * @param nextManeuverEventIndex 次マニューバ event index
      * @param currentCumulativeMeters 現在地の geometry 累積距離
      * @return follow-up maneuver。存在しない場合は null
      */
     private fun buildFollowupManeuverInfo(
         attached: AttachedRoute,
-        nextGuidancePointIndex: Int?,
+        nextManeuverEventIndex: Int?,
         currentCumulativeMeters: Double,
-    ): GuidanceManeuverInfo? = nextGuidancePointIndex
+    ): GuidanceManeuverInfo? = nextManeuverEventIndex
         ?.plus(1)
-        ?.takeIf { guidancePointIndex -> guidancePointIndex <= attached.guidancePointMetres.lastIndex }
-        ?.let { guidancePointIndex ->
+        ?.takeIf { eventIndex -> eventIndex <= attached.maneuverEvents.lastIndex }
+        ?.let { eventIndex ->
             buildManeuverInfo(
-                attached = attached,
-                guidancePointIndex = guidancePointIndex,
+                event = attached.maneuverEvents[eventIndex],
                 currentCumulativeMeters = currentCumulativeMeters,
             )
         }
@@ -449,59 +644,119 @@ class ExtNavGuidanceTracker {
      * phrase category、近傍 intersection、geometry 方位差から最小限の UI モデルを作る。
      */
     private fun buildManeuverInfo(
-        attached: AttachedRoute,
-        guidancePointIndex: Int,
+        event: TrackerManeuverEvent,
         currentCumulativeMeters: Double,
     ): GuidanceManeuverInfo {
-        val guidancePoint = attached.payload.routeGuidance.guidancePoints[guidancePointIndex]
-        val guidancePointMetres = attached.guidancePointMetres[guidancePointIndex]
-        val nearestIntersection = nearestIntersectionToGuidancePoint(
-            attached = attached,
-            guidancePointMetres = guidancePointMetres,
-        )
-        val bearingDiffDegrees = bearingDiffAt(
-            route = attached.route,
-            cumulativeMetres = attached.cumulativeMetres,
-            targetMetres = guidancePointMetres,
-        )
-        val guidancePointLocation = routePointAt(
-            route = attached.route,
-            cumulativeMetres = attached.cumulativeMetres,
-            targetMetres = guidancePointMetres,
-        )
-
         return GuidanceManeuverInfo(
-            type = maneuverType(
-                categoryNames = guidancePoint.phrases.map { phrase -> phrase.category.name },
-                isLastGuidancePoint = guidancePointIndex == attached.guidancePointMetres.lastIndex,
-                bearingDiffDegrees = bearingDiffDegrees,
-            ),
-            modifier = maneuverModifier(bearingDiffDegrees),
-            location = guidancePointLocation,
-            distanceToManeuverMeters = (guidancePointMetres - currentCumulativeMeters)
+            type = event.type,
+            modifier = event.modifier,
+            location = event.location,
+            distanceToManeuverMeters = (event.geometryMetres - currentCumulativeMeters)
                 .coerceAtLeast(0.0)
                 .roundToInt(),
-            intersectionName = nearestIntersection?.name?.takeIf { name -> name.isNotBlank() },
-            exitNumber = null,
-            guidancePointIndex = guidancePointIndex,
+            intersectionName = event.intersectionName,
+            exitNumber = event.exitNumber,
+            guidancePointIndex = event.guidancePointIndex,
         )
     }
 
     /**
      * GP の geometry 距離に最も近い intersection を探す。
      *
-     * @param attached intersection anchors を持つ attach 済み情報
+     * @param intersections geometry 距離に snap 済みの intersection anchors
      * @param guidancePointMetres GP の geometry 累積距離
      * @return 許容距離内で最も近い intersection。見つからない場合は null
      */
     private fun nearestIntersectionToGuidancePoint(
-        attached: AttachedRoute,
+        intersections: List<TrackerIntersection>,
         guidancePointMetres: Double,
-    ): TrackerIntersection? = attached.intersections
+    ): TrackerIntersection? = intersections
         .filter { intersection ->
             abs(intersection.geometryMetres - guidancePointMetres) <= INTERSECTION_SNAP_TOLERANCE_METRES
         }
         .minByOrNull { intersection -> abs(intersection.geometryMetres - guidancePointMetres) }
+
+    /**
+     * 現在地より先にあるパネル行を距離・ETA 付きの公開モデルへ変換する。
+     *
+     * @param attached attach 済み route 情報
+     * @param currentCumulativeMeters 現在地の geometry 累積距離
+     * @param timestampMillis 位置 tick の時刻
+     * @return 現在地より先にあるパネル行
+     */
+    private fun buildPanelItems(
+        attached: AttachedRoute,
+        currentCumulativeMeters: Double,
+        timestampMillis: Long,
+    ): ImmutableList<GuidancePanelItem> = attached.panelEvents
+        .asSequence()
+        .filter { event -> event.geometryMetres > currentCumulativeMeters + NEXT_GP_EPSILON_METRES }
+        .map { event ->
+            val distanceToItemMeters = (event.geometryMetres - currentCumulativeMeters)
+                .coerceAtLeast(0.0)
+                .roundToInt()
+            val etaEpochMillis = etaEpochMillisFor(
+                route = attached.route,
+                totalGeometryMetres = attached.totalGeometryMetres,
+                currentCumulativeMeters = currentCumulativeMeters,
+                targetMetres = event.geometryMetres,
+                timestampMillis = timestampMillis,
+            )
+
+            when (event) {
+                is TrackerPanelEvent.Facility -> FacilityPanelItem(
+                    id = event.id,
+                    location = event.location,
+                    distanceFromStartMeters = event.geometryMetres,
+                    distanceToItemMeters = distanceToItemMeters,
+                    etaEpochMillis = etaEpochMillis,
+                    name = event.name,
+                    kind = event.kind,
+                    roadClass = event.roadClass,
+                    services = persistentListOf(),
+                )
+                is TrackerPanelEvent.Maneuver -> ManeuverPanelItem(
+                    id = event.event.id,
+                    location = event.event.location,
+                    distanceFromStartMeters = event.event.geometryMetres,
+                    distanceToItemMeters = distanceToItemMeters,
+                    etaEpochMillis = etaEpochMillis,
+                    type = event.event.type,
+                    modifier = event.event.modifier,
+                    intersectionName = event.event.intersectionName,
+                    exitNumber = event.event.exitNumber,
+                    roadClass = event.event.roadClass,
+                    facility = event.event.facility,
+                )
+            }
+        }
+        .toList()
+        .toImmutableList()
+
+    /**
+     * 指定地点の推定通過時刻を route 全体の平均所要時間から求める。
+     *
+     * @param route durationSeconds を持つ route
+     * @param totalGeometryMetres geometry 上の総距離
+     * @param currentCumulativeMeters 現在地の geometry 累積距離
+     * @param targetMetres 推定対象地点の geometry 累積距離
+     * @param timestampMillis 現在 tick の時刻
+     * @return 推定通過時刻。計算できない場合は null
+     */
+    private fun etaEpochMillisFor(
+        route: RouteDetail,
+        totalGeometryMetres: Double,
+        currentCumulativeMeters: Double,
+        targetMetres: Double,
+        timestampMillis: Long,
+    ): Long? {
+        if (route.durationSeconds <= 0.0 || totalGeometryMetres <= 0.0) return null
+
+        val distanceToTarget = (targetMetres - currentCumulativeMeters)
+            .coerceAtLeast(0.0)
+        val secondsToTarget = route.durationSeconds * (distanceToTarget / totalGeometryMetres)
+        return timestampMillis + secondsToTarget.roundToInt().toLong() * MILLIS_PER_SECOND
+    }
 
     /**
      * route 全体の所要時間を走行距離比率で按分し、残所要時間を算出する。
@@ -810,7 +1065,6 @@ class ExtNavGuidanceTracker {
      * @param projection 今回 tick の projection
      * @param location 今回 tick の生 GPS
      * @param isOffRouteCandidate 今回 tick が off-route 候補か
-     * @param nextGuidancePointIndex 次 GP index
      * @return debounce 後の route match 状態
      */
     private fun updateRouteMatchState(
@@ -818,7 +1072,6 @@ class ExtNavGuidanceTracker {
         projection: RouteProjection,
         location: UserLocation,
         isOffRouteCandidate: Boolean,
-        nextGuidancePointIndex: Int?,
     ): RouteMatchState {
         if (!isOffRouteCandidate) {
             clearOffRouteCandidate()
@@ -841,7 +1094,6 @@ class ExtNavGuidanceTracker {
                 projection = projection,
                 location = location,
                 candidate = candidate,
-                nextGuidancePointIndex = nextGuidancePointIndex,
             )
         ) {
             RouteMatchState.OFF_ROUTE_CONFIRMED
@@ -860,7 +1112,6 @@ class ExtNavGuidanceTracker {
      * @param projection 今回 tick の projection
      * @param location 今回 tick の生 GPS
      * @param candidate 継続中の off-route 候補
-     * @param nextGuidancePointIndex 次 GP index
      * @return リルート対象として確定できる場合 true
      */
     private fun isOffRouteConfirmedSample(
@@ -868,7 +1119,6 @@ class ExtNavGuidanceTracker {
         projection: RouteProjection,
         location: UserLocation,
         candidate: OffRouteCandidate,
-        nextGuidancePointIndex: Int?,
     ): Boolean {
         val exceedsConfirmedDistance = projection.projectionErrorMeters >= offRouteConfirmedThreshold(location)
         val hasEnoughSamples = candidate.sampleCount >= OFF_ROUTE_CONFIRMATION_SAMPLE_COUNT
@@ -882,7 +1132,6 @@ class ExtNavGuidanceTracker {
         return isNearDecisionPoint(
             attached = attached,
             projection = projection,
-            nextGuidancePointIndex = nextGuidancePointIndex,
         ) &&
             hasWrongDirection(projection = projection, location = location) &&
             candidate.sampleCount >= OFF_ROUTE_DECISION_POINT_CONFIRMATION_SAMPLE_COUNT
@@ -945,25 +1194,13 @@ class ExtNavGuidanceTracker {
      *
      * @param attached attach 済み route 情報
      * @param projection 今回 tick の projection
-     * @param nextGuidancePointIndex 次 GP index
-     * @return 案内地点または交差点の近傍なら true
+     * @return 実際の案内判断点の近傍なら true
      */
     private fun isNearDecisionPoint(
         attached: AttachedRoute,
         projection: RouteProjection,
-        nextGuidancePointIndex: Int?,
-    ): Boolean {
-        val nearGuidancePoint = nextGuidancePointIndex
-            ?.let { guidancePointIndex ->
-                abs(attached.guidancePointMetres[guidancePointIndex] - projection.currentCumulativeMeters) <=
-                    DECISION_POINT_RADIUS_METRES
-            }
-            ?: false
-        if (nearGuidancePoint) return true
-
-        return attached.intersections.any { intersection ->
-            abs(intersection.geometryMetres - projection.currentCumulativeMeters) <= DECISION_POINT_RADIUS_METRES
-        }
+    ): Boolean = attached.maneuverEvents.any { event ->
+        abs(event.geometryMetres - projection.currentCumulativeMeters) <= DECISION_POINT_RADIUS_METRES
     }
 
     /**
@@ -1008,23 +1245,245 @@ class ExtNavGuidanceTracker {
         ?: RoadClass.ORDINARY
 
     /**
+     * 指定距離の地点付近の道路種別を返す。
+     *
+     * @param route roadClassSegments を持つ route
+     * @param cumulativeMetres geometry index ごとの累積距離
+     * @param targetMetres 判定対象の geometry 累積距離
+     * @return 該当する道路種別。見つからない場合は一般道
+     */
+    private fun roadClassAt(
+        route: RouteDetail,
+        cumulativeMetres: DoubleArray,
+        targetMetres: Double,
+    ): RoadClass = currentRoadClassFor(
+        route = route,
+        matchedSegmentIndex = segmentIndexAt(
+            cumulativeMetres = cumulativeMetres,
+            targetMetres = targetMetres,
+        ),
+    )
+
+    /**
+     * GP が TBT の対象になる進路選択イベントかどうかを返す。
+     *
+     * @param isLastGuidancePoint 最終 GP かどうか
+     * @param bearingDiffDegrees GP 前後の進行方位差
+     * @param facility 施設種別。施設のみの GP は TBT から除外する
+     * @return TBT 対象なら true
+     */
+    private fun ExtNavGuidancePoint.requiresManeuverEvent(
+        isLastGuidancePoint: Boolean,
+        bearingDiffDegrees: Float,
+        facility: GuidancePanelFacility?,
+    ): Boolean {
+        if (isLastGuidancePoint) return true
+
+        val categories = categories()
+        val hasManeuverCategory = categories.any { category -> category in MANEUVER_CATEGORIES }
+        val hasRouteDecisionDirection = hasRouteDecisionDirection(bearingDiffDegrees)
+
+        if (facility?.isPanelOnlyFacility() == true) return false
+        if (facility != null &&
+            !hasRouteDecisionDirection &&
+            categories.none { category -> category in MERGE_CATEGORIES }
+        ) {
+            return false
+        }
+
+        if (hasManeuverCategory) return true
+
+        val hasMeaningfulPhrase = categories.any { category ->
+            category != GuidanceCategory.Unspecified &&
+                category != GuidanceCategory.RoadName
+        }
+        return hasMeaningfulPhrase && abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES
+    }
+
+    /**
+     * GP が route 選択を伴う方向を持つかを返す。
+     *
+     * @param bearingDiffDegrees geometry 前後の進行方位差
+     * @return 直進通過以外と判断できる場合 true
+     */
+    private fun ExtNavGuidancePoint.hasRouteDecisionDirection(
+        bearingDiffDegrees: Float,
+    ): Boolean =
+        maneuver?.direction?.isRouteDecisionDirection() == true ||
+            abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES
+
+    /**
+     * GP に紐付く phrase category を取得する。
+     *
+     * @return GP の phrase category 一覧
+     */
+    private fun ExtNavGuidancePoint.categories(): List<GuidanceCategory> =
+        phrases.map { phrase -> phrase.category }
+
+    /**
+     * GP からパネル用施設種別を推定する。
+     *
+     * @return パネルに表示できる施設種別。施設でない場合は null
+     */
+    private fun ExtNavGuidancePoint.panelFacility(
+        nearestIntersection: TrackerIntersection?,
+    ): GuidancePanelFacility? {
+        val facility = maneuver?.facilityHint?.kind?.toPanelFacility()
+            ?: nearestIntersection?.facility
+            ?: return null
+
+        return facility.refinedByName(nearestIntersection?.name.orEmpty())
+    }
+
+    /**
+     * intersection からパネル用施設種別を推定する。
+     *
+     * @return パネルに表示できる施設種別。施設でない場合は null
+     */
+    private fun ExtNavIntersection.panelFacility(): GuidancePanelFacility? {
+        facilityHint?.kind?.toPanelFacility()?.let { facility ->
+            return facility.refinedByName(name)
+        }
+
+        if (imageRefs.any { ref -> ref.type == GuideImageType.TollGate }) {
+            return GuidancePanelFacility.TOLL_GATE
+        }
+        if (imageRefs.any { ref -> ref.type == GuideImageType.SaPaSignboard }) {
+            return if (name.isServiceAreaName()) GuidancePanelFacility.SA else GuidancePanelFacility.PA
+        }
+        if (imageRefs.any { ref -> ref.type == GuideImageType.HighwayJunction3D }) {
+            return GuidancePanelFacility.JCT
+        }
+        if (name.isJunctionName()) return GuidancePanelFacility.JCT
+        if (name.isInterchangeName()) return GuidancePanelFacility.IC
+
+        return null
+    }
+
+    /**
+     * 外部ナビ API ライブラリ由来の施設種別をパネル用施設種別へ変換する。
+     *
+     * @return パネル用施設種別。端点などパネルに出さないものは null
+     */
+    private fun ExtNavGuidanceFacilityKind.toPanelFacility(): GuidancePanelFacility? = when (this) {
+        ExtNavGuidanceFacilityKind.INTERCHANGE -> GuidancePanelFacility.IC
+        ExtNavGuidanceFacilityKind.PARKING_AREA -> GuidancePanelFacility.PA
+        ExtNavGuidanceFacilityKind.TOLL_GATE -> GuidancePanelFacility.TOLL_GATE
+        ExtNavGuidanceFacilityKind.ENDPOINT -> null
+    }
+
+    /**
+     * 施設名から IC / JCT や SA / PA の表示種別を補正する。
+     *
+     * @param name 施設名
+     * @return 名前から補正したパネル用施設種別
+     */
+    private fun GuidancePanelFacility.refinedByName(name: String): GuidancePanelFacility = when {
+        this == GuidancePanelFacility.IC && name.isJunctionName() -> GuidancePanelFacility.JCT
+        this == GuidancePanelFacility.PA && name.isServiceAreaName() -> GuidancePanelFacility.SA
+        else -> this
+    }
+
+    /**
+     * 進路判断ではなくパネル専用として扱う施設かを返す。
+     *
+     * @return パネル専用なら true
+     */
+    private fun GuidancePanelFacility.isPanelOnlyFacility(): Boolean = when (this) {
+        GuidancePanelFacility.SA,
+        GuidancePanelFacility.PA,
+        GuidancePanelFacility.TOLL_GATE,
+        -> true
+        GuidancePanelFacility.IC,
+        GuidancePanelFacility.JCT,
+        -> false
+    }
+
+    /**
+     * 進路判断を伴う方向かを返す。
+     *
+     * @return 直進・不明以外なら true
+     */
+    private fun ExtNavManeuverDirection.isRouteDecisionDirection(): Boolean = when (this) {
+        ExtNavManeuverDirection.Straight,
+        ExtNavManeuverDirection.Unknown,
+        -> false
+        ExtNavManeuverDirection.UTurn,
+        ExtNavManeuverDirection.Left,
+        ExtNavManeuverDirection.SlantLeft,
+        ExtNavManeuverDirection.ThisSideLeft,
+        ExtNavManeuverDirection.Right,
+        ExtNavManeuverDirection.SlantRight,
+        ExtNavManeuverDirection.ThisSideRight,
+        -> true
+    }
+
+    /**
+     * 施設パネル行の表示名を返す。
+     *
+     * @param facility 施設種別
+     * @return 表示名
+     */
+    private fun TrackerIntersection.panelFacilityName(facility: GuidancePanelFacility): String =
+        name.takeIf { value -> value.isNotBlank() } ?: facility.defaultName()
+
+    /**
+     * 施設名が取れない場合の既定表示名を返す。
+     *
+     * @return 既定表示名
+     */
+    private fun GuidancePanelFacility.defaultName(): String = when (this) {
+        GuidancePanelFacility.IC -> "IC"
+        GuidancePanelFacility.JCT -> "JCT"
+        GuidancePanelFacility.SA -> "SA"
+        GuidancePanelFacility.PA -> "PA"
+        GuidancePanelFacility.TOLL_GATE -> "料金所"
+    }
+
+    /**
+     * JCT 名として扱える文字列かどうかを返す。
+     *
+     * @return JCT 名なら true
+     */
+    private fun String.isJunctionName(): Boolean =
+        contains("JCT", ignoreCase = true) || contains("ジャンクション")
+
+    /**
+     * IC 名として扱える文字列かどうかを返す。
+     *
+     * @return IC 名なら true
+     */
+    private fun String.isInterchangeName(): Boolean =
+        contains("IC", ignoreCase = true) || contains("インターチェンジ")
+
+    /**
+     * SA 名として扱える文字列かどうかを返す。
+     *
+     * @return SA 名なら true
+     */
+    private fun String.isServiceAreaName(): Boolean =
+        contains("SA", ignoreCase = true) || contains("サービスエリア")
+
+    /**
      * phrase category と方位差から maneuver 種別を推定する。
      *
-     * @param categoryNames GP に紐づく phrase category 名
+     * @param categories GP に紐づく phrase category
      * @param isLastGuidancePoint 最終 GP かどうか
      * @param bearingDiffDegrees GP 前後の進行方位差
      * @return UI 用 maneuver 種別
      */
     private fun maneuverType(
-        categoryNames: List<String>,
+        categories: List<GuidanceCategory>,
         isLastGuidancePoint: Boolean,
         bearingDiffDegrees: Float,
     ): ManeuverType {
         if (isLastGuidancePoint) return ManeuverType.ARRIVE
-        if (categoryNames.any { name -> name in MERGE_CATEGORY_NAMES }) return ManeuverType.MERGE
-        if (categoryNames.any { name -> name in FORK_CATEGORY_NAMES }) return ManeuverType.FORK
-        if (categoryNames.any { name -> name == ROAD_NAME_CATEGORY_NAME }) return ManeuverType.NAME_CHANGE
-        if (abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES || categoryNames.any { name -> name in TURN_CATEGORY_NAMES }) {
+        if (categories.any { category -> category in MERGE_CATEGORIES }) return ManeuverType.MERGE
+        if (categories.any { category -> category in FORK_CATEGORIES }) return ManeuverType.FORK
+        if (categories.any { category -> category == GuidanceCategory.RoadName }) return ManeuverType.NAME_CHANGE
+        if (abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES ||
+            categories.any { category -> category in TURN_CATEGORIES }
+        ) {
             return ManeuverType.TURN
         }
 
@@ -1145,12 +1604,12 @@ class ExtNavGuidanceTracker {
     }
 
     /**
-     * value より大きい最初の要素 index を二分探索で返す。
+     * value より先にある最初の maneuver event index を二分探索で返す。
      *
      * @param value 探索基準値
-     * @return value より大きい最初の index。存在しない場合は null
+     * @return value より先にある最初の index。存在しない場合は null
      */
-    private fun DoubleArray.firstIndexGreaterThan(value: Double): Int? {
+    private fun List<TrackerManeuverEvent>.firstIndexGreaterThan(value: Double): Int? {
         if (isEmpty()) return null
 
         var lowIndex = 0
@@ -1158,7 +1617,7 @@ class ExtNavGuidanceTracker {
 
         while (lowIndex < highIndex) {
             val middleIndex = (lowIndex + highIndex) / 2
-            if (this[middleIndex] <= value) {
+            if (this[middleIndex].geometryMetres <= value) {
                 lowIndex = middleIndex + 1
             } else {
                 highIndex = middleIndex
@@ -1166,6 +1625,42 @@ class ExtNavGuidanceTracker {
         }
 
         return lowIndex.takeIf { index -> index < size }
+    }
+
+    /**
+     * 指定距離の近傍に maneuver event があるかを返す。
+     *
+     * @param geometryMetres 判定対象の geometry 累積距離
+     * @return 近傍に maneuver event があれば true
+     */
+    private fun List<TrackerManeuverEvent>.isNearManeuver(geometryMetres: Double): Boolean =
+        any { event -> abs(event.geometryMetres - geometryMetres) <= PANEL_EVENT_DEDUP_TOLERANCE_METRES }
+
+    /**
+     * 施設 event が同じ地点の maneuver event と重複しているかを返す。
+     *
+     * @param facilityEvent 判定対象の施設 event
+     * @return 同じ施設を持つ maneuver event が近傍にあれば true
+     */
+    private fun List<TrackerManeuverEvent>.isNearSameFacility(
+        facilityEvent: TrackerPanelEvent.Facility,
+    ): Boolean = any { maneuverEvent ->
+        maneuverEvent.facility == facilityEvent.kind &&
+            abs(maneuverEvent.geometryMetres - facilityEvent.geometryMetres) <= PANEL_EVENT_DEDUP_TOLERANCE_METRES
+    }
+
+    /**
+     * パネル event の重複除外キーを返す。
+     *
+     * @return おおよその地点と種別を束ねたキー
+     */
+    private fun TrackerPanelEvent.dedupeKey(): String {
+        val bucketMetres = (geometryMetres / PANEL_EVENT_DEDUP_TOLERANCE_METRES)
+            .roundToInt()
+        return when (this) {
+            is TrackerPanelEvent.Facility -> "facility-$kind-$bucketMetres"
+            is TrackerPanelEvent.Maneuver -> "maneuver-${event.guidancePointIndex}"
+        }
     }
 
     /**
@@ -1250,21 +1745,83 @@ class ExtNavGuidanceTracker {
     /**
      * attach 中の route で tick 時に再利用する事前計算済みデータ。
      *
-     * @param payload Preview 時に取得した外部ナビ API ライブラリ由来 payload
      * @param route 案内対象の中立 route
      * @param cumulativeMetres geometry index ごとの累積距離
      * @param totalGeometryMetres geometry の総距離
-     * @param guidancePointMetres GP index ごとの geometry 累積距離
-     * @param intersections geometry 距離に snap 済みの intersection anchors
+     * @param maneuverEvents TBT 対象にする進路選択イベント
+     * @param panelEvents 案内中パネルへ表示するイベント
      */
     private class AttachedRoute(
-        val payload: ExtNavRoutePayload,
         val route: RouteDetail,
         val cumulativeMetres: DoubleArray,
         val totalGeometryMetres: Double,
-        val guidancePointMetres: DoubleArray,
-        val intersections: List<TrackerIntersection>,
+        val maneuverEvents: List<TrackerManeuverEvent>,
+        val panelEvents: List<TrackerPanelEvent>,
     )
+
+    /**
+     * TBT 対象にする進路選択イベント。
+     *
+     * @param id event の安定 ID
+     * @param guidancePointIndex 元の guidance point index
+     * @param geometryMetres route geometry 上の累積距離
+     * @param location route geometry 上の地点座標
+     * @param type マニューバ種別
+     * @param modifier 左右・直進などの方向修飾子
+     * @param intersectionName 交差点名や分岐名
+     * @param exitNumber 出口番号
+     * @param roadClass 地点付近の道路種別
+     * @param facility 施設を伴う案内地点の場合の施設種別
+     */
+    private data class TrackerManeuverEvent(
+        val id: String,
+        val guidancePointIndex: Int,
+        val geometryMetres: Double,
+        val location: RoutePoint,
+        val type: ManeuverType,
+        val modifier: ManeuverModifier,
+        val intersectionName: String?,
+        val exitNumber: String?,
+        val roadClass: RoadClass,
+        val facility: GuidancePanelFacility?,
+    )
+
+    /**
+     * 案内中パネルへ表示するイベント。
+     */
+    private sealed interface TrackerPanelEvent {
+        val geometryMetres: Double
+
+        /**
+         * 進路選択イベントのパネル行。
+         *
+         * @param event 元の進路選択イベント
+         */
+        data class Maneuver(
+            val event: TrackerManeuverEvent,
+        ) : TrackerPanelEvent {
+            override val geometryMetres: Double = event.geometryMetres
+        }
+
+        /**
+         * 通過施設イベントのパネル行。
+         *
+         * @param id event の安定 ID
+         * @param geometryMetres route geometry 上の累積距離
+         * @param location route geometry 上の地点座標
+         * @param name 施設名
+         * @param kind 施設種別
+         * @param roadClass 地点付近の道路種別
+         */
+        data class Facility(
+            val id: String,
+            override val geometryMetres: Double,
+            val location: RoutePoint,
+            val name: String,
+            val kind: GuidancePanelFacility,
+            val roadClass: RoadClass,
+        ) : TrackerPanelEvent
+    }
 
     /**
      * 1 tick の GPS を route geometry へ投影した結果。
@@ -1299,10 +1856,12 @@ class ExtNavGuidanceTracker {
      *
      * @param geometryMetres intersection に対応する geometry 累積距離
      * @param name intersection 名
+     * @param facility パネルに出せる施設種別。施設でない場合は null
      */
     private data class TrackerIntersection(
         val geometryMetres: Double,
         val name: String,
+        val facility: GuidancePanelFacility?,
     )
 
     /**
@@ -1374,6 +1933,9 @@ class ExtNavGuidanceTracker {
         /** GP と intersection を対応付ける最大距離。 */
         private const val INTERSECTION_SNAP_TOLERANCE_METRES: Double = 300.0
 
+        /** パネル event の重複を同一地点扱いする最大距離。 */
+        private const val PANEL_EVENT_DEDUP_TOLERANCE_METRES: Double = 80.0
+
         /** 目的地直前で off-route 候補を抑制する残距離。 */
         private const val ARRIVAL_SUPPRESSION_METRES: Double = 100.0
 
@@ -1428,29 +1990,29 @@ class ExtNavGuidanceTracker {
         /** left / right modifier とみなす最大角度差。 */
         private const val TURN_MAX_DEGREES: Float = 150f
 
-        /** merge 系 maneuver として扱う phrase category 名。 */
-        private val MERGE_CATEGORY_NAMES = setOf(
-            "Merge",
-            "MergeAttention",
-            "HighwayLaneReduction",
+        /** merge 系 maneuver として扱う phrase category。 */
+        private val MERGE_CATEGORIES = setOf(
+            GuidanceCategory.Merge,
+            GuidanceCategory.MergeAttention,
+            GuidanceCategory.HighwayLaneReduction,
         )
 
-        /** fork 系 maneuver として扱う phrase category 名。 */
-        private val FORK_CATEGORY_NAMES = setOf(
-            "AutoExpresswayEntry",
-            "TunnelBranch",
+        /** fork 系 maneuver として扱う phrase category。 */
+        private val FORK_CATEGORIES = setOf(
+            GuidanceCategory.AutoExpresswayEntry,
+            GuidanceCategory.TunnelBranch,
         )
 
-        /** turn 系 maneuver として扱う phrase category 名。 */
-        private val TURN_CATEGORY_NAMES = setOf(
-            "IntersectionGuide",
-            "IntersectionGuideSoon",
-            "TrafficLight",
-            "TurnAttention",
-            "LocalRoadDirection",
+        /** turn 系 maneuver として扱う phrase category。 */
+        private val TURN_CATEGORIES = setOf(
+            GuidanceCategory.IntersectionGuide,
+            GuidanceCategory.IntersectionGuideSoon,
+            GuidanceCategory.TrafficLight,
+            GuidanceCategory.TurnAttention,
+            GuidanceCategory.LocalRoadDirection,
         )
 
-        /** road name change として扱う phrase category 名。 */
-        private const val ROAD_NAME_CATEGORY_NAME: String = "RoadName"
+        /** TBT の対象にする phrase category。 */
+        private val MANEUVER_CATEGORIES = MERGE_CATEGORIES + FORK_CATEGORIES + TURN_CATEGORIES
     }
 }

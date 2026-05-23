@@ -85,6 +85,7 @@ class GuidanceVehicleLocationSelectorTest {
         vehicleSpeedMps = 8f,
         nextManeuver = null,
         followupManeuver = null,
+        panelItems = persistentListOf(),
         lanes = persistentListOf(),
         directionSign = null,
         highwayPanel = null,
