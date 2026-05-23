@@ -100,6 +100,7 @@
     <string name="home_map_route_result_general_road">一般道</string>
     <string name="home_map_route_result_start_navigation">ナビ開始</string>
     <string name="home_map_route_placeholder">ルート</string>
+    <string name="home_map_navigation_followup">その先</string>
     <string name="home_map_not_available_ios">この機能はiOSでは利用できません</string>
 
     <!-- Setting -->

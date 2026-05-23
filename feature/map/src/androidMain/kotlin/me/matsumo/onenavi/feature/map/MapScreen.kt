@@ -27,6 +27,7 @@ import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.google.android.gms.maps.GoogleMap
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapControls
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapPlaceDetailSheet
@@ -181,6 +182,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                     modifier = Modifier.fillMaxSize(),
                     uiState = uiState,
                     screenState = screenState,
+                    guidanceState = guidanceState,
                     cameraState = cameraState,
                     onUiEvent = viewModel::onUiEvent,
                 )
@@ -210,6 +212,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
 private fun MapScreenContent(
     uiState: MapUiState,
     screenState: MapScreenState,
+    guidanceState: GuidanceState,
     cameraState: MapCameraState,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
@@ -239,6 +242,7 @@ private fun MapScreenContent(
         is MapScreenState.Navigating -> {
             MapNavigationContent(
                 modifier = modifier,
+                guidanceState = guidanceState,
                 onUiEvent = onUiEvent,
             )
         }
