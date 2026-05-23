@@ -19,6 +19,7 @@ import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.FacilityPanelItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidancePanelFacility
 import me.matsumo.onenavi.core.navigation.newguidance.model.ManeuverPanelItem
+import me.matsumo.onenavi.core.navigation.newguidance.model.TollPanelSubtitle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -45,15 +46,17 @@ class ExtNavGuidanceTrackerTest {
         val progress = tracker.snapshot.value!!.progress
         assertEquals(2, progress.nextManeuver?.guidancePointIndex)
         assertEquals(3, progress.followupManeuver?.guidancePointIndex)
+        assertEquals(3, progress.panelItems.size)
 
-        val tollGateItem = assertIs<FacilityPanelItem>(progress.panelItems[0])
-        assertEquals(GuidancePanelFacility.TOLL_GATE, tollGateItem.kind)
+        val maneuverItem = assertIs<ManeuverPanelItem>(progress.panelItems[0])
+        assertEquals(progress.nextManeuver?.guidancePointIndex, maneuverItem.id.removePrefix("maneuver-").toInt())
 
         val junctionItem = assertIs<FacilityPanelItem>(progress.panelItems[1])
         assertEquals(GuidancePanelFacility.JCT, junctionItem.kind)
 
-        val maneuverItem = assertIs<ManeuverPanelItem>(progress.panelItems[2])
-        assertEquals(progress.nextManeuver?.guidancePointIndex, maneuverItem.id.removePrefix("maneuver-").toInt())
+        val tollGateItem = assertIs<FacilityPanelItem>(progress.panelItems[2])
+        assertEquals(GuidancePanelFacility.TOLL_GATE, tollGateItem.kind)
+        assertEquals(TollPanelSubtitle(amountYen = 320), tollGateItem.subtitle)
     }
 
     private fun buildRoute(): RouteDetail {
@@ -71,6 +74,7 @@ class ExtNavGuidanceTrackerTest {
             distanceMeters = 1_000.0,
             durationSeconds = 300.0,
             steps = persistentListOf(),
+            tollFee = 320,
         )
     }
 
@@ -107,7 +111,7 @@ class ExtNavGuidanceTrackerTest {
                 index = 2,
                 distanceFromStartMetres = 600,
                 category = GuidanceCategory.TunnelBranch,
-                facilityKind = GuidanceFacilityKind.INTERCHANGE,
+                facilityKind = null,
                 direction = ManeuverDirection.SlantRight,
             ),
             buildGuidancePoint(
@@ -132,7 +136,7 @@ class ExtNavGuidanceTrackerTest {
             buildIntersection(
                 name = "分岐JCT",
                 distanceRatio = 0.6,
-                facilityKind = GuidanceFacilityKind.INTERCHANGE,
+                facilityKind = null,
             ),
         ).toImmutableList(),
         imageIds = persistentListOf(),

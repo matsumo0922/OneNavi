@@ -17,7 +17,56 @@ sealed interface GuidancePanelItem {
     val distanceFromStartMeters: Double
     val distanceToItemMeters: Int
     val etaEpochMillis: Long?
+    val subtitle: GuidancePanelSubtitle?
 }
+
+/**
+ * 案内中パネル行の補助表示。
+ */
+@Immutable
+sealed interface GuidancePanelSubtitle
+
+/**
+ * 方面看板や分岐案内などの案内文。
+ *
+ * @param text 案内文
+ */
+@Immutable
+data class GuidanceTextPanelSubtitle(
+    val text: String,
+) : GuidancePanelSubtitle
+
+/**
+ * 料金所で表示する料金。
+ *
+ * @param amountYen 料金（円）
+ */
+@Immutable
+data class TollPanelSubtitle(
+    val amountYen: Int,
+) : GuidancePanelSubtitle
+
+/**
+ * 高速道路の入口を示す補助表示。
+ */
+@Immutable
+data object EntrancePanelSubtitle : GuidancePanelSubtitle
+
+/**
+ * 高速道路の出口を示す補助表示。
+ */
+@Immutable
+data object ExitPanelSubtitle : GuidancePanelSubtitle
+
+/**
+ * 推奨レーンを示す補助表示。
+ *
+ * @param lanes 左から右の順に並んだレーン情報
+ */
+@Immutable
+data class RecommendedLanesPanelSubtitle(
+    val lanes: ImmutableList<Lane>,
+) : GuidancePanelSubtitle
 
 /**
  * 進路選択を伴う案内地点のパネル行。
@@ -33,6 +82,7 @@ sealed interface GuidancePanelItem {
  * @param exitNumber 出口番号
  * @param roadClass 地点付近の道路種別
  * @param facility 施設を伴う案内地点の場合の施設種別
+ * @param subtitle 補助表示。表示すべき情報が無い場合は null
  */
 @Immutable
 data class ManeuverPanelItem(
@@ -47,6 +97,7 @@ data class ManeuverPanelItem(
     val exitNumber: String?,
     val roadClass: RoadClass,
     val facility: GuidancePanelFacility?,
+    override val subtitle: GuidancePanelSubtitle?,
 ) : GuidancePanelItem
 
 /**
@@ -61,6 +112,7 @@ data class ManeuverPanelItem(
  * @param kind 施設種別
  * @param roadClass 地点付近の道路種別
  * @param services SA / PA のサービス情報
+ * @param subtitle 補助表示。表示すべき情報が無い場合は null
  */
 @Immutable
 data class FacilityPanelItem(
@@ -73,6 +125,7 @@ data class FacilityPanelItem(
     val kind: GuidancePanelFacility,
     val roadClass: RoadClass,
     val services: ImmutableList<String>,
+    override val subtitle: GuidancePanelSubtitle?,
 ) : GuidancePanelItem
 
 /**

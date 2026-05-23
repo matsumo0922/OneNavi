@@ -101,6 +101,15 @@
     <string name="home_map_route_result_start_navigation">ナビ開始</string>
     <string name="home_map_route_placeholder">ルート</string>
     <string name="home_map_navigation_followup">その先</string>
+    <string name="home_map_navigation_panel_guidance_point">案内地点</string>
+    <string name="home_map_navigation_panel_direction_sign">%1$s方面</string>
+    <string name="home_map_navigation_panel_entrance">入口</string>
+    <string name="home_map_navigation_panel_exit">出口</string>
+    <string name="home_map_navigation_panel_facility_ic">IC</string>
+    <string name="home_map_navigation_panel_facility_jct">JCT</string>
+    <string name="home_map_navigation_panel_facility_sa">SA</string>
+    <string name="home_map_navigation_panel_facility_pa">PA</string>
+    <string name="home_map_navigation_panel_facility_toll_gate_badge">料金</string>
     <string name="home_map_not_available_ios">この機能はiOSでは利用できません</string>
 
     <!-- Setting -->
