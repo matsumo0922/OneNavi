@@ -2,17 +2,28 @@ package me.matsumo.onenavi.feature.map.components.navigation
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -25,10 +36,13 @@ import androidx.compose.ui.zIndex
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.model.ManeuverType
+import me.matsumo.onenavi.core.navigation.newguidance.model.FacilityPanelItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceManeuverInfo
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidancePanelItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.Lane
 import me.matsumo.onenavi.core.navigation.newguidance.model.LaneGuidance
+import me.matsumo.onenavi.core.navigation.newguidance.model.ManeuverPanelItem
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_kilometer
 import me.matsumo.onenavi.core.resource.common_unit_meter
@@ -51,10 +65,11 @@ internal fun MapNavigationManeuverPanel(
     val kilometerLabel = stringResource(Res.string.common_unit_kilometer)
     val followupLabel = stringResource(Res.string.home_map_navigation_followup)
 
+    val hasPanelItems = progress.panelItems.isNotEmpty()
     val hasLanes = laneGuidance != null
     val hasHint = !hasLanes && nextManeuver != null
     val topShape = when {
-        hasLanes -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        hasPanelItems || hasLanes -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
         hasHint -> RoundedCornerShape(
             topStart = 16.dp,
             topEnd = 16.dp,
@@ -64,6 +79,8 @@ internal fun MapNavigationManeuverPanel(
         else -> RoundedCornerShape(16.dp)
     }
 
+    var showPanel by remember { mutableStateOf(false) }
+
     Column(modifier = modifier) {
         MapNavigationManeuverTopSection(
             modifier = Modifier.fillMaxWidth(),
@@ -71,7 +88,9 @@ internal fun MapNavigationManeuverPanel(
             maneuver = currentManeuver,
             meterLabel = meterLabel,
             kilometerLabel = kilometerLabel,
+            showPanelItems = showPanel,
             shape = topShape,
+            onShowPanelItemsClicked = { showPanel = !showPanel },
         )
 
         MapNavigationManeuverBottomSection(
@@ -79,6 +98,8 @@ internal fun MapNavigationManeuverPanel(
             laneGuidance = laneGuidance,
             nextManeuver = nextManeuver,
             followupLabel = followupLabel,
+            panelItems = progress.panelItems,
+            showPanelItems = showPanel,
         )
     }
 }
@@ -89,7 +110,9 @@ private fun MapNavigationManeuverTopSection(
     maneuver: GuidanceManeuverInfo,
     meterLabel: String,
     kilometerLabel: String,
+    showPanelItems: Boolean,
     shape: Shape,
+    onShowPanelItemsClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val distanceText = remember(maneuver.distanceToManeuverMeters, meterLabel, kilometerLabel) {
@@ -137,6 +160,7 @@ private fun MapNavigationManeuverTopSection(
             )
 
             Column(
+                modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
@@ -156,6 +180,16 @@ private fun MapNavigationManeuverTopSection(
                     )
                 }
             }
+
+            if (progress.panelItems.isNotEmpty()) {
+                IconButton(onShowPanelItemsClicked) {
+                    Icon(
+                        imageVector = if (showPanelItems) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        tint = ManeuverPanelPrimaryTextColor,
+                    )
+                }
+            }
         }
     }
 }
@@ -165,9 +199,24 @@ private fun MapNavigationManeuverBottomSection(
     laneGuidance: LaneGuidance?,
     nextManeuver: GuidanceManeuverInfo?,
     followupLabel: String,
+    panelItems: ImmutableList<GuidancePanelItem>,
+    showPanelItems: Boolean ,
     modifier: Modifier = Modifier,
 ) {
     when {
+        showPanelItems && panelItems.isNotEmpty() -> {
+            Surface(
+                modifier = modifier,
+                shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
+                color = ManeuverPanelSecondaryBackgroundColor,
+            ) {
+                MapNavigationManeuverPanel(
+                    modifier = Modifier.fillMaxWidth(),
+                    panelItems = panelItems,
+                )
+            }
+        }
+
         laneGuidance != null -> {
             Surface(
                 modifier = modifier,
@@ -199,6 +248,39 @@ private fun MapNavigationManeuverBottomSection(
                     maneuver = nextManeuver,
                     label = followupLabel,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapNavigationManeuverPanel(
+    panelItems: ImmutableList<GuidancePanelItem>,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(12.dp),
+    ) {
+        items(
+            items = panelItems,
+            key = { item -> item.id },
+        ) {
+            when (it) {
+                is ManeuverPanelItem -> {
+                    Text(
+                        text = "${it.modifier}, ${it.intersectionName}, ${it.distanceToItemMeters}m",
+                        color = ManeuverPanelPrimaryTextColor,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+                is FacilityPanelItem -> {
+                    Text(
+                        text = "${it.kind}, ${it.name}, ${it.distanceToItemMeters}m",
+                        color = ManeuverPanelPrimaryTextColor,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
             }
         }
     }
