@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package android.emulation.control;
+
+// emulator gRPC の GpsState（emulator_controller.proto と field 番号互換の最小定義）。
+message GpsState {
+  bool passiveUpdate = 1;
+  double latitude = 2;
+  double longitude = 3;
+  double speed = 4;
+  double bearing = 5;
+  double altitude = 6;
+  int32 satellites = 7;
+}
+
+// google.protobuf.Empty とワイヤ互換の空メッセージ。
+message Empty {}
+
+service EmulatorController {
+  rpc setGps(GpsState) returns (Empty) {}
+  rpc getGps(Empty) returns (GpsState) {}
+}
