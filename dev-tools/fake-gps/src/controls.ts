@@ -102,11 +102,6 @@ export class ControlsManager {
   }
 
   private bindWaypointButtons(): void {
-    document.getElementById("btn-add-via")!.addEventListener("click", () => {
-      // 次のクリックで via を追加するモードに (UI 表示で誘導)
-      // 実際には地図クリックで追加されるため no-op
-    });
-
     document.getElementById("btn-find-route")!.addEventListener("click", () => {
       this.startRouteSimulation();
     });
@@ -224,10 +219,10 @@ export class ControlsManager {
       const el = document.getElementById("connection-status")!;
       if (status?.active) {
         el.textContent = "\u25CF Connected";
-        el.className = "connected";
+        el.className = "badge connected";
       } else {
         el.textContent = "\u25CF Disconnected";
-        el.className = "disconnected";
+        el.className = "badge disconnected";
       }
     }, 3000);
   }
@@ -261,9 +256,9 @@ export class ControlsManager {
       document.getElementById("position-info")!.textContent =
         `${state.position.lat.toFixed(6)}, ${state.position.lng.toFixed(6)}`;
       document.getElementById("bearing-info")!.textContent =
-        `Bearing: ${state.bearing.toFixed(0)}\u00B0`;
+        `${state.bearing.toFixed(0)}\u00B0`;
       document.getElementById("speed-info")!.textContent =
-        `Speed: ${state.speedKmh.toFixed(0)} km/h`;
+        `${state.speedKmh.toFixed(0)} km/h`;
 
       updateCurrentPosition(state.position, state.bearing);
     }
@@ -281,6 +276,6 @@ export class ControlsManager {
       paused: " \u23F8",
     };
     document.getElementById("mode-info")!.textContent =
-      `Mode: ${modeLabels[state.mode] ?? state.mode}${playbackLabels[state.playback] ?? ""}`;
+      `${modeLabels[state.mode] ?? state.mode}${playbackLabels[state.playback] ?? ""}`;
   }
 }

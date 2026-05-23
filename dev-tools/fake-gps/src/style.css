@@ -1,3 +1,20 @@
+:root {
+  --bg-panel: #ffffff;
+  --bg-inset: #f4f5f7;
+  --bg-hover: #ebedf0;
+  --border: #e3e6ea;
+  --text: #1f2430;
+  --text-muted: #8a909a;
+  --primary: #4285f4;
+  --primary-dark: #3367d6;
+  --green: #34a853;
+  --orange: #fbbc05;
+  --red: #ea4335;
+  --radius: 10px;
+  --radius-sm: 7px;
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -9,6 +26,7 @@ body {
   overflow: hidden;
   height: 100vh;
   width: 100vw;
+  color: var(--text);
 }
 
 #map {
@@ -16,70 +34,265 @@ body {
   height: 100%;
 }
 
-/* Floating panel */
+/* ── Floating panel ───────────────────────── */
 #panel {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  width: 280px;
-  max-height: calc(100vh - 24px);
+  top: 14px;
+  left: 14px;
+  width: 296px;
+  max-height: calc(100vh - 28px);
   overflow-y: auto;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-  padding: 12px;
+  background: var(--bg-panel);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
   z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
-#panel h3 {
+/* ── Header ────────────────────────────────── */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.badge {
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  color: #666;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
-/* Search */
-#panel-search {
-  min-height: 40px;
+.badge.connected {
+  color: var(--green);
+  background: rgba(52, 168, 83, 0.12);
+}
+
+.badge.disconnected {
+  color: var(--red);
+  background: rgba(234, 67, 53, 0.1);
+}
+
+/* ── Search ────────────────────────────────── */
+#panel-search:empty {
+  display: none;
 }
 
 #panel-search gmp-place-autocomplete {
   width: 100%;
 }
 
-/* Panel sections */
-.panel-section {
-  border-top: 1px solid #eee;
-  padding-top: 8px;
-}
-
-/* Waypoints */
-#waypoint-list {
+/* ── Cards ─────────────────────────────────── */
+.card {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  padding: 11px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 6px;
+  gap: 9px;
+}
+
+.card-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--text-muted);
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Buttons ───────────────────────────────── */
+.btn {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.12s, border-color 0.12s, transform 0.05s;
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn.full {
+  width: 100%;
+}
+
+.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  flex: 1;
+}
+
+.btn-primary:hover {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
+.btn-ghost {
+  color: var(--text-muted);
+}
+
+.btn-group {
+  display: flex;
+  gap: 6px;
+}
+
+/* ── Transport ─────────────────────────────── */
+.transport {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+  transition: background 0.12s, transform 0.05s;
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+}
+
+.icon-btn:active {
+  transform: scale(0.96);
+}
+
+.icon-btn.play {
+  color: var(--green);
+}
+
+.icon-btn.pause {
+  color: var(--orange);
+}
+
+.icon-btn.stop {
+  color: var(--red);
+}
+
+/* ── Progress bar ──────────────────────────── */
+#progress-bar {
+  height: 5px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* ── Labeled segmented controls ────────────── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.field label .unit {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.segmented {
+  display: flex;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.segmented button {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  padding: 5px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.segmented button:hover {
+  background: var(--bg-hover);
+}
+
+.segmented button.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* ── Waypoints ─────────────────────────────── */
+.waypoint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.waypoint-list:empty {
+  display: none;
 }
 
 .waypoint-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
-  padding: 4px 6px;
-  background: #f5f5f5;
-  border-radius: 6px;
+  padding: 6px 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 .waypoint-item .label {
-  font-weight: 600;
-  min-width: 36px;
-  color: #4285f4;
+  font-weight: 700;
+  min-width: 34px;
+  color: var(--primary);
 }
 
 .waypoint-item .name {
@@ -87,144 +300,92 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .waypoint-item .remove-btn {
   background: none;
   border: none;
   cursor: pointer;
-  color: #999;
-  font-size: 14px;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
   padding: 0 2px;
 }
 
 .waypoint-item .remove-btn:hover {
-  color: #e53935;
+  color: var(--red);
 }
 
-/* Buttons */
-.button-row {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-button {
-  padding: 6px 10px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
+/* ── Telemetry ─────────────────────────────── */
+.telemetry {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
   font-size: 12px;
-  transition: all 0.15s;
 }
 
-button:hover {
-  background: #f0f0f0;
-  border-color: #bbb;
-}
-
-button:active {
-  background: #e0e0e0;
-}
-
-#btn-play { color: #4caf50; }
-#btn-pause { color: #ff9800; }
-#btn-stop { color: #f44336; }
-#btn-find-route { color: #4285f4; font-weight: 600; }
-
-/* Speed / update-rate buttons */
-.speed-btn,
-.rate-btn {
-  flex: 1;
-  min-width: 0;
-  font-size: 11px;
-  padding: 4px 2px;
-}
-
-.speed-btn.active,
-.rate-btn.active {
-  background: #4285f4;
-  color: #fff;
-  border-color: #4285f4;
-}
-
-.row-caption {
-  font-size: 10px;
-  color: #999;
-  margin-top: 4px;
-}
-
-/* Progress bar */
-#progress-bar {
-  height: 4px;
-  background: #eee;
-  border-radius: 2px;
-  margin-top: 6px;
-  overflow: hidden;
-}
-
-#progress-fill {
-  height: 100%;
-  width: 0%;
-  background: #4285f4;
-  border-radius: 2px;
-  transition: width 0.3s;
-}
-
-/* Status */
-#status {
-  font-size: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-#connection-status {
+.telemetry dt {
+  color: var(--text-muted);
   font-weight: 600;
 }
 
-#connection-status.connected {
-  color: #4caf50;
+.telemetry dd {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-#connection-status.disconnected {
-  color: #f44336;
-}
-
-/* GPX drop zone */
+/* ── GPX drop zone ─────────────────────────── */
 #drop-zone {
-  margin-top: 6px;
-  padding: 16px;
-  border: 2px dashed #ddd;
-  border-radius: 8px;
+  padding: 14px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm);
   text-align: center;
-  font-size: 12px;
-  color: #999;
-  transition: all 0.2s;
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
 }
 
 #drop-zone.dragover {
-  border-color: #4285f4;
-  background: rgba(66, 133, 244, 0.05);
-  color: #4285f4;
+  border-color: var(--primary);
+  background: rgba(66, 133, 244, 0.06);
+  color: var(--primary);
 }
 
-/* Keyboard hint */
-#keyboard-hint {
+/* ── Footer ────────────────────────────────── */
+.panel-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
   text-align: center;
-  font-size: 10px;
-  color: #999;
-  padding-top: 4px;
-  border-top: 1px solid #eee;
+  padding-top: 2px;
 }
 
-/* Scrollbar */
+.panel-footer kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 5px;
+  margin: 0 1px;
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* ── Scrollbar ─────────────────────────────── */
 #panel::-webkit-scrollbar {
-  width: 4px;
+  width: 5px;
 }
 
 #panel::-webkit-scrollbar-thumb {
-  background: #ccc;
-  border-radius: 2px;
+  background: #ccd1d8;
+  border-radius: 3px;
 }

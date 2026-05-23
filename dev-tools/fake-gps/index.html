@@ -10,72 +10,86 @@
     <div id="map"></div>
 
     <div id="panel">
+      <header class="panel-header">
+        <span class="panel-title">Fake GPS</span>
+        <span id="connection-status" class="badge disconnected">&#9679; Disconnected</span>
+      </header>
+
       <div id="panel-search">
         <!-- PlaceAutocompleteElement が JS で挿入される -->
       </div>
 
-      <div class="panel-section">
-        <h3>Waypoints</h3>
-        <div id="waypoint-list"></div>
-        <div class="button-row">
-          <button id="btn-add-via" title="Add via point">+ Via</button>
-          <button id="btn-find-route" title="Find route">Route</button>
-          <button id="btn-clear" title="Clear all">Clear</button>
+      <section class="card">
+        <div class="card-title">Route</div>
+        <div id="waypoint-list" class="waypoint-list"></div>
+        <p class="hint">地図をタップ、または検索で地点を追加</p>
+        <div class="btn-group">
+          <button id="btn-find-route" class="btn btn-primary">Find route</button>
+          <button id="btn-clear" class="btn btn-ghost">Clear</button>
         </div>
-      </div>
+      </section>
 
-      <div class="panel-section">
-        <h3>Controls</h3>
-        <div class="button-row">
-          <button id="btn-play" title="Play">&#9654;</button>
-          <button id="btn-pause" title="Pause">&#10074;&#10074;</button>
-          <button id="btn-stop" title="Stop">&#9632;</button>
-          <button id="btn-restart" title="Restart">&#8634;</button>
-        </div>
-        <div id="speed-buttons" class="button-row">
-          <button class="speed-btn" data-speed="0.5">0.5x</button>
-          <button class="speed-btn active" data-speed="1">1x</button>
-          <button class="speed-btn" data-speed="2">2x</button>
-          <button class="speed-btn" data-speed="5">5x</button>
-          <button class="speed-btn" data-speed="10">10x</button>
-          <button class="speed-btn" data-speed="20">20x</button>
-        </div>
-        <div class="row-caption">Update rate</div>
-        <div id="rate-buttons" class="button-row">
-          <button class="rate-btn" data-hz="1">1Hz</button>
-          <button class="rate-btn" data-hz="2">2Hz</button>
-          <button class="rate-btn" data-hz="5">5Hz</button>
-          <button class="rate-btn active" data-hz="10">10Hz</button>
-          <button class="rate-btn" data-hz="20">20Hz</button>
+      <section class="card">
+        <div class="card-title">Playback</div>
+        <div class="transport">
+          <button id="btn-play" class="icon-btn play" title="Play">&#9654;</button>
+          <button id="btn-pause" class="icon-btn pause" title="Pause">&#10074;&#10074;</button>
+          <button id="btn-stop" class="icon-btn stop" title="Stop">&#9632;</button>
+          <button id="btn-restart" class="icon-btn" title="Restart">&#8634;</button>
         </div>
         <div id="progress-bar">
           <div id="progress-fill"></div>
         </div>
-      </div>
 
-      <div class="panel-section">
-        <h3>Status</h3>
-        <div id="status">
-          <div id="connection-status">&#9679; Disconnected</div>
-          <div id="position-info">--</div>
-          <div id="bearing-info">--</div>
-          <div id="speed-info">--</div>
-          <div id="mode-info">Mode: Idle</div>
+        <div class="field">
+          <label>Speed <span class="unit">&times;</span></label>
+          <div id="speed-buttons" class="segmented">
+            <button class="speed-btn" data-speed="0.5">0.5</button>
+            <button class="speed-btn active" data-speed="1">1</button>
+            <button class="speed-btn" data-speed="2">2</button>
+            <button class="speed-btn" data-speed="5">5</button>
+            <button class="speed-btn" data-speed="10">10</button>
+            <button class="speed-btn" data-speed="20">20</button>
+          </div>
         </div>
-      </div>
 
-      <div class="panel-section">
-        <h3>Import</h3>
-        <div class="button-row">
-          <button id="btn-load-gpx" title="Load GPX file">Load GPX</button>
+        <div class="field">
+          <label>Rate <span class="unit">Hz</span></label>
+          <div id="rate-buttons" class="segmented">
+            <button class="rate-btn" data-hz="1">1</button>
+            <button class="rate-btn" data-hz="2">2</button>
+            <button class="rate-btn" data-hz="5">5</button>
+            <button class="rate-btn active" data-hz="10">10</button>
+            <button class="rate-btn" data-hz="20">20</button>
+          </div>
         </div>
+      </section>
+
+      <section class="card">
+        <div class="card-title">Telemetry</div>
+        <dl class="telemetry">
+          <dt>Position</dt>
+          <dd id="position-info">&mdash;</dd>
+          <dt>Bearing</dt>
+          <dd id="bearing-info">&mdash;</dd>
+          <dt>Speed</dt>
+          <dd id="speed-info">&mdash;</dd>
+          <dt>Mode</dt>
+          <dd id="mode-info">Idle</dd>
+        </dl>
+      </section>
+
+      <section class="card">
+        <div class="card-title">Import</div>
+        <button id="btn-load-gpx" class="btn btn-ghost full">Load GPX file</button>
         <input id="gpx-file-input" type="file" accept=".gpx" hidden />
         <div id="drop-zone">Drop .gpx here</div>
-      </div>
+      </section>
 
-      <div id="keyboard-hint">
-        Arrow keys: Move &middot; Space: Pause/Resume
-      </div>
+      <footer class="panel-footer">
+        <span><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&larr;</kbd><kbd>&rarr;</kbd> Move</span>
+        <span><kbd>Space</kbd> Pause / Resume</span>
+      </footer>
     </div>
 
     <script type="module" src="/src/main.ts"></script>
