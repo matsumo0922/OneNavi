@@ -133,18 +133,26 @@ button:active {
 #btn-stop { color: #f44336; }
 #btn-find-route { color: #4285f4; font-weight: 600; }
 
-/* Speed buttons */
-.speed-btn {
+/* Speed / update-rate buttons */
+.speed-btn,
+.rate-btn {
   flex: 1;
   min-width: 0;
   font-size: 11px;
   padding: 4px 2px;
 }
 
-.speed-btn.active {
+.speed-btn.active,
+.rate-btn.active {
   background: #4285f4;
   color: #fff;
   border-color: #4285f4;
+}
+
+.row-caption {
+  font-size: 10px;
+  color: #999;
+  margin-top: 4px;
 }
 
 /* Progress bar */

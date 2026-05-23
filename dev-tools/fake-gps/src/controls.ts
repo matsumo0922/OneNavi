@@ -33,6 +33,7 @@ export class ControlsManager {
   bind(): void {
     this.bindPlaybackButtons();
     this.bindSpeedButtons();
+    this.bindRateButtons();
     this.bindWaypointButtons();
     this.bindGpxImport();
     this.bindMapClick();
@@ -82,6 +83,19 @@ export class ControlsManager {
         this.engine.setSpeedMultiplier(speed);
         for (const other of buttons) {
           other.classList.toggle("active", other === btn);
+        }
+      });
+    }
+  }
+
+  private bindRateButtons(): void {
+    const buttons = document.querySelectorAll<HTMLButtonElement>(".rate-btn");
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        const hz = parseFloat(button.dataset.hz ?? "10");
+        this.engine.setTickIntervalMs(1000 / hz);
+        for (const other of buttons) {
+          other.classList.toggle("active", other === button);
         }
       });
     }
