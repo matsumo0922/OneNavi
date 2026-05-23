@@ -19,7 +19,7 @@ export interface StatusResponse {
 
 /**
  * emulator ブリッジに位置情報を送信する。
- * ブリッジが NMEA に変換し `adb emu geo nmea` で emulator に注入する。
+ * ブリッジが gRPC EmulatorController/setGps で emulator の GPS に注入する。
  */
 export async function sendLocation(payload: LocationPayload): Promise<boolean> {
   try {

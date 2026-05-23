@@ -1,71 +1,168 @@
-import { execFile } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { promisify } from "node:util";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import grpc from "@grpc/grpc-js";
+import protoLoader from "@grpc/proto-loader";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
-
-const execFileAsync = promisify(execFile);
 
 /**
  * dev-tool から受け取る 1 点分の位置。
- * bearing / speed も送られてくるが geo fix では使わない (fused provider が
- * 連続する位置の差分から進行方向・速度を自動算出するため)。
+ * `adb emu geo fix` と違い gRPC setGps は bearing / speed / satellites も注入できるため、
+ * フロントが算出した進行方向・速度をそのまま emulator の GPS に流す。
+ * これにより生の gps provider を直接購読するナビアプリでも自車が滑らかに追従する。
  */
-interface LocationFix {
+interface LocationPayload {
   lat: number;
   lng: number;
-  altitude?: number;
+  bearing: number;
+  speed: number;
+  accuracy: number;
+  altitude: number;
 }
 
-/** geo fix に渡す衛星数 (fix quality を満たすためのダミー値)。 */
-const SATELLITE_COUNT = "12";
+/** setGps に渡す衛星数 (fix quality を満たすためのダミー値)。 */
+const SATELLITE_COUNT = 12;
 
-/** 直近に解決した emulator のシリアル。adb 失敗時は null に戻して取り直す。 */
-let cachedSerial: string | null = null;
-/** 直近に注入した位置。/status で dev-tool 側に返す。 */
-let lastFix: LocationFix | null = null;
+/** 実行中 emulator の gRPC 接続情報 (discovery ini 由来)。 */
+interface EmulatorEndpoint {
+  port: string;
+  token: string;
+  serial: string;
+}
+
+/** discovery ini を探すディレクトリ候補 (macOS を主、Linux も一応)。 */
+function discoveryDirs(): string[] {
+  const home = os.homedir();
+  const candidates = [
+    process.env.XDG_RUNTIME_DIR ? path.join(process.env.XDG_RUNTIME_DIR, "avd", "running") : null,
+    path.join(os.tmpdir(), "avd", "running"),
+    path.join(home, "Library", "Caches", "TemporaryItems", "avd", "running"),
+    path.join(home, ".android", "avd", "running"),
+  ];
+  return candidates.filter((dir): dir is string => dir !== null);
+}
+
+/** ini テキストから 1 キーの値を取り出す (値に `=` を含む token に対応)。 */
+function readIniValue(text: string, key: string): string | null {
+  const line = text.split("\n").find((entry) => entry.startsWith(`${key}=`));
+  if (!line) return null;
+  return line.slice(line.indexOf("=") + 1).trim();
+}
 
 /**
- * 対象 emulator のシリアルを解決する。
- * EMU_SERIAL env があれば優先。無ければ `adb devices` の先頭 emulator を使う。
+ * 実行中 emulator の gRPC ポート・トークンを discovery ini から解決する。
+ * EMU_SERIAL env があれば port.serial で照合、無ければ最も新しい ini を採用する。
  */
-async function resolveEmulatorSerial(forceRefresh = false): Promise<string | null> {
-  if (process.env.EMU_SERIAL) return process.env.EMU_SERIAL;
-  if (cachedSerial && !forceRefresh) return cachedSerial;
+function findEndpoint(): EmulatorEndpoint | null {
+  const wantSerial = process.env.EMU_SERIAL?.replace(/^emulator-/, "") ?? null;
+  const found: Array<{ endpoint: EmulatorEndpoint; mtimeMs: number }> = [];
 
-  try {
-    const { stdout } = await execFileAsync("adb", ["devices"]);
-    const line = stdout
-      .split("\n")
-      .map((entry) => entry.trim())
-      .find((entry) => entry.startsWith("emulator-") && entry.endsWith("device"));
-    cachedSerial = line ? line.split(/\s+/)[0] : null;
-  } catch {
-    cachedSerial = null;
+  for (const dir of discoveryDirs()) {
+    let entries: string[] = [];
+    try {
+      entries = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!/^pid_\d+\.ini$/.test(entry)) continue;
+      const filePath = path.join(dir, entry);
+      try {
+        const text = fs.readFileSync(filePath, "utf8");
+        const port = readIniValue(text, "grpc.port");
+        const token = readIniValue(text, "grpc.token");
+        const serial = readIniValue(text, "port.serial");
+        if (!port || !token || !serial) continue;
+        found.push({
+          endpoint: { port, token, serial: `emulator-${serial}` },
+          mtimeMs: fs.statSync(filePath).mtimeMs,
+        });
+      } catch {
+        // 壊れた ini はスキップ
+      }
+    }
   }
-  return cachedSerial;
+
+  if (found.length === 0) return null;
+  if (wantSerial) {
+    const matched = found.find((item) => item.endpoint.serial === `emulator-${wantSerial}`);
+    if (matched) return matched.endpoint;
+  }
+  found.sort((left, right) => right.mtimeMs - left.mtimeMs);
+  return found[0].endpoint;
+}
+
+/** EmulatorController の gRPC クライアント型 (最小定義)。 */
+interface EmulatorControllerClient {
+  setGps(
+    request: Record<string, unknown>,
+    metadata: grpc.Metadata,
+    callback: (error: grpc.ServiceError | null) => void,
+  ): void;
+}
+
+const protoDefinition = protoLoader.loadSync(path.resolve(process.cwd(), "proto", "emulator_min.proto"), {
+  keepCase: true,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+});
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ControllerCtor = (grpc.loadPackageDefinition(protoDefinition) as any).android.emulation.control
+  .EmulatorController as new (address: string, credentials: grpc.ChannelCredentials) => EmulatorControllerClient;
+
+/** 解決済みの接続情報・クライアント・認証メタデータをキャッシュする。 */
+let cached: { endpoint: EmulatorEndpoint; client: EmulatorControllerClient; metadata: grpc.Metadata } | null = null;
+/** 直近に注入した位置。/status で dev-tool 側に返す。 */
+let lastFix: LocationPayload | null = null;
+
+/** クライアントを取得する。接続情報が変わっていれば張り直す。 */
+function ensureClient(): typeof cached {
+  const endpoint = findEndpoint();
+  if (!endpoint) {
+    cached = null;
+    return null;
+  }
+  if (cached && cached.endpoint.port === endpoint.port && cached.endpoint.token === endpoint.token) {
+    return cached;
+  }
+  const client = new ControllerCtor(`localhost:${endpoint.port}`, grpc.credentials.createInsecure());
+  const metadata = new grpc.Metadata();
+  metadata.set("authorization", `Bearer ${endpoint.token}`);
+  cached = { endpoint, client, metadata };
+  return cached;
 }
 
 /**
- * `adb -s <serial> emu geo fix <lng> <lat> <alt> <satellites>` で位置を注入する。
- * 引数は経度が先である点に注意。
- *
- * NOTE: emulator の `geo nmea` は OK を返しても位置に反映されない実装が多いため、
- * 確実に動く `geo fix` を使う。bearing は注入できないが fused provider 側で
- * 連続位置から算出される。
+ * gRPC EmulatorController/setGps で位置を注入する。
+ * passiveUpdate=false で Location UI の 1Hz 上書きを止め、本ツールの更新を優先させる。
  */
-async function sendGeoFix(serial: string, fix: LocationFix): Promise<void> {
-  const altitude = (fix.altitude ?? 0).toString();
-  await execFileAsync("adb", [
-    "-s",
-    serial,
-    "emu",
-    "geo",
-    "fix",
-    fix.lng.toString(),
-    fix.lat.toString(),
-    altitude,
-    SATELLITE_COUNT,
-  ]);
+function sendGps(payload: LocationPayload): Promise<string> {
+  const connection = ensureClient();
+  if (!connection) {
+    return Promise.reject(new Error("No running emulator found (discovery ini not located)"));
+  }
+  const request = {
+    passiveUpdate: false,
+    latitude: payload.lat,
+    longitude: payload.lng,
+    speed: payload.speed,
+    bearing: ((payload.bearing % 360) + 360) % 360,
+    altitude: payload.altitude,
+    satellites: SATELLITE_COUNT,
+  };
+  return new Promise((resolve, reject) => {
+    connection.client.setGps(request, connection.metadata, (error) => {
+      if (error) {
+        cached = null; // 失敗時は次回張り直す (emulator 再起動でポート/トークンが変わるため)
+        reject(error);
+      } else {
+        resolve(connection.endpoint.serial);
+      }
+    });
+  });
 }
 
 /** リクエストボディを JSON として読み取る。 */
@@ -94,29 +191,102 @@ function sendJson(response: ServerResponse, status: number, payload: unknown): v
 
 async function handleLocation(request: IncomingMessage, response: ServerResponse): Promise<void> {
   try {
-    const fix = (await readJsonBody(request)) as LocationFix;
-    const serial = await resolveEmulatorSerial();
-    if (!serial) {
-      sendJson(response, 503, { success: false, error: "No emulator detected (adb devices)" });
-      return;
-    }
-    await sendGeoFix(serial, fix);
-    lastFix = fix;
+    const payload = (await readJsonBody(request)) as LocationPayload;
+    await sendGps(payload);
+    lastFix = payload;
     sendJson(response, 200, { success: true });
   } catch (error) {
-    cachedSerial = null; // adb 失敗時は次回 serial を取り直す
+    sendJson(response, 503, { success: false, error: (error as Error).message });
+  }
+}
+
+function handleStatus(response: ServerResponse): void {
+  const endpoint = findEndpoint();
+  sendJson(response, 200, {
+    active: endpoint !== null,
+    serial: endpoint?.serial ?? null,
+    lastLocation: lastFix,
+  });
+}
+
+/** 保存ルートの格納ディレクトリ (git 管理対象)。 */
+const ROUTES_DIR = path.resolve(process.cwd(), "routes");
+
+/** ルート名をファイルシステムで安全なファイル名に変換する。 */
+function routeFileName(name: string): string {
+  const safe = name
+    .trim()
+    .replace(/[\s/\\?%*:|"<>-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 80);
+  return `${safe || "route"}.json`;
+}
+
+/** 保存済みルートを一覧で返す。 */
+function handleRoutesList(response: ServerResponse): void {
+  let files: string[] = [];
+  try {
+    files = fs.readdirSync(ROUTES_DIR).filter((entry) => entry.endsWith(".json"));
+  } catch {
+    sendJson(response, 200, []);
+    return;
+  }
+  const routes = files
+    .map((file) => {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(path.join(ROUTES_DIR, file), "utf8")) as Record<string, unknown>;
+        return { ...parsed, file };
+      } catch {
+        return null;
+      }
+    })
+    .filter((route) => route !== null)
+    .sort((left, right) => String(right!.savedAt ?? "").localeCompare(String(left!.savedAt ?? "")));
+  sendJson(response, 200, routes);
+}
+
+/** 現在のルート (waypoints) を名前付きで保存する。 */
+async function handleRouteSave(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  try {
+    const body = (await readJsonBody(request)) as { name?: string; waypoints?: unknown };
+    const name = body.name?.trim();
+    const waypoints = body.waypoints;
+    if (!name || !Array.isArray(waypoints) || waypoints.length < 2) {
+      sendJson(response, 400, { success: false, error: "name と 2 点以上の waypoints が必要です" });
+      return;
+    }
+    fs.mkdirSync(ROUTES_DIR, { recursive: true });
+    const file = routeFileName(name);
+    const payload = { name, waypoints, savedAt: new Date().toISOString() };
+    fs.writeFileSync(path.join(ROUTES_DIR, file), `${JSON.stringify(payload, null, 2)}\n`);
+    sendJson(response, 200, { success: true, file });
+  } catch (error) {
     sendJson(response, 500, { success: false, error: (error as Error).message });
   }
 }
 
-async function handleStatus(response: ServerResponse): Promise<void> {
-  const serial = await resolveEmulatorSerial(true);
-  sendJson(response, 200, { active: serial !== null, serial, lastLocation: lastFix });
+/** 指定ファイルの保存ルートを削除する。 */
+function handleRouteDelete(request: IncomingMessage, response: ServerResponse): void {
+  const requestUrl = new URL(request.url ?? "", "http://localhost");
+  const file = requestUrl.searchParams.get("file") ?? "";
+  // パストラバーサル防止: basename かつ .json のみ許可する
+  if (!file || file !== path.basename(file) || !file.endsWith(".json")) {
+    sendJson(response, 400, { success: false, error: "invalid file" });
+    return;
+  }
+  try {
+    fs.unlinkSync(path.join(ROUTES_DIR, file));
+    sendJson(response, 200, { success: true });
+  } catch (error) {
+    sendJson(response, 404, { success: false, error: (error as Error).message });
+  }
 }
 
 /**
- * ブラウザは `adb` を直接叩けないため、Vite dev server に同居する HTTP ブリッジを立てる。
- * dev-tool からの POST /location を `adb emu geo fix` で emulator に注入する。
+ * ブラウザは emulator の gRPC を直接叩けないため、Vite dev server に同居する HTTP ブリッジを立てる。
+ * dev-tool からの POST /location を gRPC EmulatorController/setGps で emulator に注入する。
+ * 加えて GET/POST/DELETE /routes で保存ルートを `routes/` ディレクトリに永続化する。
  */
 function emulatorGeoBridge(): Plugin {
   return {
@@ -131,13 +301,25 @@ function emulatorGeoBridge(): Plugin {
           return;
         }
         if (method === "GET" && url === "/status") {
-          void handleStatus(response);
+          handleStatus(response);
           return;
         }
         if (method === "POST" && url === "/stop") {
           // emulator は最後の位置を保持し続けるため停止概念は無い。最終位置を忘れるだけ。
           lastFix = null;
           sendJson(response, 200, { success: true });
+          return;
+        }
+        if (method === "GET" && url === "/routes") {
+          handleRoutesList(response);
+          return;
+        }
+        if (method === "POST" && url === "/routes") {
+          void handleRouteSave(request, response);
+          return;
+        }
+        if (method === "DELETE" && url.startsWith("/routes")) {
+          handleRouteDelete(request, response);
           return;
         }
         next();
