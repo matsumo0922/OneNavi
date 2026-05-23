@@ -317,6 +317,75 @@ body {
   color: var(--red);
 }
 
+/* ── Saved routes ──────────────────────────── */
+.saved-route-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.saved-route-list:empty {
+  display: none;
+}
+
+.saved-route-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px 2px 2px;
+}
+
+.saved-route-item .load-btn {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-route-item .load-btn:hover {
+  background: var(--bg-hover);
+  color: var(--primary);
+}
+
+.saved-route-item .count {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-inset);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.saved-route-item .remove-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.saved-route-item .remove-btn:hover {
+  color: var(--red);
+}
+
 /* ── Telemetry ─────────────────────────────── */
 .telemetry {
   display: grid;

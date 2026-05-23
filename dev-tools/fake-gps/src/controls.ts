@@ -2,6 +2,7 @@ import type {SimulationEngine, SimulationState} from "./simulation";
 import type {LatLng} from "./geo-utils";
 import {parseGpx} from "./gpx-parser";
 import {getStatus} from "./connection";
+import {deleteRoute, listRoutes, saveRoute, type SavedRoute} from "./routes";
 import {clearRoute, findRoute, onMapClick, showGpxPath, updateCurrentPosition, updateWaypointMarkers,} from "./map";
 
 /**
@@ -11,6 +12,7 @@ const WAYPOINTS_STORAGE_KEY = "onenavi-dev-waypoints";
 
 export class ControlsManager {
   private waypoints: LatLng[] = [];
+  private savedRoutes: SavedRoute[] = [];
   private statusPollHandle: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly engine: SimulationEngine) {
@@ -35,6 +37,7 @@ export class ControlsManager {
     this.bindSpeedButtons();
     this.bindRateButtons();
     this.bindWaypointButtons();
+    this.bindSavedRoutes();
     this.bindGpxImport();
     this.bindMapClick();
     this.startStatusPolling();
@@ -47,6 +50,9 @@ export class ControlsManager {
       this.renderWaypointList();
       updateWaypointMarkers(this.waypoints);
     }
+
+    // 保存ルート一覧を取得して表示
+    void this.refreshSavedRoutes();
   }
 
   private bindPlaybackButtons(): void {
@@ -114,6 +120,86 @@ export class ControlsManager {
       this.renderWaypointList();
       updateWaypointMarkers([]);
     });
+  }
+
+  private bindSavedRoutes(): void {
+    document.getElementById("btn-save-route")!.addEventListener("click", () => {
+      void this.saveCurrentRoute();
+    });
+  }
+
+  /**
+   * 現在の waypoints を名前付きで保存する。
+   */
+  private async saveCurrentRoute(): Promise<void> {
+    if (this.waypoints.length < 2) {
+      window.alert("スタートとエンド（2 点以上）を指定してください");
+      return;
+    }
+    const name = window.prompt("ルート名を入力");
+    if (!name?.trim()) return;
+
+    const saved = await saveRoute(name.trim(), this.waypoints);
+    if (!saved) {
+      window.alert("保存に失敗しました（dev server に接続できません）");
+      return;
+    }
+    await this.refreshSavedRoutes();
+  }
+
+  /**
+   * 保存ルートを現在の waypoints として読み込む。
+   */
+  private loadSavedRoute(route: SavedRoute): void {
+    this.waypoints = route.waypoints.map((waypoint) => ({ lat: waypoint.lat, lng: waypoint.lng }));
+    this.saveWaypoints();
+    this.engine.stop();
+    clearRoute();
+    this.renderWaypointList();
+    updateWaypointMarkers(this.waypoints);
+  }
+
+  private async removeSavedRoute(route: SavedRoute): Promise<void> {
+    if (!window.confirm(`「${route.name}」を削除しますか?`)) return;
+    await deleteRoute(route.file);
+    await this.refreshSavedRoutes();
+  }
+
+  private async refreshSavedRoutes(): Promise<void> {
+    this.savedRoutes = await listRoutes();
+    this.renderSavedRoutes();
+  }
+
+  private renderSavedRoutes(): void {
+    const container = document.getElementById("saved-route-list")!;
+    container.innerHTML = "";
+
+    for (const route of this.savedRoutes) {
+      const item = document.createElement("div");
+      item.className = "saved-route-item";
+
+      const loadButton = document.createElement("button");
+      loadButton.className = "load-btn";
+      loadButton.title = "Load route";
+      loadButton.textContent = route.name;
+      loadButton.addEventListener("click", () => this.loadSavedRoute(route));
+
+      const count = document.createElement("span");
+      count.className = "count";
+      count.textContent = `${route.waypoints.length}`;
+      count.title = `${route.waypoints.length} points`;
+
+      const removeButton = document.createElement("button");
+      removeButton.className = "remove-btn";
+      removeButton.title = "Delete route";
+      removeButton.innerHTML = "&times;";
+      removeButton.addEventListener("click", () => {
+        void this.removeSavedRoute(route);
+      });
+
+      item.append(loadButton, count, removeButton);
+      container.appendChild(item);
+    }
   }
 
   private bindGpxImport(): void {
