@@ -263,31 +263,22 @@ internal class MapCameraState internal constructor() {
             isFollowingMyLocation = true,
         )
 
-        val current = map?.cameraPosition
-        val vehiclePose = vehicleLocationState?.toVehiclePose() ?: lastVehiclePose
-        val target = if (current != null && vehiclePose != null) {
-            vehicleCameraPosition(
-                vehiclePose = vehiclePose,
-                current = current,
-                zoom = DEFAULT_CAMERA_ZOOM,
-                perspective = GoogleMap.CameraPerspective.TILTED,
-            )
-        } else if (current != null) {
-            CameraPosition.Builder()
-                .target(current.target)
-                .zoom(DEFAULT_CAMERA_ZOOM)
-                .bearing(current.bearing)
-                .tilt(vehicleCameraPositionFactory.vehicleTiltDegrees(GoogleMap.CameraPerspective.TILTED))
-                .build()
-        } else {
-            null
-        }
-
-        if (target == null) return
         val activeMap = map ?: return
+        val startCameraPosition = activeMap.cameraPosition
+        val vehiclePose = vehicleLocationState?.toVehiclePose() ?: lastVehiclePose
+        val target = guidanceStartCameraPosition(
+            vehiclePose = vehiclePose,
+            current = startCameraPosition,
+        )
 
         flyCameraTo(
             target = target,
+            targetProvider = {
+                guidanceStartCameraPosition(
+                    vehiclePose = lastVehiclePose ?: vehiclePose,
+                    current = startCameraPosition,
+                )
+            },
             keepFollowingMyLocation = true,
             moveCamera = { _, cameraPosition -> moveVehicleCamera(cameraPosition) },
             onFinished = {
@@ -692,6 +683,34 @@ internal class MapCameraState internal constructor() {
         zoom = zoom,
         perspective = perspective,
     )
+
+    /**
+     * 案内開始 animation のカメラ位置を作る。
+     *
+     * @param vehiclePose 自車 pose。未取得なら現在の target / bearing を維持する
+     * @param current 現在のカメラ位置
+     * @return 案内開始 animation の移動先カメラ位置
+     */
+    private fun guidanceStartCameraPosition(
+        vehiclePose: VehiclePose?,
+        current: CameraPosition,
+    ): CameraPosition {
+        if (vehiclePose != null) {
+            return vehicleCameraPosition(
+                vehiclePose = vehiclePose,
+                current = current,
+                zoom = DEFAULT_CAMERA_ZOOM,
+                perspective = GoogleMap.CameraPerspective.TILTED,
+            )
+        }
+
+        return CameraPosition.Builder()
+            .target(current.target)
+            .zoom(DEFAULT_CAMERA_ZOOM)
+            .bearing(current.bearing)
+            .tilt(vehicleCameraPositionFactory.vehicleTiltDegrees(GoogleMap.CameraPerspective.TILTED))
+            .build()
+    }
 
     /**
      * 案内地点フォーカス中の heading-up 真上カメラ位置を作る。
