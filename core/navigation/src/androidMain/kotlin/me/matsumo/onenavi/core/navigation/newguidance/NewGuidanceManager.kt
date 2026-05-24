@@ -369,6 +369,7 @@ private fun RouteDetail.toInitialProgress(): GuidanceProgress = GuidanceProgress
     vehicleSpeedMps = null,
     nextManeuver = null,
     followupManeuver = null,
+    panelItems = persistentListOf(),
     lanes = persistentListOf(),
     directionSign = null,
     highwayPanel = null,
