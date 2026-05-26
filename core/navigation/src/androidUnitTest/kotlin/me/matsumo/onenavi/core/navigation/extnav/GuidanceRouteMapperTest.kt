@@ -147,6 +147,72 @@ class GuidanceRouteMapperTest {
         )
     }
 
+    @Test
+    fun `GP に紐付かない施設付き intersection も通過施設イベントになる`() {
+        val mapper = GuidanceRouteMapper()
+        val route = buildRoute()
+        val payload = ExtNavRoutePayload(id = route.id, routeGuidance = buildUncoveredFacilityGuidance())
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        // PA は GP から 300m 以上離れているため GP イベントには載らず、通過施設イベントとして補完される。
+        val facilityEvent = guidanceRoute.events.first { event -> event.details.facility?.kind == FacilityKind.PA }
+        assertNull(facilityEvent.primary)
+        assertNull(facilityEvent.anchor.sourceGuidancePointIndex)
+    }
+
+    private fun buildUncoveredFacilityGuidance(): RouteGuidance = RouteGuidance(
+        index = 1,
+        priority = null,
+        summary = DsrRouteSummary(
+            depth = 0,
+            distanceMetres = 1_000,
+            timeSeconds = 300,
+            fuelLitres = 0f,
+            tollYen = 0,
+            tollDetails = persistentListOf(),
+            streets = persistentListOf(),
+            priority = 0,
+            trafficCongestionAvoidanceRate = 0f,
+        ),
+        guidancePoints = listOf(
+            buildGuidancePoint(
+                index = 0,
+                distanceFromStartMetres = 100,
+                category = GuidanceCategory.IntersectionGuide,
+                laneInfo = null,
+            ),
+            buildGuidancePoint(
+                index = 1,
+                distanceFromStartMetres = 950,
+                category = GuidanceCategory.Unspecified,
+                laneInfo = null,
+            ),
+        ).toImmutableList(),
+        intersections = persistentListOf(
+            Intersection(
+                id = 0,
+                name = "テストPA",
+                nameRuby = "",
+                roadName = "",
+                roadNameOfficial = "",
+                roadNumberSign = "",
+                directionSignA = "",
+                directionSignAKana = "",
+                directionSignB = "",
+                directionSignBKana = "",
+                position = Coord.fromDegrees(latDeg = ORIGIN_LATITUDE, lonDeg = ORIGIN_LONGITUDE + LONGITUDE_STEP * 2),
+                angleIn = 0,
+                angleOut = 0,
+                direction = ManeuverDirection.Straight,
+                imageRefs = persistentListOf(),
+                facilityHint = GuidanceFacilityHint(kind = GuidanceFacilityKind.PARKING_AREA),
+            ),
+        ),
+        imageIds = persistentListOf(),
+        polyline = persistentListOf(),
+    )
+
     private fun buildMixedBlockGuidance(): RouteGuidance = RouteGuidance(
         index = 1,
         priority = null,
