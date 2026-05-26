@@ -29,9 +29,7 @@ internal class RouteProjectionContext(
      */
     fun roadClassAt(geometryMeters: Double): RoadClass {
         val segmentIndex = RouteGeometryMath.segmentIndexAt(cumulativeMetres, geometryMeters)
-        return route.roadClassSegments
-            .firstOrNull { segment -> segmentIndex >= segment.startPointIndex && segmentIndex < segment.endPointIndex }
-            ?.roadClass
-            ?: RoadClass.ORDINARY
+        val segment = route.roadClassSegments.firstOrNull { segment -> segmentIndex >= segment.startPointIndex && segmentIndex < segment.endPointIndex }
+        return segment?.roadClass ?: RoadClass.ORDINARY
     }
 }

@@ -59,10 +59,8 @@ internal class GuidanceProgressAdapter {
         currentCumulativeMeters: Double,
         timestampMillis: Long,
     ): GuidanceProgressProjection {
-        val nextManeuver = selection.nextPrimaryEvent
-            ?.let { event -> maneuverInfo(event = event, currentCumulativeMeters = currentCumulativeMeters) }
-        val followupManeuver = selection.followupPrimaryEvent
-            ?.let { event -> maneuverInfo(event = event, currentCumulativeMeters = currentCumulativeMeters) }
+        val nextManeuver = selection.nextPrimaryEvent?.let { event -> maneuverInfo(event = event, currentCumulativeMeters = currentCumulativeMeters) }
+        val followupManeuver = selection.followupPrimaryEvent?.let { event -> maneuverInfo(event = event, currentCumulativeMeters = currentCumulativeMeters) }
 
         return GuidanceProgressProjection(
             nextManeuver = nextManeuver,
@@ -138,9 +136,7 @@ internal class GuidanceProgressAdapter {
         val layout = lane.layout as? LaneLayout.MarkerLayout ?: return null
         if (layout.lanes.isEmpty() || layout.lanes.none { mark -> mark.isRecommended }) return null
 
-        val lanes = layout.lanes
-            .map { mark -> toUiLane(mark = mark, modifier = modifier) }
-            .toImmutableList()
+        val lanes = layout.lanes.map { mark -> toUiLane(mark = mark, modifier = modifier) }.toImmutableList()
         return LaneGuidance(lanes = lanes)
     }
 
@@ -349,9 +345,7 @@ internal class GuidanceProgressAdapter {
     private fun distanceToMeters(
         event: GuidanceEvent,
         currentCumulativeMeters: Double,
-    ): Int = (event.anchor.geometryDistanceFromStartMeters - currentCumulativeMeters)
-        .coerceAtLeast(0.0)
-        .roundToInt()
+    ): Int = (event.anchor.geometryDistanceFromStartMeters - currentCumulativeMeters).coerceAtLeast(0.0).roundToInt()
 
     /**
      * 指定地点の推定通過時刻を route 全体の平均所要時間から求める。算出できない場合は null。

@@ -27,9 +27,7 @@ internal class GuidanceRouteSelector {
         currentCumulativeMeters: Double,
     ): GuidanceSelection {
         val thresholdMeters = currentCumulativeMeters + NEXT_EVENT_EPSILON_METRES
-        val eventsAfterCurrent = route.events
-            .filter { event -> event.anchor.geometryDistanceFromStartMeters > thresholdMeters }
-            .toImmutableList()
+        val eventsAfterCurrent = route.events.filter { event -> event.anchor.geometryDistanceFromStartMeters > thresholdMeters }.toImmutableList()
         val primaryEvents = eventsAfterCurrent.filter { event -> event.primary != null }
 
         return GuidanceSelection(
