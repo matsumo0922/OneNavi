@@ -86,8 +86,7 @@ internal object RouteGeometryMath {
         if (geometry.size == 1 || cumulativeMetres.size <= 1) return geometry.first()
 
         val coercedTargetMetres = targetMetres.coerceIn(0.0, cumulativeMetres.last())
-        val segmentIndex = segmentIndexAt(cumulativeMetres, coercedTargetMetres)
-            .coerceIn(0, geometry.lastIndex - 1)
+        val segmentIndex = segmentIndexAt(cumulativeMetres, coercedTargetMetres).coerceIn(0, geometry.lastIndex - 1)
         val segmentStartMetres = cumulativeMetres[segmentIndex]
         val segmentEndMetres = cumulativeMetres[segmentIndex + 1]
         val ratio = segmentRatio(
@@ -137,8 +136,9 @@ internal object RouteGeometryMath {
         val toLatRadians = latitudeRadians(to)
         val deltaLatRadians = Math.toRadians(to.latitude - from.latitude)
         val deltaLngRadians = Math.toRadians(to.longitude - from.longitude)
-        val haversineTerm = sin(deltaLatRadians / 2.0) * sin(deltaLatRadians / 2.0) +
-            cos(fromLatRadians) * cos(toLatRadians) * sin(deltaLngRadians / 2.0) * sin(deltaLngRadians / 2.0)
+        val halfLatSinSquared = sin(deltaLatRadians / 2.0) * sin(deltaLatRadians / 2.0)
+        val halfLngSinSquared = sin(deltaLngRadians / 2.0) * sin(deltaLngRadians / 2.0)
+        val haversineTerm = halfLatSinSquared + cos(fromLatRadians) * cos(toLatRadians) * halfLngSinSquared
         return EARTH_RADIUS_METRES * 2.0 * atan2(sqrt(haversineTerm), sqrt(1.0 - haversineTerm))
     }
 
@@ -154,8 +154,7 @@ internal object RouteGeometryMath {
         val toLatRadians = latitudeRadians(to)
         val deltaLngRadians = Math.toRadians(to.longitude - from.longitude)
         val y = sin(deltaLngRadians) * cos(toLatRadians)
-        val x = cos(fromLatRadians) * sin(toLatRadians) -
-            sin(fromLatRadians) * cos(toLatRadians) * cos(deltaLngRadians)
+        val x = cos(fromLatRadians) * sin(toLatRadians) - sin(fromLatRadians) * cos(toLatRadians) * cos(deltaLngRadians)
         return ((Math.toDegrees(atan2(y, x)) + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES).toFloat()
     }
 

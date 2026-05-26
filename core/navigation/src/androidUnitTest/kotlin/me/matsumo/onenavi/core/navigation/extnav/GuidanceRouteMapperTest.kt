@@ -6,12 +6,12 @@ import kotlinx.collections.immutable.toImmutableSet
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.guidance.domain.DsrRouteSummary
 import me.matsumo.drive.supporter.api.guidance.domain.ExternalGuideAnchor
-import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementBlock
-import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityHint
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
+import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementBlock
+import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection
 import me.matsumo.drive.supporter.api.guidance.domain.LaneInfo
 import me.matsumo.drive.supporter.api.guidance.domain.LaneMarker

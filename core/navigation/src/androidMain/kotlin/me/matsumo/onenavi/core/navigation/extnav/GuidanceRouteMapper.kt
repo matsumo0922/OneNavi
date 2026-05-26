@@ -138,7 +138,7 @@ internal class GuidanceRouteMapper {
     }
 
     /**
-     * 各 GP を [GuidanceEvent] へ変換する。骨組みでは主案内とレーンを持つ GP だけを出す。
+     * 各 GP を [GuidanceEvent] へ変換する。主案内・レーン・施設・通知を持つ GP だけを出す。
      */
     private fun buildEvents(
         payload: ExtNavRoutePayload,
@@ -151,36 +151,83 @@ internal class GuidanceRouteMapper {
         val guidancePoints = payload.routeGuidance.guidancePoints
         val lastIndex = guidancePoints.lastIndex
         val events = guidancePoints.mapIndexedNotNull { guidancePointIndex, guidancePoint ->
-            val sourceDistanceMetres = guidancePoint.distanceFromStartMetres.toDouble()
-            val geometryMetres = distanceMapper
-                .mapSourceToGeometry(sourceDistanceMetres)
-                .coerceIn(0.0, totalGeometryMetres)
-            val context = EventContext(
+            buildEventAt(
                 guidancePointIndex = guidancePointIndex,
-                isLastGuidancePoint = guidancePointIndex == lastIndex,
-                sourceDistanceMetres = sourceDistanceMetres,
-                geometryMetres = geometryMetres,
-                location = RouteGeometryMath.pointAt(
-                    geometry = route.geometry,
-                    cumulativeMetres = cumulativeMetres,
-                    targetMetres = geometryMetres,
-                    fallback = route.origin,
-                ),
-                bearingDiffDegrees = RouteGeometryMath.bearingDiffAt(
-                    geometry = route.geometry,
-                    cumulativeMetres = cumulativeMetres,
-                    targetMetres = geometryMetres,
-                ),
-                nearestIntersection = nearestIntersection(intersectionAnchors, geometryMetres),
-            )
-            buildEvent(
                 guidancePoint = guidancePoint,
-                context = context,
+                lastIndex = lastIndex,
                 route = route,
                 cumulativeMetres = cumulativeMetres,
+                totalGeometryMetres = totalGeometryMetres,
+                distanceMapper = distanceMapper,
+                intersectionAnchors = intersectionAnchors,
             )
         }
         return events.toImmutableList()
+    }
+
+    /** 1 GP 分の位置を計算して [GuidanceEvent] を構築する (意味が無ければ null)。 */
+    private fun buildEventAt(
+        guidancePointIndex: Int,
+        guidancePoint: ExtNavGuidancePoint,
+        lastIndex: Int,
+        route: RouteDetail,
+        cumulativeMetres: DoubleArray,
+        totalGeometryMetres: Double,
+        distanceMapper: RouteDistanceMapper,
+        intersectionAnchors: List<IntersectionAnchor>,
+    ): GuidanceEvent? {
+        val context = buildEventContext(
+            guidancePointIndex = guidancePointIndex,
+            guidancePoint = guidancePoint,
+            lastIndex = lastIndex,
+            route = route,
+            cumulativeMetres = cumulativeMetres,
+            totalGeometryMetres = totalGeometryMetres,
+            distanceMapper = distanceMapper,
+            intersectionAnchors = intersectionAnchors,
+        )
+        return buildEvent(
+            guidancePoint = guidancePoint,
+            context = context,
+            route = route,
+            cumulativeMetres = cumulativeMetres,
+        )
+    }
+
+    /** GP の geometry 距離・座標・方位差・近傍 intersection をまとめた [EventContext] を作る。 */
+    private fun buildEventContext(
+        guidancePointIndex: Int,
+        guidancePoint: ExtNavGuidancePoint,
+        lastIndex: Int,
+        route: RouteDetail,
+        cumulativeMetres: DoubleArray,
+        totalGeometryMetres: Double,
+        distanceMapper: RouteDistanceMapper,
+        intersectionAnchors: List<IntersectionAnchor>,
+    ): EventContext {
+        val sourceDistanceMetres = guidancePoint.distanceFromStartMetres.toDouble()
+        val mappedMetres = distanceMapper.mapSourceToGeometry(sourceDistanceMetres)
+        val geometryMetres = mappedMetres.coerceIn(0.0, totalGeometryMetres)
+        val location = RouteGeometryMath.pointAt(
+            geometry = route.geometry,
+            cumulativeMetres = cumulativeMetres,
+            targetMetres = geometryMetres,
+            fallback = route.origin,
+        )
+        val bearingDiffDegrees = RouteGeometryMath.bearingDiffAt(
+            geometry = route.geometry,
+            cumulativeMetres = cumulativeMetres,
+            targetMetres = geometryMetres,
+        )
+        return EventContext(
+            guidancePointIndex = guidancePointIndex,
+            isLastGuidancePoint = guidancePointIndex == lastIndex,
+            sourceDistanceMetres = sourceDistanceMetres,
+            geometryMetres = geometryMetres,
+            location = location,
+            bearingDiffDegrees = bearingDiffDegrees,
+            nearestIntersection = nearestIntersection(intersectionAnchors, geometryMetres),
+        )
     }
 
     /**
@@ -214,10 +261,7 @@ internal class GuidanceRouteMapper {
         val lane = guidancePoint.maneuver?.laneInfo?.toGuidanceLane(sourceRefs = laneSourceRefs)
         val notices = buildNotices(categories)
 
-        val hasContent = primary != null ||
-            lane != null ||
-            facility != null ||
-            notices.isNotEmpty()
+        val hasContent = primary != null || lane != null || facility != null || notices.isNotEmpty()
         if (!hasContent) return null
 
         val anchor = RouteAnchor(
@@ -273,13 +317,15 @@ internal class GuidanceRouteMapper {
     private fun ExtNavGuidancePoint.buildSourceRefs(
         guidancePointIndex: Int,
     ): ImmutableList<SourceRef> {
-        val refs = announcementBlocks.flatMap { block ->
-            block.pieces.mapIndexed { pieceIndex, _ ->
-                SourceRef(
+        val refs = mutableListOf<SourceRef>()
+        for (block in announcementBlocks) {
+            for (pieceIndex in block.pieces.indices) {
+                val ref = SourceRef(
                     guidancePointIndex = guidancePointIndex,
                     blockId = block.id,
                     pieceIndex = pieceIndex,
                 )
+                refs += ref
             }
         }
         if (refs.isNotEmpty()) return refs.toImmutableList()
@@ -350,9 +396,9 @@ internal class GuidanceRouteMapper {
         guidancePoint: ExtNavGuidancePoint,
         context: EventContext,
     ): StepFacility? {
-        val rawKind = guidancePoint.maneuver?.facilityHint?.kind
-            ?: context.nearestIntersection?.intersection?.facilityHint?.kind
-            ?: return null
+        val guidancePointFacilityKind = guidancePoint.maneuver?.facilityHint?.kind
+        val intersectionFacilityKind = context.nearestIntersection?.intersection?.facilityHint?.kind
+        val rawKind = guidancePointFacilityKind ?: intersectionFacilityKind ?: return null
         val facilityKind = rawKind.toFacilityKind() ?: return null
         val name = context.nearestIntersection?.intersection?.name.orEmpty()
         val refinedKind = facilityKind.refinedByName(name)
@@ -380,19 +426,22 @@ internal class GuidanceRouteMapper {
     /** 近傍 intersection の道路名から [StepRoadName] を作る。名前が無ければ null。 */
     private fun buildRoadName(nearestIntersection: IntersectionAnchor?): StepRoadName? {
         val intersection = nearestIntersection?.intersection ?: return null
-        val roadName = intersection.roadName.trim().takeIf { text -> text.isNotEmpty() }
-            ?: intersection.roadNameOfficial.trim().takeIf { text -> text.isNotEmpty() }
-            ?: return null
+        val primaryRoadName = intersection.roadName.trim().takeIf { text -> text.isNotEmpty() }
+        val officialRoadName = intersection.roadNameOfficial.trim().takeIf { text -> text.isNotEmpty() }
+        val roadName = primaryRoadName ?: officialRoadName ?: return null
         return StepRoadName(text = roadName)
     }
 
     /** GP の category 群を裾の通知 ([GuidanceNotice]) に変換する。 */
     private fun buildNotices(categories: List<GuidanceCategory>): ImmutableList<GuidanceNotice> {
-        val notices = categories.mapNotNull { category ->
-            val kind = NOTICE_KIND_BY_CATEGORY[category] ?: return@mapNotNull null
-            GuidanceNotice(kind = kind, text = null)
-        }
+        val notices = categories.mapNotNull { category -> category.toNoticeOrNull() }
         return notices.distinct().toImmutableList()
+    }
+
+    /** category を通知に変換する。通知対象でなければ null。 */
+    private fun GuidanceCategory.toNoticeOrNull(): GuidanceNotice? {
+        val kind = NOTICE_KIND_BY_CATEGORY[this] ?: return null
+        return GuidanceNotice(kind = kind, text = null)
     }
 
     /**

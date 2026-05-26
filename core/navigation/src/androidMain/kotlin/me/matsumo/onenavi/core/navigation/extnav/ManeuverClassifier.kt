@@ -55,6 +55,12 @@ internal object ManeuverClassifier {
     /** TBT の対象にする phrase category。 */
     val MANEUVER_CATEGORIES: Set<GuidanceCategory> = ROUTE_DECISION_CATEGORIES
 
+    /** 主案内の手掛かりにならない (意味の薄い) phrase category。 */
+    private val NON_MEANINGFUL_CATEGORIES: Set<GuidanceCategory> = setOf(
+        GuidanceCategory.Unspecified,
+        GuidanceCategory.RoadName,
+    )
+
     /**
      * phrase category と方位差から maneuver 種別を推定する。
      *
@@ -73,9 +79,9 @@ internal object ManeuverClassifier {
         if (categories.any { category -> category in FORK_CATEGORIES }) return ManeuverType.FORK
         if (categories.any { category -> category == GuidanceCategory.RoadName }) return ManeuverType.NAME_CHANGE
 
-        val isTurn = abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES ||
-            categories.any { category -> category in TURN_CATEGORIES }
-        if (isTurn) return ManeuverType.TURN
+        val isSharpTurn = abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES
+        val hasTurnCategory = categories.any { category -> category in TURN_CATEGORIES }
+        if (isSharpTurn || hasTurnCategory) return ManeuverType.TURN
 
         return ManeuverType.CONTINUE
     }
@@ -122,8 +128,9 @@ internal object ManeuverClassifier {
     ): Boolean {
         if (isLastGuidancePoint) return true
 
-        val isMergeAlert = categories.any { category -> category in MERGE_CATEGORIES } &&
-            categories.none { category -> category in ROUTE_DECISION_CATEGORIES }
+        val hasMergeCategory = categories.any { category -> category in MERGE_CATEGORIES }
+        val hasRouteDecisionCategory = categories.any { category -> category in ROUTE_DECISION_CATEGORIES }
+        val isMergeAlert = hasMergeCategory && !hasRouteDecisionCategory
         if (isPanelOnlyFacility) return false
         if (isMergeAlert) return false
         if (hasFacility && !hasRouteDecisionDirection) return false
@@ -131,11 +138,9 @@ internal object ManeuverClassifier {
         val hasManeuverCategory = categories.any { category -> category in MANEUVER_CATEGORIES }
         if (hasManeuverCategory) return true
 
-        val hasMeaningfulPhrase = categories.any { category ->
-            category != GuidanceCategory.Unspecified &&
-                category != GuidanceCategory.RoadName
-        }
-        return hasMeaningfulPhrase && abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES
+        val hasMeaningfulPhrase = categories.any { category -> category !in NON_MEANINGFUL_CATEGORIES }
+        val isSharpTurn = abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES
+        return hasMeaningfulPhrase && isSharpTurn
     }
 
     /**
