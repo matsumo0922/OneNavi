@@ -29,13 +29,10 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RecommendedLanesPane
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.model.TollPanelSubtitle
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlin.math.sin
-import kotlin.math.sqrt
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind as ExtNavGuidanceFacilityKind
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint as ExtNavGuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection as ExtNavIntersection
@@ -241,16 +238,8 @@ class ExtNavGuidanceTracker {
      * @param geometry route polyline
      * @return geometry index と同じ順序の累積距離配列
      */
-    private fun buildCumulativeGeometryMetres(geometry: List<RoutePoint>): DoubleArray {
-        if (geometry.isEmpty()) return DoubleArray(0)
-
-        val cumulativeMetres = DoubleArray(geometry.size)
-        for (index in 1 until geometry.size) {
-            cumulativeMetres[index] = cumulativeMetres[index - 1] +
-                haversineMetres(geometry[index - 1], geometry[index])
-        }
-        return cumulativeMetres
-    }
+    private fun buildCumulativeGeometryMetres(geometry: List<RoutePoint>): DoubleArray =
+        RouteGeometryMath.cumulativeMetres(geometry)
 
     /**
      * intersection の座標を最寄り geometry 点に snap し、距離 anchor として保持する。
@@ -1107,10 +1096,7 @@ class ExtNavGuidanceTracker {
         start: RoutePoint,
         end: RoutePoint,
         ratio: Double,
-    ): RoutePoint = RoutePoint(
-        latitude = start.latitude + (end.latitude - start.latitude) * ratio,
-        longitude = start.longitude + (end.longitude - start.longitude) * ratio,
-    )
+    ): RoutePoint = RouteGeometryMath.interpolateRoutePoint(start, end, ratio)
 
     // ---------------------------------------------------------------------
     // Off-route / maneuver classification
@@ -1732,17 +1718,11 @@ class ExtNavGuidanceTracker {
         route: RouteDetail,
         cumulativeMetres: DoubleArray,
         targetMetres: Double,
-    ): Float {
-        if (route.geometry.size < 3 || cumulativeMetres.size < 3) return 0f
-
-        val segmentIndex = segmentIndexAt(cumulativeMetres, targetMetres)
-        val beforeIndex = (segmentIndex - 1).coerceAtLeast(0)
-        val afterIndex = (segmentIndex + 1).coerceAtMost(route.geometry.lastIndex - 1)
-        val beforeBearing = bearingDegrees(route.geometry[beforeIndex], route.geometry[beforeIndex + 1])
-        val afterBearing = bearingDegrees(route.geometry[afterIndex], route.geometry[afterIndex + 1])
-
-        return normalizeDegrees(afterBearing - beforeBearing)
-    }
+    ): Float = RouteGeometryMath.bearingDiffAt(
+        geometry = route.geometry,
+        cumulativeMetres = cumulativeMetres,
+        targetMetres = targetMetres,
+    )
 
     /**
      * route geometry 上の累積距離から座標を補間する。
@@ -1756,31 +1736,12 @@ class ExtNavGuidanceTracker {
         route: RouteDetail,
         cumulativeMetres: DoubleArray,
         targetMetres: Double,
-    ): RoutePoint {
-        val geometry = route.geometry
-        if (geometry.isEmpty()) return route.origin
-        if (geometry.size == 1 || cumulativeMetres.size <= 1) return geometry.first()
-
-        val coercedTargetMetres = targetMetres.coerceIn(0.0, cumulativeMetres.last())
-        val segmentIndex = segmentIndexAt(
-            cumulativeMetres = cumulativeMetres,
-            targetMetres = coercedTargetMetres,
-        ).coerceIn(0, geometry.lastIndex - 1)
-        val segmentStartMetres = cumulativeMetres[segmentIndex]
-        val segmentEndMetres = cumulativeMetres[segmentIndex + 1]
-        val segmentMetres = segmentEndMetres - segmentStartMetres
-        val ratio = if (segmentMetres > 0.0) {
-            ((coercedTargetMetres - segmentStartMetres) / segmentMetres).coerceIn(0.0, 1.0)
-        } else {
-            0.0
-        }
-
-        return interpolateRoutePoint(
-            start = geometry[segmentIndex],
-            end = geometry[segmentIndex + 1],
-            ratio = ratio,
-        )
-    }
+    ): RoutePoint = RouteGeometryMath.pointAt(
+        geometry = route.geometry,
+        cumulativeMetres = cumulativeMetres,
+        targetMetres = targetMetres,
+        fallback = route.origin,
+    )
 
     // ---------------------------------------------------------------------
     // Small math helpers
@@ -1796,25 +1757,7 @@ class ExtNavGuidanceTracker {
     private fun segmentIndexAt(
         cumulativeMetres: DoubleArray,
         targetMetres: Double,
-    ): Int {
-        if (cumulativeMetres.size <= 1) return 0
-        if (targetMetres <= 0.0) return 0
-        if (targetMetres >= cumulativeMetres.last()) return cumulativeMetres.lastIndex - 1
-
-        var lowIndex = 1
-        var highIndex = cumulativeMetres.lastIndex
-
-        while (lowIndex < highIndex) {
-            val middleIndex = (lowIndex + highIndex) / 2
-            if (cumulativeMetres[middleIndex] < targetMetres) {
-                lowIndex = middleIndex + 1
-            } else {
-                highIndex = middleIndex
-            }
-        }
-
-        return (lowIndex - 1).coerceIn(0, cumulativeMetres.lastIndex - 1)
-    }
+    ): Int = RouteGeometryMath.segmentIndexAt(cumulativeMetres, targetMetres)
 
     /**
      * value より先にある最初の maneuver event index を二分探索で返す。
@@ -1871,15 +1814,8 @@ class ExtNavGuidanceTracker {
      * @param to 終点
      * @return 2 点間距離メートル
      */
-    private fun haversineMetres(from: RoutePoint, to: RoutePoint): Double {
-        val fromLatRadians = latitudeRadians(from)
-        val toLatRadians = latitudeRadians(to)
-        val deltaLatRadians = Math.toRadians(to.latitude - from.latitude)
-        val deltaLngRadians = Math.toRadians(to.longitude - from.longitude)
-        val haversineTerm = sin(deltaLatRadians / 2.0) * sin(deltaLatRadians / 2.0) +
-            cos(fromLatRadians) * cos(toLatRadians) * sin(deltaLngRadians / 2.0) * sin(deltaLngRadians / 2.0)
-        return EARTH_RADIUS_METRES * 2.0 * atan2(sqrt(haversineTerm), sqrt(1.0 - haversineTerm))
-    }
+    private fun haversineMetres(from: RoutePoint, to: RoutePoint): Double =
+        RouteGeometryMath.haversineMetres(from, to)
 
     /**
      * 2 点を結ぶ進行方位を計算する。
@@ -1888,23 +1824,8 @@ class ExtNavGuidanceTracker {
      * @param to 終点
      * @return 0 度以上 360 度未満の方位角
      */
-    private fun bearingDegrees(from: RoutePoint, to: RoutePoint): Float {
-        val fromLatRadians = latitudeRadians(from)
-        val toLatRadians = latitudeRadians(to)
-        val deltaLngRadians = Math.toRadians(to.longitude - from.longitude)
-        val y = sin(deltaLngRadians) * cos(toLatRadians)
-        val x = cos(fromLatRadians) * sin(toLatRadians) -
-            sin(fromLatRadians) * cos(toLatRadians) * cos(deltaLngRadians)
-        return ((Math.toDegrees(atan2(y, x)) + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES).toFloat()
-    }
-
-    /**
-     * route point の緯度をラジアンへ変換する。
-     *
-     * @param point 変換対象 point
-     * @return 緯度ラジアン
-     */
-    private fun latitudeRadians(point: RoutePoint): Double = Math.toRadians(point.latitude)
+    private fun bearingDegrees(from: RoutePoint, to: RoutePoint): Float =
+        RouteGeometryMath.bearingDegrees(from, to)
 
     /**
      * 方位差を -180 度から 180 度の範囲へ正規化する。
@@ -1912,12 +1833,8 @@ class ExtNavGuidanceTracker {
      * @param degrees 正規化前の角度
      * @return 正規化後の角度
      */
-    private fun normalizeDegrees(degrees: Float): Float {
-        var normalized = degrees % FULL_CIRCLE_DEGREES
-        if (normalized > HALF_CIRCLE_DEGREES) normalized -= FULL_CIRCLE_DEGREES
-        if (normalized < -HALF_CIRCLE_DEGREES) normalized += FULL_CIRCLE_DEGREES
-        return normalized
-    }
+    private fun normalizeDegrees(degrees: Float): Float =
+        RouteGeometryMath.normalizeDegrees(degrees)
 
     /**
      * attach 中の route で tick 時に再利用する事前計算済みデータ。
@@ -2106,17 +2023,8 @@ class ExtNavGuidanceTracker {
 
     /** Tracker 内の数値閾値と category 分類定義。 */
     private companion object {
-        /** haversine 距離計算で使う地球半径メートル。 */
-        private const val EARTH_RADIUS_METRES: Double = 6_371_000.0
-
         /** 緯度 1 度をメートルへ近似変換する係数。 */
         private const val METRES_PER_DEGREE: Double = 111_320.0
-
-        /** 方位角の 1 周分の度数。 */
-        private const val FULL_CIRCLE_DEGREES: Float = 360f
-
-        /** 方位差を正規化するときの半周分の度数。 */
-        private const val HALF_CIRCLE_DEGREES: Float = 180f
 
         /** 秒からミリ秒へ変換する係数。 */
         private const val MILLIS_PER_SECOND: Long = 1_000L
