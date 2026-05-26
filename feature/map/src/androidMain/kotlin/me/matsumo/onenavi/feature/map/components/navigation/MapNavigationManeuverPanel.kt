@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +68,7 @@ internal fun MapNavigationManeuverPanel(
     val hourLabel = stringResource(Res.string.common_unit_hour)
     val minuteLabel = stringResource(Res.string.common_unit_minute)
     val followupLabel = stringResource(Res.string.home_map_navigation_followup)
-    var showPanel by remember { mutableStateOf(false) }
+    var showPanel by rememberSaveable { mutableStateOf(false) }
 
     val hasPanelItems = progress.panelItems.isNotEmpty()
     val hasLanes = laneGuidance != null
