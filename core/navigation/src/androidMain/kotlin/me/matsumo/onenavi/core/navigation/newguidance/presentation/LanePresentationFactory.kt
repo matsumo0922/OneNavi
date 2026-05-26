@@ -35,6 +35,9 @@ internal class LanePresentationFactory {
     /**
      * レーンを表示用 [LanePresentation] へ変換する。描画対象が無ければ null。
      *
+     * 現状は marker 由来の視覚レーンのみを生成する。テキスト由来 (側 + 本数) のレーンは
+     * 発話テキスト解析経路 (別タスク) で実データが入るまで生成しない。
+     *
      * @param lane semantic レーン情報
      * @param recommendedDirection 推奨車線に付ける進行方向 (geometry の方位差由来)
      * @return 表示用レーン。描画対象が無い場合は null
@@ -42,10 +45,9 @@ internal class LanePresentationFactory {
     fun create(
         lane: GuidanceLane,
         recommendedDirection: ManeuverModifier,
-    ): LanePresentation? = when (val layout = lane.layout) {
-        is LaneLayout.MarkerLayout -> markerPresentation(layout = layout, recommendedDirection = recommendedDirection)
-        is LaneLayout.SideCount -> LanePresentation.SideInstructionText(side = layout.side, laneCount = layout.laneCount)
-        null -> null
+    ): LanePresentation? {
+        val layout = lane.layout as? LaneLayout.MarkerLayout ?: return null
+        return markerPresentation(layout = layout, recommendedDirection = recommendedDirection)
     }
 
     /**

@@ -35,10 +35,13 @@ import dev.chrisbanes.haze.HazeState
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.model.RoadClass
-import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceManeuverInfo
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
-import me.matsumo.onenavi.core.navigation.newguidance.model.Lane
-import me.matsumo.onenavi.core.navigation.newguidance.model.LaneGuidance
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.BannerSupport
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListItem
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.LaneCell
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.LanePresentation
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.ManeuverBanner
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.ManeuverCallout
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_day
 import me.matsumo.onenavi.core.resource.common_unit_hour
@@ -53,15 +56,12 @@ import kotlin.math.floor
 
 @Composable
 internal fun MapNavigationManeuverPanel(
+    banner: ManeuverBanner,
+    listItems: ImmutableList<GuidanceListItem>,
     progress: GuidanceProgress,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
-    val currentManeuver = progress.nextManeuver ?: return
-    val nextManeuver = progress.followupManeuver
-    val laneGuidance = progress.lanes.firstOrNull { laneGuidance ->
-        laneGuidance.lanes.isNotEmpty()
-    }
     val meterLabel = stringResource(Res.string.common_unit_meter)
     val kilometerLabel = stringResource(Res.string.common_unit_kilometer)
     val dayLabel = stringResource(Res.string.common_unit_day)
@@ -70,9 +70,10 @@ internal fun MapNavigationManeuverPanel(
     val followupLabel = stringResource(Res.string.home_map_navigation_followup)
     var showPanel by rememberSaveable { mutableStateOf(false) }
 
-    val hasPanelItems = progress.panelItems.isNotEmpty()
-    val hasLanes = laneGuidance != null
-    val hasHint = !hasLanes && nextManeuver != null
+    val laneCells = bannerLaneCells(banner.support)
+    val followupCallout = bannerFollowupCallout(banner.support)
+    val hasLanes = laneCells != null
+    val hasHint = followupCallout != null
     val topShape = when {
         hasLanes -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
         hasHint -> RoundedCornerShape(
@@ -89,10 +90,10 @@ internal fun MapNavigationManeuverPanel(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        if (hasPanelItems && showPanel) {
+        if (banner.hasMoreEvents && showPanel) {
             MapNavigationManeuverPanelSection(
                 modifier = Modifier.fillMaxWidth(),
-                panelItems = progress.panelItems,
+                listItems = listItems,
                 hazeState = hazeState,
                 meterLabel = meterLabel,
                 kilometerLabel = kilometerLabel,
@@ -100,13 +101,14 @@ internal fun MapNavigationManeuverPanel(
                 hourLabel = hourLabel,
                 minuteLabel = minuteLabel,
                 timestampMillis = progress.locationTimestampMillis,
+                elapsedSeconds = progress.elapsedSeconds,
+                traveledMeters = progress.traveledMeters,
                 onDismissPanelClicked = { showPanel = false },
             )
         } else {
             MapNavigationManeuverTopSection(
                 modifier = Modifier.fillMaxWidth(),
-                progress = progress,
-                maneuver = currentManeuver,
+                banner = banner,
                 meterLabel = meterLabel,
                 kilometerLabel = kilometerLabel,
                 showPanelItems = showPanel,
@@ -116,19 +118,35 @@ internal fun MapNavigationManeuverPanel(
 
             MapNavigationManeuverBottomSection(
                 modifier = Modifier.fillMaxWidth(),
-                laneGuidance = laneGuidance,
-                nextManeuver = nextManeuver,
+                laneCells = laneCells,
+                followupCallout = followupCallout,
                 followupLabel = followupLabel,
-                currentRoadClass = progress.currentRoadClass,
+                roadClass = banner.roadClass,
             )
         }
     }
 }
 
+/**
+ * バナー下段に視覚レーンがあればそのレーンセルを返す。レーン以外の補助なら null。
+ */
+private fun bannerLaneCells(support: BannerSupport?): ImmutableList<LaneCell>? {
+    val laneSupport = support as? BannerSupport.Lanes ?: return null
+    val visualLanes = laneSupport.lane as? LanePresentation.VisualLanes ?: return null
+    return visualLanes.lanes
+}
+
+/**
+ * バナー下段がフォローアップ案内ならその主案内を返す。それ以外は null。
+ */
+private fun bannerFollowupCallout(support: BannerSupport?): ManeuverCallout? {
+    val followupSupport = support as? BannerSupport.Followup ?: return null
+    return followupSupport.maneuver
+}
+
 @Composable
 private fun MapNavigationManeuverTopSection(
-    progress: GuidanceProgress,
-    maneuver: GuidanceManeuverInfo,
+    banner: ManeuverBanner,
     meterLabel: String,
     kilometerLabel: String,
     showPanelItems: Boolean,
@@ -136,6 +154,8 @@ private fun MapNavigationManeuverTopSection(
     onShowPanelItemsClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val maneuver = banner.primary
+    val guidanceLabel = banner.secondaryLabel
     val distanceText = remember(maneuver.distanceToManeuverMeters, meterLabel, kilometerLabel) {
         formatGuidanceDistance(
             meters = maneuver.distanceToManeuverMeters.toDouble(),
@@ -143,19 +163,7 @@ private fun MapNavigationManeuverTopSection(
             kilometerLabel = kilometerLabel,
         )
     }
-    val guidanceLabel = remember(
-        progress.directionSign,
-        progress.currentRoadName,
-        maneuver.exitNumber,
-        maneuver.intersectionName,
-    ) {
-        maneuver.intersectionName
-            ?.takeIf { intersectionName -> intersectionName.isNotBlank() }
-            ?: progress.directionSign?.primary?.takeIf { primary -> primary.isNotBlank() }
-            ?: progress.currentRoadName?.takeIf { roadName -> roadName.isNotBlank() }
-            ?: maneuver.exitNumber?.takeIf { exitNumber -> exitNumber.isNotBlank() }
-    }
-    val panelColors = RouteColors.accent(progress.currentRoadClass)
+    val panelColors = RouteColors.accent(banner.roadClass)
     val contentColor = panelColors.onPrimary
 
     Surface(
@@ -201,7 +209,7 @@ private fun MapNavigationManeuverTopSection(
                 }
             }
 
-            if (progress.panelItems.isNotEmpty()) {
+            if (banner.hasMoreEvents) {
                 IconButton(onShowPanelItemsClicked) {
                     Icon(
                         imageVector = if (showPanelItems) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
@@ -216,15 +224,15 @@ private fun MapNavigationManeuverTopSection(
 
 @Composable
 private fun MapNavigationManeuverBottomSection(
-    laneGuidance: LaneGuidance?,
-    nextManeuver: GuidanceManeuverInfo?,
+    laneCells: ImmutableList<LaneCell>?,
+    followupCallout: ManeuverCallout?,
     followupLabel: String,
-    currentRoadClass: RoadClass,
+    roadClass: RoadClass,
     modifier: Modifier = Modifier,
 ) {
     when {
-        laneGuidance != null -> {
-            val panelColors = RouteColors.accent(currentRoadClass)
+        laneCells != null -> {
+            val panelColors = RouteColors.accent(roadClass)
             Surface(
                 modifier = modifier,
                 shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
@@ -234,15 +242,15 @@ private fun MapNavigationManeuverBottomSection(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 10.dp),
-                    lanes = laneGuidance.lanes,
+                    lanes = laneCells,
                     activeTint = panelColors.onPrimary,
                     inactiveTint = panelColors.onPrimary.copy(alpha = SecondaryContentAlpha),
                 )
             }
         }
 
-        nextManeuver != null -> {
-            val panelColors = RouteColors.accent(currentRoadClass)
+        followupCallout != null -> {
+            val panelColors = RouteColors.accent(roadClass)
             Surface(
                 modifier = modifier.wrapContentWidth(Alignment.Start),
                 shape = RoundedCornerShape(
@@ -255,7 +263,7 @@ private fun MapNavigationManeuverBottomSection(
             ) {
                 MapNavigationManeuverFollowupHint(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    maneuver = nextManeuver,
+                    maneuver = followupCallout,
                     label = followupLabel,
                     contentColor = panelColors.onPrimary,
                 )
@@ -266,7 +274,7 @@ private fun MapNavigationManeuverBottomSection(
 
 @Composable
 private fun MapNavigationManeuverLaneRow(
-    lanes: ImmutableList<Lane>,
+    lanes: ImmutableList<LaneCell>,
     activeTint: Color,
     inactiveTint: Color,
     modifier: Modifier = Modifier,
@@ -284,7 +292,7 @@ private fun MapNavigationManeuverLaneRow(
 
 @Composable
 private fun MapNavigationManeuverFollowupHint(
-    maneuver: GuidanceManeuverInfo,
+    maneuver: ManeuverCallout,
     label: String,
     contentColor: Color,
     modifier: Modifier = Modifier,
@@ -310,7 +318,7 @@ private fun MapNavigationManeuverFollowupHint(
 
 @Composable
 private fun MapNavigationManeuverTurnIcon(
-    maneuver: GuidanceManeuverInfo,
+    maneuver: ManeuverCallout,
     tint: Color,
     modifier: Modifier = Modifier,
 ) {

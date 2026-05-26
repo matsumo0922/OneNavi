@@ -49,16 +49,12 @@ import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.common.formatYen
 import me.matsumo.onenavi.core.model.RoadClass
-import me.matsumo.onenavi.core.navigation.newguidance.model.EntrancePanelSubtitle
-import me.matsumo.onenavi.core.navigation.newguidance.model.ExitPanelSubtitle
-import me.matsumo.onenavi.core.navigation.newguidance.model.FacilityPanelItem
-import me.matsumo.onenavi.core.navigation.newguidance.model.GuidancePanelFacility
-import me.matsumo.onenavi.core.navigation.newguidance.model.GuidancePanelItem
-import me.matsumo.onenavi.core.navigation.newguidance.model.GuidancePanelSubtitle
-import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceTextPanelSubtitle
-import me.matsumo.onenavi.core.navigation.newguidance.model.ManeuverPanelItem
-import me.matsumo.onenavi.core.navigation.newguidance.model.RecommendedLanesPanelSubtitle
-import me.matsumo.onenavi.core.navigation.newguidance.model.TollPanelSubtitle
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListDetail
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListIcon
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListItem
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.LanePresentation
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.HighwayBoundary
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_direction_sign
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_entrance
@@ -82,7 +78,7 @@ import org.jetbrains.compose.resources.stringResource
 @Suppress("UnusedParameter")
 @Composable
 internal fun MapNavigationManeuverPanelSection(
-    panelItems: ImmutableList<GuidancePanelItem>,
+    listItems: ImmutableList<GuidanceListItem>,
     hazeState: HazeState,
     meterLabel: String,
     kilometerLabel: String,
@@ -90,6 +86,8 @@ internal fun MapNavigationManeuverPanelSection(
     hourLabel: String,
     minuteLabel: String,
     timestampMillis: Long,
+    elapsedSeconds: Int,
+    traveledMeters: Int,
     onDismissPanelClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -119,7 +117,7 @@ internal fun MapNavigationManeuverPanelSection(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 itemsIndexed(
-                    items = panelItems,
+                    items = listItems,
                     key = { _, item -> item.id },
                 ) { index, item ->
                     MapNavigationGuidancePanelRow(
@@ -131,14 +129,21 @@ internal fun MapNavigationManeuverPanelSection(
                         hourLabel = hourLabel,
                         minuteLabel = minuteLabel,
                         timestampMillis = timestampMillis,
-                        isPrimary = index == panelItems.lastIndex,
+                        isPrimary = index == listItems.lastIndex,
                     )
                 }
 
                 item(key = "footer") {
                     MapNavigationGuidancePanelFooter(
                         modifier = Modifier.fillMaxWidth(),
-                        item = panelItems.last(),
+                        roadClass = listItems.last().roadClass,
+                        elapsedSeconds = elapsedSeconds,
+                        traveledMeters = traveledMeters,
+                        meterLabel = meterLabel,
+                        kilometerLabel = kilometerLabel,
+                        dayLabel = dayLabel,
+                        hourLabel = hourLabel,
+                        minuteLabel = minuteLabel,
                     )
                 }
             }
@@ -187,10 +192,32 @@ private fun MapNavigationGuidancePanelHeader(
 
 @Composable
 private fun MapNavigationGuidancePanelFooter(
-    item: GuidancePanelItem,
+    roadClass: RoadClass,
+    elapsedSeconds: Int,
+    traveledMeters: Int,
+    meterLabel: String,
+    kilometerLabel: String,
+    dayLabel: String,
+    hourLabel: String,
+    minuteLabel: String,
     modifier: Modifier = Modifier,
 ) {
-    val panelColors = RouteColors.accent(item.roadClass())
+    val panelColors = RouteColors.accent(roadClass)
+    val elapsedText = remember(elapsedSeconds, dayLabel, hourLabel, minuteLabel) {
+        formatDuration(
+            totalSeconds = elapsedSeconds.toDouble(),
+            dayLabel = dayLabel,
+            hourLabel = hourLabel,
+            minuteLabel = minuteLabel,
+        )
+    }
+    val traveledText = remember(traveledMeters, meterLabel, kilometerLabel) {
+        formatDistance(
+            meters = traveledMeters.toDouble(),
+            meterLabel = meterLabel,
+            kilometerLabel = kilometerLabel,
+        )
+    }
 
     Column(
         modifier = modifier.padding(bottom = 16.dp),
@@ -260,7 +287,7 @@ private fun MapNavigationGuidancePanelFooter(
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Text(
-                    text = "12分", // TODO: 経過時間
+                    text = elapsedText,
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
@@ -268,7 +295,7 @@ private fun MapNavigationGuidancePanelFooter(
                 )
 
                 Text(
-                    text = "12.3 km", // TODO: 走行距離
+                    text = traveledText,
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
@@ -280,7 +307,7 @@ private fun MapNavigationGuidancePanelFooter(
 
 @Composable
 private fun MapNavigationGuidancePanelRow(
-    item: GuidancePanelItem,
+    item: GuidanceListItem,
     meterLabel: String,
     kilometerLabel: String,
     dayLabel: String,
@@ -290,9 +317,9 @@ private fun MapNavigationGuidancePanelRow(
     isPrimary: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val distanceText = remember(item.distanceToItemMeters, meterLabel, kilometerLabel) {
+    val distanceText = remember(item.distanceMeters, meterLabel, kilometerLabel) {
         formatPanelDistance(
-            meters = item.distanceToItemMeters.toDouble(),
+            meters = item.distanceMeters.toDouble(),
             meterLabel = meterLabel,
             kilometerLabel = kilometerLabel,
         )
@@ -307,8 +334,8 @@ private fun MapNavigationGuidancePanelRow(
         )
     }
     val title = item.panelTitle()
-    val subtitle = item.subtitle
-    val panelColors = RouteColors.accent(item.roadClass())
+    val detail = item.detail
+    val panelColors = RouteColors.accent(item.roadClass)
 
     Box(
         modifier = modifier.heightIn(min = GuidancePanelRowMinHeight),
@@ -374,7 +401,7 @@ private fun MapNavigationGuidancePanelRow(
 
                 MapNavigationGuidancePanelIcon(
                     modifier = Modifier.size(40.dp),
-                    item = item,
+                    icon = item.icon,
                     tint = MaterialTheme.colorScheme.onSurface,
                 )
 
@@ -391,9 +418,9 @@ private fun MapNavigationGuidancePanelRow(
                         overflow = TextOverflow.Ellipsis,
                     )
 
-                    if (subtitle != null) {
-                        MapNavigationGuidancePanelSubtitle(
-                            subtitle = subtitle,
+                    if (detail != null) {
+                        MapNavigationGuidancePanelDetail(
+                            detail = detail,
                             contentColor = MaterialTheme.colorScheme.onSurface,
                             secondaryContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -428,63 +455,80 @@ private fun MapNavigationGuidancePanelRow(
 }
 
 @Composable
-private fun MapNavigationGuidancePanelSubtitle(
-    subtitle: GuidancePanelSubtitle,
+private fun MapNavigationGuidancePanelDetail(
+    detail: GuidanceListDetail,
     contentColor: Color,
     secondaryContentColor: Color,
     modifier: Modifier = Modifier,
 ) {
-    when (subtitle) {
-        is GuidanceTextPanelSubtitle -> Text(
+    when (detail) {
+        is GuidanceListDetail.Signpost -> Text(
             modifier = modifier,
-            text = stringResource(Res.string.home_map_navigation_panel_direction_sign, subtitle.text),
+            text = stringResource(Res.string.home_map_navigation_panel_direction_sign, detail.text),
             color = secondaryContentColor,
             style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
 
-        is TollPanelSubtitle -> Text(
+        is GuidanceListDetail.Toll -> Text(
             modifier = modifier,
-            text = formatYen(subtitle.amountYen),
+            text = formatYen(detail.amountYen),
             color = secondaryContentColor,
             style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
 
-        EntrancePanelSubtitle -> Text(
+        is GuidanceListDetail.Boundary -> Text(
             modifier = modifier,
-            text = stringResource(Res.string.home_map_navigation_panel_entrance),
+            text = stringResource(detail.kind.boundaryLabel()),
             color = secondaryContentColor,
             style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
 
-        ExitPanelSubtitle -> Text(
+        is GuidanceListDetail.Warning -> Text(
             modifier = modifier,
-            text = stringResource(Res.string.home_map_navigation_panel_exit),
+            text = detail.text,
             color = secondaryContentColor,
             style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
 
-        is RecommendedLanesPanelSubtitle -> MapNavigationManeuverLaneIcons(
+        is GuidanceListDetail.Lanes -> MapNavigationGuidancePanelLaneDetail(
             modifier = modifier,
-            lanes = subtitle.lanes,
-            iconSize = GuidancePanelSubtitleLaneIconSize,
-            spacing = GuidancePanelSubtitleLaneSpacing,
-            activeTint = contentColor,
-            inactiveTint = secondaryContentColor,
+            lane = detail.lane,
+            contentColor = contentColor,
+            secondaryContentColor = secondaryContentColor,
         )
     }
 }
 
 @Composable
+private fun MapNavigationGuidancePanelLaneDetail(
+    lane: LanePresentation,
+    contentColor: Color,
+    secondaryContentColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    // テキスト由来のレーン (側 + 本数 / 警告文) は発話テキスト解析経路で対応する。現状は視覚レーンのみ描く。
+    val visualLanes = lane as? LanePresentation.VisualLanes ?: return
+    MapNavigationManeuverLaneIcons(
+        modifier = modifier,
+        lanes = visualLanes.lanes,
+        iconSize = GuidancePanelSubtitleLaneIconSize,
+        spacing = GuidancePanelSubtitleLaneSpacing,
+        activeTint = contentColor,
+        inactiveTint = secondaryContentColor,
+    )
+}
+
+@Composable
 private fun MapNavigationGuidancePanelIcon(
-    item: GuidancePanelItem,
+    icon: GuidanceListIcon,
     tint: Color,
     modifier: Modifier = Modifier,
 ) {
@@ -492,18 +536,18 @@ private fun MapNavigationGuidancePanelIcon(
         modifier = modifier,
         contentAlignment = Alignment.Center,
     ) {
-        when (item) {
-            is ManeuverPanelItem -> ManeuverIcon(
+        when (icon) {
+            is GuidanceListIcon.Maneuver -> ManeuverIcon(
                 modifier = Modifier.size(34.dp),
-                type = item.type,
-                maneuverModifier = item.modifier,
+                type = icon.type,
+                maneuverModifier = icon.modifier,
                 contentDescription = null,
                 tint = tint,
             )
 
-            is FacilityPanelItem -> MapNavigationFacilityBadge(
+            is GuidanceListIcon.FacilityBadge -> MapNavigationFacilityBadge(
                 modifier = Modifier.size(width = 38.dp, height = 28.dp),
-                facility = item.kind,
+                facility = icon.kind,
                 tint = tint,
             )
         }
@@ -512,7 +556,7 @@ private fun MapNavigationGuidancePanelIcon(
 
 @Composable
 private fun MapNavigationFacilityBadge(
-    facility: GuidancePanelFacility,
+    facility: FacilityKind,
     tint: Color,
     modifier: Modifier = Modifier,
 ) {
@@ -527,7 +571,7 @@ private fun MapNavigationFacilityBadge(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = facility.badgeText(),
+                text = stringResource(facility.badgeLabel()),
                 color = tint,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
@@ -567,41 +611,24 @@ private fun panelDurationText(
 }
 
 @Composable
-private fun GuidancePanelItem.panelTitle(): String {
+private fun GuidanceListItem.panelTitle(): String {
     val fallbackTitle = stringResource(Res.string.home_map_navigation_panel_guidance_point)
-    return when (this) {
-        is ManeuverPanelItem -> {
-            val title = intersectionName?.takeIf { name -> name.isNotBlank() }
-            val exitNumberTitle = exitNumber?.takeIf { number -> number.isNotBlank() }
-            title ?: exitNumberTitle ?: fallbackTitle
-        }
-
-        is FacilityPanelItem ->
-            name.takeIf { value -> value.isNotBlank() } ?: fallbackTitle
-    }
+    return title?.takeIf { value -> value.isNotBlank() } ?: fallbackTitle
 }
 
-@Composable
-private fun GuidancePanelFacility.badgeText(): String = when (this) {
-    GuidancePanelFacility.IC ->
-        stringResource(Res.string.home_map_navigation_panel_facility_ic)
-
-    GuidancePanelFacility.JCT ->
-        stringResource(Res.string.home_map_navigation_panel_facility_jct)
-
-    GuidancePanelFacility.SA ->
-        stringResource(Res.string.home_map_navigation_panel_facility_sa)
-
-    GuidancePanelFacility.PA ->
-        stringResource(Res.string.home_map_navigation_panel_facility_pa)
-
-    GuidancePanelFacility.TOLL_GATE ->
-        stringResource(Res.string.home_map_navigation_panel_facility_toll_gate_badge)
+/** 境界種別ごとの表示文字列リソースを返す。 */
+private fun HighwayBoundary.boundaryLabel() = when (this) {
+    HighwayBoundary.ENTRANCE -> Res.string.home_map_navigation_panel_entrance
+    HighwayBoundary.EXIT -> Res.string.home_map_navigation_panel_exit
 }
 
-private fun GuidancePanelItem.roadClass(): RoadClass = when (this) {
-    is ManeuverPanelItem -> roadClass
-    is FacilityPanelItem -> roadClass
+/** 施設種別ごとのバッジ文字列リソースを返す。 */
+private fun FacilityKind.badgeLabel() = when (this) {
+    FacilityKind.IC -> Res.string.home_map_navigation_panel_facility_ic
+    FacilityKind.JCT -> Res.string.home_map_navigation_panel_facility_jct
+    FacilityKind.SA -> Res.string.home_map_navigation_panel_facility_sa
+    FacilityKind.PA -> Res.string.home_map_navigation_panel_facility_pa
+    FacilityKind.TOLL_GATE -> Res.string.home_map_navigation_panel_facility_toll_gate_badge
 }
 
 private val GuidancePanelRowMinHeight = 60.dp

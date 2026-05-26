@@ -46,8 +46,10 @@ internal class GuidancePresentationProjector {
         currentRoadName: String?,
         timestampMillis: Long,
     ): GuidancePresentation {
-        val nextManeuver = calloutOrNull(event = selection.nextPrimaryEvent, currentCumulativeMeters = currentCumulativeMeters)
-        val followupManeuver = calloutOrNull(event = selection.followupPrimaryEvent, currentCumulativeMeters = currentCumulativeMeters)
+        val nextManeuver =
+            calloutOrNull(event = selection.nextPrimaryEvent, currentCumulativeMeters = currentCumulativeMeters)
+        val followupManeuver =
+            calloutOrNull(event = selection.followupPrimaryEvent, currentCumulativeMeters = currentCumulativeMeters)
         val listItems = listItems(
             guidanceRoute = guidanceRoute,
             selection = selection,

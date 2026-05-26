@@ -17,8 +17,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.GoogleMap
 import kotlinx.collections.immutable.toImmutableList
-import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceManeuverInfo
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.ManeuverCallout
 import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
 
 /**
@@ -37,8 +37,8 @@ internal fun MapGuidanceManeuverCallOutMarkerEffect(
     val guiding = guidanceState as? GuidanceState.Guiding ?: return
     val density = LocalDensity.current
     val topPadding = with(density) { topAppBarHeightPx.toDp() } + GUIDANCE_CALLOUT_VIEWPORT_PADDING
-    val nextManeuver = guiding.progress.nextManeuver
-    val followupManeuver = guiding.progress.followupManeuver
+    val nextManeuver = guiding.presentation.nextManeuver
+    val followupManeuver = guiding.presentation.followupManeuver
 
     val maneuvers = remember(
         guiding.route.id,
@@ -85,7 +85,7 @@ internal fun MapGuidanceManeuverCallOutMarkerEffect(
 
 @Composable
 private fun MapGuidanceManeuverCallOut(
-    maneuver: GuidanceManeuverInfo,
+    maneuver: ManeuverCallout,
     tailSide: MapCallOutTailSide,
     modifier: Modifier = Modifier,
 ) {
@@ -123,7 +123,7 @@ private fun MapGuidanceManeuverCallOut(
     }
 }
 
-private fun GuidanceManeuverInfo.toCallOutRequest(
+private fun ManeuverCallout.toCallOutRequest(
     routeId: String,
     order: Int,
 ): MapCallOutRequest {

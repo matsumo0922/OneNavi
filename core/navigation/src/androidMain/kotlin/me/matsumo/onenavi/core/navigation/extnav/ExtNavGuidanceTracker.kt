@@ -9,7 +9,6 @@ import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
-import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentationProjector
 import me.matsumo.onenavi.core.navigation.newguidance.progress.GuidanceRouteSelector
 import me.matsumo.onenavi.core.navigation.newguidance.progress.RouteProjectionContext

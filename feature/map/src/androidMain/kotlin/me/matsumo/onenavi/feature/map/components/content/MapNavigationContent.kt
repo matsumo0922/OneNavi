@@ -30,8 +30,8 @@ internal fun MapNavigationContent(
     modifier: Modifier = Modifier,
 ) {
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
-    val progress = (guidanceState as? GuidanceState.Guiding)?.progress
-    val currentManeuver = progress?.nextManeuver
+    val guiding = guidanceState as? GuidanceState.Guiding
+    val banner = guiding?.presentation?.banner
 
     NavigationEventHandler(
         state = navigationState,
@@ -39,8 +39,8 @@ internal fun MapNavigationContent(
         onUiEvent(MapUiEvent.OnNavigationStop)
     }
 
-    LaunchedEffect(currentManeuver?.guidancePointIndex) {
-        if (currentManeuver == null) {
+    LaunchedEffect(banner?.primary?.guidancePointIndex) {
+        if (banner == null) {
             onUiEvent(MapUiEvent.OnTopAppBarHeightChanged(0))
         }
     }
@@ -49,7 +49,7 @@ internal fun MapNavigationContent(
         modifier = modifier,
         contentAlignment = Alignment.TopCenter,
     ) {
-        if (progress != null && currentManeuver != null) {
+        if (guiding != null && banner != null) {
             MapNavigationManeuverPanel(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -57,7 +57,9 @@ internal fun MapNavigationContent(
                     .onGloballyPositioned { coordinates ->
                         onUiEvent(MapUiEvent.OnTopAppBarHeightChanged(coordinates.size.height))
                     },
-                progress = progress,
+                banner = banner,
+                listItems = guiding.presentation.listItems,
+                progress = guiding.progress,
                 hazeState = hazeState,
             )
         }
