@@ -627,7 +627,8 @@ class ExtNavGuidanceTracker {
                 timestampMillis = location.timestampMillis,
             ),
             lanes = currentLaneGuidance(
-                laneAnchors = attached.laneAnchors,
+                attached = attached,
+                nextManeuverEventIndex = nextManeuverEventIndex,
                 currentCumulativeMeters = projection.currentCumulativeMeters,
             ),
             directionSign = null,
@@ -685,6 +686,7 @@ class ExtNavGuidanceTracker {
             intersectionName = event.intersectionName,
             exitNumber = event.exitNumber,
             guidancePointIndex = event.guidancePointIndex,
+            laneGuidance = event.laneGuidance,
         )
     }
 
@@ -721,22 +723,27 @@ class ExtNavGuidanceTracker {
         .minByOrNull { anchor -> abs(anchor.geometryMetres - geometryMetres) }
 
     /**
-     * 現在地の手前に迫っているレーン anchor からレーンガイダンスを取り出す。
+     * 次マニューバが visibility 距離内に迫っていれば、そのレーンガイダンスを取り出す。
      *
-     * @param laneAnchors geometry 距離順のレーン anchor
+     * @param attached attach 済み route 情報
+     * @param nextManeuverEventIndex 次マニューバ event index
      * @param currentCumulativeMeters 現在地の geometry 累積距離
      * @return 表示対象のレーンガイダンス。対象が無い場合は空
      */
     private fun currentLaneGuidance(
-        laneAnchors: List<TrackerLaneAnchor>,
+        attached: AttachedRoute,
+        nextManeuverEventIndex: Int?,
         currentCumulativeMeters: Double,
-    ): ImmutableList<LaneGuidance> = laneAnchors
-        .firstOrNull { anchor ->
-            val distanceMetres = anchor.geometryMetres - currentCumulativeMeters
-            distanceMetres in 0.0..LANE_GUIDANCE_VISIBILITY_METRES
-        }
-        ?.let { anchor -> persistentListOf(anchor.laneGuidance) }
-        ?: persistentListOf()
+    ): ImmutableList<LaneGuidance> {
+        val event = nextManeuverEventIndex
+            ?.let { eventIndex -> attached.maneuverEvents.getOrNull(eventIndex) }
+            ?: return persistentListOf()
+        val laneGuidance = event.laneGuidance ?: return persistentListOf()
+        val distanceMetres = event.geometryMetres - currentCumulativeMeters
+        if (distanceMetres !in 0.0..LANE_GUIDANCE_VISIBILITY_METRES) return persistentListOf()
+
+        return persistentListOf(laneGuidance)
+    }
 
     /**
      * 現在地より先にあるパネル行を距離・ETA 付きの公開モデルへ変換する。
