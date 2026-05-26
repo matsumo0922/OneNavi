@@ -25,6 +25,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceTextPanelSub
 import me.matsumo.onenavi.core.navigation.newguidance.model.Lane
 import me.matsumo.onenavi.core.navigation.newguidance.model.LaneGuidance
 import me.matsumo.onenavi.core.navigation.newguidance.model.ManeuverPanelItem
+import me.matsumo.onenavi.core.navigation.newguidance.model.RecommendedLanesPanelSubtitle
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.model.TollPanelSubtitle
 import kotlin.math.abs
@@ -686,7 +687,6 @@ class ExtNavGuidanceTracker {
             intersectionName = event.intersectionName,
             exitNumber = event.exitNumber,
             guidancePointIndex = event.guidancePointIndex,
-            laneGuidance = event.laneGuidance,
         )
     }
 
@@ -746,6 +746,15 @@ class ExtNavGuidanceTracker {
     }
 
     /**
+     * レーンガイダンスをパネル補助表示へ変換する。レーンが無ければ null。
+     *
+     * @param laneGuidance レーンガイダンス
+     * @return 推奨レーン補助表示。無い場合は null
+     */
+    private fun laneSubtitleOrNull(laneGuidance: LaneGuidance?): GuidancePanelSubtitle? =
+        laneGuidance?.let { guidance -> RecommendedLanesPanelSubtitle(lanes = guidance.lanes) }
+
+    /**
      * 現在地より先にあるパネル行を距離・ETA 付きの公開モデルへ変換する。
      *
      * @param attached attach 済み route 情報
@@ -784,8 +793,7 @@ class ExtNavGuidanceTracker {
                     kind = event.kind,
                     roadClass = event.roadClass,
                     services = persistentListOf(),
-                    subtitle = event.subtitle,
-                    laneGuidance = event.laneGuidance,
+                    subtitle = laneSubtitleOrNull(event.laneGuidance) ?: event.subtitle,
                 )
                 is TrackerPanelEvent.Maneuver -> ManeuverPanelItem(
                     id = event.event.id,
@@ -799,8 +807,7 @@ class ExtNavGuidanceTracker {
                     exitNumber = event.event.exitNumber,
                     roadClass = event.event.roadClass,
                     facility = event.event.facility,
-                    subtitle = event.event.subtitle,
-                    laneGuidance = event.event.laneGuidance,
+                    subtitle = laneSubtitleOrNull(event.event.laneGuidance) ?: event.event.subtitle,
                 )
             }
         }

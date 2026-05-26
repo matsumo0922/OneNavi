@@ -104,7 +104,7 @@ internal fun MapNavigationManeuverPanelSection(
                 shape = shape,
             ),
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainer
+        color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -174,11 +174,11 @@ private fun MapNavigationGuidancePanelHeader(
             onClick = onDismissPanelClicked,
             colors = IconButtonDefaults.iconButtonColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            )
+            ),
         ) {
             Icon(
                 imageVector = Icons.Default.Close,
-                contentDescription = null
+                contentDescription = null,
             )
         }
     }
@@ -193,7 +193,7 @@ private fun MapNavigationGuidancePanelFooter(
 
     Column(
         modifier = modifier.padding(bottom = 16.dp),
-        horizontalAlignment = Alignment.Start
+        horizontalAlignment = Alignment.Start,
     ) {
         Row(
             modifier = Modifier
@@ -317,7 +317,7 @@ private fun MapNavigationGuidancePanelRow(
                 .fillMaxWidth()
                 .height(GuidancePanelRowMinHeight + 16.dp)
                 .offset(y = 8.dp)
-                .background(if (isPrimary) panelColors.container.copy(0.2f) else Color.Transparent)
+                .background(if (isPrimary) panelColors.container.copy(0.2f) else Color.Transparent),
         )
 
         Column(
@@ -326,7 +326,7 @@ private fun MapNavigationGuidancePanelRow(
                     start = 20.dp,
                     end = 16.dp,
                 )
-                .fillMaxWidth()
+                .fillMaxWidth(),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

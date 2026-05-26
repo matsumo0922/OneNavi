@@ -18,7 +18,6 @@ sealed interface GuidancePanelItem {
     val distanceToItemMeters: Int
     val etaEpochMillis: Long?
     val subtitle: GuidancePanelSubtitle?
-    val laneGuidance: LaneGuidance?
 }
 
 /**
@@ -84,7 +83,6 @@ data class RecommendedLanesPanelSubtitle(
  * @param roadClass 地点付近の道路種別
  * @param facility 施設を伴う案内地点の場合の施設種別
  * @param subtitle 補助表示。表示すべき情報が無い場合は null
- * @param laneGuidance 案内地点のレーンガイダンス。無い場合は null
  */
 @Immutable
 data class ManeuverPanelItem(
@@ -100,7 +98,6 @@ data class ManeuverPanelItem(
     val roadClass: RoadClass,
     val facility: GuidancePanelFacility?,
     override val subtitle: GuidancePanelSubtitle?,
-    override val laneGuidance: LaneGuidance?,
 ) : GuidancePanelItem
 
 /**
@@ -116,7 +113,6 @@ data class ManeuverPanelItem(
  * @param roadClass 地点付近の道路種別
  * @param services SA / PA のサービス情報
  * @param subtitle 補助表示。表示すべき情報が無い場合は null
- * @param laneGuidance 施設のレーンガイダンス。無い場合は null
  */
 @Immutable
 data class FacilityPanelItem(
@@ -130,7 +126,6 @@ data class FacilityPanelItem(
     val roadClass: RoadClass,
     val services: ImmutableList<String>,
     override val subtitle: GuidancePanelSubtitle?,
-    override val laneGuidance: LaneGuidance?,
 ) : GuidancePanelItem
 
 /**

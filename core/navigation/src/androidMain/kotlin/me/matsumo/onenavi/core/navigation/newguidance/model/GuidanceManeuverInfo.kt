@@ -15,7 +15,6 @@ import me.matsumo.onenavi.core.model.RoutePoint
  * @param intersectionName 交差点名
  * @param exitNumber 出口番号
  * @param guidancePointIndex 元の案内ポイント index
- * @param laneGuidance 案内地点のレーンガイダンス。無い場合は null
  */
 @Immutable
 data class GuidanceManeuverInfo(
@@ -26,5 +25,4 @@ data class GuidanceManeuverInfo(
     val intersectionName: String?,
     val exitNumber: String?,
     val guidancePointIndex: Int,
-    val laneGuidance: LaneGuidance?,
 )
