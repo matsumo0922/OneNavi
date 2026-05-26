@@ -1343,29 +1343,14 @@ class ExtNavGuidanceTracker {
         isLastGuidancePoint: Boolean,
         bearingDiffDegrees: Float,
         facility: GuidancePanelFacility?,
-    ): Boolean {
-        if (isLastGuidancePoint) return true
-
-        val categories = categories()
-        val hasManeuverCategory = categories.any { category -> category in ManeuverClassifier.MANEUVER_CATEGORIES }
-        val hasRouteDecisionDirection = hasRouteDecisionDirection(bearingDiffDegrees)
-        val isMergeAlert = categories.any { category -> category in ManeuverClassifier.MERGE_CATEGORIES } &&
-            categories.none { category -> category in ManeuverClassifier.ROUTE_DECISION_CATEGORIES }
-
-        if (facility?.isPanelOnlyFacility() == true) return false
-        if (isMergeAlert) return false
-        if (facility != null && !hasRouteDecisionDirection) {
-            return false
-        }
-
-        if (hasManeuverCategory) return true
-
-        val hasMeaningfulPhrase = categories.any { category ->
-            category != GuidanceCategory.Unspecified &&
-                category != GuidanceCategory.RoadName
-        }
-        return hasMeaningfulPhrase && abs(bearingDiffDegrees) >= ManeuverClassifier.TURN_BEARING_DIFF_DEGREES
-    }
+    ): Boolean = ManeuverClassifier.shouldCreatePrimaryManeuver(
+        categories = categories(),
+        bearingDiffDegrees = bearingDiffDegrees,
+        isLastGuidancePoint = isLastGuidancePoint,
+        hasFacility = facility != null,
+        isPanelOnlyFacility = facility?.isPanelOnlyFacility() == true,
+        hasRouteDecisionDirection = hasRouteDecisionDirection(bearingDiffDegrees),
+    )
 
     /**
      * GP が route 選択を伴う方向を持つかを返す。

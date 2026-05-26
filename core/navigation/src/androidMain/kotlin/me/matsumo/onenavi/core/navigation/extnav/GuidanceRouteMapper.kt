@@ -5,7 +5,6 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
-import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
@@ -29,7 +28,6 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.SourceRef
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacility
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepRoadName
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepSignpost
-import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepToll
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind as ExtNavGuidanceFacilityKind
@@ -197,20 +195,23 @@ internal class GuidanceRouteMapper {
         route: RouteDetail,
         cumulativeMetres: DoubleArray,
     ): GuidanceEvent? {
-        val sourceRef = SourceRef(
-            guidancePointIndex = context.guidancePointIndex,
-            blockId = null,
-            pieceIndex = null,
+        val categories = guidancePoint.guidanceCategories()
+        val eventSourceRefs = guidancePoint.buildSourceRefs(context.guidancePointIndex)
+        val laneSourceRefs = persistentListOf(
+            SourceRef(
+                guidancePointIndex = context.guidancePointIndex,
+                blockId = null,
+                pieceIndex = null,
+            ),
         )
-        val sourceRefs = persistentListOf(sourceRef)
         val facility = resolveFacility(guidancePoint = guidancePoint, context = context)
         val primary = buildPrimaryManeuver(
             guidancePoint = guidancePoint,
             context = context,
+            categories = categories,
             facility = facility,
         )
-        val lane = guidancePoint.maneuver?.laneInfo?.toGuidanceLane(sourceRefs = sourceRefs)
-        val categories = guidancePoint.phrases.map { phrase -> phrase.category }
+        val lane = guidancePoint.maneuver?.laneInfo?.toGuidanceLane(sourceRefs = laneSourceRefs)
         val notices = buildNotices(categories)
 
         val hasContent = primary != null ||
@@ -230,7 +231,7 @@ internal class GuidanceRouteMapper {
         val details = GuidanceEventDetails(
             facility = facility,
             lane = lane,
-            toll = buildToll(facility = facility, route = route),
+            toll = null,
             signpost = buildSignpost(context.nearestIntersection),
             boundary = boundaryAt(
                 route = route,
@@ -245,8 +246,49 @@ internal class GuidanceRouteMapper {
             anchor = anchor,
             primary = primary,
             details = details,
-            sourceRefs = sourceRefs,
+            sourceRefs = eventSourceRefs,
         )
+    }
+
+    /**
+     * GP の発話片の category を piece 単位で取得する。
+     *
+     * L0 で保持した [announcementBlocks] の各 piece の category を使い、代表 1 つに
+     * 潰さない。block が無い場合のみ従来の phrases 由来 category にフォールバックする。
+     */
+    private fun ExtNavGuidancePoint.guidanceCategories(): List<GuidanceCategory> {
+        val pieceCategories = announcementBlocks
+            .flatMap { block -> block.pieces }
+            .mapNotNull { piece -> piece.category }
+        if (pieceCategories.isNotEmpty()) return pieceCategories
+        return phrases.map { phrase -> phrase.category }
+    }
+
+    /**
+     * GP の発話片を piece 単位で辿る [SourceRef] 列を作る。
+     *
+     * block / piece 単位で source を残すことで、後段が text lane / notice を
+     * 拾い直せるようにする。block が無い場合は GP 単位の参照 1 件にフォールバックする。
+     */
+    private fun ExtNavGuidancePoint.buildSourceRefs(
+        guidancePointIndex: Int,
+    ): ImmutableList<SourceRef> {
+        val refs = announcementBlocks.flatMap { block ->
+            block.pieces.mapIndexed { pieceIndex, _ ->
+                SourceRef(
+                    guidancePointIndex = guidancePointIndex,
+                    blockId = block.id,
+                    pieceIndex = pieceIndex,
+                )
+            }
+        }
+        if (refs.isNotEmpty()) return refs.toImmutableList()
+        val fallback = SourceRef(
+            guidancePointIndex = guidancePointIndex,
+            blockId = null,
+            pieceIndex = null,
+        )
+        return persistentListOf(fallback)
     }
 
     /**
@@ -258,19 +300,26 @@ internal class GuidanceRouteMapper {
     private fun buildPrimaryManeuver(
         guidancePoint: ExtNavGuidancePoint,
         context: EventContext,
+        categories: List<GuidanceCategory>,
         facility: StepFacility?,
     ): GuidanceManeuver? {
-        if (facility != null && facility.kind.isPanelOnly()) return null
+        val isPanelOnlyFacility = facility != null && facility.kind.isPanelOnly()
+        val hasRouteDecisionDirection = guidancePoint.hasRouteDecisionDirection(context.bearingDiffDegrees)
+        val shouldCreate = ManeuverClassifier.shouldCreatePrimaryManeuver(
+            categories = categories,
+            bearingDiffDegrees = context.bearingDiffDegrees,
+            isLastGuidancePoint = context.isLastGuidancePoint,
+            hasFacility = facility != null,
+            isPanelOnlyFacility = isPanelOnlyFacility,
+            hasRouteDecisionDirection = hasRouteDecisionDirection,
+        )
+        if (!shouldCreate) return null
 
-        val categories = guidancePoint.phrases.map { phrase -> phrase.category }
         val maneuverType = ManeuverClassifier.maneuverType(
             categories = categories,
             isLastGuidancePoint = context.isLastGuidancePoint,
             bearingDiffDegrees = context.bearingDiffDegrees,
         )
-        val isManeuver = context.isLastGuidancePoint || maneuverType != ManeuverType.CONTINUE
-        if (!isManeuver) return null
-
         val modifier = ManeuverClassifier.maneuverModifier(context.bearingDiffDegrees)
         val intersectionName = context.nearestIntersection
             ?.intersection
@@ -282,6 +331,15 @@ internal class GuidanceRouteMapper {
             intersectionName = intersectionName,
             exitNumber = null,
         )
+    }
+
+    /**
+     * GP が進路判断を伴う方向を持つかを返す (方向 enum または方位差から判定)。
+     */
+    private fun ExtNavGuidancePoint.hasRouteDecisionDirection(bearingDiffDegrees: Float): Boolean {
+        val direction = maneuver?.direction
+        val isDecisionDirection = direction != null && ManeuverClassifier.isRouteDecisionDirection(direction)
+        return isDecisionDirection || abs(bearingDiffDegrees) >= ManeuverClassifier.TURN_BEARING_DIFF_DEGREES
     }
 
     /**
@@ -303,13 +361,6 @@ internal class GuidanceRouteMapper {
             name = name,
             services = persistentListOf(),
         )
-    }
-
-    /** 料金所施設のときだけルート合計料金を [StepToll] として返す。 */
-    private fun buildToll(facility: StepFacility?, route: RouteDetail): StepToll? {
-        if (facility?.kind != FacilityKind.TOLL_GATE) return null
-        val amountYen = routeTollYen(route) ?: return null
-        return StepToll(amountYen = amountYen)
     }
 
     /** 近傍 intersection の方面看板から [StepSignpost] を作る。主方面が空なら null。 */

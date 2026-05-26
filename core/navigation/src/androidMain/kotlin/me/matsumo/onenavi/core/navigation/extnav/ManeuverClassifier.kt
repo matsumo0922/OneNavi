@@ -98,6 +98,47 @@ internal object ManeuverClassifier {
     }
 
     /**
+     * GP を主案内 (primary maneuver) にすべきかを判定する。
+     *
+     * tick 時の TBT 抽出 (tracker) と attach 時の semantic イベント構築 (mapper) で同じ
+     * 判定を共有するための単一の真実。合流注意 / 車線減少のみ (`isMergeAlert`) や
+     * パネル専用施設は主案内にしない。
+     *
+     * @param categories GP の発話片 category 一覧
+     * @param bearingDiffDegrees GP 前後の進行方位差
+     * @param isLastGuidancePoint 最終 GP (到着) かどうか
+     * @param hasFacility GP に施設が紐付くか
+     * @param isPanelOnlyFacility 施設が通過パネル専用 (SA / PA / 料金所) か
+     * @param hasRouteDecisionDirection 進路判断を伴う方向か (方向 enum or 方位差由来)
+     * @return 主案内にすべきなら true
+     */
+    fun shouldCreatePrimaryManeuver(
+        categories: List<GuidanceCategory>,
+        bearingDiffDegrees: Float,
+        isLastGuidancePoint: Boolean,
+        hasFacility: Boolean,
+        isPanelOnlyFacility: Boolean,
+        hasRouteDecisionDirection: Boolean,
+    ): Boolean {
+        if (isLastGuidancePoint) return true
+
+        val isMergeAlert = categories.any { category -> category in MERGE_CATEGORIES } &&
+            categories.none { category -> category in ROUTE_DECISION_CATEGORIES }
+        if (isPanelOnlyFacility) return false
+        if (isMergeAlert) return false
+        if (hasFacility && !hasRouteDecisionDirection) return false
+
+        val hasManeuverCategory = categories.any { category -> category in MANEUVER_CATEGORIES }
+        if (hasManeuverCategory) return true
+
+        val hasMeaningfulPhrase = categories.any { category ->
+            category != GuidanceCategory.Unspecified &&
+                category != GuidanceCategory.RoadName
+        }
+        return hasMeaningfulPhrase && abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES
+    }
+
+    /**
      * 外部 API 由来の方向が進路判断を伴うかを返す。
      *
      * @param direction 外部 API 由来の方向

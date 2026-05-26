@@ -2,8 +2,12 @@ package me.matsumo.onenavi.core.navigation.extnav
 
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.guidance.domain.DsrRouteSummary
+import me.matsumo.drive.supporter.api.guidance.domain.ExternalGuideAnchor
+import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementBlock
+import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityHint
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind
@@ -89,7 +93,7 @@ class GuidanceRouteMapperTest {
     }
 
     @Test
-    fun `料金所 GP は施設と料金と境界を持ち主案内を持たない`() {
+    fun `料金所 GP は施設と境界と看板を持ち主案内を持たない`() {
         val mapper = GuidanceRouteMapper()
         val route = buildHighwayRoute()
         val payload = ExtNavRoutePayload(id = route.id, routeGuidance = buildHighwayRouteGuidance())
@@ -100,9 +104,10 @@ class GuidanceRouteMapperTest {
             event.details.facility?.kind == FacilityKind.TOLL_GATE
         }
         assertNull(tollEvent.primary)
-        assertEquals(320, tollEvent.details.toll?.amountYen)
         assertEquals(HighwayBoundary.ENTRANCE, tollEvent.details.boundary)
         assertEquals("東京方面", tollEvent.details.signpost?.primary)
+        // 料金はルート合計として route 側に持つ。各料金所地点には重複させない。
+        assertNull(tollEvent.details.toll)
         assertEquals(320, guidanceRoute.tollTotalYen)
     }
 
@@ -118,6 +123,107 @@ class GuidanceRouteMapperTest {
             event.details.notices.isNotEmpty()
         }
         assertTrue(noticeEvent.details.notices.any { notice -> notice.kind == GuidanceNoticeKind.SPEED_CAMERA })
+    }
+
+    @Test
+    fun `混在 block の piece category が L1 で潰れず notice に残る`() {
+        val mapper = GuidanceRouteMapper()
+        val route = buildRoute()
+        val payload = ExtNavRoutePayload(id = route.id, routeGuidance = buildMixedBlockGuidance())
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        // GP0 は「交差点案内 + 一時停止」の混在 block。代表 category に潰れず両方残る。
+        val event = guidanceRoute.events.first()
+        assertEquals(ManeuverType.TURN, event.primary?.type)
+        assertTrue(
+            event.details.notices.any { notice -> notice.kind == GuidanceNoticeKind.STOP_LINE },
+            "一時停止 (StopLine) が notice として残る",
+        )
+        // SourceRef が block / piece 単位で付与される。
+        assertTrue(
+            event.sourceRefs.any { ref -> ref.blockId != null && ref.pieceIndex != null },
+            "piece 単位の SourceRef が付与される",
+        )
+    }
+
+    private fun buildMixedBlockGuidance(): RouteGuidance = RouteGuidance(
+        index = 1,
+        priority = null,
+        summary = DsrRouteSummary(
+            depth = 0,
+            distanceMetres = 1_000,
+            timeSeconds = 300,
+            fuelLitres = 0f,
+            tollYen = 0,
+            tollDetails = persistentListOf(),
+            streets = persistentListOf(),
+            priority = 0,
+            trafficCongestionAvoidanceRate = 0f,
+        ),
+        guidancePoints = listOf(
+            buildBlockGuidancePoint(
+                index = 0,
+                distanceFromStartMetres = 250,
+                categories = listOf(GuidanceCategory.IntersectionGuide, GuidanceCategory.StopLine),
+            ),
+            buildBlockGuidancePoint(
+                index = 1,
+                distanceFromStartMetres = 900,
+                categories = listOf(GuidanceCategory.Unspecified),
+            ),
+        ).toImmutableList(),
+        intersections = persistentListOf(),
+        imageIds = persistentListOf(),
+        polyline = persistentListOf(),
+    )
+
+    private fun buildBlockGuidancePoint(
+        index: Int,
+        distanceFromStartMetres: Int,
+        categories: List<GuidanceCategory>,
+    ): GuidancePoint {
+        val pieces = categories
+            .map { category ->
+                GuideAnnouncementPiece(
+                    text = category.name,
+                    ssml = null,
+                    templateRef = null,
+                    category = category,
+                )
+            }
+            .toImmutableList()
+        val block = GuideAnnouncementBlock(
+            id = "block-$index",
+            anchor = ExternalGuideAnchor(
+                sourceDistanceFromStartMetres = distanceFromStartMetres.toDouble(),
+                sourceGuidancePointIndex = index,
+                sourceBlockIndex = 0,
+            ),
+            triggerDistanceMetres = 0,
+            pieces = pieces,
+            categories = categories.toImmutableSet(),
+        )
+        return GuidancePoint(
+            index = index,
+            gpType = 0,
+            distanceFromPrevMetres = 0,
+            distanceFromStartMetres = distanceFromStartMetres,
+            phrases = persistentListOf(),
+            announcementBlocks = persistentListOf(block),
+            imageRefs = persistentListOf(),
+            maneuver = ManeuverHint(
+                angleIn = 0,
+                angleOut = 0,
+                direction = ManeuverDirection.Straight,
+                laneInfo = null,
+                specialNode = null,
+                speedLimit = null,
+                flagsGroup = persistentListOf(),
+                mergeSide = null,
+                facilityHint = null,
+            ),
+        )
     }
 
     private fun buildHighwayRoute(): RouteDetail {
