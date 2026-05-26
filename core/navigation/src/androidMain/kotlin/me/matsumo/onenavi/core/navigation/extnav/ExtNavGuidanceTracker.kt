@@ -1347,10 +1347,10 @@ class ExtNavGuidanceTracker {
         if (isLastGuidancePoint) return true
 
         val categories = categories()
-        val hasManeuverCategory = categories.any { category -> category in MANEUVER_CATEGORIES }
+        val hasManeuverCategory = categories.any { category -> category in ManeuverClassifier.MANEUVER_CATEGORIES }
         val hasRouteDecisionDirection = hasRouteDecisionDirection(bearingDiffDegrees)
-        val isMergeAlert = categories.any { category -> category in MERGE_CATEGORIES } &&
-            categories.none { category -> category in ROUTE_DECISION_CATEGORIES }
+        val isMergeAlert = categories.any { category -> category in ManeuverClassifier.MERGE_CATEGORIES } &&
+            categories.none { category -> category in ManeuverClassifier.ROUTE_DECISION_CATEGORIES }
 
         if (facility?.isPanelOnlyFacility() == true) return false
         if (isMergeAlert) return false
@@ -1364,7 +1364,7 @@ class ExtNavGuidanceTracker {
             category != GuidanceCategory.Unspecified &&
                 category != GuidanceCategory.RoadName
         }
-        return hasMeaningfulPhrase && abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES
+        return hasMeaningfulPhrase && abs(bearingDiffDegrees) >= ManeuverClassifier.TURN_BEARING_DIFF_DEGREES
     }
 
     /**
@@ -1377,7 +1377,7 @@ class ExtNavGuidanceTracker {
         bearingDiffDegrees: Float,
     ): Boolean =
         maneuver?.direction?.isRouteDecisionDirection() == true ||
-            abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES
+            abs(bearingDiffDegrees) >= ManeuverClassifier.TURN_BEARING_DIFF_DEGREES
 
     /**
      * GP に紐付く phrase category を取得する。
@@ -1602,42 +1602,16 @@ class ExtNavGuidanceTracker {
      *
      * @return 直進・不明以外なら true
      */
-    private fun ExtNavManeuverDirection.isRouteDecisionDirection(): Boolean = when (this) {
-        ExtNavManeuverDirection.Straight,
-        ExtNavManeuverDirection.Unknown,
-        -> false
-        ExtNavManeuverDirection.UTurn,
-        ExtNavManeuverDirection.Left,
-        ExtNavManeuverDirection.SlantLeft,
-        ExtNavManeuverDirection.ThisSideLeft,
-        ExtNavManeuverDirection.Right,
-        ExtNavManeuverDirection.SlantRight,
-        ExtNavManeuverDirection.ThisSideRight,
-        -> true
-    }
+    private fun ExtNavManeuverDirection.isRouteDecisionDirection(): Boolean =
+        ManeuverClassifier.isRouteDecisionDirection(this)
 
     /**
      * 外部ナビ API ライブラリ由来の方向を UI 用 modifier へ変換する。
      *
      * @return UI 用 maneuver modifier
      */
-    private fun ExtNavManeuverDirection.toManeuverModifier(): ManeuverModifier = when (this) {
-        ExtNavManeuverDirection.Straight,
-        ExtNavManeuverDirection.Unknown,
-        -> ManeuverModifier.STRAIGHT
-        ExtNavManeuverDirection.UTurn,
-        -> ManeuverModifier.UTURN
-        ExtNavManeuverDirection.Left,
-        ExtNavManeuverDirection.ThisSideLeft,
-        -> ManeuverModifier.LEFT
-        ExtNavManeuverDirection.SlantLeft,
-        -> ManeuverModifier.SLIGHT_LEFT
-        ExtNavManeuverDirection.Right,
-        ExtNavManeuverDirection.ThisSideRight,
-        -> ManeuverModifier.RIGHT
-        ExtNavManeuverDirection.SlantRight,
-        -> ManeuverModifier.SLIGHT_RIGHT
-    }
+    private fun ExtNavManeuverDirection.toManeuverModifier(): ManeuverModifier =
+        ManeuverClassifier.toManeuverModifier(this)
 
     /**
      * 施設パネル行の表示名を返す。
@@ -1675,19 +1649,11 @@ class ExtNavGuidanceTracker {
         categories: List<GuidanceCategory>,
         isLastGuidancePoint: Boolean,
         bearingDiffDegrees: Float,
-    ): ManeuverType {
-        if (isLastGuidancePoint) return ManeuverType.ARRIVE
-        if (categories.any { category -> category in MERGE_CATEGORIES }) return ManeuverType.MERGE
-        if (categories.any { category -> category in FORK_CATEGORIES }) return ManeuverType.FORK
-        if (categories.any { category -> category == GuidanceCategory.RoadName }) return ManeuverType.NAME_CHANGE
-        if (abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES ||
-            categories.any { category -> category in TURN_CATEGORIES }
-        ) {
-            return ManeuverType.TURN
-        }
-
-        return ManeuverType.CONTINUE
-    }
+    ): ManeuverType = ManeuverClassifier.maneuverType(
+        categories = categories,
+        isLastGuidancePoint = isLastGuidancePoint,
+        bearingDiffDegrees = bearingDiffDegrees,
+    )
 
     /**
      * 方位差から左右・直進などの modifier を推定する。
@@ -1695,16 +1661,8 @@ class ExtNavGuidanceTracker {
      * @param bearingDiffDegrees GP 前後の進行方位差
      * @return UI 用 maneuver modifier
      */
-    private fun maneuverModifier(bearingDiffDegrees: Float): ManeuverModifier {
-        val absDiffDegrees = abs(bearingDiffDegrees)
-
-        return when {
-            absDiffDegrees <= STRAIGHT_MAX_DEGREES -> ManeuverModifier.STRAIGHT
-            absDiffDegrees <= SLIGHT_MAX_DEGREES -> if (bearingDiffDegrees >= 0f) ManeuverModifier.SLIGHT_RIGHT else ManeuverModifier.SLIGHT_LEFT
-            absDiffDegrees <= TURN_MAX_DEGREES -> if (bearingDiffDegrees >= 0f) ManeuverModifier.RIGHT else ManeuverModifier.LEFT
-            else -> ManeuverModifier.UTURN
-        }
-    }
+    private fun maneuverModifier(bearingDiffDegrees: Float): ManeuverModifier =
+        ManeuverClassifier.maneuverModifier(bearingDiffDegrees)
 
     /**
      * 指定距離付近の前後 segment 方位差を計算する。
@@ -2091,45 +2049,5 @@ class ExtNavGuidanceTracker {
 
         /** 案内判断点付近で使う GPS bearing と segment bearing の最小差分。 */
         private const val OFF_ROUTE_DECISION_POINT_BEARING_DIFF_DEGREES: Float = 45f
-
-        /** 方位差から turn とみなす最小角度。 */
-        private const val TURN_BEARING_DIFF_DEGREES: Float = 30f
-
-        /** straight modifier とみなす最大角度差。 */
-        private const val STRAIGHT_MAX_DEGREES: Float = 5f
-
-        /** slight modifier とみなす最大角度差。 */
-        private const val SLIGHT_MAX_DEGREES: Float = 60f
-
-        /** left / right modifier とみなす最大角度差。 */
-        private const val TURN_MAX_DEGREES: Float = 150f
-
-        /** merge 系 maneuver として扱う phrase category。 */
-        private val MERGE_CATEGORIES = setOf(
-            GuidanceCategory.Merge,
-            GuidanceCategory.MergeAttention,
-            GuidanceCategory.HighwayLaneReduction,
-        )
-
-        /** fork 系 maneuver として扱う phrase category。 */
-        private val FORK_CATEGORIES = setOf(
-            GuidanceCategory.AutoExpresswayEntry,
-            GuidanceCategory.TunnelBranch,
-        )
-
-        /** turn 系 maneuver として扱う phrase category。 */
-        private val TURN_CATEGORIES = setOf(
-            GuidanceCategory.IntersectionGuide,
-            GuidanceCategory.IntersectionGuideSoon,
-            GuidanceCategory.TrafficLight,
-            GuidanceCategory.TurnAttention,
-            GuidanceCategory.LocalRoadDirection,
-        )
-
-        /** 経路選択を伴う maneuver として扱う phrase category。 */
-        private val ROUTE_DECISION_CATEGORIES = FORK_CATEGORIES + TURN_CATEGORIES
-
-        /** TBT の対象にする phrase category。 */
-        private val MANEUVER_CATEGORIES = ROUTE_DECISION_CATEGORIES
     }
 }
