@@ -116,7 +116,6 @@ internal fun MapNavigationManeuverPanelSection(
 
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
-
             ) {
                 itemsIndexed(
                     items = panelItems,
@@ -443,6 +442,7 @@ private fun MapNavigationGuidancePanelSubtitle(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+
         is TollPanelSubtitle -> Text(
             modifier = modifier,
             text = formatYen(subtitle.amountYen),
@@ -451,6 +451,7 @@ private fun MapNavigationGuidancePanelSubtitle(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+
         EntrancePanelSubtitle -> Text(
             modifier = modifier,
             text = stringResource(Res.string.home_map_navigation_panel_entrance),
@@ -459,6 +460,7 @@ private fun MapNavigationGuidancePanelSubtitle(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+
         ExitPanelSubtitle -> Text(
             modifier = modifier,
             text = stringResource(Res.string.home_map_navigation_panel_exit),
@@ -467,6 +469,7 @@ private fun MapNavigationGuidancePanelSubtitle(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+
         is RecommendedLanesPanelSubtitle -> MapNavigationManeuverLaneIcons(
             modifier = modifier,
             lanes = subtitle.lanes,
@@ -496,6 +499,7 @@ private fun MapNavigationGuidancePanelIcon(
                 contentDescription = null,
                 tint = tint,
             )
+
             is FacilityPanelItem -> MapNavigationFacilityBadge(
                 modifier = Modifier.size(width = 38.dp, height = 28.dp),
                 facility = item.kind,
@@ -570,6 +574,7 @@ private fun GuidancePanelItem.panelTitle(): String {
             val exitNumberTitle = exitNumber?.takeIf { number -> number.isNotBlank() }
             title ?: exitNumberTitle ?: fallbackTitle
         }
+
         is FacilityPanelItem ->
             name.takeIf { value -> value.isNotBlank() } ?: fallbackTitle
     }
@@ -579,12 +584,16 @@ private fun GuidancePanelItem.panelTitle(): String {
 private fun GuidancePanelFacility.badgeText(): String = when (this) {
     GuidancePanelFacility.IC ->
         stringResource(Res.string.home_map_navigation_panel_facility_ic)
+
     GuidancePanelFacility.JCT ->
         stringResource(Res.string.home_map_navigation_panel_facility_jct)
+
     GuidancePanelFacility.SA ->
         stringResource(Res.string.home_map_navigation_panel_facility_sa)
+
     GuidancePanelFacility.PA ->
         stringResource(Res.string.home_map_navigation_panel_facility_pa)
+
     GuidancePanelFacility.TOLL_GATE ->
         stringResource(Res.string.home_map_navigation_panel_facility_toll_gate_badge)
 }
