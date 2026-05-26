@@ -9,9 +9,9 @@ import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
-import me.matsumo.onenavi.core.navigation.newguidance.progress.GuidanceProgressAdapter
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentationProjector
 import me.matsumo.onenavi.core.navigation.newguidance.progress.GuidanceRouteSelector
-import me.matsumo.onenavi.core.navigation.newguidance.progress.GuidanceSelection
 import me.matsumo.onenavi.core.navigation.newguidance.progress.RouteProjectionContext
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceRoute
 import kotlin.math.abs
@@ -36,7 +36,7 @@ class ExtNavGuidanceTracker {
 
     private val routeMapper = GuidanceRouteMapper()
     private val routeSelector = GuidanceRouteSelector()
-    private val progressAdapter = GuidanceProgressAdapter()
+    private val presentationProjector = GuidancePresentationProjector()
 
     private val _snapshot = MutableStateFlow<ExtNavProgressSnapshot?>(null)
 
@@ -46,6 +46,7 @@ class ExtNavGuidanceTracker {
     private var attachedRoute: AttachedRoute? = null
     private var lastProjection: RouteProjection? = null
     private var offRouteCandidate: OffRouteCandidate? = null
+    private var guidanceStartTimestampMillis: Long? = null
 
     /**
      * 案内対象の route と、Preview 時にキャッシュした外部ナビ API ライブラリ由来 payload を紐付ける。
@@ -59,6 +60,7 @@ class ExtNavGuidanceTracker {
         attachedRoute = attached
         lastProjection = null
         offRouteCandidate = null
+        guidanceStartTimestampMillis = null
         _snapshot.value = null
     }
 
@@ -68,6 +70,9 @@ class ExtNavGuidanceTracker {
     @Suppress("unused")
     fun onLocation(location: UserLocation) {
         val attached = attachedRoute ?: return
+        if (guidanceStartTimestampMillis == null) {
+            guidanceStartTimestampMillis = location.timestampMillis
+        }
         val projection = projectLocation(
             route = attached.route,
             cumulativeMetres = attached.cumulativeMetres,
@@ -90,6 +95,7 @@ class ExtNavGuidanceTracker {
         attachedRoute = null
         lastProjection = null
         offRouteCandidate = null
+        guidanceStartTimestampMillis = null
         _snapshot.value = null
     }
 
@@ -178,17 +184,31 @@ class ExtNavGuidanceTracker {
             location = location,
             isOffRouteCandidate = offRouteCandidate,
         )
+        val currentRoadClass = currentRoadClassFor(
+            route = attached.route,
+            matchedSegmentIndex = projection.matchedSegmentIndex,
+        )
         val progress = buildProgress(
             attached = attached,
             projection = projection,
             location = location,
             distanceRemainingMetres = distanceRemainingMetres,
-            selection = selection,
             routeMatchState = routeMatchState,
+            currentRoadClass = currentRoadClass,
+        )
+        val presentation = presentationProjector.project(
+            guidanceRoute = attached.guidanceRoute,
+            selection = selection,
+            context = attached.projectionContext,
+            currentCumulativeMeters = projection.currentCumulativeMeters,
+            currentRoadClass = currentRoadClass,
+            currentRoadName = progress.currentRoadName,
+            timestampMillis = location.timestampMillis,
         )
 
         return ExtNavProgressSnapshot(
             progress = progress,
+            presentation = presentation,
             rawLocation = location,
             currentCumulativeMeters = projection.currentCumulativeMeters,
             distanceRemainingMeters = distanceRemainingMetres,
@@ -216,17 +236,17 @@ class ExtNavGuidanceTracker {
         .coerceAtLeast(0.0)
 
     /**
-     * UI が直接読む [GuidanceProgress] を組み立てる。
+     * UI が直接読む位置スカラ [GuidanceProgress] を組み立てる。
      *
-     * 案内イベント由来の表示 (次案内・パネル行・レーン) は [GuidanceProgressAdapter] に委譲し、
-     * 位置スカラと走行状態だけをここで詰める。
+     * 案内イベント由来の表示 (次案内・リスト行・レーン) は presentation 層の projector が別途
+     * 射影するため、ここでは位置スカラと走行状態だけを詰める。
      *
      * @param attached attach 済み route 情報
      * @param projection 今回 tick の projection
      * @param location 今回 tick の生 GPS
      * @param distanceRemainingMetres 事前算出済みの残距離
-     * @param selection 今回 tick のイベントカーソル
      * @param routeMatchState 現在位置と案内 route の一致状態
+     * @param currentRoadClass 現在走行中の道路種別
      * @return UI 表示用の案内進捗
      */
     private fun buildProgress(
@@ -234,27 +254,21 @@ class ExtNavGuidanceTracker {
         projection: RouteProjection,
         location: UserLocation,
         distanceRemainingMetres: Double,
-        selection: GuidanceSelection,
         routeMatchState: RouteMatchState,
+        currentRoadClass: RoadClass,
     ): GuidanceProgress {
         val durationRemainingSeconds = remainingDurationSeconds(
             route = attached.route,
             totalGeometryMetres = attached.totalGeometryMetres,
             currentCumulativeMeters = projection.currentCumulativeMeters,
         ).roundToInt()
-        val projectionResult = progressAdapter.adapt(
-            guidanceRoute = attached.guidanceRoute,
-            selection = selection,
-            context = attached.projectionContext,
-            currentCumulativeMeters = projection.currentCumulativeMeters,
-            timestampMillis = location.timestampMillis,
-        )
 
         return GuidanceProgress(
             distanceRemainingMeters = distanceRemainingMetres.roundToInt(),
             durationRemainingSeconds = durationRemainingSeconds,
             etaEpochMillis = location.timestampMillis + durationRemainingSeconds.toLong() * MILLIS_PER_SECOND,
             traveledMeters = projection.currentCumulativeMeters.roundToInt(),
+            elapsedSeconds = elapsedSeconds(location.timestampMillis),
             currentCumulativeMeters = projection.currentCumulativeMeters,
             snappedLocation = projection.snappedLocation,
             bearingDegrees = location.bearingDegrees ?: projection.segmentBearingDegrees,
@@ -264,21 +278,24 @@ class ExtNavGuidanceTracker {
             locationTimestampMillis = location.timestampMillis,
             locationElapsedRealtimeNanos = location.elapsedRealtimeNanos,
             vehicleSpeedMps = location.speedMps,
-            nextManeuver = projectionResult.nextManeuver,
-            followupManeuver = projectionResult.followupManeuver,
-            panelItems = projectionResult.panelItems,
-            lanes = projectionResult.lanes,
-            directionSign = null,
-            highwayPanel = null,
             currentRoadName = null,
-            currentRoadClass = currentRoadClassFor(
-                route = attached.route,
-                matchedSegmentIndex = projection.matchedSegmentIndex,
-            ),
+            currentRoadClass = currentRoadClass,
             currentSpeedLimitKmh = null,
             routeMatchState = routeMatchState,
             projectionErrorMeters = projection.projectionErrorMeters,
         )
+    }
+
+    /**
+     * 案内開始 (最初の位置 tick) からの経過秒を返す。負値は 0 に丸める。
+     *
+     * @param timestampMillis 今回 tick の時刻
+     * @return 案内開始からの経過秒
+     */
+    private fun elapsedSeconds(timestampMillis: Long): Int {
+        val startTimestampMillis = guidanceStartTimestampMillis ?: timestampMillis
+        val elapsedMillis = (timestampMillis - startTimestampMillis).coerceAtLeast(0L)
+        return (elapsedMillis / MILLIS_PER_SECOND).toInt()
     }
 
     /**

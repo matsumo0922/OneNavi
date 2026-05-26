@@ -2,6 +2,7 @@ package me.matsumo.onenavi.core.navigation.newguidance.model
 
 import androidx.compose.runtime.Immutable
 import me.matsumo.onenavi.core.model.RouteDetail
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation
 
 /**
  * Guidance 期 (案内中) の状態。
@@ -22,12 +23,14 @@ sealed interface GuidanceState {
      * 通常案内中。
      *
      * @param route 現在案内中のルート
-     * @param progress 案内中 UI が読む進捗スナップショット
+     * @param progress 案内中 UI が読む進捗スナップショット (位置スカラ)
+     * @param presentation 案内中 UI が読む presentation 射影 (バナー / リスト / CallOut)
      */
     @Immutable
     data class Guiding(
         val route: RouteDetail,
         val progress: GuidanceProgress,
+        val presentation: GuidancePresentation,
     ) : GuidanceState
 
     /** 逸脱検知 → 外部ナビ API ライブラリで再探索中。 */

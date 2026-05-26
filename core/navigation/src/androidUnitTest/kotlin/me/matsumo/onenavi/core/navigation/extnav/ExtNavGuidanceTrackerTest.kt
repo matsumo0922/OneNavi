@@ -16,10 +16,9 @@ import me.matsumo.drive.supporter.api.guidance.domain.SsmlPhrase
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
-import me.matsumo.onenavi.core.navigation.newguidance.model.FacilityPanelItem
-import me.matsumo.onenavi.core.navigation.newguidance.model.GuidancePanelFacility
-import me.matsumo.onenavi.core.navigation.newguidance.model.ManeuverPanelItem
-import me.matsumo.onenavi.core.navigation.newguidance.model.TollPanelSubtitle
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListDetail
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListIcon
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -30,7 +29,7 @@ import kotlin.test.assertIs
 class ExtNavGuidanceTrackerTest {
 
     @Test
-    fun `通過施設は nextManeuver ではなく panelItems に入る`() {
+    fun `通過施設は nextManeuver ではなく listItems に入る`() {
         val tracker = ExtNavGuidanceTracker()
         val route = buildRoute()
         tracker.attach(
@@ -43,20 +42,23 @@ class ExtNavGuidanceTrackerTest {
 
         tracker.onLocation(locationAt(route.origin))
 
-        val progress = tracker.snapshot.value!!.progress
-        assertEquals(2, progress.nextManeuver?.guidancePointIndex)
-        assertEquals(3, progress.followupManeuver?.guidancePointIndex)
-        assertEquals(3, progress.panelItems.size)
+        val presentation = tracker.snapshot.value!!.presentation
+        assertEquals(2, presentation.nextManeuver?.guidancePointIndex)
+        assertEquals(3, presentation.followupManeuver?.guidancePointIndex)
+        assertEquals(3, presentation.listItems.size)
 
-        val maneuverItem = assertIs<ManeuverPanelItem>(progress.panelItems[0])
-        assertEquals(progress.nextManeuver?.guidancePointIndex, maneuverItem.id.removePrefix("maneuver-").toInt())
+        val maneuverItem = presentation.listItems[0]
+        assertIs<GuidanceListIcon.Maneuver>(maneuverItem.icon)
+        assertEquals(presentation.nextManeuver?.guidancePointIndex, maneuverItem.id.removePrefix("maneuver-").toInt())
 
-        val junctionItem = assertIs<FacilityPanelItem>(progress.panelItems[1])
-        assertEquals(GuidancePanelFacility.JCT, junctionItem.kind)
+        val junctionItem = presentation.listItems[1]
+        val junctionBadge = assertIs<GuidanceListIcon.FacilityBadge>(junctionItem.icon)
+        assertEquals(FacilityKind.JCT, junctionBadge.kind)
 
-        val tollGateItem = assertIs<FacilityPanelItem>(progress.panelItems[2])
-        assertEquals(GuidancePanelFacility.TOLL_GATE, tollGateItem.kind)
-        assertEquals(TollPanelSubtitle(amountYen = 320), tollGateItem.subtitle)
+        val tollGateItem = presentation.listItems[2]
+        val tollGateBadge = assertIs<GuidanceListIcon.FacilityBadge>(tollGateItem.icon)
+        assertEquals(FacilityKind.TOLL_GATE, tollGateBadge.kind)
+        assertEquals(GuidanceListDetail.Toll(amountYen = 320), tollGateItem.detail)
     }
 
     private fun buildRoute(): RouteDetail {

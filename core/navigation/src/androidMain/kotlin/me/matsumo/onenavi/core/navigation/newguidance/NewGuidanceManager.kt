@@ -2,7 +2,6 @@ package me.matsumo.onenavi.core.navigation.newguidance
 
 import android.os.SystemClock
 import io.github.aakira.napier.Napier
-import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,10 +16,12 @@ import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavProgressSnapshot
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation
 
 /**
  * Guidance 期 (案内中) のマネージャ。
@@ -62,16 +63,38 @@ class NewGuidanceManager(
         stopGuidanceSession(detachTracker = isSessionActive)
         Napier.i(tag = TAG) { "Guidance started: routeId=${route.id}" }
         val sessionId = consumeNextSessionId()
-        val trackerProgress = startTrackerForRoute(route)
+        val trackerSnapshot = startTrackerForRoute(route)
         activeSessionId = sessionId
         isSessionActive = true
-        _state.value = GuidanceState.Guiding(
-            route = route,
-            progress = trackerProgress ?: route.toInitialProgress(),
-        )
+        _state.value = guidingStateFrom(route = route, snapshot = trackerSnapshot)
         startGuidanceSession(
             route = route,
             sessionId = sessionId,
+        )
+    }
+
+    /**
+     * tracker snapshot から [GuidanceState.Guiding] を作る。snapshot が無い場合は初期値で埋める。
+     *
+     * @param route 案内対象ルート
+     * @param snapshot tracker が作った初期 snapshot。作れない場合は null
+     * @return 案内中状態
+     */
+    private fun guidingStateFrom(
+        route: RouteDetail,
+        snapshot: ExtNavProgressSnapshot?,
+    ): GuidanceState.Guiding {
+        if (snapshot == null) {
+            return GuidanceState.Guiding(
+                route = route,
+                progress = route.toInitialProgress(),
+                presentation = GuidancePresentation.Empty,
+            )
+        }
+        return GuidanceState.Guiding(
+            route = route,
+            progress = snapshot.progress,
+            presentation = snapshot.presentation,
         )
     }
 
@@ -101,9 +124,9 @@ class NewGuidanceManager(
      * 位置情報 data source から初回 tick が来るまで UI を空にしないため、ここで同期的に初期 snapshot を作る。
      *
      * @param route 案内対象ルート
-     * @return tracker が作った初期 [GuidanceProgress]。作れない場合は null
+     * @return tracker が作った初期 snapshot。作れない場合は null
      */
-    private fun startTrackerForRoute(route: RouteDetail): GuidanceProgress? {
+    private fun startTrackerForRoute(route: RouteDetail): ExtNavProgressSnapshot? {
         val registry = routeRegistry
         val tracker = guidanceTracker
         if (registry == null || tracker == null) {
@@ -126,7 +149,7 @@ class NewGuidanceManager(
             return null
         }
 
-        return snapshot.progress
+        return snapshot
     }
 
     /**
@@ -183,6 +206,7 @@ class NewGuidanceManager(
                 _state.value = GuidanceState.Guiding(
                     route = route,
                     progress = snapshot.progress,
+                    presentation = snapshot.presentation,
                 )
             }
         } catch (cancellation: CancellationException) {
@@ -358,6 +382,7 @@ private fun RouteDetail.toInitialProgress(): GuidanceProgress = GuidanceProgress
     durationRemainingSeconds = durationSeconds.toInt(),
     etaEpochMillis = System.currentTimeMillis() + durationSeconds.toLong() * 1_000L,
     traveledMeters = 0,
+    elapsedSeconds = 0,
     currentCumulativeMeters = 0.0,
     snappedLocation = origin,
     bearingDegrees = 0f,
@@ -367,12 +392,6 @@ private fun RouteDetail.toInitialProgress(): GuidanceProgress = GuidanceProgress
     locationTimestampMillis = System.currentTimeMillis(),
     locationElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
     vehicleSpeedMps = null,
-    nextManeuver = null,
-    followupManeuver = null,
-    panelItems = persistentListOf(),
-    lanes = persistentListOf(),
-    directionSign = null,
-    highwayPanel = null,
     currentRoadName = null,
     currentRoadClass = roadClassSegments.firstOrNull()?.roadClass ?: RoadClass.ORDINARY,
     currentSpeedLimitKmh = null,

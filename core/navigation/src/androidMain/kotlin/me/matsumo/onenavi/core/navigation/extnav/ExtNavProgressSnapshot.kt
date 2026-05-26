@@ -4,11 +4,13 @@ import androidx.compose.runtime.Immutable
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation
 
 /**
  * Tracker が周辺コンポーネントへ渡す projection snapshot。
  *
- * @param progress UI に公開する進捗モデル
+ * @param progress UI に公開する進捗モデル (位置スカラ)
+ * @param presentation UI に公開する presentation 射影 (バナー / リスト / CallOut)
  * @param rawLocation 位置情報プロバイダ由来の生位置
  * @param currentCumulativeMeters ルート geometry 上の現在累積距離
  * @param distanceRemainingMeters 内部計算用の残距離
@@ -23,6 +25,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 @Immutable
 data class ExtNavProgressSnapshot(
     val progress: GuidanceProgress,
+    val presentation: GuidancePresentation,
     val rawLocation: UserLocation?,
     val currentCumulativeMeters: Double,
     val distanceRemainingMeters: Double,

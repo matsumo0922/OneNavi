@@ -1,17 +1,21 @@
 package me.matsumo.onenavi.core.navigation.newguidance.model
 
 import androidx.compose.runtime.Immutable
-import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RoutePoint
 
 /**
- * 案内中 UI が読む進捗スナップショット。
+ * 案内中 UI が読む進捗スナップショット (L2 progress 層)。
+ *
+ * tick ごとの現在地スカラと走行状態だけを持ち、案内イベント由来の表示 (次案内・パネル行・レーン)
+ * は複製しない。それらは presentation 層の
+ * [me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation] が射影する。
  *
  * @param distanceRemainingMeters 目的地までの残距離
  * @param durationRemainingSeconds 目的地までの残所要時間
  * @param etaEpochMillis 到着予想時刻
  * @param traveledMeters 走行済み距離
+ * @param elapsedSeconds 案内開始からの経過時間 (秒)
  * @param currentCumulativeMeters route geometry 上の現在累積距離
  * @param snappedLocation ルート上に snap した自車位置
  * @param bearingDegrees 自車マーカーの向き
@@ -21,12 +25,6 @@ import me.matsumo.onenavi.core.model.RoutePoint
  * @param locationTimestampMillis 位置情報の計測時刻
  * @param locationElapsedRealtimeNanos 位置情報の monotonic clock 時刻。取得できない場合は null
  * @param vehicleSpeedMps 自車速度。取得できない場合は null
- * @param nextManeuver 次の案内。案内対象が無い場合は null
- * @param followupManeuver 次の次の案内。無い場合は null
- * @param panelItems 案内中パネルに表示する現在地より先の行
- * @param lanes レーンガイダンス
- * @param directionSign 方面看板
- * @param highwayPanel IC / JCT / SA / PA パネル
  * @param currentRoadName 走行中道路名
  * @param currentRoadClass 走行中道路種別
  * @param currentSpeedLimitKmh 現在区間の制限速度
@@ -39,6 +37,7 @@ data class GuidanceProgress(
     val durationRemainingSeconds: Int,
     val etaEpochMillis: Long,
     val traveledMeters: Int,
+    val elapsedSeconds: Int,
     val currentCumulativeMeters: Double,
     val snappedLocation: RoutePoint,
     val bearingDegrees: Float,
@@ -48,12 +47,6 @@ data class GuidanceProgress(
     val locationTimestampMillis: Long,
     val locationElapsedRealtimeNanos: Long?,
     val vehicleSpeedMps: Float?,
-    val nextManeuver: GuidanceManeuverInfo?,
-    val followupManeuver: GuidanceManeuverInfo?,
-    val panelItems: ImmutableList<GuidancePanelItem>,
-    val lanes: ImmutableList<LaneGuidance>,
-    val directionSign: DirectionSign?,
-    val highwayPanel: HighwayPanel?,
     val currentRoadName: String?,
     val currentRoadClass: RoadClass,
     val currentSpeedLimitKmh: Int?,
