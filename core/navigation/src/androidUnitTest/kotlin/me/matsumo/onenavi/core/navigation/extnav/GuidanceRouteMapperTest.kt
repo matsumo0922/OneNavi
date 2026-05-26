@@ -2,9 +2,13 @@ package me.matsumo.onenavi.core.navigation.extnav
 
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.guidance.domain.DsrRouteSummary
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
+import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityHint
+import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
+import me.matsumo.drive.supporter.api.guidance.domain.Intersection
 import me.matsumo.drive.supporter.api.guidance.domain.LaneInfo
 import me.matsumo.drive.supporter.api.guidance.domain.LaneMarker
 import me.matsumo.drive.supporter.api.guidance.domain.ManeuverDirection
@@ -12,8 +16,13 @@ import me.matsumo.drive.supporter.api.guidance.domain.ManeuverHint
 import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
 import me.matsumo.drive.supporter.api.guidance.domain.SsmlPhrase
 import me.matsumo.onenavi.core.model.ManeuverType
+import me.matsumo.onenavi.core.model.RoadClass
+import me.matsumo.onenavi.core.model.RoadClassSegment
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceNoticeKind
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.HighwayBoundary
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneLayout
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -78,6 +87,144 @@ class GuidanceRouteMapperTest {
         val arriveEvent = guidanceRoute.events.last()
         assertEquals(ManeuverType.ARRIVE, arriveEvent.primary?.type)
     }
+
+    @Test
+    fun `料金所 GP は施設と料金と境界を持ち主案内を持たない`() {
+        val mapper = GuidanceRouteMapper()
+        val route = buildHighwayRoute()
+        val payload = ExtNavRoutePayload(id = route.id, routeGuidance = buildHighwayRouteGuidance())
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        val tollEvent = guidanceRoute.events.first { event ->
+            event.details.facility?.kind == FacilityKind.TOLL_GATE
+        }
+        assertNull(tollEvent.primary)
+        assertEquals(320, tollEvent.details.toll?.amountYen)
+        assertEquals(HighwayBoundary.ENTRANCE, tollEvent.details.boundary)
+        assertEquals("東京方面", tollEvent.details.signpost?.primary)
+        assertEquals(320, guidanceRoute.tollTotalYen)
+    }
+
+    @Test
+    fun `オービスの category は通知になる`() {
+        val mapper = GuidanceRouteMapper()
+        val route = buildHighwayRoute()
+        val payload = ExtNavRoutePayload(id = route.id, routeGuidance = buildHighwayRouteGuidance())
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        val noticeEvent = guidanceRoute.events.first { event ->
+            event.details.notices.isNotEmpty()
+        }
+        assertTrue(noticeEvent.details.notices.any { notice -> notice.kind == GuidanceNoticeKind.SPEED_CAMERA })
+    }
+
+    private fun buildHighwayRoute(): RouteDetail {
+        val points = (0..4).map { index ->
+            RoutePoint(latitude = ORIGIN_LATITUDE, longitude = ORIGIN_LONGITUDE + LONGITUDE_STEP * index)
+        }
+        return RouteDetail(
+            id = "route-mapper-highway-test",
+            origin = points.first(),
+            destination = points.last(),
+            intermediateWaypoints = persistentListOf(),
+            geometry = points.toImmutableList(),
+            distanceMeters = 1_000.0,
+            durationSeconds = 300.0,
+            steps = persistentListOf(),
+            roadClassSegments = persistentListOf(
+                RoadClassSegment(
+                    startPointIndex = 1,
+                    endPointIndex = 3,
+                    roadClass = RoadClass.HIGHWAY,
+                ),
+            ),
+            tollFee = 320,
+        )
+    }
+
+    private fun buildHighwayRouteGuidance(): RouteGuidance = RouteGuidance(
+        index = 1,
+        priority = null,
+        summary = DsrRouteSummary(
+            depth = 0,
+            distanceMetres = 1_000,
+            timeSeconds = 300,
+            fuelLitres = 0f,
+            tollYen = 320,
+            tollDetails = persistentListOf(),
+            streets = persistentListOf(),
+            priority = 0,
+            trafficCongestionAvoidanceRate = 0f,
+        ),
+        guidancePoints = listOf(
+            buildFacilityGuidancePoint(
+                index = 0,
+                distanceFromStartMetres = 250,
+                facilityKind = GuidanceFacilityKind.TOLL_GATE,
+            ),
+            buildGuidancePoint(
+                index = 1,
+                distanceFromStartMetres = 500,
+                category = GuidanceCategory.Orbis,
+                laneInfo = null,
+            ),
+        ).toImmutableList(),
+        intersections = persistentListOf(
+            Intersection(
+                id = 0,
+                name = "テスト料金所",
+                nameRuby = "",
+                roadName = "",
+                roadNameOfficial = "",
+                roadNumberSign = "",
+                directionSignA = "東京方面",
+                directionSignAKana = "",
+                directionSignB = "",
+                directionSignBKana = "",
+                position = Coord.fromDegrees(latDeg = ORIGIN_LATITUDE, lonDeg = ORIGIN_LONGITUDE + LONGITUDE_STEP),
+                angleIn = 0,
+                angleOut = 0,
+                direction = ManeuverDirection.Straight,
+                imageRefs = persistentListOf(),
+                facilityHint = GuidanceFacilityHint(kind = GuidanceFacilityKind.TOLL_GATE),
+            ),
+        ),
+        imageIds = persistentListOf(),
+        polyline = persistentListOf(),
+    )
+
+    private fun buildFacilityGuidancePoint(
+        index: Int,
+        distanceFromStartMetres: Int,
+        facilityKind: GuidanceFacilityKind,
+    ): GuidancePoint = GuidancePoint(
+        index = index,
+        gpType = 0,
+        distanceFromPrevMetres = 0,
+        distanceFromStartMetres = distanceFromStartMetres,
+        phrases = persistentListOf(
+            SsmlPhrase(
+                ssml = "facility",
+                distanceMetres = 0,
+                category = GuidanceCategory.Unspecified,
+            ),
+        ),
+        announcementBlocks = persistentListOf(),
+        imageRefs = persistentListOf(),
+        maneuver = ManeuverHint(
+            angleIn = 0,
+            angleOut = 0,
+            direction = ManeuverDirection.Straight,
+            laneInfo = null,
+            specialNode = null,
+            speedLimit = null,
+            flagsGroup = persistentListOf(),
+            mergeSide = null,
+            facilityHint = GuidanceFacilityHint(kind = facilityKind),
+        ),
+    )
 
     private fun buildRoute(): RouteDetail {
         val points = (0..4).map { index ->

@@ -4,23 +4,35 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
+import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.onenavi.core.model.ManeuverType
+import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventDetails
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventId
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceLane
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceManeuver
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceNotice
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceNoticeKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceRoute
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuideImageKey
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.HighwayBoundary
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneConfidence
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneLayout
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneMark
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneSource
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.RouteAnchor
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.SourceRef
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacility
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepRoadName
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepSignpost
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepToll
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind as ExtNavGuidanceFacilityKind
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint as ExtNavGuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection as ExtNavIntersection
 import me.matsumo.drive.supporter.api.guidance.domain.LaneInfo as ExtNavLaneInfo
@@ -72,7 +84,7 @@ internal class GuidanceRouteMapper {
         return GuidanceRoute(
             totalDistanceMeters = totalGeometryMetres,
             totalDurationSeconds = route.durationSeconds.roundToInt(),
-            tollTotalYen = null,
+            tollTotalYen = routeTollYen(route),
             events = events,
         )
     }
@@ -163,18 +175,27 @@ internal class GuidanceRouteMapper {
                 ),
                 nearestIntersection = nearestIntersection(intersectionAnchors, geometryMetres),
             )
-            buildEvent(guidancePoint = guidancePoint, context = context)
+            buildEvent(
+                guidancePoint = guidancePoint,
+                context = context,
+                route = route,
+                cumulativeMetres = cumulativeMetres,
+            )
         }
         return events.toImmutableList()
     }
 
     /**
-     * 1 GP を [GuidanceEvent] に変換する。主案内もレーンも無い GP は骨組みでは捨てる
-     * (施設のみの通過イベントは詳細追加時に拾う)。
+     * 1 GP を [GuidanceEvent] に変換する。
+     *
+     * 主案内・レーン・施設・通知のいずれも無い GP は意味が無いので捨てる。施設のみの
+     * 通過 GP (例: SA/PA 通過) は主案内 null + facility 付きのイベントとして拾う。
      */
     private fun buildEvent(
         guidancePoint: ExtNavGuidancePoint,
         context: EventContext,
+        route: RouteDetail,
+        cumulativeMetres: DoubleArray,
     ): GuidanceEvent? {
         val sourceRef = SourceRef(
             guidancePointIndex = context.guidancePointIndex,
@@ -182,9 +203,21 @@ internal class GuidanceRouteMapper {
             pieceIndex = null,
         )
         val sourceRefs = persistentListOf(sourceRef)
-        val primary = buildPrimaryManeuver(guidancePoint = guidancePoint, context = context)
+        val facility = resolveFacility(guidancePoint = guidancePoint, context = context)
+        val primary = buildPrimaryManeuver(
+            guidancePoint = guidancePoint,
+            context = context,
+            facility = facility,
+        )
         val lane = guidancePoint.maneuver?.laneInfo?.toGuidanceLane(sourceRefs = sourceRefs)
-        if (primary == null && lane == null) return null
+        val categories = guidancePoint.phrases.map { phrase -> phrase.category }
+        val notices = buildNotices(categories)
+
+        val hasContent = primary != null ||
+            lane != null ||
+            facility != null ||
+            notices.isNotEmpty()
+        if (!hasContent) return null
 
         val anchor = RouteAnchor(
             sourceDistanceFromStartMeters = context.sourceDistanceMetres,
@@ -195,13 +228,17 @@ internal class GuidanceRouteMapper {
             matchErrorMeters = null,
         )
         val details = GuidanceEventDetails(
-            facility = null,
+            facility = facility,
             lane = lane,
-            toll = null,
-            signpost = null,
-            boundary = null,
-            roadName = null,
-            notices = persistentListOf(),
+            toll = buildToll(facility = facility, route = route),
+            signpost = buildSignpost(context.nearestIntersection),
+            boundary = boundaryAt(
+                route = route,
+                cumulativeMetres = cumulativeMetres,
+                geometryMetres = context.geometryMetres,
+            ),
+            roadName = buildRoadName(context.nearestIntersection),
+            notices = notices,
         )
         return GuidanceEvent(
             id = GuidanceEventId("event-${context.guidancePointIndex}"),
@@ -213,15 +250,18 @@ internal class GuidanceRouteMapper {
     }
 
     /**
-     * GP の主案内を作る。進路選択を伴わない通過 GP では null。
+     * GP の主案内を作る。進路選択を伴わない通過 GP やパネル専用施設では null。
      *
-     * 骨組みでは category と方位差による簡易判定で、施設による除外
-     * (パネル専用施設・合流注意のみ等) は詳細追加時に揃える。
+     * category と方位差で maneuver 種別を決めつつ、パネル専用施設 (SA / PA / 料金所) は
+     * 通過扱いとして主案内にしない (= [GuidanceEventDetails.facility] 側で表現する)。
      */
     private fun buildPrimaryManeuver(
         guidancePoint: ExtNavGuidancePoint,
         context: EventContext,
+        facility: StepFacility?,
     ): GuidanceManeuver? {
+        if (facility != null && facility.kind.isPanelOnly()) return null
+
         val categories = guidancePoint.phrases.map { phrase -> phrase.category }
         val maneuverType = ManeuverClassifier.maneuverType(
             categories = categories,
@@ -242,6 +282,134 @@ internal class GuidanceRouteMapper {
             intersectionName = intersectionName,
             exitNumber = null,
         )
+    }
+
+    /**
+     * GP の施設情報を解決する。GP 自身の facilityHint を優先し、無ければ近傍 intersection
+     * から取る。名前から IC→JCT / PA→SA を補正する。
+     */
+    private fun resolveFacility(
+        guidancePoint: ExtNavGuidancePoint,
+        context: EventContext,
+    ): StepFacility? {
+        val rawKind = guidancePoint.maneuver?.facilityHint?.kind
+            ?: context.nearestIntersection?.intersection?.facilityHint?.kind
+            ?: return null
+        val facilityKind = rawKind.toFacilityKind() ?: return null
+        val name = context.nearestIntersection?.intersection?.name.orEmpty()
+        val refinedKind = facilityKind.refinedByName(name)
+        return StepFacility(
+            kind = refinedKind,
+            name = name,
+            services = persistentListOf(),
+        )
+    }
+
+    /** 料金所施設のときだけルート合計料金を [StepToll] として返す。 */
+    private fun buildToll(facility: StepFacility?, route: RouteDetail): StepToll? {
+        if (facility?.kind != FacilityKind.TOLL_GATE) return null
+        val amountYen = routeTollYen(route) ?: return null
+        return StepToll(amountYen = amountYen)
+    }
+
+    /** 近傍 intersection の方面看板から [StepSignpost] を作る。主方面が空なら null。 */
+    private fun buildSignpost(nearestIntersection: IntersectionAnchor?): StepSignpost? {
+        val intersection = nearestIntersection?.intersection ?: return null
+        val primary = intersection.directionSignA.trim().takeIf { text -> text.isNotEmpty() } ?: return null
+        val secondary = intersection.directionSignB.trim().takeIf { text -> text.isNotEmpty() }
+        val firstImage = intersection.imageRefs.firstOrNull()
+        val imageRef = firstImage?.let { image -> GuideImageKey(major = image.major, minor = image.minor) }
+        return StepSignpost(
+            primary = primary,
+            secondary = secondary,
+            imageRef = imageRef,
+        )
+    }
+
+    /** 近傍 intersection の道路名から [StepRoadName] を作る。名前が無ければ null。 */
+    private fun buildRoadName(nearestIntersection: IntersectionAnchor?): StepRoadName? {
+        val intersection = nearestIntersection?.intersection ?: return null
+        val roadName = intersection.roadName.trim().takeIf { text -> text.isNotEmpty() }
+            ?: intersection.roadNameOfficial.trim().takeIf { text -> text.isNotEmpty() }
+            ?: return null
+        return StepRoadName(text = roadName)
+    }
+
+    /** GP の category 群を裾の通知 ([GuidanceNotice]) に変換する。 */
+    private fun buildNotices(categories: List<GuidanceCategory>): ImmutableList<GuidanceNotice> {
+        val notices = categories.mapNotNull { category ->
+            val kind = NOTICE_KIND_BY_CATEGORY[category] ?: return@mapNotNull null
+            GuidanceNotice(kind = kind, text = null)
+        }
+        return notices.distinct().toImmutableList()
+    }
+
+    /**
+     * 指定 geometry 距離が高速の入口 / 出口付近なら境界種別を返す。
+     *
+     * roadClassSegments の HIGHWAY 区間の開始 (入口) / 終了 (出口) のうち、許容距離内で
+     * 最も近いものを採用する。
+     */
+    private fun boundaryAt(
+        route: RouteDetail,
+        cumulativeMetres: DoubleArray,
+        geometryMetres: Double,
+    ): HighwayBoundary? {
+        val candidates = mutableListOf<Pair<Double, HighwayBoundary>>()
+        for (segment in route.roadClassSegments) {
+            if (segment.roadClass != RoadClass.HIGHWAY) continue
+            if (segment.startPointIndex > 0) {
+                val startMetres = cumulativeMetres.valueAtOrNull(segment.startPointIndex)
+                if (startMetres != null) candidates += startMetres to HighwayBoundary.ENTRANCE
+            }
+            if (segment.endPointIndex < route.geometry.lastIndex) {
+                val endMetres = cumulativeMetres.valueAtOrNull(segment.endPointIndex)
+                if (endMetres != null) candidates += endMetres to HighwayBoundary.EXIT
+            }
+        }
+
+        val nearest = candidates.minByOrNull { candidate -> abs(candidate.first - geometryMetres) }
+            ?: return null
+        if (abs(nearest.first - geometryMetres) > HIGHWAY_BOUNDARY_TOLERANCE_METRES) return null
+        return nearest.second
+    }
+
+    /** ルート合計料金 (円)。tollFee 優先、無ければ内訳合計。0 以下なら null。 */
+    private fun routeTollYen(route: RouteDetail): Int? {
+        val directFee = route.tollFee?.takeIf { amountYen -> amountYen > 0 }
+        if (directFee != null) return directFee
+        val summedFee = route.tollDetails.sumOf { detail -> detail.amount }
+        return summedFee.takeIf { amountYen -> amountYen > 0 }
+    }
+
+    /** index 範囲内の累積距離を返す。範囲外なら null。 */
+    private fun DoubleArray.valueAtOrNull(index: Int): Double? =
+        if (index in indices) this[index] else null
+
+    /** 外部 API 由来の施設種別を semantic 施設種別へ変換する。端点は null。 */
+    private fun ExtNavGuidanceFacilityKind.toFacilityKind(): FacilityKind? = when (this) {
+        ExtNavGuidanceFacilityKind.INTERCHANGE -> FacilityKind.IC
+        ExtNavGuidanceFacilityKind.PARKING_AREA -> FacilityKind.PA
+        ExtNavGuidanceFacilityKind.TOLL_GATE -> FacilityKind.TOLL_GATE
+        ExtNavGuidanceFacilityKind.ENDPOINT -> null
+    }
+
+    /** 施設名から IC→JCT / PA→SA を補正する。 */
+    private fun FacilityKind.refinedByName(name: String): FacilityKind = when {
+        this == FacilityKind.IC && name.contains("JCT", ignoreCase = true) -> FacilityKind.JCT
+        this == FacilityKind.PA && name.contains("SA", ignoreCase = true) -> FacilityKind.SA
+        else -> this
+    }
+
+    /** 進路判断ではなく通過パネルとして扱う施設か。 */
+    private fun FacilityKind.isPanelOnly(): Boolean = when (this) {
+        FacilityKind.SA,
+        FacilityKind.PA,
+        FacilityKind.TOLL_GATE,
+        -> true
+        FacilityKind.IC,
+        FacilityKind.JCT,
+        -> false
     }
 
     /**
@@ -333,5 +501,18 @@ internal class GuidanceRouteMapper {
     private companion object {
         /** GP と intersection を対応付ける最大距離。 */
         private const val INTERSECTION_SNAP_TOLERANCE_METRES: Double = 300.0
+
+        /** 高速入口 / 出口と GP を対応付ける最大距離。 */
+        private const val HIGHWAY_BOUNDARY_TOLERANCE_METRES: Double = 600.0
+
+        /** 裾の通知に変換する category とその通知種別の対応。 */
+        private val NOTICE_KIND_BY_CATEGORY: Map<GuidanceCategory, GuidanceNoticeKind> = mapOf(
+            GuidanceCategory.AccidentBlackSpot to GuidanceNoticeKind.ACCIDENT_BLACK_SPOT,
+            GuidanceCategory.Orbis to GuidanceNoticeKind.SPEED_CAMERA,
+            GuidanceCategory.Curve to GuidanceNoticeKind.CURVE,
+            GuidanceCategory.StopLine to GuidanceNoticeKind.STOP_LINE,
+            GuidanceCategory.SpeedAdjustment to GuidanceNoticeKind.SPEED_ADJUSTMENT,
+            GuidanceCategory.MergeAttention to GuidanceNoticeKind.MERGE_ATTENTION,
+        )
     }
 }
