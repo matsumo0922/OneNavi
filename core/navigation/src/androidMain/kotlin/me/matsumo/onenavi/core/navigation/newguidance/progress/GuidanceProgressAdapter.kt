@@ -65,7 +65,7 @@ internal class GuidanceProgressAdapter {
         return GuidanceProgressProjection(
             nextManeuver = nextManeuver,
             followupManeuver = followupManeuver,
-            lanes = activeLanes(selection = selection, currentCumulativeMeters = currentCumulativeMeters),
+            lanes = activeLanes(selection = selection, context = context, currentCumulativeMeters = currentCumulativeMeters),
             panelItems = panelItems(
                 guidanceRoute = guidanceRoute,
                 selection = selection,
@@ -109,11 +109,13 @@ internal class GuidanceProgressAdapter {
      * あればその modifier、無ければ直進を既定とする。
      *
      * @param selection 現在地より先のイベントカーソル
+     * @param context レーン矢印の向きを解決する geometry コンテキスト
      * @param currentCumulativeMeters 現在地の geometry 累積距離
      * @return 表示対象のレーンガイダンス。対象が無い場合は空
      */
     private fun activeLanes(
         selection: GuidanceSelection,
+        context: RouteProjectionContext,
         currentCumulativeMeters: Double,
     ): ImmutableList<LaneGuidance> {
         val event = selection.activeLaneEvent ?: return persistentListOf()
@@ -121,7 +123,7 @@ internal class GuidanceProgressAdapter {
         val distanceMeters = event.anchor.geometryDistanceFromStartMeters - currentCumulativeMeters
         if (distanceMeters !in 0.0..LANE_GUIDANCE_VISIBILITY_METRES) return persistentListOf()
 
-        val modifier = event.primary?.modifier ?: ManeuverModifier.STRAIGHT
+        val modifier = context.maneuverModifierAt(event.anchor.geometryDistanceFromStartMeters)
         val laneGuidance = toLaneGuidance(lane = lane, modifier = modifier) ?: return persistentListOf()
         return persistentListOf(laneGuidance)
     }
@@ -268,7 +270,7 @@ internal class GuidanceProgressAdapter {
             kind = facility.kind.toPanelFacility(),
             roadClass = context.roadClassAt(geometryMeters),
             services = facility.services,
-            subtitle = facilitySubtitle(event = event, facility = facility, guidanceRoute = guidanceRoute),
+            subtitle = facilitySubtitle(event = event, facility = facility, guidanceRoute = guidanceRoute, context = context),
         )
     }
 
@@ -297,8 +299,10 @@ internal class GuidanceProgressAdapter {
         event: GuidanceEvent,
         facility: StepFacility,
         guidanceRoute: GuidanceRoute,
+        context: RouteProjectionContext,
     ): GuidancePanelSubtitle? {
-        val laneSubtitle = laneSubtitleOrNull(lane = event.details.lane, modifier = ManeuverModifier.STRAIGHT)
+        val laneModifier = context.maneuverModifierAt(event.anchor.geometryDistanceFromStartMeters)
+        val laneSubtitle = laneSubtitleOrNull(lane = event.details.lane, modifier = laneModifier)
         if (laneSubtitle != null) return laneSubtitle
 
         return when (facility.kind) {

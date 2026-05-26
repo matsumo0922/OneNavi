@@ -94,6 +94,55 @@ class GuidanceProgressAdapterTest {
         assertTrue(projection.lanes.first().lanes.any { lane -> lane.isActive })
     }
 
+    @Test
+    fun `主案内を持たないレーンイベントの矢印は geometry の方位差から決まる`() {
+        val selector = GuidanceRouteSelector()
+        val adapter = GuidanceProgressAdapter()
+
+        // 東進 → 北進に折れる geometry。折れ点のレーンイベントは左折の矢印になるべき。
+        val geometry = listOf(
+            RoutePoint(latitude = 35.0, longitude = 139.000),
+            RoutePoint(latitude = 35.0, longitude = 139.002),
+            RoutePoint(latitude = 35.0, longitude = 139.004),
+            RoutePoint(latitude = 35.002, longitude = 139.004),
+            RoutePoint(latitude = 35.004, longitude = 139.004),
+        )
+        val cumulativeMetres = RouteGeometryMath.cumulativeMetres(geometry)
+        val bendMeters = cumulativeMetres[2]
+        val context = RouteProjectionContext(
+            route = RouteDetail(
+                id = "adapter-bend-test",
+                origin = geometry.first(),
+                destination = geometry.last(),
+                intermediateWaypoints = persistentListOf(),
+                geometry = geometry.toImmutableList(),
+                distanceMeters = cumulativeMetres.last(),
+                durationSeconds = 300.0,
+                steps = persistentListOf(),
+            ),
+            cumulativeMetres = cumulativeMetres,
+            totalGeometryMetres = cumulativeMetres.last(),
+        )
+        val guidanceRoute = GuidanceRoute(
+            totalDistanceMeters = cumulativeMetres.last(),
+            totalDurationSeconds = 300,
+            tollTotalYen = null,
+            events = listOf(laneFacilityEvent(id = "bend-lane", geometryMeters = bendMeters)).toImmutableList(),
+        )
+
+        val selection = selector.select(route = guidanceRoute, currentCumulativeMeters = 0.0)
+        val projection = adapter.adapt(
+            guidanceRoute = guidanceRoute,
+            selection = selection,
+            context = context,
+            currentCumulativeMeters = 0.0,
+            timestampMillis = 1_000L,
+        )
+
+        val recommendedLane = projection.lanes.first().lanes.first { lane -> lane.isActive }
+        assertEquals(ManeuverModifier.LEFT, recommendedLane.recommendedDirection)
+    }
+
     private fun buildRoute(): GuidanceRoute = GuidanceRoute(
         totalDistanceMeters = 400.0,
         totalDurationSeconds = 300,
