@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.navigation.newguidance.progress
 
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
@@ -8,8 +9,13 @@ import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventDetails
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventId
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceLane
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceManeuver
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceRoute
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneConfidence
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneLayout
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneMark
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneSource
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.RouteAnchor
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -43,6 +49,26 @@ class GuidanceRouteSelectorTest {
         assertNull(selection.followupPrimaryEvent)
         // 距離 300 (facility) と 400 (arrive) の 2 件だけが先行イベントとして残る。
         assertEquals(2, selection.eventsAfterCurrent.size)
+    }
+
+    @Test
+    fun `レーンを持つ通過イベントを主案内と独立に active lane として選ぶ`() {
+        val selector = GuidanceRouteSelector()
+        val route = GuidanceRoute(
+            totalDistanceMeters = 400.0,
+            totalDurationSeconds = 120,
+            tollTotalYen = null,
+            events = listOf(
+                laneEvent(id = "toll-lane", geometryMeters = 150.0),
+                maneuverEvent(id = "turn", geometryMeters = 250.0, type = ManeuverType.TURN),
+            ).toImmutableList(),
+        )
+
+        val selection = selector.select(route = route, currentCumulativeMeters = 0.0)
+
+        // 主案内 (turn) より手前にある主案内 null のレーンイベントを active lane に選ぶ。
+        assertEquals("toll-lane", selection.activeLaneEvent?.id?.value)
+        assertEquals("turn", selection.nextPrimaryEvent?.id?.value)
     }
 
     private fun buildRoute(): GuidanceRoute = GuidanceRoute(
@@ -82,6 +108,37 @@ class GuidanceRouteSelectorTest {
         anchor = anchorAt(geometryMeters),
         primary = null,
         details = emptyDetails(),
+        sourceRefs = persistentListOf(),
+    )
+
+    private fun laneEvent(
+        id: String,
+        geometryMeters: Double,
+    ): GuidanceEvent = GuidanceEvent(
+        id = GuidanceEventId(id),
+        anchor = anchorAt(geometryMeters),
+        primary = null,
+        details = GuidanceEventDetails(
+            facility = null,
+            lane = markerLane(),
+            toll = null,
+            signpost = null,
+            boundary = null,
+            roadName = null,
+            notices = persistentListOf(),
+        ),
+        sourceRefs = persistentListOf(),
+    )
+
+    private fun markerLane(): GuidanceLane = GuidanceLane(
+        layout = LaneLayout.MarkerLayout(
+            lanes = listOf(LaneMark(rawA = 1, rawB = 0), LaneMark(rawA = 0, rawB = 0)).toImmutableList(),
+            kind = 0,
+        ),
+        instruction = null,
+        warning = null,
+        sources = persistentSetOf(LaneSource.MARKER),
+        confidence = LaneConfidence.MEDIUM,
         sourceRefs = persistentListOf(),
     )
 

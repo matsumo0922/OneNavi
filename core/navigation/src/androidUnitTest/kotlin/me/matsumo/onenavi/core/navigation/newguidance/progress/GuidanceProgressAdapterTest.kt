@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.navigation.newguidance.progress
 
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
@@ -15,13 +16,19 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventDetails
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventId
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceLane
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceManeuver
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceRoute
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneConfidence
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneLayout
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneMark
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneSource
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.RouteAnchor
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacility
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 /**
  * [GuidanceProgressAdapter] の semantic → UI モデル射影テスト。
@@ -56,6 +63,35 @@ class GuidanceProgressAdapterTest {
         val tollItem = assertIs<FacilityPanelItem>(projection.panelItems[1])
         assertEquals(GuidancePanelFacility.TOLL_GATE, tollItem.kind)
         assertEquals(TollPanelSubtitle(amountYen = 320), tollItem.subtitle)
+    }
+
+    @Test
+    fun `主案内を持たないレーンイベントも progress lanes に乗る`() {
+        val selector = GuidanceRouteSelector()
+        val adapter = GuidanceProgressAdapter()
+        val guidanceRoute = GuidanceRoute(
+            totalDistanceMeters = 400.0,
+            totalDurationSeconds = 300,
+            tollTotalYen = 320,
+            events = listOf(
+                laneFacilityEvent(id = "event-toll", geometryMeters = 100.0),
+                maneuverEvent(id = "event-3", guidancePointIndex = 3, geometryMeters = 300.0, type = ManeuverType.TURN),
+            ).toImmutableList(),
+        )
+        val context = buildContext()
+
+        val selection = selector.select(route = guidanceRoute, currentCumulativeMeters = 0.0)
+        val projection = adapter.adapt(
+            guidanceRoute = guidanceRoute,
+            selection = selection,
+            context = context,
+            currentCumulativeMeters = 0.0,
+            timestampMillis = 1_000L,
+        )
+
+        // 主案内 (turn) ではなく、手前の主案内 null レーンイベント (料金所レーン) が progress.lanes に乗る。
+        assertEquals(1, projection.lanes.size)
+        assertTrue(projection.lanes.first().lanes.any { lane -> lane.isActive })
     }
 
     private fun buildRoute(): GuidanceRoute = GuidanceRoute(
@@ -120,6 +156,37 @@ class GuidanceProgressAdapterTest {
         details = emptyDetails(
             facility = StepFacility(kind = kind, name = "料金所", services = persistentListOf()),
         ),
+        sourceRefs = persistentListOf(),
+    )
+
+    private fun laneFacilityEvent(
+        id: String,
+        geometryMeters: Double,
+    ): GuidanceEvent = GuidanceEvent(
+        id = GuidanceEventId(id),
+        anchor = anchorAt(geometryMeters = geometryMeters, guidancePointIndex = null),
+        primary = null,
+        details = GuidanceEventDetails(
+            facility = StepFacility(kind = FacilityKind.TOLL_GATE, name = "料金所", services = persistentListOf()),
+            lane = markerLane(),
+            toll = null,
+            signpost = null,
+            boundary = null,
+            roadName = null,
+            notices = persistentListOf(),
+        ),
+        sourceRefs = persistentListOf(),
+    )
+
+    private fun markerLane(): GuidanceLane = GuidanceLane(
+        layout = LaneLayout.MarkerLayout(
+            lanes = listOf(LaneMark(rawA = 1, rawB = 0), LaneMark(rawA = 0, rawB = 0)).toImmutableList(),
+            kind = 0,
+        ),
+        instruction = null,
+        warning = null,
+        sources = persistentSetOf(LaneSource.MARKER),
+        confidence = LaneConfidence.MEDIUM,
         sourceRefs = persistentListOf(),
     )
 

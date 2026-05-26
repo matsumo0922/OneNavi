@@ -102,7 +102,11 @@ internal class GuidanceProgressAdapter {
     // ---------------------------------------------------------------------
 
     /**
-     * 次の主案内が可視距離内に迫っていれば、そのレーンガイダンスを取り出す。
+     * レーンを持つ直近イベントが可視距離内に迫っていれば、そのレーンガイダンスを取り出す。
+     *
+     * レーンは主案内に紐付くとは限らない (料金所レーン等は primary == null) ため、主案内カーソル
+     * ではなく selector が選んだ [GuidanceSelection.activeLaneEvent] を使う。レーン方向は主案内が
+     * あればその modifier、無ければ直進を既定とする。
      *
      * @param selection 現在地より先のイベントカーソル
      * @param currentCumulativeMeters 現在地の geometry 累積距離
@@ -112,7 +116,7 @@ internal class GuidanceProgressAdapter {
         selection: GuidanceSelection,
         currentCumulativeMeters: Double,
     ): ImmutableList<LaneGuidance> {
-        val event = selection.nextPrimaryEvent ?: return persistentListOf()
+        val event = selection.activeLaneEvent ?: return persistentListOf()
         val lane = event.details.lane ?: return persistentListOf()
         val distanceMeters = event.anchor.geometryDistanceFromStartMeters - currentCumulativeMeters
         if (distanceMeters !in 0.0..LANE_GUIDANCE_VISIBILITY_METRES) return persistentListOf()
