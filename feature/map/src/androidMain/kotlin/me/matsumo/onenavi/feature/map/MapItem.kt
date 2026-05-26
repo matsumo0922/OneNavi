@@ -22,12 +22,15 @@ import com.google.android.gms.maps.GoogleMapOptions
 import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PointOfInterest
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 
 @Composable
 internal fun MapItem(
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
+    hazeState: HazeState,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
@@ -55,6 +58,7 @@ internal fun MapItem(
         AndroidView(
             modifier = Modifier
                 .fillMaxSize()
+                .hazeSource(hazeState)
                 .onSizeChanged { size ->
                     cameraState.updateViewportSize(
                         widthPx = size.width,

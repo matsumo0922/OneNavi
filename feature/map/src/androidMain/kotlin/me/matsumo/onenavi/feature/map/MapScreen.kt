@@ -27,6 +27,8 @@ import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.google.android.gms.maps.GoogleMap
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.rememberHazeState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapControls
@@ -74,6 +76,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
         label = "ControlsBottomPadding",
     )
 
+    val hazeState = rememberHazeState()
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     val cameraState = rememberMapCameraState()
     val scaffoldState = rememberBottomSheetScaffoldState(
@@ -140,6 +143,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                     modifier = Modifier.fillMaxSize(),
                     googleMap = googleMap,
                     cameraState = cameraState,
+                    hazeState = hazeState,
                     onMapUpdate = { googleMap = it },
                     onPointOfInterestClicked = { pointOfInterest ->
                         viewModel.onUiEvent(
@@ -184,6 +188,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                     screenState = screenState,
                     guidanceState = guidanceState,
                     cameraState = cameraState,
+                    hazeState = hazeState,
                     onUiEvent = viewModel::onUiEvent,
                 )
 
@@ -214,6 +219,7 @@ private fun MapScreenContent(
     screenState: MapScreenState,
     guidanceState: GuidanceState,
     cameraState: MapCameraState,
+    hazeState: HazeState,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -243,6 +249,7 @@ private fun MapScreenContent(
             MapNavigationContent(
                 modifier = modifier,
                 guidanceState = guidanceState,
+                hazeState = hazeState,
                 onUiEvent = onUiEvent,
             )
         }
