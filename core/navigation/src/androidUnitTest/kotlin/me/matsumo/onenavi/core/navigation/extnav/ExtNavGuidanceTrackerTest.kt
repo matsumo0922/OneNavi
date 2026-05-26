@@ -161,6 +161,7 @@ class ExtNavGuidanceTrackerTest {
                 category = category,
             ),
         ),
+        announcementBlocks = persistentListOf(),
         imageRefs = persistentListOf(),
         maneuver = buildManeuverHint(
             facilityKind = facilityKind,
