@@ -23,8 +23,8 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.GuidancePanelSubtitl
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceTextPanelSubtitle
 import me.matsumo.onenavi.core.navigation.newguidance.model.Lane
+import me.matsumo.onenavi.core.navigation.newguidance.model.LaneGuidance
 import me.matsumo.onenavi.core.navigation.newguidance.model.ManeuverPanelItem
-import me.matsumo.onenavi.core.navigation.newguidance.model.RecommendedLanesPanelSubtitle
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.model.TollPanelSubtitle
 import kotlin.math.abs
@@ -144,18 +144,26 @@ class ExtNavGuidanceTracker {
             guidancePointMetres = guidancePointMetres,
             intersections = intersections,
         )
+        val laneAnchors = buildLaneAnchors(
+            payload = payload,
+            route = route,
+            cumulativeMetres = cumulativeMetres,
+            guidancePointMetres = guidancePointMetres,
+        )
 
         return AttachedRoute(
             route = route,
             cumulativeMetres = cumulativeMetres,
             totalGeometryMetres = totalGeometryMetres,
             maneuverEvents = maneuverEvents,
+            laneAnchors = laneAnchors,
             panelEvents = buildPanelEvents(
                 route = route,
                 cumulativeMetres = cumulativeMetres,
                 totalGeometryMetres = totalGeometryMetres,
                 maneuverEvents = maneuverEvents,
                 intersections = intersections,
+                laneAnchors = laneAnchors,
             ),
         )
     }
@@ -350,11 +358,48 @@ class ExtNavGuidanceTracker {
                     cumulativeMetres = cumulativeMetres,
                     geometryMetres = guidancePointMetresOnGeometry,
                     nearestIntersection = nearestIntersection,
-                    modifier = modifier,
                 ),
+                laneGuidance = guidancePoint.maneuver
+                    ?.laneInfo
+                    ?.toLaneGuidance(modifier = modifier),
             )
         }
         .sortedBy { event -> event.geometryMetres }
+
+    /**
+     * レーン情報を持つ GP を geometry 距離付き anchor に変換する。
+     *
+     * @param payload 外部ナビ API ライブラリ由来 payload
+     * @param route 案内対象 route
+     * @param cumulativeMetres geometry index ごとの累積距離
+     * @param guidancePointMetres GP index ごとの geometry 累積距離
+     * @return geometry 距離順のレーン anchor
+     */
+    private fun buildLaneAnchors(
+        payload: ExtNavRoutePayload,
+        route: RouteDetail,
+        cumulativeMetres: DoubleArray,
+        guidancePointMetres: DoubleArray,
+    ): List<TrackerLaneAnchor> = payload.routeGuidance.guidancePoints
+        .mapIndexedNotNull { guidancePointIndex, guidancePoint ->
+            val laneInfo = guidancePoint.maneuver?.laneInfo ?: return@mapIndexedNotNull null
+            val geometryMetres = guidancePointMetres.getOrNull(guidancePointIndex)
+                ?: return@mapIndexedNotNull null
+            val bearingDiffDegrees = bearingDiffAt(
+                route = route,
+                cumulativeMetres = cumulativeMetres,
+                targetMetres = geometryMetres,
+            )
+            val laneGuidance = laneInfo
+                .toLaneGuidance(modifier = maneuverModifier(bearingDiffDegrees))
+                ?: return@mapIndexedNotNull null
+
+            TrackerLaneAnchor(
+                geometryMetres = geometryMetres,
+                laneGuidance = laneGuidance,
+            )
+        }
+        .sortedBy { anchor -> anchor.geometryMetres }
 
     /**
      * パネルに出す進路選択イベントと通過施設イベントを 1 本の時系列にまとめる。
@@ -364,6 +409,7 @@ class ExtNavGuidanceTracker {
      * @param totalGeometryMetres geometry 上の最大距離
      * @param maneuverEvents 進路選択イベント列
      * @param intersections geometry 距離に snap 済みの intersection anchors
+     * @param laneAnchors レーン情報を持つ GP の anchor
      * @return パネル行テンプレート列
      */
     private fun buildPanelEvents(
@@ -372,6 +418,7 @@ class ExtNavGuidanceTracker {
         totalGeometryMetres: Double,
         maneuverEvents: List<TrackerManeuverEvent>,
         intersections: List<TrackerIntersection>,
+        laneAnchors: List<TrackerLaneAnchor>,
     ): List<TrackerPanelEvent> {
         val maneuverPanelEvents = maneuverEvents
             .filterNot { event -> event.type == ManeuverType.ARRIVE }
@@ -402,6 +449,10 @@ class ExtNavGuidanceTracker {
                         cumulativeMetres = cumulativeMetres,
                         geometryMetres = geometryMetres,
                     ),
+                    laneGuidance = nearestLaneAnchor(
+                        laneAnchors = laneAnchors,
+                        geometryMetres = geometryMetres,
+                    )?.laneGuidance,
                 )
             }
         return (maneuverPanelEvents + intersectionFacilityEvents)
@@ -575,7 +626,10 @@ class ExtNavGuidanceTracker {
                 currentCumulativeMeters = projection.currentCumulativeMeters,
                 timestampMillis = location.timestampMillis,
             ),
-            lanes = persistentListOf(),
+            lanes = currentLaneGuidance(
+                laneAnchors = attached.laneAnchors,
+                currentCumulativeMeters = projection.currentCumulativeMeters,
+            ),
             directionSign = null,
             highwayPanel = null,
             currentRoadName = null,
@@ -651,6 +705,40 @@ class ExtNavGuidanceTracker {
         .minByOrNull { intersection -> abs(intersection.geometryMetres - guidancePointMetres) }
 
     /**
+     * 施設の geometry 距離に最も近いレーン anchor を探す。
+     *
+     * @param laneAnchors geometry 距離順のレーン anchor
+     * @param geometryMetres 施設の geometry 累積距離
+     * @return 許容距離内で最も近いレーン anchor。見つからない場合は null
+     */
+    private fun nearestLaneAnchor(
+        laneAnchors: List<TrackerLaneAnchor>,
+        geometryMetres: Double,
+    ): TrackerLaneAnchor? = laneAnchors
+        .filter { anchor ->
+            abs(anchor.geometryMetres - geometryMetres) <= LANE_FACILITY_SNAP_TOLERANCE_METRES
+        }
+        .minByOrNull { anchor -> abs(anchor.geometryMetres - geometryMetres) }
+
+    /**
+     * 現在地の手前に迫っているレーン anchor からレーンガイダンスを取り出す。
+     *
+     * @param laneAnchors geometry 距離順のレーン anchor
+     * @param currentCumulativeMeters 現在地の geometry 累積距離
+     * @return 表示対象のレーンガイダンス。対象が無い場合は空
+     */
+    private fun currentLaneGuidance(
+        laneAnchors: List<TrackerLaneAnchor>,
+        currentCumulativeMeters: Double,
+    ): ImmutableList<LaneGuidance> = laneAnchors
+        .firstOrNull { anchor ->
+            val distanceMetres = anchor.geometryMetres - currentCumulativeMeters
+            distanceMetres in 0.0..LANE_GUIDANCE_VISIBILITY_METRES
+        }
+        ?.let { anchor -> persistentListOf(anchor.laneGuidance) }
+        ?: persistentListOf()
+
+    /**
      * 現在地より先にあるパネル行を距離・ETA 付きの公開モデルへ変換する。
      *
      * @param attached attach 済み route 情報
@@ -690,6 +778,7 @@ class ExtNavGuidanceTracker {
                     roadClass = event.roadClass,
                     services = persistentListOf(),
                     subtitle = event.subtitle,
+                    laneGuidance = event.laneGuidance,
                 )
                 is TrackerPanelEvent.Maneuver -> ManeuverPanelItem(
                     id = event.event.id,
@@ -704,6 +793,7 @@ class ExtNavGuidanceTracker {
                     roadClass = event.event.roadClass,
                     facility = event.event.facility,
                     subtitle = event.event.subtitle,
+                    laneGuidance = event.event.laneGuidance,
                 )
             }
         }
@@ -1319,7 +1409,6 @@ class ExtNavGuidanceTracker {
      * @param cumulativeMetres geometry index ごとの累積距離
      * @param geometryMetres GP の geometry 累積距離
      * @param nearestIntersection GP 近傍の intersection
-     * @param modifier UI 用 maneuver modifier
      * @return パネル補助表示。表示すべき情報が無い場合は null
      */
     private fun ExtNavGuidancePoint.panelManeuverSubtitle(
@@ -1327,16 +1416,12 @@ class ExtNavGuidanceTracker {
         cumulativeMetres: DoubleArray,
         geometryMetres: Double,
         nearestIntersection: TrackerIntersection?,
-        modifier: ManeuverModifier,
     ): GuidancePanelSubtitle? =
         highwayBoundarySubtitleAt(
             route = route,
             cumulativeMetres = cumulativeMetres,
             geometryMetres = geometryMetres,
         )
-            ?: maneuver
-                ?.laneInfo
-                ?.toRecommendedLanesSubtitle(modifier = modifier)
             ?: nearestIntersection
                 ?.guidanceText
                 ?.let { guidanceText -> GuidanceTextPanelSubtitle(text = guidanceText) }
@@ -1347,22 +1432,18 @@ class ExtNavGuidanceTracker {
      * @param route 案内対象 route
      * @param cumulativeMetres geometry index ごとの累積距離
      * @param geometryMetres 施設の geometry 累積距離
-     * @param laneInfo 施設 GP に紐づくレーン情報
-     * @param modifier レーンアイコンの方向
      * @return パネル補助表示。表示すべき情報が無い場合は null
      */
     private fun GuidancePanelFacility.panelFacilitySubtitle(
         route: RouteDetail,
         cumulativeMetres: DoubleArray,
         geometryMetres: Double,
-        laneInfo: ExtNavLaneInfo? = null,
-        modifier: ManeuverModifier? = null,
     ): GuidancePanelSubtitle? {
         if (this == GuidancePanelFacility.TOLL_GATE) {
             return route.panelTollYen()?.let { amountYen -> TollPanelSubtitle(amountYen = amountYen) }
         }
 
-        val highwayBoundarySubtitle = when (this) {
+        return when (this) {
             GuidancePanelFacility.IC,
             GuidancePanelFacility.JCT,
             -> highwayBoundarySubtitleAt(
@@ -1375,11 +1456,6 @@ class ExtNavGuidanceTracker {
             GuidancePanelFacility.TOLL_GATE,
             -> null
         }
-
-        return highwayBoundarySubtitle
-            ?: laneInfo?.toRecommendedLanesSubtitle(
-                modifier = modifier ?: ManeuverModifier.STRAIGHT,
-            )
     }
 
     /**
@@ -1448,17 +1524,17 @@ class ExtNavGuidanceTracker {
         if (index in indices) this[index] else null
 
     /**
-     * レーン情報をパネル補助表示へ変換する。
+     * レーン情報をレーンガイダンスへ変換する。
      *
      * @param modifier レーンアイコンの方向
-     * @return 推奨レーン補助表示。推奨レーンが無い場合は null
+     * @return レーンガイダンス。推奨レーンが無い場合は null
      */
-    private fun ExtNavLaneInfo.toRecommendedLanesSubtitle(
+    private fun ExtNavLaneInfo.toLaneGuidance(
         modifier: ManeuverModifier,
-    ): RecommendedLanesPanelSubtitle? {
+    ): LaneGuidance? {
         if (markers.isEmpty() || markers.none { marker -> marker.isRecommended }) return null
 
-        return RecommendedLanesPanelSubtitle(
+        return LaneGuidance(
             lanes = markers
                 .map { marker ->
                     Lane(
@@ -1836,6 +1912,7 @@ class ExtNavGuidanceTracker {
      * @param cumulativeMetres geometry index ごとの累積距離
      * @param totalGeometryMetres geometry の総距離
      * @param maneuverEvents TBT 対象にする進路選択イベント
+     * @param laneAnchors レーン情報を持つ GP の anchor
      * @param panelEvents 案内中パネルへ表示するイベント
      */
     private class AttachedRoute(
@@ -1843,6 +1920,7 @@ class ExtNavGuidanceTracker {
         val cumulativeMetres: DoubleArray,
         val totalGeometryMetres: Double,
         val maneuverEvents: List<TrackerManeuverEvent>,
+        val laneAnchors: List<TrackerLaneAnchor>,
         val panelEvents: List<TrackerPanelEvent>,
     )
 
@@ -1860,6 +1938,7 @@ class ExtNavGuidanceTracker {
      * @param roadClass 地点付近の道路種別
      * @param facility 施設を伴う案内地点の場合の施設種別
      * @param subtitle 補助表示。表示すべき情報が無い場合は null
+     * @param laneGuidance レーンガイダンス。無い場合は null
      */
     private data class TrackerManeuverEvent(
         val id: String,
@@ -1873,6 +1952,7 @@ class ExtNavGuidanceTracker {
         val roadClass: RoadClass,
         val facility: GuidancePanelFacility?,
         val subtitle: GuidancePanelSubtitle?,
+        val laneGuidance: LaneGuidance?,
     )
 
     /**
@@ -1902,6 +1982,7 @@ class ExtNavGuidanceTracker {
          * @param kind 施設種別
          * @param roadClass 地点付近の道路種別
          * @param subtitle 補助表示。表示すべき情報が無い場合は null
+         * @param laneGuidance レーンガイダンス。無い場合は null
          */
         data class Facility(
             val id: String,
@@ -1911,6 +1992,7 @@ class ExtNavGuidanceTracker {
             val kind: GuidancePanelFacility,
             val roadClass: RoadClass,
             val subtitle: GuidancePanelSubtitle?,
+            val laneGuidance: LaneGuidance?,
         ) : TrackerPanelEvent
     }
 
@@ -1955,6 +2037,17 @@ class ExtNavGuidanceTracker {
         val name: String,
         val guidanceText: String?,
         val facility: GuidancePanelFacility?,
+    )
+
+    /**
+     * レーン情報を geometry 距離へ snap した anchor。
+     *
+     * @param geometryMetres レーン情報に対応する geometry 累積距離
+     * @param laneGuidance 推奨レーンを含むレーンガイダンス
+     */
+    private data class TrackerLaneAnchor(
+        val geometryMetres: Double,
+        val laneGuidance: LaneGuidance,
     )
 
     /**
@@ -2028,6 +2121,12 @@ class ExtNavGuidanceTracker {
 
         /** 高速入口 / 出口と panel event を対応付ける最大距離。 */
         private const val HIGHWAY_BOUNDARY_PANEL_TOLERANCE_METRES: Double = 600.0
+
+        /** 施設パネルとレーン anchor を対応付ける最大距離。 */
+        private const val LANE_FACILITY_SNAP_TOLERANCE_METRES: Double = 150.0
+
+        /** メインのレーンガイダンスを表示し始める手前距離。 */
+        private const val LANE_GUIDANCE_VISIBILITY_METRES: Double = 800.0
 
         /** 目的地直前で off-route 候補を抑制する残距離。 */
         private const val ARRIVAL_SUPPRESSION_METRES: Double = 100.0
