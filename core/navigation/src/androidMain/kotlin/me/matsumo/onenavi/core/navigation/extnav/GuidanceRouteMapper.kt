@@ -43,9 +43,10 @@ import me.matsumo.drive.supporter.api.guidance.domain.LaneInfo as ExtNavLaneInfo
  * 距離・方位・座標は共通の [RouteGeometryMath] を、maneuver 分類は [ManeuverClassifier]
  * を使う。
  *
- * 現状は骨組み実装で、各イベントの主案内 ([GuidanceManeuver]) とレーン ([GuidanceLane])
- * のみを埋める。施設 / 看板 / 料金 / 境界 / 道路名 / 通知は後続で [GuidanceEventDetails]
- * に追加する。
+ * 各 GP を主案内 ([GuidanceManeuver])・レーン ([GuidanceLane])・施設・看板・境界・道路名・
+ * 通知を持つ [GuidanceEvent] に射影する。さらに、GP に紐付かない施設付き intersection
+ * (通過 SA / PA / 料金所など) を主案内 null の通過施設イベントとして補完する。
+ * レーンの instruction / warning は発話テキスト解析経路を作る段階で埋める。
  */
 internal class GuidanceRouteMapper {
 
@@ -138,7 +139,9 @@ internal class GuidanceRouteMapper {
     }
 
     /**
-     * 各 GP を [GuidanceEvent] へ変換する。主案内・レーン・施設・通知を持つ GP だけを出す。
+     * 各 GP を [GuidanceEvent] へ変換し、さらに GP に紐付かない施設付き intersection を
+     * 通過施設イベントとして補完する。主案内・レーン・施設・通知のいずれかを持つものだけを
+     * geometry 距離の昇順で返す。
      */
     private fun buildEvents(
         payload: ExtNavRoutePayload,
@@ -150,10 +153,14 @@ internal class GuidanceRouteMapper {
     ): ImmutableList<GuidanceEvent> {
         val guidancePoints = payload.routeGuidance.guidancePoints
         val lastIndex = guidancePoints.lastIndex
-        val events = guidancePoints.mapIndexedNotNull { guidancePointIndex, guidancePoint ->
-            buildEventAt(
+        val consumedIntersections = mutableSetOf<IntersectionAnchor>()
+        val events = mutableListOf<GuidanceEvent>()
+
+        // GP 由来イベント。各イベントが近傍として使った intersection を消費済みに記録する。
+        for (guidancePointIndex in guidancePoints.indices) {
+            val context = buildEventContext(
                 guidancePointIndex = guidancePointIndex,
-                guidancePoint = guidancePoint,
+                guidancePoint = guidancePoints[guidancePointIndex],
                 lastIndex = lastIndex,
                 route = route,
                 cumulativeMetres = cumulativeMetres,
@@ -161,36 +168,108 @@ internal class GuidanceRouteMapper {
                 distanceMapper = distanceMapper,
                 intersectionAnchors = intersectionAnchors,
             )
+            val event = buildEvent(
+                guidancePoint = guidancePoints[guidancePointIndex],
+                context = context,
+                route = route,
+                cumulativeMetres = cumulativeMetres,
+            ) ?: continue
+            val nearestIntersection = context.nearestIntersection
+            if (nearestIntersection != null) consumedIntersections += nearestIntersection
+            events += event
         }
+
+        addUncoveredFacilityEvents(
+            events = events,
+            intersectionAnchors = intersectionAnchors,
+            consumedIntersections = consumedIntersections,
+            route = route,
+            cumulativeMetres = cumulativeMetres,
+        )
+        events.sortBy { event -> event.anchor.geometryDistanceFromStartMeters }
         return events.toImmutableList()
     }
 
-    /** 1 GP 分の位置を計算して [GuidanceEvent] を構築する (意味が無ければ null)。 */
-    private fun buildEventAt(
-        guidancePointIndex: Int,
-        guidancePoint: ExtNavGuidancePoint,
-        lastIndex: Int,
+    /**
+     * どの GP イベントにも紐付かなかった施設付き intersection を、主案内を持たない通過施設
+     * イベントとして [events] に追加する。GP が近傍として消費済みの intersection は重複を
+     * 避けるため除外する。
+     */
+    private fun addUncoveredFacilityEvents(
+        events: MutableList<GuidanceEvent>,
+        intersectionAnchors: List<IntersectionAnchor>,
+        consumedIntersections: Set<IntersectionAnchor>,
         route: RouteDetail,
         cumulativeMetres: DoubleArray,
-        totalGeometryMetres: Double,
-        distanceMapper: RouteDistanceMapper,
-        intersectionAnchors: List<IntersectionAnchor>,
+    ) {
+        for (intersectionIndex in intersectionAnchors.indices) {
+            val intersectionAnchor = intersectionAnchors[intersectionIndex]
+            if (intersectionAnchor in consumedIntersections) continue
+            val event = buildIntersectionFacilityEvent(
+                intersectionAnchor = intersectionAnchor,
+                intersectionIndex = intersectionIndex,
+                route = route,
+                cumulativeMetres = cumulativeMetres,
+            ) ?: continue
+            events += event
+        }
+    }
+
+    /**
+     * 施設付き intersection から、主案内 null + facility 付きの通過施設イベントを作る。
+     *
+     * GP に紐付かない通過施設なので [RouteAnchor.sourceGuidancePointIndex] は null とし、
+     * source 距離も持たない (geometry 距離のみ)。施設種別を持たない端点などは null を返す。
+     */
+    private fun buildIntersectionFacilityEvent(
+        intersectionAnchor: IntersectionAnchor,
+        intersectionIndex: Int,
+        route: RouteDetail,
+        cumulativeMetres: DoubleArray,
     ): GuidanceEvent? {
-        val context = buildEventContext(
-            guidancePointIndex = guidancePointIndex,
-            guidancePoint = guidancePoint,
-            lastIndex = lastIndex,
-            route = route,
+        val intersection = intersectionAnchor.intersection
+        val rawKind = intersection.facilityHint?.kind ?: return null
+        val facilityKind = rawKind.toFacilityKind() ?: return null
+        val refinedKind = facilityKind.refinedByName(intersection.name)
+        val geometryMetres = intersectionAnchor.geometryMetres
+        val location = RouteGeometryMath.pointAt(
+            geometry = route.geometry,
             cumulativeMetres = cumulativeMetres,
-            totalGeometryMetres = totalGeometryMetres,
-            distanceMapper = distanceMapper,
-            intersectionAnchors = intersectionAnchors,
+            targetMetres = geometryMetres,
+            fallback = route.origin,
         )
-        return buildEvent(
-            guidancePoint = guidancePoint,
-            context = context,
-            route = route,
-            cumulativeMetres = cumulativeMetres,
+        val facility = StepFacility(
+            kind = refinedKind,
+            name = intersection.name,
+            services = persistentListOf(),
+        )
+        val details = GuidanceEventDetails(
+            facility = facility,
+            lane = null,
+            toll = null,
+            signpost = buildSignpost(intersectionAnchor),
+            boundary = boundaryAt(
+                route = route,
+                cumulativeMetres = cumulativeMetres,
+                geometryMetres = geometryMetres,
+            ),
+            roadName = buildRoadName(intersectionAnchor),
+            notices = persistentListOf(),
+        )
+        val anchor = RouteAnchor(
+            sourceDistanceFromStartMeters = null,
+            geometryDistanceFromStartMeters = geometryMetres,
+            location = location,
+            sourceGuidancePointIndex = null,
+            sourceBlockIndex = null,
+            matchErrorMeters = null,
+        )
+        return GuidanceEvent(
+            id = GuidanceEventId("event-intersection-$intersectionIndex"),
+            anchor = anchor,
+            primary = null,
+            details = details,
+            sourceRefs = persistentListOf(),
         )
     }
 
