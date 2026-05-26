@@ -29,13 +29,10 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RecommendedLanesPane
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.model.TollPanelSubtitle
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlin.math.sin
-import kotlin.math.sqrt
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind as ExtNavGuidanceFacilityKind
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint as ExtNavGuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection as ExtNavIntersection
@@ -241,16 +238,8 @@ class ExtNavGuidanceTracker {
      * @param geometry route polyline
      * @return geometry index と同じ順序の累積距離配列
      */
-    private fun buildCumulativeGeometryMetres(geometry: List<RoutePoint>): DoubleArray {
-        if (geometry.isEmpty()) return DoubleArray(0)
-
-        val cumulativeMetres = DoubleArray(geometry.size)
-        for (index in 1 until geometry.size) {
-            cumulativeMetres[index] = cumulativeMetres[index - 1] +
-                haversineMetres(geometry[index - 1], geometry[index])
-        }
-        return cumulativeMetres
-    }
+    private fun buildCumulativeGeometryMetres(geometry: List<RoutePoint>): DoubleArray =
+        RouteGeometryMath.cumulativeMetres(geometry)
 
     /**
      * intersection の座標を最寄り geometry 点に snap し、距離 anchor として保持する。
@@ -1107,10 +1096,7 @@ class ExtNavGuidanceTracker {
         start: RoutePoint,
         end: RoutePoint,
         ratio: Double,
-    ): RoutePoint = RoutePoint(
-        latitude = start.latitude + (end.latitude - start.latitude) * ratio,
-        longitude = start.longitude + (end.longitude - start.longitude) * ratio,
-    )
+    ): RoutePoint = RouteGeometryMath.interpolateRoutePoint(start, end, ratio)
 
     // ---------------------------------------------------------------------
     // Off-route / maneuver classification
@@ -1357,29 +1343,14 @@ class ExtNavGuidanceTracker {
         isLastGuidancePoint: Boolean,
         bearingDiffDegrees: Float,
         facility: GuidancePanelFacility?,
-    ): Boolean {
-        if (isLastGuidancePoint) return true
-
-        val categories = categories()
-        val hasManeuverCategory = categories.any { category -> category in MANEUVER_CATEGORIES }
-        val hasRouteDecisionDirection = hasRouteDecisionDirection(bearingDiffDegrees)
-        val isMergeAlert = categories.any { category -> category in MERGE_CATEGORIES } &&
-            categories.none { category -> category in ROUTE_DECISION_CATEGORIES }
-
-        if (facility?.isPanelOnlyFacility() == true) return false
-        if (isMergeAlert) return false
-        if (facility != null && !hasRouteDecisionDirection) {
-            return false
-        }
-
-        if (hasManeuverCategory) return true
-
-        val hasMeaningfulPhrase = categories.any { category ->
-            category != GuidanceCategory.Unspecified &&
-                category != GuidanceCategory.RoadName
-        }
-        return hasMeaningfulPhrase && abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES
-    }
+    ): Boolean = ManeuverClassifier.shouldCreatePrimaryManeuver(
+        categories = categories(),
+        bearingDiffDegrees = bearingDiffDegrees,
+        isLastGuidancePoint = isLastGuidancePoint,
+        hasFacility = facility != null,
+        isPanelOnlyFacility = facility?.isPanelOnlyFacility() == true,
+        hasRouteDecisionDirection = hasRouteDecisionDirection(bearingDiffDegrees),
+    )
 
     /**
      * GP が route 選択を伴う方向を持つかを返す。
@@ -1391,7 +1362,7 @@ class ExtNavGuidanceTracker {
         bearingDiffDegrees: Float,
     ): Boolean =
         maneuver?.direction?.isRouteDecisionDirection() == true ||
-            abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES
+            abs(bearingDiffDegrees) >= ManeuverClassifier.TURN_BEARING_DIFF_DEGREES
 
     /**
      * GP に紐付く phrase category を取得する。
@@ -1616,42 +1587,16 @@ class ExtNavGuidanceTracker {
      *
      * @return 直進・不明以外なら true
      */
-    private fun ExtNavManeuverDirection.isRouteDecisionDirection(): Boolean = when (this) {
-        ExtNavManeuverDirection.Straight,
-        ExtNavManeuverDirection.Unknown,
-        -> false
-        ExtNavManeuverDirection.UTurn,
-        ExtNavManeuverDirection.Left,
-        ExtNavManeuverDirection.SlantLeft,
-        ExtNavManeuverDirection.ThisSideLeft,
-        ExtNavManeuverDirection.Right,
-        ExtNavManeuverDirection.SlantRight,
-        ExtNavManeuverDirection.ThisSideRight,
-        -> true
-    }
+    private fun ExtNavManeuverDirection.isRouteDecisionDirection(): Boolean =
+        ManeuverClassifier.isRouteDecisionDirection(this)
 
     /**
      * 外部ナビ API ライブラリ由来の方向を UI 用 modifier へ変換する。
      *
      * @return UI 用 maneuver modifier
      */
-    private fun ExtNavManeuverDirection.toManeuverModifier(): ManeuverModifier = when (this) {
-        ExtNavManeuverDirection.Straight,
-        ExtNavManeuverDirection.Unknown,
-        -> ManeuverModifier.STRAIGHT
-        ExtNavManeuverDirection.UTurn,
-        -> ManeuverModifier.UTURN
-        ExtNavManeuverDirection.Left,
-        ExtNavManeuverDirection.ThisSideLeft,
-        -> ManeuverModifier.LEFT
-        ExtNavManeuverDirection.SlantLeft,
-        -> ManeuverModifier.SLIGHT_LEFT
-        ExtNavManeuverDirection.Right,
-        ExtNavManeuverDirection.ThisSideRight,
-        -> ManeuverModifier.RIGHT
-        ExtNavManeuverDirection.SlantRight,
-        -> ManeuverModifier.SLIGHT_RIGHT
-    }
+    private fun ExtNavManeuverDirection.toManeuverModifier(): ManeuverModifier =
+        ManeuverClassifier.toManeuverModifier(this)
 
     /**
      * 施設パネル行の表示名を返す。
@@ -1689,19 +1634,11 @@ class ExtNavGuidanceTracker {
         categories: List<GuidanceCategory>,
         isLastGuidancePoint: Boolean,
         bearingDiffDegrees: Float,
-    ): ManeuverType {
-        if (isLastGuidancePoint) return ManeuverType.ARRIVE
-        if (categories.any { category -> category in MERGE_CATEGORIES }) return ManeuverType.MERGE
-        if (categories.any { category -> category in FORK_CATEGORIES }) return ManeuverType.FORK
-        if (categories.any { category -> category == GuidanceCategory.RoadName }) return ManeuverType.NAME_CHANGE
-        if (abs(bearingDiffDegrees) >= TURN_BEARING_DIFF_DEGREES ||
-            categories.any { category -> category in TURN_CATEGORIES }
-        ) {
-            return ManeuverType.TURN
-        }
-
-        return ManeuverType.CONTINUE
-    }
+    ): ManeuverType = ManeuverClassifier.maneuverType(
+        categories = categories,
+        isLastGuidancePoint = isLastGuidancePoint,
+        bearingDiffDegrees = bearingDiffDegrees,
+    )
 
     /**
      * 方位差から左右・直進などの modifier を推定する。
@@ -1709,16 +1646,8 @@ class ExtNavGuidanceTracker {
      * @param bearingDiffDegrees GP 前後の進行方位差
      * @return UI 用 maneuver modifier
      */
-    private fun maneuverModifier(bearingDiffDegrees: Float): ManeuverModifier {
-        val absDiffDegrees = abs(bearingDiffDegrees)
-
-        return when {
-            absDiffDegrees <= STRAIGHT_MAX_DEGREES -> ManeuverModifier.STRAIGHT
-            absDiffDegrees <= SLIGHT_MAX_DEGREES -> if (bearingDiffDegrees >= 0f) ManeuverModifier.SLIGHT_RIGHT else ManeuverModifier.SLIGHT_LEFT
-            absDiffDegrees <= TURN_MAX_DEGREES -> if (bearingDiffDegrees >= 0f) ManeuverModifier.RIGHT else ManeuverModifier.LEFT
-            else -> ManeuverModifier.UTURN
-        }
-    }
+    private fun maneuverModifier(bearingDiffDegrees: Float): ManeuverModifier =
+        ManeuverClassifier.maneuverModifier(bearingDiffDegrees)
 
     /**
      * 指定距離付近の前後 segment 方位差を計算する。
@@ -1732,17 +1661,11 @@ class ExtNavGuidanceTracker {
         route: RouteDetail,
         cumulativeMetres: DoubleArray,
         targetMetres: Double,
-    ): Float {
-        if (route.geometry.size < 3 || cumulativeMetres.size < 3) return 0f
-
-        val segmentIndex = segmentIndexAt(cumulativeMetres, targetMetres)
-        val beforeIndex = (segmentIndex - 1).coerceAtLeast(0)
-        val afterIndex = (segmentIndex + 1).coerceAtMost(route.geometry.lastIndex - 1)
-        val beforeBearing = bearingDegrees(route.geometry[beforeIndex], route.geometry[beforeIndex + 1])
-        val afterBearing = bearingDegrees(route.geometry[afterIndex], route.geometry[afterIndex + 1])
-
-        return normalizeDegrees(afterBearing - beforeBearing)
-    }
+    ): Float = RouteGeometryMath.bearingDiffAt(
+        geometry = route.geometry,
+        cumulativeMetres = cumulativeMetres,
+        targetMetres = targetMetres,
+    )
 
     /**
      * route geometry 上の累積距離から座標を補間する。
@@ -1756,31 +1679,12 @@ class ExtNavGuidanceTracker {
         route: RouteDetail,
         cumulativeMetres: DoubleArray,
         targetMetres: Double,
-    ): RoutePoint {
-        val geometry = route.geometry
-        if (geometry.isEmpty()) return route.origin
-        if (geometry.size == 1 || cumulativeMetres.size <= 1) return geometry.first()
-
-        val coercedTargetMetres = targetMetres.coerceIn(0.0, cumulativeMetres.last())
-        val segmentIndex = segmentIndexAt(
-            cumulativeMetres = cumulativeMetres,
-            targetMetres = coercedTargetMetres,
-        ).coerceIn(0, geometry.lastIndex - 1)
-        val segmentStartMetres = cumulativeMetres[segmentIndex]
-        val segmentEndMetres = cumulativeMetres[segmentIndex + 1]
-        val segmentMetres = segmentEndMetres - segmentStartMetres
-        val ratio = if (segmentMetres > 0.0) {
-            ((coercedTargetMetres - segmentStartMetres) / segmentMetres).coerceIn(0.0, 1.0)
-        } else {
-            0.0
-        }
-
-        return interpolateRoutePoint(
-            start = geometry[segmentIndex],
-            end = geometry[segmentIndex + 1],
-            ratio = ratio,
-        )
-    }
+    ): RoutePoint = RouteGeometryMath.pointAt(
+        geometry = route.geometry,
+        cumulativeMetres = cumulativeMetres,
+        targetMetres = targetMetres,
+        fallback = route.origin,
+    )
 
     // ---------------------------------------------------------------------
     // Small math helpers
@@ -1796,25 +1700,7 @@ class ExtNavGuidanceTracker {
     private fun segmentIndexAt(
         cumulativeMetres: DoubleArray,
         targetMetres: Double,
-    ): Int {
-        if (cumulativeMetres.size <= 1) return 0
-        if (targetMetres <= 0.0) return 0
-        if (targetMetres >= cumulativeMetres.last()) return cumulativeMetres.lastIndex - 1
-
-        var lowIndex = 1
-        var highIndex = cumulativeMetres.lastIndex
-
-        while (lowIndex < highIndex) {
-            val middleIndex = (lowIndex + highIndex) / 2
-            if (cumulativeMetres[middleIndex] < targetMetres) {
-                lowIndex = middleIndex + 1
-            } else {
-                highIndex = middleIndex
-            }
-        }
-
-        return (lowIndex - 1).coerceIn(0, cumulativeMetres.lastIndex - 1)
-    }
+    ): Int = RouteGeometryMath.segmentIndexAt(cumulativeMetres, targetMetres)
 
     /**
      * value より先にある最初の maneuver event index を二分探索で返す。
@@ -1871,15 +1757,8 @@ class ExtNavGuidanceTracker {
      * @param to 終点
      * @return 2 点間距離メートル
      */
-    private fun haversineMetres(from: RoutePoint, to: RoutePoint): Double {
-        val fromLatRadians = latitudeRadians(from)
-        val toLatRadians = latitudeRadians(to)
-        val deltaLatRadians = Math.toRadians(to.latitude - from.latitude)
-        val deltaLngRadians = Math.toRadians(to.longitude - from.longitude)
-        val haversineTerm = sin(deltaLatRadians / 2.0) * sin(deltaLatRadians / 2.0) +
-            cos(fromLatRadians) * cos(toLatRadians) * sin(deltaLngRadians / 2.0) * sin(deltaLngRadians / 2.0)
-        return EARTH_RADIUS_METRES * 2.0 * atan2(sqrt(haversineTerm), sqrt(1.0 - haversineTerm))
-    }
+    private fun haversineMetres(from: RoutePoint, to: RoutePoint): Double =
+        RouteGeometryMath.haversineMetres(from, to)
 
     /**
      * 2 点を結ぶ進行方位を計算する。
@@ -1888,23 +1767,8 @@ class ExtNavGuidanceTracker {
      * @param to 終点
      * @return 0 度以上 360 度未満の方位角
      */
-    private fun bearingDegrees(from: RoutePoint, to: RoutePoint): Float {
-        val fromLatRadians = latitudeRadians(from)
-        val toLatRadians = latitudeRadians(to)
-        val deltaLngRadians = Math.toRadians(to.longitude - from.longitude)
-        val y = sin(deltaLngRadians) * cos(toLatRadians)
-        val x = cos(fromLatRadians) * sin(toLatRadians) -
-            sin(fromLatRadians) * cos(toLatRadians) * cos(deltaLngRadians)
-        return ((Math.toDegrees(atan2(y, x)) + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES).toFloat()
-    }
-
-    /**
-     * route point の緯度をラジアンへ変換する。
-     *
-     * @param point 変換対象 point
-     * @return 緯度ラジアン
-     */
-    private fun latitudeRadians(point: RoutePoint): Double = Math.toRadians(point.latitude)
+    private fun bearingDegrees(from: RoutePoint, to: RoutePoint): Float =
+        RouteGeometryMath.bearingDegrees(from, to)
 
     /**
      * 方位差を -180 度から 180 度の範囲へ正規化する。
@@ -1912,12 +1776,8 @@ class ExtNavGuidanceTracker {
      * @param degrees 正規化前の角度
      * @return 正規化後の角度
      */
-    private fun normalizeDegrees(degrees: Float): Float {
-        var normalized = degrees % FULL_CIRCLE_DEGREES
-        if (normalized > HALF_CIRCLE_DEGREES) normalized -= FULL_CIRCLE_DEGREES
-        if (normalized < -HALF_CIRCLE_DEGREES) normalized += FULL_CIRCLE_DEGREES
-        return normalized
-    }
+    private fun normalizeDegrees(degrees: Float): Float =
+        RouteGeometryMath.normalizeDegrees(degrees)
 
     /**
      * attach 中の route で tick 時に再利用する事前計算済みデータ。
@@ -2106,17 +1966,8 @@ class ExtNavGuidanceTracker {
 
     /** Tracker 内の数値閾値と category 分類定義。 */
     private companion object {
-        /** haversine 距離計算で使う地球半径メートル。 */
-        private const val EARTH_RADIUS_METRES: Double = 6_371_000.0
-
         /** 緯度 1 度をメートルへ近似変換する係数。 */
         private const val METRES_PER_DEGREE: Double = 111_320.0
-
-        /** 方位角の 1 周分の度数。 */
-        private const val FULL_CIRCLE_DEGREES: Float = 360f
-
-        /** 方位差を正規化するときの半周分の度数。 */
-        private const val HALF_CIRCLE_DEGREES: Float = 180f
 
         /** 秒からミリ秒へ変換する係数。 */
         private const val MILLIS_PER_SECOND: Long = 1_000L
@@ -2183,45 +2034,5 @@ class ExtNavGuidanceTracker {
 
         /** 案内判断点付近で使う GPS bearing と segment bearing の最小差分。 */
         private const val OFF_ROUTE_DECISION_POINT_BEARING_DIFF_DEGREES: Float = 45f
-
-        /** 方位差から turn とみなす最小角度。 */
-        private const val TURN_BEARING_DIFF_DEGREES: Float = 30f
-
-        /** straight modifier とみなす最大角度差。 */
-        private const val STRAIGHT_MAX_DEGREES: Float = 5f
-
-        /** slight modifier とみなす最大角度差。 */
-        private const val SLIGHT_MAX_DEGREES: Float = 60f
-
-        /** left / right modifier とみなす最大角度差。 */
-        private const val TURN_MAX_DEGREES: Float = 150f
-
-        /** merge 系 maneuver として扱う phrase category。 */
-        private val MERGE_CATEGORIES = setOf(
-            GuidanceCategory.Merge,
-            GuidanceCategory.MergeAttention,
-            GuidanceCategory.HighwayLaneReduction,
-        )
-
-        /** fork 系 maneuver として扱う phrase category。 */
-        private val FORK_CATEGORIES = setOf(
-            GuidanceCategory.AutoExpresswayEntry,
-            GuidanceCategory.TunnelBranch,
-        )
-
-        /** turn 系 maneuver として扱う phrase category。 */
-        private val TURN_CATEGORIES = setOf(
-            GuidanceCategory.IntersectionGuide,
-            GuidanceCategory.IntersectionGuideSoon,
-            GuidanceCategory.TrafficLight,
-            GuidanceCategory.TurnAttention,
-            GuidanceCategory.LocalRoadDirection,
-        )
-
-        /** 経路選択を伴う maneuver として扱う phrase category。 */
-        private val ROUTE_DECISION_CATEGORIES = FORK_CATEGORIES + TURN_CATEGORIES
-
-        /** TBT の対象にする phrase category。 */
-        private val MANEUVER_CATEGORIES = ROUTE_DECISION_CATEGORIES
     }
 }
