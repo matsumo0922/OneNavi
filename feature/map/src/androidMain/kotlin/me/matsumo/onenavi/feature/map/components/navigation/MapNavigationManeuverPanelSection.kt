@@ -79,6 +79,7 @@ import me.matsumo.onenavi.core.ui.theme.bold
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+@Suppress("UnusedParameter")
 @Composable
 internal fun MapNavigationManeuverPanelSection(
     panelItems: ImmutableList<GuidancePanelItem>,
