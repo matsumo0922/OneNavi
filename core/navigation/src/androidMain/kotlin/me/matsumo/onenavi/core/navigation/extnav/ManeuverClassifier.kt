@@ -152,7 +152,8 @@ internal object ManeuverClassifier {
     fun isRouteDecisionDirection(direction: ExtNavManeuverDirection): Boolean = when (direction) {
         ExtNavManeuverDirection.Straight,
         ExtNavManeuverDirection.Unknown,
-        -> false
+            -> false
+
         ExtNavManeuverDirection.UTurn,
         ExtNavManeuverDirection.Left,
         ExtNavManeuverDirection.SlantLeft,
@@ -160,7 +161,19 @@ internal object ManeuverClassifier {
         ExtNavManeuverDirection.Right,
         ExtNavManeuverDirection.SlantRight,
         ExtNavManeuverDirection.ThisSideRight,
-        -> true
+            -> true
+    }
+
+    /**
+     * 外部 API 由来の方向を UI 用 modifier へ変換する。不明なら null。
+     *
+     * @param direction 外部 API 由来の方向
+     * @return UI 用 maneuver modifier。不明なら null
+     */
+    fun toManeuverModifierOrNull(direction: ExtNavManeuverDirection?): ManeuverModifier? = if (direction == null || direction == ExtNavManeuverDirection.Unknown) {
+        null
+    } else {
+        toManeuverModifier(direction)
     }
 
     /**
@@ -172,19 +185,28 @@ internal object ManeuverClassifier {
     fun toManeuverModifier(direction: ExtNavManeuverDirection): ManeuverModifier = when (direction) {
         ExtNavManeuverDirection.Straight,
         ExtNavManeuverDirection.Unknown,
-        -> ManeuverModifier.STRAIGHT
+            -> ManeuverModifier.STRAIGHT
+
         ExtNavManeuverDirection.UTurn,
-        -> ManeuverModifier.UTURN
+            -> ManeuverModifier.UTURN
+
         ExtNavManeuverDirection.Left,
-        ExtNavManeuverDirection.ThisSideLeft,
-        -> ManeuverModifier.LEFT
+            -> ManeuverModifier.LEFT
+
         ExtNavManeuverDirection.SlantLeft,
-        -> ManeuverModifier.SLIGHT_LEFT
+            -> ManeuverModifier.SLIGHT_LEFT
+
+        ExtNavManeuverDirection.ThisSideLeft,
+            -> ManeuverModifier.SHARP_LEFT
+
         ExtNavManeuverDirection.Right,
-        ExtNavManeuverDirection.ThisSideRight,
-        -> ManeuverModifier.RIGHT
+            -> ManeuverModifier.RIGHT
+
         ExtNavManeuverDirection.SlantRight,
-        -> ManeuverModifier.SLIGHT_RIGHT
+            -> ManeuverModifier.SLIGHT_RIGHT
+
+        ExtNavManeuverDirection.ThisSideRight,
+            -> ManeuverModifier.SHARP_RIGHT
     }
 
     /** 浅い角度の左右 modifier を返す。 */

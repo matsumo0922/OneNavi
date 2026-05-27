@@ -448,7 +448,8 @@ internal class GuidanceRouteMapper {
             isLastGuidancePoint = context.isLastGuidancePoint,
             bearingDiffDegrees = context.bearingDiffDegrees,
         )
-        val modifier = ManeuverClassifier.maneuverModifier(context.bearingDiffDegrees)
+        val modifier = ManeuverClassifier.toManeuverModifierOrNull(guidancePoint.maneuver?.direction)
+            ?: ManeuverClassifier.maneuverModifier(context.bearingDiffDegrees)
         val intersectionName = context.nearestIntersection
             ?.intersection
             ?.name

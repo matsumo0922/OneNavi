@@ -70,6 +70,36 @@ class GuidanceRouteMapperTest {
     }
 
     @Test
+    fun `主案内 modifier は geometry より案内方向分類を優先する`() {
+        val mapper = GuidanceRouteMapper()
+        val route = buildRoute()
+        val routeGuidance = buildRouteGuidance().copy(
+            guidancePoints = listOf(
+                buildGuidancePoint(
+                    index = 0,
+                    distanceFromStartMetres = 200,
+                    category = GuidanceCategory.IntersectionGuide,
+                    laneInfo = null,
+                    direction = ManeuverDirection.Left,
+                ),
+                buildGuidancePoint(
+                    index = 1,
+                    distanceFromStartMetres = 950,
+                    category = GuidanceCategory.Unspecified,
+                    laneInfo = null,
+                ),
+            ).toImmutableList(),
+        )
+        val payload = ExtNavRoutePayload(id = route.id, routeGuidance = routeGuidance)
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        val turnEvent = guidanceRoute.events.first()
+        assertEquals(ManeuverType.TURN, turnEvent.primary?.type)
+        assertEquals(ManeuverModifier.LEFT, turnEvent.primary?.modifier)
+    }
+
+    @Test
     fun `lane を持つ GP は marker layout を保持し主案内を持たない`() {
         val mapper = GuidanceRouteMapper()
         val route = buildRoute()
@@ -492,6 +522,7 @@ class GuidanceRouteMapperTest {
         distanceFromStartMetres: Int,
         category: GuidanceCategory,
         laneInfo: LaneInfo?,
+        direction: ManeuverDirection = ManeuverDirection.Straight,
     ): GuidancePoint = GuidancePoint(
         index = index,
         gpType = 0,
@@ -509,7 +540,7 @@ class GuidanceRouteMapperTest {
         maneuver = ManeuverHint(
             angleIn = 0,
             angleOut = 0,
-            direction = ManeuverDirection.Straight,
+            direction = direction,
             laneInfo = laneInfo,
             specialNode = null,
             speedLimit = null,
