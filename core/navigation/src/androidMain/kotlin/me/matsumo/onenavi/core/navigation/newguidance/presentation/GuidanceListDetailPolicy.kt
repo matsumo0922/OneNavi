@@ -8,9 +8,10 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacility
  * フルリスト行の単一 detail 枠に何を出すかを優先順位で 1 度だけ決める policy (L3)。
  *
  * 複数の補足 (レーン / 料金 / 境界 / 看板) を持つイベントでも、表示できる枠は 1 つ。優先順位は
- * **レーン > 料金 (料金所) > 境界 > 看板** の固定順とし、domain ではなくこの policy に閉じる。
- * 文脈ごとの調整が要るときは domain に触れずここだけ変える。レーン判定で使う
- * [LanePresentation] は位置依存 (矢印の向き) のため呼び出し側が構築して渡す。状態を持たない。
+ * **料金 (料金所) > レーン > 境界 > 看板** の固定順とし、domain ではなくこの policy に閉じる。
+ * 料金所では (レーンを持っていても) 料金を優先し、料金所以外ではレーンが最優先になる。文脈ごとの
+ * 調整が要るときは domain に触れずここだけ変える。レーン判定で使う [LanePresentation] は位置依存
+ * (矢印の向き) のため呼び出し側が構築して渡す。状態を持たない。
  *
  * 料金は per-gate 値ではなくルート合計 (`tollTotalYen`) のみを持つため、料金所行に合計を出す。
  */
@@ -29,10 +30,10 @@ internal class GuidanceListDetailPolicy {
         lanePresentation: LanePresentation?,
         tollTotalYen: Int?,
     ): GuidanceListDetail? {
-        if (lanePresentation != null) return GuidanceListDetail.Lanes(lane = lanePresentation)
-
         val tollDetail = tollDetailOrNull(facility = event.details.facility, tollTotalYen = tollTotalYen)
         if (tollDetail != null) return tollDetail
+
+        if (lanePresentation != null) return GuidanceListDetail.Lanes(lane = lanePresentation)
 
         val boundary = event.details.boundary
         if (boundary != null) return GuidanceListDetail.Boundary(kind = boundary)
