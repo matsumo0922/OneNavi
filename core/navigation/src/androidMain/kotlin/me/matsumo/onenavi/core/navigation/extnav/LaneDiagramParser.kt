@@ -17,9 +17,9 @@ import me.matsumo.drive.supporter.api.guidance.domain.FlagsGroupEntry as ExtNavF
  * GP の `flags_group` を、一般道交差点 / 高速入口の車線図 ([LaneLayout.DirectionLayout]) として
  * 解釈する parser。
  *
- * `flags_group` は車線以外の離散メタにも使われる汎用フラグ配列のため、「2 レーン以上が既知方向
- * (左 / 直 / 右) を持つ」ものだけを車線図とみなす guard を置く。各 entry が左から 1 レーンで、
- * `directions` が進行方向コード、`b` がターゲット (推奨 / 強調) レーンを表す。状態を持たない。
+ * `flags_group` は車線以外の離散メタにも使われる汎用フラグ配列のため、「2 レーン以上が既知方向を
+ * 持つ」ものだけを車線図とみなす guard を置く。各 entry が左から 1 レーンで、`compactDirections` が
+ * 進行方向 compact code (1..8)、`b` がターゲット (推奨 / 強調) レーンを表す。状態を持たない。
  */
 internal class LaneDiagramParser {
 
@@ -51,12 +51,12 @@ internal class LaneDiagramParser {
     }
 
     /**
-     * 1 entry を方向付きレーンセルへ変換する。未確定の方向コードは捨てる。
+     * 1 entry を方向付きレーンセルへ変換する。未確定の compact code は捨てる。
      *
      * @return 方向 / ターゲット / 付加フラグを持つレーンセル
      */
     private fun ExtNavFlagsGroupEntry.toCell(): LaneDirectionCell {
-        val modifiers = directions.mapNotNull { code -> code.toModifierOrNull() }
+        val modifiers = compactDirections.mapNotNull { code -> code.toModifierOrNull() }
         return LaneDirectionCell(
             directions = modifiers.toImmutableSet(),
             isTarget = b == TARGET_LANE_FLAG,
@@ -65,14 +65,21 @@ internal class LaneDiagramParser {
     }
 
     /**
-     * `flags_group` の方向コードを [ManeuverModifier] へ変換する。未確定コード (5 / 7 等) は null。
+     * `flags_group` の compact code (1..8) を [ManeuverModifier] へ変換する。範囲外は null。
      *
-     * @return 対応する方向。未確定なら null
+     * 手前左 / 手前右 (this-side) は鋭角の左右折、斜め左 / 斜め右 (slant) はやや左右に対応させる。
+     *
+     * @return 対応する方向。範囲外なら null
      */
     private fun Int.toModifierOrNull(): ManeuverModifier? = when (this) {
-        DIRECTION_LEFT -> ManeuverModifier.LEFT
-        DIRECTION_STRAIGHT -> ManeuverModifier.STRAIGHT
-        DIRECTION_RIGHT -> ManeuverModifier.RIGHT
+        CODE_SLANT_LEFT -> ManeuverModifier.SLIGHT_LEFT
+        CODE_LEFT -> ManeuverModifier.LEFT
+        CODE_THIS_SIDE_LEFT -> ManeuverModifier.SHARP_LEFT
+        CODE_STRAIGHT -> ManeuverModifier.STRAIGHT
+        CODE_SLANT_RIGHT -> ManeuverModifier.SLIGHT_RIGHT
+        CODE_RIGHT -> ManeuverModifier.RIGHT
+        CODE_THIS_SIDE_RIGHT -> ManeuverModifier.SHARP_RIGHT
+        CODE_UTURN -> ManeuverModifier.UTURN
         else -> null
     }
 
@@ -86,13 +93,28 @@ internal class LaneDiagramParser {
         /** 付加 / 側方レーンを示す `a` の値。 */
         private const val APPEND_LANE_FLAG: Int = 1
 
-        /** 左折を示す方向コード。 */
-        private const val DIRECTION_LEFT: Int = 2
+        /** 斜め左を示す compact code。 */
+        private const val CODE_SLANT_LEFT: Int = 1
 
-        /** 直進を示す方向コード。 */
-        private const val DIRECTION_STRAIGHT: Int = 4
+        /** 左折を示す compact code。 */
+        private const val CODE_LEFT: Int = 2
 
-        /** 右折を示す方向コード。 */
-        private const val DIRECTION_RIGHT: Int = 6
+        /** 手前左を示す compact code。 */
+        private const val CODE_THIS_SIDE_LEFT: Int = 3
+
+        /** 直進を示す compact code。 */
+        private const val CODE_STRAIGHT: Int = 4
+
+        /** 斜め右を示す compact code。 */
+        private const val CODE_SLANT_RIGHT: Int = 5
+
+        /** 右折を示す compact code。 */
+        private const val CODE_RIGHT: Int = 6
+
+        /** 手前右を示す compact code。 */
+        private const val CODE_THIS_SIDE_RIGHT: Int = 7
+
+        /** U ターンを示す compact code。 */
+        private const val CODE_UTURN: Int = 8
     }
 }

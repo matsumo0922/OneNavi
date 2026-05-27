@@ -90,9 +90,9 @@ class GuidanceRouteMapperTest {
         val route = buildRoute()
         val guidancePoint = buildFlagsGroupGuidancePoint(
             entries = listOf(
-                FlagsGroupEntry(a = 0, b = 0, directions = persistentListOf(2, 4)),
-                FlagsGroupEntry(a = 0, b = 0, directions = persistentListOf(4)),
-                FlagsGroupEntry(a = 1, b = 1, directions = persistentListOf(6)),
+                FlagsGroupEntry(a = 0, b = 0, compactDirections = persistentListOf(2, 4)),
+                FlagsGroupEntry(a = 0, b = 0, compactDirections = persistentListOf(4)),
+                FlagsGroupEntry(a = 1, b = 1, compactDirections = persistentListOf(6)),
             ),
         )
         val payload = ExtNavRoutePayload(id = route.id, routeGuidance = buildLaneGuidance(guidancePoint))
