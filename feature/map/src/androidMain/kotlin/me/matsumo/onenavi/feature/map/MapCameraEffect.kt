@@ -47,7 +47,7 @@ internal fun MapCameraEffect(
     }
 
     val guiding = guidanceState as? GuidanceState.Guiding
-    val nextManeuver = guiding?.progress?.nextManeuver
+    val nextManeuver = guiding?.presentation?.nextManeuver
     val guidancePointIndex = nextManeuver?.guidancePointIndex
     val distanceToManeuverMeters = nextManeuver?.distanceToManeuverMeters
     val isOnRoute = guiding?.progress?.routeMatchState == RouteMatchState.ON_ROUTE

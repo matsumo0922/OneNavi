@@ -1,6 +1,5 @@
 package me.matsumo.onenavi.feature.map.state
 
-import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
@@ -74,6 +73,7 @@ class GuidanceVehicleLocationSelectorTest {
         durationRemainingSeconds = 120,
         etaEpochMillis = NOW_MILLIS + 120_000L,
         traveledMeters = 100,
+        elapsedSeconds = 60,
         currentCumulativeMeters = ROUTE_PROGRESS_METERS,
         snappedLocation = ROUTE_SNAPPED_LOCATION,
         bearingDegrees = 90f,
@@ -83,12 +83,6 @@ class GuidanceVehicleLocationSelectorTest {
         locationTimestampMillis = NOW_MILLIS,
         locationElapsedRealtimeNanos = NOW_NANOS,
         vehicleSpeedMps = 8f,
-        nextManeuver = null,
-        followupManeuver = null,
-        panelItems = persistentListOf(),
-        lanes = persistentListOf(),
-        directionSign = null,
-        highwayPanel = null,
         currentRoadName = null,
         currentRoadClass = RoadClass.ORDINARY,
         currentSpeedLimitKmh = null,

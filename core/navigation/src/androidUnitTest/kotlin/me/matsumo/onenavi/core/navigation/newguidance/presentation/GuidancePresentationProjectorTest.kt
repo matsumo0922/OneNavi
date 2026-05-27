@@ -1,17 +1,16 @@
-package me.matsumo.onenavi.core.navigation.newguidance.progress
+package me.matsumo.onenavi.core.navigation.newguidance.presentation
 
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
+import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.extnav.RouteGeometryMath
-import me.matsumo.onenavi.core.navigation.newguidance.model.FacilityPanelItem
-import me.matsumo.onenavi.core.navigation.newguidance.model.GuidancePanelFacility
-import me.matsumo.onenavi.core.navigation.newguidance.model.ManeuverPanelItem
-import me.matsumo.onenavi.core.navigation.newguidance.model.TollPanelSubtitle
+import me.matsumo.onenavi.core.navigation.newguidance.progress.GuidanceRouteSelector
+import me.matsumo.onenavi.core.navigation.newguidance.progress.RouteProjectionContext
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventDetails
@@ -28,47 +27,58 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacility
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * [GuidanceProgressAdapter] の semantic → UI モデル射影テスト。
+ * [GuidancePresentationProjector] の semantic → presentation 射影テスト。
  */
-class GuidanceProgressAdapterTest {
+class GuidancePresentationProjectorTest {
+
+    private val selector = GuidanceRouteSelector()
+    private val projector = GuidancePresentationProjector()
 
     @Test
-    fun `通過施設と主案内をパネル行へ射影し到着は除外する`() {
-        val selector = GuidanceRouteSelector()
-        val adapter = GuidanceProgressAdapter()
+    fun `通過施設と主案内をリスト行へ射影し到着は除外する`() {
         val guidanceRoute = buildRoute()
         val context = buildContext()
 
-        val selection = selector.select(route = guidanceRoute, currentCumulativeMeters = 0.0)
-        val projection = adapter.adapt(
-            guidanceRoute = guidanceRoute,
-            selection = selection,
-            context = context,
-            currentCumulativeMeters = 0.0,
-            timestampMillis = 1_000L,
-        )
+        val presentation = project(guidanceRoute = guidanceRoute, context = context)
 
-        assertEquals(ManeuverType.TURN, projection.nextManeuver?.type)
-        assertEquals(2, projection.nextManeuver?.guidancePointIndex)
-        assertEquals(ManeuverType.ARRIVE, projection.followupManeuver?.type)
+        assertEquals(ManeuverType.TURN, presentation.nextManeuver?.type)
+        assertEquals(2, presentation.nextManeuver?.guidancePointIndex)
+        assertEquals(ManeuverType.ARRIVE, presentation.followupManeuver?.type)
 
         // 到着は除外。残るのは主案内 (turn) と通過施設 (料金所) の 2 件で距離の降順。
-        assertEquals(2, projection.panelItems.size)
-        val maneuverItem = assertIs<ManeuverPanelItem>(projection.panelItems[0])
-        assertEquals("maneuver-2", maneuverItem.id)
+        assertEquals(2, presentation.listItems.size)
 
-        val tollItem = assertIs<FacilityPanelItem>(projection.panelItems[1])
-        assertEquals(GuidancePanelFacility.TOLL_GATE, tollItem.kind)
-        assertEquals(TollPanelSubtitle(amountYen = 320), tollItem.subtitle)
+        val maneuverItem = presentation.listItems[0]
+        assertEquals("maneuver-2", maneuverItem.id)
+        assertIs<GuidanceListIcon.Maneuver>(maneuverItem.icon)
+
+        val tollItem = presentation.listItems[1]
+        val tollBadge = assertIs<GuidanceListIcon.FacilityBadge>(tollItem.icon)
+        assertEquals(FacilityKind.TOLL_GATE, tollBadge.kind)
+        assertEquals(GuidanceListDetail.Toll(amountYen = 320), tollItem.detail)
     }
 
     @Test
-    fun `主案内を持たないレーンイベントも progress lanes に乗る`() {
-        val selector = GuidanceRouteSelector()
-        val adapter = GuidanceProgressAdapter()
+    fun `主案内ラベルとフォローアップがバナーに同時に乗る`() {
+        val guidanceRoute = buildRoute()
+        val context = buildContext()
+
+        val presentation = project(guidanceRoute = guidanceRoute, context = context)
+        val banner = presentation.banner
+
+        assertEquals(ManeuverType.TURN, banner?.primary?.type)
+        // レーンが無いので下段はフォローアップ案内になる。
+        val support = assertIs<BannerSupport.Followup>(banner?.support)
+        assertEquals(ManeuverType.ARRIVE, support.maneuver.type)
+        assertTrue(banner?.hasMoreEvents == true)
+    }
+
+    @Test
+    fun `主案内を持たないレーンイベントがバナー下段のレーンに乗る`() {
         val guidanceRoute = GuidanceRoute(
             totalDistanceMeters = 400.0,
             totalDurationSeconds = 300,
@@ -80,25 +90,16 @@ class GuidanceProgressAdapterTest {
         )
         val context = buildContext()
 
-        val selection = selector.select(route = guidanceRoute, currentCumulativeMeters = 0.0)
-        val projection = adapter.adapt(
-            guidanceRoute = guidanceRoute,
-            selection = selection,
-            context = context,
-            currentCumulativeMeters = 0.0,
-            timestampMillis = 1_000L,
-        )
+        val presentation = project(guidanceRoute = guidanceRoute, context = context)
 
-        // 主案内 (turn) ではなく、手前の主案内 null レーンイベント (料金所レーン) が progress.lanes に乗る。
-        assertEquals(1, projection.lanes.size)
-        assertTrue(projection.lanes.first().lanes.any { lane -> lane.isActive })
+        // 主案内 (turn) ではなく、手前の主案内 null レーンイベント (料金所レーン) が下段に乗る。
+        val support = assertIs<BannerSupport.Lanes>(presentation.banner?.support)
+        val visualLanes = assertIs<LanePresentation.VisualLanes>(support.lane)
+        assertTrue(visualLanes.lanes.any { lane -> lane.isActive })
     }
 
     @Test
     fun `主案内を持たないレーンイベントの矢印は geometry の方位差から決まる`() {
-        val selector = GuidanceRouteSelector()
-        val adapter = GuidanceProgressAdapter()
-
         // 東進 → 北進に折れる geometry。折れ点のレーンイベントは左折の矢印になるべき。
         val geometry = listOf(
             RoutePoint(latitude = 35.0, longitude = 139.000),
@@ -111,7 +112,7 @@ class GuidanceProgressAdapterTest {
         val bendMeters = cumulativeMetres[2]
         val context = RouteProjectionContext(
             route = RouteDetail(
-                id = "adapter-bend-test",
+                id = "projector-bend-test",
                 origin = geometry.first(),
                 destination = geometry.last(),
                 intermediateWaypoints = persistentListOf(),
@@ -123,24 +124,56 @@ class GuidanceProgressAdapterTest {
             cumulativeMetres = cumulativeMetres,
             totalGeometryMetres = cumulativeMetres.last(),
         )
+        // 主案内が無いとバナーは作られないため、折れ点より先に主案内を 1 つ置く。
         val guidanceRoute = GuidanceRoute(
             totalDistanceMeters = cumulativeMetres.last(),
             totalDurationSeconds = 300,
             tollTotalYen = null,
-            events = listOf(laneFacilityEvent(id = "bend-lane", geometryMeters = bendMeters)).toImmutableList(),
+            events = listOf(
+                laneFacilityEvent(id = "bend-lane", geometryMeters = bendMeters),
+                maneuverEvent(id = "after-turn", guidancePointIndex = 9, geometryMeters = cumulativeMetres.last(), type = ManeuverType.TURN),
+            ).toImmutableList(),
         )
 
+        val presentation = project(guidanceRoute = guidanceRoute, context = context)
+
+        val support = assertIs<BannerSupport.Lanes>(presentation.banner?.support)
+        val visualLanes = assertIs<LanePresentation.VisualLanes>(support.lane)
+        val recommendedLane = visualLanes.lanes.first { lane -> lane.isActive }
+        assertEquals(ManeuverModifier.LEFT, recommendedLane.recommendedDirection)
+    }
+
+    @Test
+    fun `主案内が無ければバナーは null`() {
+        val guidanceRoute = GuidanceRoute(
+            totalDistanceMeters = 400.0,
+            totalDurationSeconds = 300,
+            tollTotalYen = 320,
+            events = listOf(facilityEvent(id = "event-toll", geometryMeters = 100.0, kind = FacilityKind.TOLL_GATE)).toImmutableList(),
+        )
+        val context = buildContext()
+
+        val presentation = project(guidanceRoute = guidanceRoute, context = context)
+
+        assertNull(presentation.banner)
+        assertNull(presentation.nextManeuver)
+        assertEquals(1, presentation.listItems.size)
+    }
+
+    private fun project(
+        guidanceRoute: GuidanceRoute,
+        context: RouteProjectionContext,
+    ): GuidancePresentation {
         val selection = selector.select(route = guidanceRoute, currentCumulativeMeters = 0.0)
-        val projection = adapter.adapt(
+        return projector.project(
             guidanceRoute = guidanceRoute,
             selection = selection,
             context = context,
             currentCumulativeMeters = 0.0,
+            currentRoadClass = RoadClass.ORDINARY,
+            currentRoadName = null,
             timestampMillis = 1_000L,
         )
-
-        val recommendedLane = projection.lanes.first().lanes.first { lane -> lane.isActive }
-        assertEquals(ManeuverModifier.LEFT, recommendedLane.recommendedDirection)
     }
 
     private fun buildRoute(): GuidanceRoute = GuidanceRoute(
@@ -162,7 +195,7 @@ class GuidanceProgressAdapterTest {
         val cumulativeMetres = RouteGeometryMath.cumulativeMetres(geometry)
         return RouteProjectionContext(
             route = RouteDetail(
-                id = "adapter-test",
+                id = "projector-test",
                 origin = geometry.first(),
                 destination = geometry.last(),
                 intermediateWaypoints = persistentListOf(),

@@ -11,12 +11,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.ManeuverType
-import me.matsumo.onenavi.core.navigation.newguidance.model.Lane
+import me.matsumo.onenavi.core.navigation.newguidance.presentation.LaneCell
 import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
 
 @Composable
 internal fun MapNavigationManeuverLaneIcons(
-    lanes: ImmutableList<Lane>,
+    lanes: ImmutableList<LaneCell>,
     iconSize: Dp,
     spacing: Dp,
     activeTint: Color,
@@ -42,7 +42,7 @@ internal fun MapNavigationManeuverLaneIcons(
 
 @Composable
 private fun MapNavigationManeuverLaneIcon(
-    lane: Lane,
+    lane: LaneCell,
     activeTint: Color,
     inactiveTint: Color,
     modifier: Modifier = Modifier,
