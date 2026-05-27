@@ -277,7 +277,10 @@ class ExtNavGuidanceTracker {
             locationTimestampMillis = location.timestampMillis,
             locationElapsedRealtimeNanos = location.elapsedRealtimeNanos,
             vehicleSpeedMps = location.speedMps,
-            currentRoadName = null,
+            currentRoadName = currentRoadNameFor(
+                attached = attached,
+                currentCumulativeMeters = projection.currentCumulativeMeters,
+            ),
             currentRoadClass = currentRoadClass,
             currentSpeedLimitKmh = null,
             routeMatchState = routeMatchState,
@@ -779,6 +782,33 @@ class ExtNavGuidanceTracker {
         }
         ?.roadClass
         ?: RoadClass.ORDINARY
+
+    /**
+     * 現在地までに通過済みのイベントのうち、最も手前で道路名を持つものから現在の道路名を求める。
+     *
+     * 道路名は IC / JCT / 交差点付近のイベントにしか付かないため近似だが、案内ラベルの
+     * フォールバック (交差点名 / 看板が無いときの走行中道路名) には十分。該当が無ければ null。
+     *
+     * @param attached 案内ルートを持つ attach 済み情報
+     * @param currentCumulativeMeters 現在地の geometry 累積距離
+     * @return 現在走行中の道路名。求められなければ null
+     */
+    private fun currentRoadNameFor(
+        attached: AttachedRoute,
+        currentCumulativeMeters: Double,
+    ): String? {
+        var bestMetres = Double.NEGATIVE_INFINITY
+        var bestName: String? = null
+        for (event in attached.guidanceRoute.events) {
+            val roadName = event.details.roadName?.text ?: continue
+            val metres = event.anchor.geometryDistanceFromStartMeters
+            if (metres > currentCumulativeMeters) continue
+            if (metres < bestMetres) continue
+            bestMetres = metres
+            bestName = roadName
+        }
+        return bestName
+    }
 
     // ---------------------------------------------------------------------
     // Small math helpers
