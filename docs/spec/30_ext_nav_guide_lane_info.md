@@ -18,6 +18,10 @@
 - 大泉IC入口: `直進 / 直進 / 右折(target)`
 - 学園の森: `左折+直進 / 直進 / 右折(target)`
 
+その後、保存済み 12 GUIDE payload を横断スキャンし、`flags_group` を持つ 404 GP、
+`lane_markers` を持つ 41 GP、`props_22` を持つ 251 GP を確認した。
+本書にはその追加結果も反映している。
+
 また、調査初期に候補と見ていた `props_22 = {40, 560, 0}` は車線ではなく
 速度区間情報と判断したため、その理由も明記する。
 
@@ -67,12 +71,14 @@ entry.field_2 absent or 0 -> normal lane
   `target lane` 側の概念。
 - `isRecommendLane` 相当の情報は Java/Kotlin UI 層では主表示にほぼ使われず、
   実際の強調表示は `isTargetLane` 相当で行われている。
+- 横断スキャンでは `field_2 == 1` が複数レーンに立つ GP が多数ある。
+  これは「唯一の推奨レーン」ではなく「走行対象として強調するレーン群」と読むのが自然。
 - OneNavi 側では「推奨」と UI 表記してもよいが、domain model のフィールド名は
   `isTarget` にしておくほうが誤読が少ない。
 
 ### 1.3 `field_1`
 
-`field_1 == 1` は付加レーン / 分岐レーン / 側方レーンの補助フラグと見られる。
+`field_1 == 1` は付加レーン / 分岐レーン / 側方レーンを示す `append lane` フラグと見る。
 推奨判定には使わない。
 
 ```text
@@ -81,7 +87,8 @@ entry.field_1 == 0 or absent -> normal lane
 ```
 
 観測上、右左折側の外側レーンで立ちやすい。ただし `field_2 == 1` と常に一致する
-わけではないため、`isTarget` とは別プロパティとして扱う。
+わけではない。横断スキャンでは `a=1,b=0` が 221 件、`a=1,b=1` が 31 件あり、
+`isTarget` とは別プロパティとして扱う必要がある。
 
 ---
 
@@ -92,19 +99,35 @@ entry.field_1 == 0 or absent -> normal lane
 `entry.field_3` は compact lane direction code。1 レーンが複数方向を持つ場合、
 同じ field number `3` が複数回出る。
 
-| `field_3` | 復元方向 | 備考 |
-|---:|---|---|
-| `2` | Left | 左折 |
-| `4` | Straight | 直進 |
-| `6` | Right | 右折 |
-| `[2, 4]` | Left + Straight | 左折+直進 |
-| `[4, 6]` | Straight + Right | 直進+右折 |
-| `[2, 6]` | Left + Right | 左折+右折。サンプル数少 |
-| `5`, `7` | Unknown | 極少観測。現時点では unknown 扱い |
+横断スキャンと既知の lane direction 定数を突き合わせると、次の変換で説明できる。
 
-これは既知の lane direction 定数とは別 encoding である。
-例えば通常の車線方向定数では `STRAIGHT = 8`, `RIGHT = 32`, `STRAIGHT_RIGHT = 40`
-に相当する組み合わせでも、`flags_group` 内では直進が `4`、右折が `6` になる。
+```text
+laneDirectionBit = 1 shl (field_3 - 1)
+```
+
+| `field_3` | bit 値 | 復元方向 | 備考 |
+|---:|---:|---|---|
+| `1` | `1` | SlantLeft | 未観測だが変換式上は斜め左 |
+| `2` | `2` | Left | 左折 |
+| `3` | `4` | ThisSideLeft | 手前左。2 件観測 |
+| `4` | `8` | Straight | 直進 |
+| `5` | `16` | SlantRight | 斜め右。4 件観測 |
+| `6` | `32` | Right | 右折 |
+| `7` | `64` | ThisSideRight | 手前右。1 件観測 |
+| `8` | `128` | UTurn | 未観測だが変換式上は U ターン |
+
+1 レーンが複数方向を持つ場合は、複数の compact code を bit OR した値が通常の
+lane direction 定数に相当する。
+
+| `field_3` | bit OR | 復元方向 |
+|---|---:|---|
+| `[2, 4]` | `10` | Left + Straight |
+| `[4, 6]` | `40` | Straight + Right |
+| `[2, 6]` | `34` | Left + Right |
+| `[4, 5]` | `24` | Straight + SlantRight |
+
+つまり `flags_group` 内では直進が `4` として現れるが、既存の lane icon mapper へ
+渡す場合は `1 shl (4 - 1) = 8` へ変換する。
 
 ### 2.2 proto 定義上の注意
 
@@ -115,12 +138,13 @@ entry.field_1 == 0 or absent -> normal lane
 message FlagsGroupEntry {
   uint32 a = 1; // append / side lane hint
   uint32 b = 2; // target lane hint
-  repeated uint32 directions = 3 [packed = false];
+  repeated uint32 compact_directions = 3 [packed = false];
 }
 ```
 
 wire 上は同じ field number `3` の unpacked varint 列なので、既存バイナリとは互換。
-Kotlin 側では `directions: List<Int>` として扱う。
+Kotlin 側では `compactDirections: List<Int>` として扱い、domain へ写す段階で
+`1 shl (compact - 1)` または `LaneDirection` enum に変換する。
 
 ---
 
@@ -271,6 +295,10 @@ field_3 = auxiliary value
 - `field_1=40, field_2=560` は `40km/h 区間が 560m` と読める。
 - 車線図を持つ GP でも `props_22` が無いケースが多い。
 - `学園の森` の車線図は `props_22` なしで `flags_group` だけから復元できる。
+- 横断スキャンでは `props_22.field_1.field_1` が `20/30/40/50/60/70/80/100/120`
+  に分布し、速度制限値として自然な値だけを取った。
+- `props_22` と `flags_group` は 18 GP で同時に存在したため、相互排他ではない。
+  ただし内容は独立しており、車線方向や target lane の復元には使わない。
 
 したがって、`props_22` は車線実装の入力に使わない。
 
@@ -290,7 +318,8 @@ field_3 = auxiliary value
 一方、大泉IC入口や学園の森のような一般道交差点 / 高速入口の車線図は
 `lane_markers` ではなく `flags_group` に入る。
 
-実装上は次の 2 系統を分ける。
+横断スキャンでも、`flags_group` を持つ 404 GP と `lane_markers` を持つ 41 GP の
+重複は 0 件だった。実装上は次の 2 系統を分ける。
 
 | source | 主な用途 | domain |
 |---|---|---|
@@ -298,7 +327,8 @@ field_3 = auxiliary value
 | `lane_markers.markers[]` | 料金所・高速上のゲート/レーン情報 | `TollGateLaneInfo` または別型 |
 
 既存 `LaneInfo` が `lane_markers` 専用の意味を持っている場合、`flags_group` 由来の
-車線図を同じ型に混ぜると意味が曖昧になる。別 domain type を追加するほうが安全。
+車線図を同じ型に混ぜると意味が曖昧になる。別 domain type を追加し、UI 描画層で
+共通の render model へ寄せる。
 
 ---
 
@@ -315,19 +345,26 @@ data class LaneGuidance(
 @Immutable
 data class LaneGuidanceLane(
     val directions: ImmutableSet<LaneDirection>,
+    val laneDirectionMask: Int,
     val isTarget: Boolean,
     val isAppend: Boolean,
 )
 
 enum class LaneDirection {
+    SlantLeft,
     Left,
+    ThisSideLeft,
     Straight,
+    SlantRight,
     Right,
+    ThisSideRight,
+    UTurn,
     Unknown,
 }
 ```
 
-`directions` は複数方向を表すため `Set` にする。
+`directions` は複数方向を表すため `Set` にする。既存の lane icon mapper が通常の
+lane direction bit 値を要求する場合に備え、`laneDirectionMask` も保持する。
 表示時は `Left + Straight` / `Straight + Right` の組み合わせを専用アイコンに写像する。
 
 ### 6.2 mapper 案
@@ -335,19 +372,34 @@ enum class LaneDirection {
 ```kotlin
 private fun FlagsGroupEntry.toLaneGuidanceLane(): LaneGuidanceLane =
     LaneGuidanceLane(
-        directions = directions
+        directions = compactDirections
             .map { raw -> raw.toLaneDirection() }
             .toImmutableSet(),
+        laneDirectionMask = compactDirections
+            .map { raw -> raw.toLaneDirectionBit() }
+            .fold(0) { acc, bit -> acc or bit },
         isTarget = b == 1,
         isAppend = a == 1,
     )
 
 private fun Int.toLaneDirection(): LaneDirection =
     when (this) {
+        1 -> LaneDirection.SlantLeft
         2 -> LaneDirection.Left
+        3 -> LaneDirection.ThisSideLeft
         4 -> LaneDirection.Straight
+        5 -> LaneDirection.SlantRight
         6 -> LaneDirection.Right
+        7 -> LaneDirection.ThisSideRight
+        8 -> LaneDirection.UTurn
         else -> LaneDirection.Unknown
+    }
+
+private fun Int.toLaneDirectionBit(): Int =
+    if (this in 1..8) {
+        1 shl (this - 1)
+    } else {
+        0
     }
 ```
 
@@ -450,22 +502,52 @@ GuidePoint[14].laneGuidance == null
 
 これにより、`40,560` を lane payload と誤認しないことを固定する。
 
+### 7.5 compact code 3 / 5 / 7
+
+fixture: 保存済み GUIDE payload 横断
+
+期待値:
+
+```text
+field_3=3 -> ThisSideLeft, laneDirectionMask=4
+field_3=5 -> SlantRight, laneDirectionMask=16
+field_3=7 -> ThisSideRight, laneDirectionMask=64
+field_3=[4,5] -> {Straight, SlantRight}, laneDirectionMask=24
+```
+
+確認済みの代表例:
+
+| sample | point | raw | 復元 |
+|---|---:|---|---|
+| keiyo-funabashi | 6 | `3A / 4 / 6TA` | `ThisSideLeft(append) / Straight / Right(target, append)` |
+| oizumi-choshi | 160 | `2+4T / 4T / 5A` | `Left+Straight(target) / Straight(target) / SlantRight(append)` |
+| tokyo-gotemba multi route3 | 312 | `4+5A / 6T` | `Straight+SlantRight(append) / Right(target)` |
+| tokyo-nagoya-hiroshima | 318 | `4T / 4 / 6 / 7` | `Straight(target) / Straight / Right / ThisSideRight` |
+
 ---
 
-## 8. 未解決点
+## 8. 横断調査で解消した点
 
-- `field_3 = 5` / `7` の方向意味。観測数が少ないため `Unknown` 扱い。
-- `field_1 == 1` の正確な内部名。現時点では `append` / `side` 系の補助フラグと推定。
-- `field_2 == 1` が実装内部の `target lane` と完全一致するか。
-  外部ナビ API の参照実装アプリの表示とは一致しているが、全サンプルでの直接比較は未実施。
-- `lane_markers` と `flags_group` を最終的に同一 UI type へ統合するかどうか。
-  domain では分け、UI で共通描画に寄せる方針が安全。
+保存済み 12 GUIDE payload を対象に、`flags_group` を持つ 404 GP を集計した。
+
+| 項目 | 結論 |
+|---|---|
+| `field_3 = 5` | `SlantRight`。`1 shl (5 - 1) = 16` |
+| `field_3 = 7` | `ThisSideRight`。`1 shl (7 - 1) = 64` |
+| `field_3 = 3` | 追加で観測。`ThisSideLeft`。`1 shl (3 - 1) = 4` |
+| `field_1 == 1` | `append lane` として扱う。target 判定とは独立 |
+| `field_2 == 1` | `target lane` として扱う。複数レーンに立つ場合がある |
+| `lane_markers` との統合 | domain では分ける。`flags_group` 404 GP と `lane_markers` 41 GP の重複は 0 件 |
+| `props_22` | 速度区間情報。`20/30/40/50/60/70/80/100/120` に分布し、車線復元には使わない |
+
+残る観測ギャップは `field_3 = 1` と `8` が今回の保存済みサンプルでは未出現なこと。
+ただし変換式上はそれぞれ `SlantLeft` と `UTurn` に対応するため、実装では先に対応しておく。
 
 ---
 
 ## 9. 次アクション
 
-1. `FlagsGroupEntry.c` を repeated directions として受けられるよう proto を修正する。
+1. `FlagsGroupEntry.c` を repeated compact directions として受けられるよう proto を修正する。
 2. `LaneGuidance` / `LaneGuidanceLane` / `LaneDirection` を domain に追加する。
 3. `GuideProtoMapper.toManeuverHint()` で `flags_group` 由来の `laneGuidance` を詰める。
 4. §7 の fixture tests を追加する。
