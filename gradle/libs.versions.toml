@@ -135,9 +135,6 @@ androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.r
 # KMP
 kmp-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "kmpLifecycle" }
 kmp-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "kmpLifecycle" }
-kmp-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "kmpNavigation" }
-kmp-navigation3 = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version = "1.0.0-alpha06" }
-kmp-navigation3-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3", version = "2.10.0-alpha07" }
 
 # Compose
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "kmpCompose" }

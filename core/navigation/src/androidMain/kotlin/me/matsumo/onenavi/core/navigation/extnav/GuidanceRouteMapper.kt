@@ -46,9 +46,12 @@ import me.matsumo.drive.supporter.api.guidance.domain.LaneInfo as ExtNavLaneInfo
  * 各 GP を主案内 ([GuidanceManeuver])・レーン ([GuidanceLane])・施設・看板・境界・道路名・
  * 通知を持つ [GuidanceEvent] に射影する。さらに、GP に紐付かない施設付き intersection
  * (通過 SA / PA / 料金所など) を主案内 null の通過施設イベントとして補完する。
- * レーンの instruction / warning は発話テキスト解析経路を作る段階で埋める。
+ * レーンは `lane_markers` (料金所・高速ゲート) を優先し、無ければ [LaneDiagramParser] が
+ * `flags_group` から復元した一般道交差点 / 高速入口の車線図を使う。
  */
 internal class GuidanceRouteMapper {
+
+    private val laneDiagramParser = LaneDiagramParser()
 
     /**
      * payload と中立 route から [GuidanceRoute] を構築する。
@@ -337,7 +340,7 @@ internal class GuidanceRouteMapper {
             categories = categories,
             facility = facility,
         )
-        val lane = guidancePoint.maneuver?.laneInfo?.toGuidanceLane(sourceRefs = laneSourceRefs)
+        val lane = buildLane(guidancePoint = guidancePoint, sourceRefs = laneSourceRefs)
         val notices = buildNotices(categories)
 
         val hasContent = primary != null || lane != null || facility != null || notices.isNotEmpty()
@@ -592,11 +595,23 @@ internal class GuidanceRouteMapper {
     }
 
     /**
-     * marker 由来のレーン情報を semantic [GuidanceLane] に変換する。
+     * GP のレーン情報を組み立てる。`lane_markers` (料金所・高速ゲート) を優先し、無ければ
+     * `flags_group` 由来の一般道交差点 / 高速入口の車線図を使う。どちらも無ければ null。
      *
-     * marker の値の意味 (rawA/rawB) が完全には確定していないため confidence は MEDIUM。
-     * instruction / warning は発話テキスト解析経路を作る段階で埋める。
+     * @param guidancePoint 対象 GP
+     * @param sourceRefs 元データへの参照
+     * @return レーン情報。marker も車線図も無ければ null
      */
+    private fun buildLane(
+        guidancePoint: ExtNavGuidancePoint,
+        sourceRefs: ImmutableList<SourceRef>,
+    ): GuidanceLane? {
+        val maneuver = guidancePoint.maneuver ?: return null
+        val markerLane = maneuver.laneInfo?.toGuidanceLane(sourceRefs = sourceRefs)
+        if (markerLane != null) return markerLane
+        return laneDiagramParser.parse(entries = maneuver.flagsGroup, sourceRefs = sourceRefs)
+    }
+
     private fun ExtNavLaneInfo.toGuidanceLane(
         sourceRefs: ImmutableList<SourceRef>,
     ): GuidanceLane? {

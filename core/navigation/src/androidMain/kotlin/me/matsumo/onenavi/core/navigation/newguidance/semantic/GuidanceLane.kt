@@ -58,7 +58,32 @@ sealed interface LaneLayout {
         val laneCount: Int?,
         val totalLaneCount: Int?,
     ) : LaneLayout
+
+    /**
+     * 一般道交差点 / 高速入口の車線図 (`flags_group` 由来)。各レーンが進行方向とターゲット
+     * (推奨 / 強調) フラグを持つ。総数既知で、各レーンの向きが確定している点が marker と異なる。
+     *
+     * @property lanes 左から右の順に並んだレーン。
+     */
+    @Immutable
+    data class DirectionLayout(
+        val lanes: ImmutableList<LaneDirectionCell>,
+    ) : LaneLayout
 }
+
+/**
+ * 方向付きレーン 1 車線分 ([LaneLayout.DirectionLayout] の構成要素)。
+ *
+ * @property directions このレーンで進める方向 (複数あり得る。例: 左折 + 直進)。未確定コードは含めない。
+ * @property isTarget ターゲット (推奨 / 強調) レーンか。`flags_group` の target hint 由来。
+ * @property isAppend 付加 / 側方レーンのヒントか。target とは独立。
+ */
+@Immutable
+data class LaneDirectionCell(
+    val directions: ImmutableSet<ManeuverModifier>,
+    val isTarget: Boolean,
+    val isAppend: Boolean,
+)
 
 /**
  * 1 車線分のマーカー (marker 由来)。
@@ -138,8 +163,11 @@ enum class LaneSide { LEFT, CENTER, RIGHT }
 
 /** レーン情報の出所。 */
 enum class LaneSource {
-    /** marker (構造化レーンデータ) 由来。 */
+    /** `lane_markers` (料金所・高速ゲートの marker) 由来。 */
     MARKER,
+
+    /** `flags_group` の車線図 (一般道交差点 / 高速入口の方向付きレーン) 由来。 */
+    LANE_DIAGRAM,
 
     /** 発話テキスト / テンプレート由来。 */
     TEXT,
