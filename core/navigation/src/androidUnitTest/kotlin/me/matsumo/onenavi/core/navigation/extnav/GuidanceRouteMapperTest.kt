@@ -6,6 +6,7 @@ import kotlinx.collections.immutable.toImmutableSet
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.guidance.domain.DsrRouteSummary
 import me.matsumo.drive.supporter.api.guidance.domain.ExternalGuideAnchor
+import me.matsumo.drive.supporter.api.guidance.domain.FlagsGroupEntry
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityHint
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind
@@ -19,6 +20,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.ManeuverDirection
 import me.matsumo.drive.supporter.api.guidance.domain.ManeuverHint
 import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
 import me.matsumo.drive.supporter.api.guidance.domain.SsmlPhrase
+import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RoadClassSegment
@@ -27,7 +29,9 @@ import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceNoticeKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.HighwayBoundary
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneConfidence
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneLayout
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -78,6 +82,30 @@ class GuidanceRouteMapperTest {
         val layout = assertIs<LaneLayout.MarkerLayout>(laneEvent.details.lane?.layout)
         assertEquals(3, layout.lanes.size)
         assertTrue(layout.lanes.any { lane -> lane.isRecommended })
+    }
+
+    @Test
+    fun `flags_group を持つ GP は方向付き車線図レーンになる`() {
+        val mapper = GuidanceRouteMapper()
+        val route = buildRoute()
+        val guidancePoint = buildFlagsGroupGuidancePoint(
+            entries = listOf(
+                FlagsGroupEntry(a = 0, b = 0, directions = persistentListOf(2, 4)),
+                FlagsGroupEntry(a = 0, b = 0, directions = persistentListOf(4)),
+                FlagsGroupEntry(a = 1, b = 1, directions = persistentListOf(6)),
+            ),
+        )
+        val payload = ExtNavRoutePayload(id = route.id, routeGuidance = buildLaneGuidance(guidancePoint))
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        val lane = guidanceRoute.events.first { event -> event.details.lane != null }.details.lane
+        val layout = assertIs<LaneLayout.DirectionLayout>(lane?.layout)
+        assertEquals(3, layout.lanes.size)
+        assertEquals(setOf(ManeuverModifier.LEFT, ManeuverModifier.STRAIGHT), layout.lanes[0].directions)
+        assertTrue(layout.lanes[2].isTarget)
+        assertEquals(LaneConfidence.HIGH, lane?.confidence)
+        assertTrue(lane?.sources?.contains(LaneSource.LANE_DIAGRAM) == true)
     }
 
     @Test
@@ -498,6 +526,47 @@ class GuidanceRouteMapperTest {
             LaneMarker(rawA = 0, rawB = 0),
         ).toImmutableList(),
         kind = 0,
+    )
+
+    private fun buildLaneGuidance(guidancePoint: GuidancePoint): RouteGuidance = RouteGuidance(
+        index = 1,
+        priority = null,
+        summary = DsrRouteSummary(
+            depth = 0,
+            distanceMetres = 1_000,
+            timeSeconds = 300,
+            fuelLitres = 0f,
+            tollYen = 0,
+            tollDetails = persistentListOf(),
+            streets = persistentListOf(),
+            priority = 0,
+            trafficCongestionAvoidanceRate = 0f,
+        ),
+        guidancePoints = persistentListOf(guidancePoint),
+        intersections = persistentListOf(),
+        imageIds = persistentListOf(),
+        polyline = persistentListOf(),
+    )
+
+    private fun buildFlagsGroupGuidancePoint(entries: List<FlagsGroupEntry>): GuidancePoint = GuidancePoint(
+        index = 0,
+        gpType = 0,
+        distanceFromPrevMetres = 0,
+        distanceFromStartMetres = 400,
+        phrases = persistentListOf(),
+        announcementBlocks = persistentListOf(),
+        imageRefs = persistentListOf(),
+        maneuver = ManeuverHint(
+            angleIn = 0,
+            angleOut = 0,
+            direction = ManeuverDirection.Straight,
+            laneInfo = null,
+            specialNode = null,
+            speedLimit = null,
+            flagsGroup = entries.toImmutableList(),
+            mergeSide = null,
+            facilityHint = null,
+        ),
     )
 
     private companion object {
