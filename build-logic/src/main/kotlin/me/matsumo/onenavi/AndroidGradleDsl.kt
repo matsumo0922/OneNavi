@@ -54,6 +54,12 @@ fun Project.setupAndroid() {
             isCoreLibraryDesugaringEnabled = true
         }
 
+        // plain JVM unit test で未モックの Android フレームワーク API (SystemClock 等) を
+        // 既定値で返させ、テスト専用に production へ seam を足さずに済むようにする。
+        testOptions {
+            unitTests.isReturnDefaultValues = true
+        }
+
         dependencies {
             add("coreLibraryDesugaring", libs.library("desugar"))
         }
