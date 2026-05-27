@@ -28,8 +28,11 @@ kotlin {
             api(libs.adaptive.layout)
             api(libs.lexilabs.basic.ads)
             api(libs.play.service.ads)
-
-            api(libs.compose.ui.tooling)
         }
     }
+}
+
+dependencies {
+    // @Preview のレンダリング用。release には載せず debug ビルドのみに閉じる。
+    debugImplementation(libs.compose.ui.tooling)
 }

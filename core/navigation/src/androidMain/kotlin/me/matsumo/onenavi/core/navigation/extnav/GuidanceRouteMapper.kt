@@ -595,12 +595,6 @@ internal class GuidanceRouteMapper {
     }
 
     /**
-     * marker 由来のレーン情報を semantic [GuidanceLane] に変換する。
-     *
-     * marker の値の意味 (rawA/rawB) が完全には確定していないため confidence は MEDIUM。
-     * instruction / warning は発話テキスト解析経路を作る段階で埋める。
-     */
-    /**
      * GP のレーン情報を組み立てる。`lane_markers` (料金所・高速ゲート) を優先し、無ければ
      * `flags_group` 由来の一般道交差点 / 高速入口の車線図を使う。どちらも無ければ null。
      *
