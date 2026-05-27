@@ -438,8 +438,8 @@ private const val LaneTopYRatio = 0.16f
 private const val LaneBranchYWithStraight = 0.60f
 private const val LaneBranchYTurnOnly = 0.44f
 private const val LaneBranchRatio = 0.44f
-private const val LaneHeadLengthRatio = 0.45f
-private const val LaneHeadHalfWidthRatio = 0.38f
+private const val LaneHeadLengthRatio = 0.5f
+private const val LaneHeadHalfWidthRatio = 0.42f
 
 private const val LaneStrokeBaseRatio = 0.12f
 private const val LaneStrokeStepRatio = 0.018f
