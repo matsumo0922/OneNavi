@@ -68,6 +68,7 @@ function buildHaystackParts(field: DecodedField, annotation: FieldAnnotation | u
   const parts: HaystackPart[] = [
     { label: "path", text: pathToKey(field.path) },
     { label: "field", text: `#${field.fieldNumber}` },
+    { label: "summary", text: summarizeValue(field.value) },
   ];
   if (annotation?.name) parts.push({ label: "name", text: annotation.name });
   if (annotation?.description) parts.push({ label: "description", text: annotation.description });
@@ -251,7 +252,7 @@ function renderField(
       nameText.toLowerCase().includes(filter.query) ||
       pathKey.toLowerCase().includes(filter.query) ||
       `#${field.fieldNumber}`.includes(filter.query);
-    const hidden = labelsForRow.filter((label) => !["field", "name", "path"].includes(label));
+    const hidden = labelsForRow.filter((label) => !["field", "name", "path", "summary"].includes(label));
     if (!hasVisibleHit && hidden.length > 0) {
       const hint = document.createElement("span");
       hint.className = "tree-match-hint";
