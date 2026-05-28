@@ -2,7 +2,9 @@
 
 ## 1. 目的
 
-OneNavi の音声案内エンジンを、現状の Android 標準 TTS (`android.speech.tts.TextToSpeech`) から **Google Cloud Text-to-Speech (Chirp 3 HD / ja-JP-Chirp3-HD-Laomedeia)** に載せ替える。
+OneNavi の音声案内エンジンを、現状の Android 標準 TTS (`android.speech.tts.TextToSpeech`) から **Google Cloud Text-to-Speech (Chirp 3 HD / ja-JP-Chirp3-HD-Despina)** に載せ替える。
+
+2026-05-28 時点の voice 選定は `ja-JP-Chirp3-HD-Despina` とする。Chirp 3 HD の自然な会話調を活かしつつ、ナビアプリでは Google アシスタント風の短文案内として聞き取りやすい声質を優先する。
 
 ただし以下を条件とする:
 
@@ -87,7 +89,7 @@ interface TtsEngine {
   "input": { "text": "この先、右方向です" },
   "voice": {
     "languageCode": "ja-JP",
-    "name": "ja-JP-Chirp3-HD-Laomedeia"
+    "name": "ja-JP-Chirp3-HD-Despina"
   },
   "audioConfig": {
     "audioEncoding": "LINEAR16",
@@ -380,7 +382,7 @@ fun stopSession() {
 - [ ] API キー発行 + Cloud Console で Android 制限設定 (パッケージ名 + SHA-1)
 - [ ] `curl` or 簡単な Kotlin テストコードで `text:synthesize` に POST
   - `x-goog-api-key` / `X-Android-Package` / `X-Android-Cert` ヘッダの必要性を実機レベルで確認
-  - voice name `ja-JP-Chirp3-HD-Laomedeia` が実在・利用可能か確認
+  - voice name `ja-JP-Chirp3-HD-Despina` が実在・利用可能か確認
   - `audioEncoding = LINEAR16` + `sampleRateHertz = 24000` のレスポンスが WAV ヘッダ 44 byte + PCM であることをバイナリダンプで確認
 - [ ] 成功したら Step 1 へ。認証で詰まったら Cloud Console 設定を先に正す
 
@@ -478,7 +480,7 @@ data class AppConfig(
 実装デフォルト (コード内):
 
 - `voice.languageCode = "ja-JP"`
-- `voice.name = "ja-JP-Chirp3-HD-Laomedeia"`
+- `voice.name = "ja-JP-Chirp3-HD-Despina"`
 - `audioConfig.audioEncoding = "LINEAR16"`
 - `audioConfig.sampleRateHertz = 24000`
 - `audioConfig.speakingRate = 1.0`
@@ -534,7 +536,7 @@ Codex レビュー指摘: LINEAR16 24kHz mono 16bit は 48KB/s raw、REST は ba
 
 | リスク | 影響 | 軽減策 |
 |---|---|---|
-| Chirp 3 HD (Laomedeia) が将来名前変更 / 廃止 | 音声が出なくなる | voice name を設定可能にし、`FallbackTtsEngine` で救済 |
+| Chirp 3 HD (Despina) が将来名前変更 / 廃止 | 音声が出なくなる | voice name を設定可能にし、`FallbackTtsEngine` で救済 |
 | API キー漏洩 | Google Cloud アカウント悪用 | Console 側で Android パッケージ + SHA-1 制限 + API 制限 |
 | PCM 転送量の増加 (MP3 比 ~3 倍 + base64 でさらに約 1.33 倍 ≒ 実 wire は MP3 比 4 倍前後) | モバイル通信量・Cloud TTS 課金 | 同一文言を繰り返す用途なので Section 9.1 の LRU キャッシュを今回スコープに含めて軽減 |
 | Cloud TTS の従量課金 | コスト増 | Chirp 3 HD は従来の Standard/Neural より単価が高い。`docs/spec/06_pricing_analysis.md` と突合のうえ月間予算のアラート設定 |
