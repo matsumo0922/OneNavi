@@ -70,6 +70,67 @@ class GuidanceRouteMapperTest {
     }
 
     @Test
+    fun `origin が追加された route は API polyline 区間へ source 距離を対応させる`() {
+        val mapper = GuidanceRouteMapper()
+        val origin = routeOrigin()
+        val apiPolylineCoords = (1..4).map { index ->
+            Coord.fromDegrees(
+                latDeg = ORIGIN_LATITUDE,
+                lonDeg = ORIGIN_LONGITUDE + LONGITUDE_STEP * index,
+            )
+        }
+        val apiPolyline = apiPolylineCoords.map { coord ->
+            RoutePoint(
+                latitude = coord.latDegrees,
+                longitude = coord.lonDegrees,
+            )
+        }
+        val route = RouteDetail(
+            id = "route-mapper-prepended-origin-test",
+            origin = origin,
+            destination = apiPolyline.last(),
+            intermediateWaypoints = persistentListOf(),
+            geometry = (listOf(origin) + apiPolyline).toImmutableList(),
+            distanceMeters = 1_000.0,
+            durationSeconds = 300.0,
+            steps = persistentListOf(),
+        )
+        val cumulativeMetres = RouteGeometryMath.cumulativeMetres(route.geometry)
+        val routeGuidance = buildRouteGuidance().copy(
+            guidancePoints = listOf(
+                buildGuidancePoint(
+                    index = 0,
+                    distanceFromStartMetres = 200,
+                    category = GuidanceCategory.IntersectionGuide,
+                    laneInfo = null,
+                    direction = ManeuverDirection.Left,
+                ),
+                buildGuidancePoint(
+                    index = 1,
+                    distanceFromStartMetres = 950,
+                    category = GuidanceCategory.Unspecified,
+                    laneInfo = null,
+                ),
+            ).toImmutableList(),
+            polyline = apiPolylineCoords.toImmutableList(),
+        )
+        val payload = ExtNavRoutePayload(id = route.id, routeGuidance = routeGuidance)
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        val turnEvent = guidanceRoute.events.first()
+        val sourceGeometryStartMetres = cumulativeMetres[1]
+        val sourceGeometryEndMetres = cumulativeMetres.last()
+        val expectedGeometryMetres = sourceGeometryStartMetres +
+            (sourceGeometryEndMetres - sourceGeometryStartMetres) * 200.0 / 1_000.0
+        assertEquals(
+            expectedGeometryMetres,
+            turnEvent.anchor.geometryDistanceFromStartMeters,
+            absoluteTolerance = 0.001,
+        )
+    }
+
+    @Test
     fun `主案内 modifier は geometry より案内方向分類を優先する`() {
         val mapper = GuidanceRouteMapper()
         val route = buildRoute()
@@ -471,6 +532,11 @@ class GuidanceRouteMapperTest {
             steps = persistentListOf(),
         )
     }
+
+    private fun routeOrigin(): RoutePoint = RoutePoint(
+        latitude = ORIGIN_LATITUDE,
+        longitude = ORIGIN_LONGITUDE,
+    )
 
     private fun buildRouteGuidance(): RouteGuidance = RouteGuidance(
         index = 1,
