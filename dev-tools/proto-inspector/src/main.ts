@@ -41,7 +41,7 @@ function updateSearchCount(filter: TreeFilter | null): void {
     searchCount.textContent = "";
     return;
   }
-  searchCount.textContent = `${filter.matchedPaths.size} matches`;
+  searchCount.textContent = `${filter.matchedIds.size} matches`;
 }
 
 async function reloadFor(rootId: string, fields: DecodedField[]): Promise<void> {

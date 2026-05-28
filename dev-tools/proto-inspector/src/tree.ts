@@ -8,13 +8,16 @@ export interface TreeCallbacks {
 }
 
 /**
- * 検索結果を保持する。`includePaths` は「マッチ自体 + マッチの祖先」、
- * `matchedPaths` は「直接マッチした field の path」。フィルタ未指定なら null。
+ * 検索結果を保持する。`includeIds` は「マッチ + マッチの祖先」の物理行 ID 集合。
+ * `matchedIds` は「直接マッチした field の物理行 ID」。`matchLabels` は
+ * 各マッチ行で「どの属性 (name / zigzag / hex 等) に query が含まれていたか」を示す
+ * (可視テキストにマッチが見えないケースの補助表示用)。
  */
 export interface TreeFilter {
   query: string;
-  includePaths: Set<string>;
-  matchedPaths: Set<string>;
+  includeIds: Set<number>;
+  matchedIds: Set<number>;
+  matchLabels: Map<number, string[]>;
 }
 
 const WIRE_TYPE_LABELS: Record<number, string> = {
@@ -48,50 +51,72 @@ export function summarizeValue(value: DecodedValue): string {
   }
 }
 
-/** 注釈レコードをルックアップする。 */
-function lookupAnnotation(annotations: AnnotationFile, pathKey: string): FieldAnnotation | undefined {
-  return annotations.fields[pathKey];
-}
-
-/** field を検索対象文字列に展開する (小文字化済み)。 */
-function buildHaystack(field: DecodedField, annotation: FieldAnnotation | undefined): string {
-  const parts: string[] = [pathToKey(field.path), `#${field.fieldNumber}`];
-  if (annotation?.name) parts.push(annotation.name);
-  if (annotation?.description) parts.push(annotation.description);
-  if (annotation?.typeHint) parts.push(annotation.typeHint);
-  const value = field.value;
-  switch (value.kind) {
-    case "varint":
-      parts.push(value.unsigned, value.signed, value.zigzag);
-      if (value.asBool !== null) parts.push(String(value.asBool));
-      break;
-    case "i64":
-      parts.push(value.asUint, value.asInt, String(value.asDouble), value.hex);
-      break;
-    case "i32":
-      parts.push(String(value.asUint), String(value.asInt), String(value.asFloat), value.hex);
-      break;
-    case "string":
-      parts.push(value.text);
-      break;
-    case "bytes":
-      parts.push(value.hex);
-      break;
-    case "packed":
-      parts.push(value.values.join(" "));
-      break;
-    case "message":
-      // 子は再帰で別途検査される。サマリだけ。
-      parts.push(`{${value.fields.length}fields}`);
-      break;
-  }
-  return parts.join(" ").toLowerCase();
+function lookupAnnotation(annotations: AnnotationFile, field: DecodedField): FieldAnnotation | undefined {
+  return annotations.fields[pathToKey(field.path)];
 }
 
 /**
- * 検索クエリにマッチする path を走査して filter を作る。
- * query が空なら null。
+ * field を検索対象トークン群に展開する。検索成立時に「どこにマッチしたか」を
+ * 表示するため、ラベル付きで返す。
  */
+interface HaystackPart {
+  label: string;
+  text: string;
+}
+
+function buildHaystackParts(field: DecodedField, annotation: FieldAnnotation | undefined): HaystackPart[] {
+  const parts: HaystackPart[] = [
+    { label: "path", text: pathToKey(field.path) },
+    { label: "field", text: `#${field.fieldNumber}` },
+  ];
+  if (annotation?.name) parts.push({ label: "name", text: annotation.name });
+  if (annotation?.description) parts.push({ label: "description", text: annotation.description });
+  if (annotation?.typeHint) parts.push({ label: "typeHint", text: annotation.typeHint });
+  const value = field.value;
+  switch (value.kind) {
+    case "varint":
+      parts.push({ label: "unsigned", text: value.unsigned });
+      if (value.signed !== value.unsigned) parts.push({ label: "signed", text: value.signed });
+      parts.push({ label: "zigzag", text: value.zigzag });
+      if (value.asBool !== null) parts.push({ label: "bool", text: String(value.asBool) });
+      break;
+    case "i64":
+      parts.push({ label: "uint64", text: value.asUint });
+      parts.push({ label: "int64", text: value.asInt });
+      parts.push({ label: "double", text: String(value.asDouble) });
+      parts.push({ label: "hex", text: value.hex });
+      break;
+    case "i32":
+      parts.push({ label: "uint32", text: String(value.asUint) });
+      parts.push({ label: "int32", text: String(value.asInt) });
+      parts.push({ label: "float", text: String(value.asFloat) });
+      parts.push({ label: "hex", text: value.hex });
+      break;
+    case "string":
+      parts.push({ label: "text", text: value.text });
+      break;
+    case "bytes":
+      parts.push({ label: "hex", text: value.hex });
+      break;
+    case "packed":
+      parts.push({ label: "packed", text: value.values.join(" ") });
+      break;
+    case "message":
+      // 子は再帰で別途検査される。サマリは含めない。
+      break;
+  }
+  return parts;
+}
+
+/** 大小無視で query を含むラベル一覧を返す。 */
+function matchLabels(parts: HaystackPart[], query: string): string[] {
+  const result: string[] = [];
+  for (const part of parts) {
+    if (part.text.toLowerCase().includes(query)) result.push(part.label);
+  }
+  return result;
+}
+
 export function buildFilter(
   fields: DecodedField[],
   annotations: AnnotationFile,
@@ -99,27 +124,29 @@ export function buildFilter(
 ): TreeFilter | null {
   const trimmed = query.trim().toLowerCase();
   if (trimmed === "") return null;
-  const includePaths = new Set<string>();
-  const matchedPaths = new Set<string>();
+  const includeIds = new Set<number>();
+  const matchedIds = new Set<number>();
+  const labels = new Map<number, string[]>();
 
-  function visit(field: DecodedField, ancestors: string[]): boolean {
-    const pathKey = pathToKey(field.path);
-    const annotation = lookupAnnotation(annotations, pathKey);
-    const haystack = buildHaystack(field, annotation);
-    let selfMatch = haystack.includes(trimmed);
+  function visit(field: DecodedField, ancestorIds: number[]): boolean {
+    const annotation = lookupAnnotation(annotations, field);
+    const parts = buildHaystackParts(field, annotation);
+    const hits = matchLabels(parts, trimmed);
+    const selfMatch = hits.length > 0;
     let descendantMatch = false;
     if (field.value.kind === "message") {
-      const nextAncestors = [...ancestors, pathKey];
+      const nextAncestors = [...ancestorIds, field.id];
       for (const child of field.value.fields) {
-        if (visit(child, nextAncestors)) {
-          descendantMatch = true;
-        }
+        if (visit(child, nextAncestors)) descendantMatch = true;
       }
     }
-    if (selfMatch) matchedPaths.add(pathKey);
+    if (selfMatch) {
+      matchedIds.add(field.id);
+      labels.set(field.id, hits);
+    }
     if (selfMatch || descendantMatch) {
-      includePaths.add(pathKey);
-      for (const ancestor of ancestors) includePaths.add(ancestor);
+      includeIds.add(field.id);
+      for (const ancestorId of ancestorIds) includeIds.add(ancestorId);
       return true;
     }
     return false;
@@ -128,30 +155,66 @@ export function buildFilter(
   for (const field of fields) {
     visit(field, []);
   }
-  return { query: trimmed, includePaths, matchedPaths };
+  return { query: trimmed, includeIds, matchedIds, matchLabels: labels };
 }
 
-/** field 1 件分の <li> を描画する (子要素は遅延展開)。 */
+/** 大小無視で query にマッチする部分を `<mark>` で囲んだ DOM を返す。 */
+function makeHighlightedText(text: string, query: string | null): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  if (!query) {
+    fragment.appendChild(document.createTextNode(text));
+    return fragment;
+  }
+  const lower = text.toLowerCase();
+  let cursor = 0;
+  while (cursor < text.length) {
+    const next = lower.indexOf(query, cursor);
+    if (next < 0) {
+      fragment.appendChild(document.createTextNode(text.slice(cursor)));
+      break;
+    }
+    if (next > cursor) {
+      fragment.appendChild(document.createTextNode(text.slice(cursor, next)));
+    }
+    const mark = document.createElement("mark");
+    mark.textContent = text.slice(next, next + query.length);
+    fragment.appendChild(mark);
+    cursor = next + query.length;
+  }
+  return fragment;
+}
+
+/** 可視テキストを差し替えるユーティリティ。 */
+function setHighlighted(element: HTMLElement, text: string, query: string | null): void {
+  element.textContent = "";
+  element.appendChild(makeHighlightedText(text, query));
+}
+
 function renderField(
   field: DecodedField,
   annotations: AnnotationFile,
   callbacks: TreeCallbacks,
   filter: TreeFilter | null,
 ): HTMLLIElement | null {
-  const pathKey = pathToKey(field.path);
-  if (filter && !filter.includePaths.has(pathKey)) return null;
+  if (filter && !filter.includeIds.has(field.id)) return null;
 
-  const annotation = lookupAnnotation(annotations, pathKey);
+  const pathKey = pathToKey(field.path);
+  const annotation = lookupAnnotation(annotations, field);
   const li = document.createElement("li");
   li.className = "tree-node";
 
   const row = document.createElement("div");
   row.className = "tree-row";
-  if (filter && filter.matchedPaths.has(pathKey)) row.classList.add("matched");
+  const isSelfMatched = filter ? filter.matchedIds.has(field.id) : false;
+  if (filter && !isSelfMatched) row.classList.add("ancestor");
+  if (isSelfMatched) row.classList.add("matched");
   row.tabIndex = 0;
   row.dataset.path = pathKey;
+  row.dataset.id = String(field.id);
 
+  const query = filter?.query ?? null;
   const isExpandable = field.value.kind === "message";
+
   const toggle = document.createElement("span");
   toggle.className = `tree-toggle${isExpandable ? "" : " tree-toggle-leaf"}`;
   toggle.textContent = isExpandable ? "▶" : "•";
@@ -159,7 +222,7 @@ function renderField(
 
   const tag = document.createElement("span");
   tag.className = "tree-tag";
-  tag.textContent = `#${field.fieldNumber}`;
+  setHighlighted(tag, `#${field.fieldNumber}`, query);
   row.appendChild(tag);
 
   const wire = document.createElement("span");
@@ -169,14 +232,33 @@ function renderField(
 
   const name = document.createElement("span");
   name.className = "tree-name";
-  name.textContent = annotation?.name ?? "(unnamed)";
+  const nameText = annotation?.name ?? "(unnamed)";
+  setHighlighted(name, nameText, query);
   if (!annotation?.name) name.classList.add("tree-name-empty");
   row.appendChild(name);
 
   const summary = document.createElement("span");
   summary.className = "tree-summary";
-  summary.textContent = summarizeValue(field.value);
+  setHighlighted(summary, summarizeValue(field.value), query);
   row.appendChild(summary);
+
+  if (isSelfMatched && filter) {
+    const labelsForRow = filter.matchLabels.get(field.id) ?? [];
+    // 可視テキストにマッチが見えない場合のみ、どこにマッチしたかを補助表示
+    const summaryText = summarizeValue(field.value).toLowerCase();
+    const hasVisibleHit =
+      summaryText.includes(filter.query) ||
+      nameText.toLowerCase().includes(filter.query) ||
+      pathKey.toLowerCase().includes(filter.query) ||
+      `#${field.fieldNumber}`.includes(filter.query);
+    const hidden = labelsForRow.filter((label) => !["field", "name", "path"].includes(label));
+    if (!hasVisibleHit && hidden.length > 0) {
+      const hint = document.createElement("span");
+      hint.className = "tree-match-hint";
+      hint.textContent = `match: ${hidden.join(",")}`;
+      row.appendChild(hint);
+    }
+  }
 
   const select = (): void => {
     document.querySelectorAll(".tree-row.selected").forEach((node) => node.classList.remove("selected"));
@@ -205,7 +287,6 @@ function renderField(
 
   let childrenContainer: HTMLUListElement | null = null;
   let expanded = false;
-  // フィルタ中はマッチを辿りやすいよう祖先を自動展開する
   const autoExpand = filter !== null && isExpandable;
 
   function toggleChildren(force?: boolean): void {
@@ -254,12 +335,17 @@ export function renderTree(
   container.appendChild(root);
 }
 
-/** すでに描画済みのツリーで、特定 path の name 表示を更新する (注釈保存後)。 */
+/**
+ * すでに描画済みのツリーで、同じ semantic path を共有する全行の name 表示を更新する
+ * (注釈は repeated インスタンスで共有されるため複数行に反映する)。
+ */
 export function refreshFieldName(container: HTMLElement, pathKey: string, name: string | undefined): void {
-  const row = container.querySelector<HTMLElement>(`.tree-row[data-path="${pathKey}"]`);
-  if (!row) return;
-  const nameEl = row.querySelector<HTMLElement>(".tree-name");
-  if (!nameEl) return;
-  nameEl.textContent = name && name.length > 0 ? name : "(unnamed)";
-  nameEl.classList.toggle("tree-name-empty", !name || name.length === 0);
+  const escaped = pathKey.replace(/"/g, '\\"');
+  const rows = container.querySelectorAll<HTMLElement>(`.tree-row[data-path="${escaped}"]`);
+  for (const row of rows) {
+    const nameEl = row.querySelector<HTMLElement>(".tree-name");
+    if (!nameEl) continue;
+    nameEl.textContent = name && name.length > 0 ? name : "(unnamed)";
+    nameEl.classList.toggle("tree-name-empty", !name || name.length === 0);
+  }
 }

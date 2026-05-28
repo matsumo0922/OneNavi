@@ -21,9 +21,18 @@
 export type WireType = 0 | 1 | 2 | 5;
 
 export interface DecodedField {
+  /**
+   * 物理行ごとに一意な ID。同じ `path` を共有する repeated フィールドを
+   * 行単位で区別する用 (検索ハイライト等)。
+   */
+  id: number;
   /** field_number (tag の上位ビット) */
   fieldNumber: number;
-  /** ルートからこの field までの field_number 列 (root 直下は [1] のような単独要素)。 */
+  /**
+   * ルートからこの field までの field_number 列 (root 直下は [1] のような単独要素)。
+   * repeated フィールドではインスタンス間で同一になる (アノテーションは
+   * semantic path 単位で 1 件に共有させる)。
+   */
   path: number[];
   /** wire type */
   wireType: WireType;
@@ -278,6 +287,9 @@ function tryDecodeAsMessage(bytes: Uint8Array, parentPath: number[]): LenMessage
   };
 }
 
+/** decode 全体を通じての行 ID 採番カウンタ。decodeRootMessage 呼び出しごとにリセットする。 */
+let nextFieldId = 0;
+
 /** バイト列を message として decode (全 byte を消費できなければ null)。 */
 function decodeMessage(bytes: Uint8Array, parentPath: number[]): DecodedField[] | null {
   const reader = new Reader(bytes);
@@ -321,6 +333,7 @@ function decodeMessage(bytes: Uint8Array, parentPath: number[]): DecodedField[] 
     }
 
     fields.push({
+      id: nextFieldId++,
       fieldNumber,
       path: currentPath,
       wireType,
@@ -349,6 +362,7 @@ function interpretLen(bytes: Uint8Array, parentPath: number[]): DecodedValue {
  * 前提（GUIDE / ROUTE proto はいずれもそう）。
  */
 export function decodeRootMessage(bytes: Uint8Array): { fields: DecodedField[]; error: string | null } {
+  nextFieldId = 0;
   const fields = decodeMessage(bytes, []);
   if (!fields) {
     return { fields: [], error: "binary is not a valid protobuf root message" };
