@@ -122,6 +122,29 @@ body {
   color: var(--error);
 }
 
+.search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.search input {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-row);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  width: 220px;
+}
+
+.search-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 70px;
+}
+
 #main {
   flex: 1 1 auto;
   display: grid;
@@ -216,6 +239,15 @@ body {
 
 .tree-row.selected {
   background: var(--accent-soft);
+}
+
+.tree-row.matched {
+  background: rgba(255, 213, 79, 0.12);
+}
+
+.tree-row.matched.selected {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px rgba(255, 213, 79, 0.6);
 }
 
 .tree-row:focus {

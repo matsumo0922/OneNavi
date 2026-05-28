@@ -1,12 +1,14 @@
 import { decodeRootMessage, type DecodedField } from "./decoder";
 import { loadAnnotations, saveAnnotations, type AnnotationFile, type FieldAnnotation } from "./annotations";
-import { renderTree, refreshFieldName } from "./tree";
+import { renderTree, refreshFieldName, buildFilter, type TreeFilter } from "./tree";
 import { renderDetail } from "./detail";
 
 const fileInput = document.querySelector<HTMLInputElement>("#file-input")!;
 const rootIdInput = document.querySelector<HTMLInputElement>("#root-id")!;
 const saveButton = document.querySelector<HTMLButtonElement>("#btn-save")!;
 const saveStatus = document.querySelector<HTMLElement>("#save-status")!;
+const searchInput = document.querySelector<HTMLInputElement>("#search")!;
+const searchCount = document.querySelector<HTMLElement>("#search-count")!;
 const treeContainer = document.querySelector<HTMLElement>("#tree")!;
 const detailContainer = document.querySelector<HTMLElement>("#detail")!;
 const summary = document.querySelector<HTMLElement>("#summary")!;
@@ -20,6 +22,28 @@ interface DecodedState {
 
 let state: DecodedState | null = null;
 
+function rerenderTree(): void {
+  if (!state) return;
+  const filter = buildFilter(state.fields, state.annotations, searchInput.value);
+  renderTree(treeContainer, state.fields, state.annotations, {
+    onSelect: (field) => {
+      if (!state) return;
+      renderDetail(detailContainer, field, state.annotations, {
+        onChange: (pathKey, next) => onAnnotationChange(pathKey, next),
+      });
+    },
+  }, filter);
+  updateSearchCount(filter);
+}
+
+function updateSearchCount(filter: TreeFilter | null): void {
+  if (!filter) {
+    searchCount.textContent = "";
+    return;
+  }
+  searchCount.textContent = `${filter.matchedPaths.size} matches`;
+}
+
 async function reloadFor(rootId: string, fields: DecodedField[]): Promise<void> {
   let annotations: AnnotationFile;
   try {
@@ -31,14 +55,7 @@ async function reloadFor(rootId: string, fields: DecodedField[]): Promise<void> 
   state = { rootId, fields, annotations, dirty: false };
   saveButton.disabled = true;
   summary.textContent = `${fields.length} top-level fields · root=${rootId}`;
-  renderTree(treeContainer, fields, annotations, {
-    onSelect: (field) => {
-      if (!state) return;
-      renderDetail(detailContainer, field, state.annotations, {
-        onChange: (pathKey, next) => onAnnotationChange(pathKey, next),
-      });
-    },
-  });
+  rerenderTree();
   detailContainer.innerHTML = '<p class="placeholder">ツリーからフィールドを選択してください。</p>';
 }
 
@@ -58,6 +75,14 @@ function onAnnotationChange(pathKey: string, next: FieldAnnotation): void {
   refreshFieldName(treeContainer, pathKey, cleaned.name);
   setStatus("unsaved changes", false);
 }
+
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+searchInput.addEventListener("input", () => {
+  if (searchDebounce) clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    rerenderTree();
+  }, 120);
+});
 
 function setStatus(text: string, isError: boolean): void {
   saveStatus.textContent = text;

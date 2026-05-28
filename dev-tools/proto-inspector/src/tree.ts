@@ -7,6 +7,16 @@ export interface TreeCallbacks {
   onSelect(field: DecodedField): void;
 }
 
+/**
+ * 検索結果を保持する。`includePaths` は「マッチ自体 + マッチの祖先」、
+ * `matchedPaths` は「直接マッチした field の path」。フィルタ未指定なら null。
+ */
+export interface TreeFilter {
+  query: string;
+  includePaths: Set<string>;
+  matchedPaths: Set<string>;
+}
+
 const WIRE_TYPE_LABELS: Record<number, string> = {
   0: "VARINT",
   1: "I64",
@@ -38,11 +48,87 @@ export function summarizeValue(value: DecodedValue): string {
   }
 }
 
+/** 注釈レコードをルックアップする。 */
+function lookupAnnotation(annotations: AnnotationFile, pathKey: string): FieldAnnotation | undefined {
+  return annotations.fields[pathKey];
+}
+
+/** field を検索対象文字列に展開する (小文字化済み)。 */
+function buildHaystack(field: DecodedField, annotation: FieldAnnotation | undefined): string {
+  const parts: string[] = [pathToKey(field.path), `#${field.fieldNumber}`];
+  if (annotation?.name) parts.push(annotation.name);
+  if (annotation?.description) parts.push(annotation.description);
+  if (annotation?.typeHint) parts.push(annotation.typeHint);
+  const value = field.value;
+  switch (value.kind) {
+    case "varint":
+      parts.push(value.unsigned, value.signed, value.zigzag);
+      if (value.asBool !== null) parts.push(String(value.asBool));
+      break;
+    case "i64":
+      parts.push(value.asUint, value.asInt, String(value.asDouble), value.hex);
+      break;
+    case "i32":
+      parts.push(String(value.asUint), String(value.asInt), String(value.asFloat), value.hex);
+      break;
+    case "string":
+      parts.push(value.text);
+      break;
+    case "bytes":
+      parts.push(value.hex);
+      break;
+    case "packed":
+      parts.push(value.values.join(" "));
+      break;
+    case "message":
+      // 子は再帰で別途検査される。サマリだけ。
+      parts.push(`{${value.fields.length}fields}`);
+      break;
+  }
+  return parts.join(" ").toLowerCase();
+}
+
 /**
- * 注釈レコードをルックアップする。注釈がなければ undefined。
+ * 検索クエリにマッチする path を走査して filter を作る。
+ * query が空なら null。
  */
-function lookupAnnotation(annotations: AnnotationFile, field: DecodedField): FieldAnnotation | undefined {
-  return annotations.fields[pathToKey(field.path)];
+export function buildFilter(
+  fields: DecodedField[],
+  annotations: AnnotationFile,
+  query: string,
+): TreeFilter | null {
+  const trimmed = query.trim().toLowerCase();
+  if (trimmed === "") return null;
+  const includePaths = new Set<string>();
+  const matchedPaths = new Set<string>();
+
+  function visit(field: DecodedField, ancestors: string[]): boolean {
+    const pathKey = pathToKey(field.path);
+    const annotation = lookupAnnotation(annotations, pathKey);
+    const haystack = buildHaystack(field, annotation);
+    let selfMatch = haystack.includes(trimmed);
+    let descendantMatch = false;
+    if (field.value.kind === "message") {
+      const nextAncestors = [...ancestors, pathKey];
+      for (const child of field.value.fields) {
+        if (visit(child, nextAncestors)) {
+          descendantMatch = true;
+        }
+      }
+    }
+    if (selfMatch) matchedPaths.add(pathKey);
+    if (selfMatch || descendantMatch) {
+      includePaths.add(pathKey);
+      for (const ancestor of ancestors) includePaths.add(ancestor);
+      return true;
+    }
+    return false;
+  }
+
+  for (const field of fields) {
+    visit(field, []);
+  }
+  return { query: trimmed, includePaths, matchedPaths };
 }
 
 /** field 1 件分の <li> を描画する (子要素は遅延展開)。 */
@@ -50,15 +136,20 @@ function renderField(
   field: DecodedField,
   annotations: AnnotationFile,
   callbacks: TreeCallbacks,
-): HTMLLIElement {
-  const annotation = lookupAnnotation(annotations, field);
+  filter: TreeFilter | null,
+): HTMLLIElement | null {
+  const pathKey = pathToKey(field.path);
+  if (filter && !filter.includePaths.has(pathKey)) return null;
+
+  const annotation = lookupAnnotation(annotations, pathKey);
   const li = document.createElement("li");
   li.className = "tree-node";
 
   const row = document.createElement("div");
   row.className = "tree-row";
+  if (filter && filter.matchedPaths.has(pathKey)) row.classList.add("matched");
   row.tabIndex = 0;
-  row.dataset.path = pathToKey(field.path);
+  row.dataset.path = pathKey;
 
   const isExpandable = field.value.kind === "message";
   const toggle = document.createElement("span");
@@ -114,6 +205,8 @@ function renderField(
 
   let childrenContainer: HTMLUListElement | null = null;
   let expanded = false;
+  // フィルタ中はマッチを辿りやすいよう祖先を自動展開する
+  const autoExpand = filter !== null && isExpandable;
 
   function toggleChildren(force?: boolean): void {
     if (!isExpandable) return;
@@ -126,7 +219,8 @@ function renderField(
         childrenContainer.className = "tree-children";
         if (field.value.kind === "message") {
           for (const child of field.value.fields) {
-            childrenContainer.appendChild(renderField(child, annotations, callbacks));
+            const childEl = renderField(child, annotations, callbacks, filter);
+            if (childEl) childrenContainer.appendChild(childEl);
           }
         }
         li.appendChild(childrenContainer);
@@ -139,6 +233,7 @@ function renderField(
     }
   }
 
+  if (autoExpand) toggleChildren(true);
   return li;
 }
 
@@ -147,12 +242,14 @@ export function renderTree(
   fields: DecodedField[],
   annotations: AnnotationFile,
   callbacks: TreeCallbacks,
+  filter: TreeFilter | null,
 ): void {
   container.innerHTML = "";
   const root = document.createElement("ul");
   root.className = "tree-root";
   for (const field of fields) {
-    root.appendChild(renderField(field, annotations, callbacks));
+    const el = renderField(field, annotations, callbacks, filter);
+    if (el) root.appendChild(el);
   }
   container.appendChild(root);
 }
