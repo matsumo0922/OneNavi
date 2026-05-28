@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OneNavi Proto Inspector (debug)</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header id="header">
+      <h1>Proto Inspector</h1>
+      <div class="header-controls">
+        <label class="file-input">
+          <input id="file-input" type="file" accept=".bin,.pb,.proto-bin,application/octet-stream" />
+          <span>Open binary…</span>
+        </label>
+        <label class="root-id">
+          Root ID
+          <input id="root-id" type="text" placeholder="guide / route" value="guide" />
+        </label>
+        <button id="btn-save" type="button" disabled>Save annotations</button>
+        <span id="save-status" class="save-status"></span>
+      </div>
+    </header>
+
+    <main id="main">
+      <section id="tree-pane" class="pane">
+        <div class="pane-header">
+          <h2>Decoded tree</h2>
+          <div id="summary" class="summary">no file</div>
+        </div>
+        <div id="tree" class="tree-body"></div>
+      </section>
+
+      <aside id="detail-pane" class="pane">
+        <div class="pane-header">
+          <h2>Field detail</h2>
+        </div>
+        <div id="detail" class="detail-body">
+          <p class="placeholder">ツリーからフィールドを選択してください。</p>
+        </div>
+      </aside>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

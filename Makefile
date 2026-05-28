@@ -6,8 +6,9 @@ FAKE_GPS_DIR := dev-tools/fake-gps
 FAKE_GPS_PORT := 5173
 ROUTE_COMPARE_DIR := dev-tools/route-compare
 UI_PLAYGROUND_DIR := dev-tools/ui-playground
+PROTO_INSPECTOR_DIR := dev-tools/proto-inspector
 
-.PHONY: detekt dhu route-demo-1 clean-dhu fake-gps fake-gps-setup fake-gps-dev fake-gps-status fake-gps-stop route-compare route-compare-setup route-compare-dev ui-playground ui-playground-setup ui-playground-dev
+.PHONY: detekt dhu route-demo-1 clean-dhu fake-gps fake-gps-setup fake-gps-dev fake-gps-status fake-gps-stop route-compare route-compare-setup route-compare-dev ui-playground ui-playground-setup ui-playground-dev proto-inspector proto-inspector-setup proto-inspector-dev
 
 detekt:
 	./gradlew detekt --auto-correct --continue
@@ -65,3 +66,13 @@ ui-playground-dev:
 	cd $(UI_PLAYGROUND_DIR) && npx vite
 
 ui-playground: ui-playground-setup ui-playground-dev
+
+# ── Proto Inspector (schema-less protobuf annotation tool) ──
+
+proto-inspector-setup:
+	cd $(PROTO_INSPECTOR_DIR) && npm install
+
+proto-inspector-dev:
+	cd $(PROTO_INSPECTOR_DIR) && npx vite
+
+proto-inspector: proto-inspector-setup proto-inspector-dev
