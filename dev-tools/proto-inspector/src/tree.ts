@@ -118,6 +118,16 @@ function matchLabels(parts: HaystackPart[], query: string): string[] {
   return result;
 }
 
+/** field およびその全 descendant を include に加える (subtree 取り込み)。 */
+function includeSubtree(field: DecodedField, includeIds: Set<number>): void {
+  includeIds.add(field.id);
+  if (field.value.kind === "message") {
+    for (const child of field.value.fields) {
+      includeSubtree(child, includeIds);
+    }
+  }
+}
+
 export function buildFilter(
   fields: DecodedField[],
   annotations: AnnotationFile,
@@ -129,7 +139,12 @@ export function buildFilter(
   const matchedIds = new Set<number>();
   const labels = new Map<number, string[]>();
 
-  function visit(field: DecodedField, ancestorIds: number[]): boolean {
+  /**
+   * `parent` は呼び出し側 (1 つ上の message field)。root 直下なら null。
+   * マッチ時に parent の subtree を丸ごと include することで「兄弟」と
+   * 「マッチした message の descendant」の両方が見えるようにする。
+   */
+  function visit(field: DecodedField, ancestorIds: number[], parent: DecodedField | null): boolean {
     const annotation = lookupAnnotation(annotations, field);
     const parts = buildHaystackParts(field, annotation);
     const hits = matchLabels(parts, trimmed);
@@ -138,12 +153,19 @@ export function buildFilter(
     if (field.value.kind === "message") {
       const nextAncestors = [...ancestorIds, field.id];
       for (const child of field.value.fields) {
-        if (visit(child, nextAncestors)) descendantMatch = true;
+        if (visit(child, nextAncestors, field)) descendantMatch = true;
       }
     }
     if (selfMatch) {
       matchedIds.add(field.id);
       labels.set(field.id, hits);
+      // 同列 (siblings) と 以下 (descendants) を見られるよう、親の subtree を丸ごと include。
+      // 親が無ければ自身の subtree のみ取り込む。
+      if (parent) {
+        includeSubtree(parent, includeIds);
+      } else {
+        includeSubtree(field, includeIds);
+      }
     }
     if (selfMatch || descendantMatch) {
       includeIds.add(field.id);
@@ -154,7 +176,7 @@ export function buildFilter(
   }
 
   for (const field of fields) {
-    visit(field, []);
+    visit(field, [], null);
   }
   return { query: trimmed, includeIds, matchedIds, matchLabels: labels };
 }
