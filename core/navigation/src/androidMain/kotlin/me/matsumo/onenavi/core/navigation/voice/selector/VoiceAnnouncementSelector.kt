@@ -103,7 +103,13 @@ internal class VoiceAnnouncementSelector(
         return best
     }
 
-    /** 2 候補のうち緊急度が高い方を返す。null は「候補なし」を表す。 */
+    /**
+     * 2 候補のうち緊急度が高い方を返す。null は「候補なし」を表す。
+     *
+     * urgency は target の残距離と種別だけで決まるため、同一 target の同種別段 (複数の MIDDLE 等)
+     * では同値になる。その場合はより手前でトリガする ([AnnouncementStage.triggerGeometryMeters] が
+     * 大きい) 段を採り、一度に複数段を跨いだとき近い予告を選ぶ (例: 2km と 1km を同時に越えたら 1km)。
+     */
     private fun moreUrgentOf(
         current: VoiceAnnouncementSelection?,
         candidate: VoiceAnnouncementSelection?,
@@ -111,9 +117,13 @@ internal class VoiceAnnouncementSelector(
         if (candidate == null) return current
         if (current == null) return candidate
 
-        val isCandidateMoreUrgent = candidate.urgency > current.urgency
+        val urgencyComparison = candidate.urgency.compareTo(current.urgency)
+        if (urgencyComparison > 0) return candidate
+        if (urgencyComparison < 0) return current
 
-        return if (isCandidateMoreUrgent) candidate else current
+        val isCandidateNearer = candidate.stage.triggerGeometryMeters > current.stage.triggerGeometryMeters
+
+        return if (isCandidateNearer) candidate else current
     }
 
     /** 案内地点がまだ前方にあるか (通過していないか) を返す。 */

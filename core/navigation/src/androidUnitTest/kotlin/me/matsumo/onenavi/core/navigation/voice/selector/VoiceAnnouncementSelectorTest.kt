@@ -78,6 +78,27 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
+    fun `同一 target で複数の中間段を同時に跨いだら最も手前の段を選ぶ`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // stages は遠い順 (triggerSource 昇順) で並ぶ前提。2km と 1km 手前を同 tick で跨ぐ。
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 5_000.0,
+                stages = listOf(
+                    middleStage("m3000", triggerGeometryMeters = 3_000.0),
+                    middleStage("m4000", triggerGeometryMeters = 4_000.0),
+                ),
+            ),
+        )
+
+        val selection = selector.select(plan, tickOf(previous = 2_500.0, current = 4_200.0), emptyState())
+
+        // 両方を越えているが、より手前 (1km 手前 = triggerGeometry 大) の段を採る。
+        assertEquals(VoiceAnnouncementId("m4000"), selection?.stage?.id)
+    }
+
+    @Test
     fun `同時に複数 target が鳴りたい tick では最も近い案内地点が選ばれる`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         val plan = planOf(
