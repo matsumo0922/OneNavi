@@ -51,8 +51,13 @@ internal class VoiceAnnouncementSelector(
      *
      * scheduler はこれを [VoiceAnnouncementSpeechState.withTargetPassed] に流し、通過済み地点の
      * 未発話段を恒久的に抑止する。判定は前 tick→現 tick の区間で GP 位置を跨いだかで行う。
+     *
+     * route が発話不能状態 (OFF_ROUTE_CONFIRMED 等) の tick では空を返す。投影距離だけが進んで
+     * いる可能性があり、通過済みと誤記録すると復帰時に案内を失うため、発話状態は維持する。
      */
     fun passedTargetIndices(plan: VoiceAnnouncementPlan, tick: VoiceTick): List<Int> {
+        if (!tick.isRouteUsable) return emptyList()
+
         val passed = mutableListOf<Int>()
 
         for (targetIndex in plan.targets.indices) {

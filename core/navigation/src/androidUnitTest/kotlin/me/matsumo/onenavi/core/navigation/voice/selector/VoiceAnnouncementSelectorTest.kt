@@ -168,6 +168,22 @@ class VoiceAnnouncementSelectorTest {
         assertTrue(notYet.isEmpty())
     }
 
+    @Test
+    fun `route が発話不能な tick では通過済みを記録しない`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val plan = planOf(
+            targetOf(index = 0, geometryMeters = 500.0, stages = listOf(finalStage("f0"))),
+        )
+
+        // 投影距離は GP を跨いでいるが OFF_ROUTE 等で発話不能 → 通過済みにしない。
+        val passed = selector.passedTargetIndices(
+            plan = plan,
+            tick = tickOf(previous = 480.0, current = 520.0, isRouteUsable = false),
+        )
+
+        assertTrue(passed.isEmpty())
+    }
+
     private fun planOf(vararg targets: AnnouncementTarget): VoiceAnnouncementPlan =
         VoiceAnnouncementPlan(
             routeId = "R",

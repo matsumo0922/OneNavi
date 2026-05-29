@@ -85,6 +85,21 @@ class VoiceAnnouncementSelectionPolicyTest {
         assertEquals(VoiceAnnouncementDispatchDecision.ENQUEUE, decision)
     }
 
+    @Test
+    fun `発話中 target を通過済みなら次地点の候補に道を譲る`() {
+        // A (geo 500) の中間段を発話中のまま A を通過 (現在地 510m, 残 -10)。
+        val tick = tickOf(current = 510.0)
+        val speakingState = speakingStateOf(id = "passedA", targetGeometryMeters = 500.0)
+        // 次地点 B (geo 550) の FINAL が trigger。残 40。
+        val nextSelection =
+            selectionOf(id = "nextB", targetGeometryMeters = 550.0, tick = tick, kind = AnnouncementStageKind.FINAL)
+
+        val decision = policy.decide(state = speakingState, selection = nextSelection, tick = tick)
+
+        // 通過済み発話の残距離は負だが「最緊急」とはせず、新候補に BARGE_IN で譲る。
+        assertEquals(VoiceAnnouncementDispatchDecision.BARGE_IN, decision)
+    }
+
     private fun speakingStateOf(
         id: String,
         targetGeometryMeters: Double,
