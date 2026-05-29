@@ -138,8 +138,8 @@ internal fun MapCallOutMarkerEffect(
         }
     }
 
-    val specs = placements.map { placement ->
-        val request = requests[placement.requestIndex]
+    val specs = placements.mapNotNull { placement ->
+        val request = requests.elementAtOrNull(placement.requestIndex) ?: return@mapNotNull null
         val descriptor = key(request.id, placement.tailSide, request.contentKey ?: NO_CONTENT_KEY) {
             rememberMapComposeBitmapDescriptor(request.id, placement.tailSide, request.contentKey ?: NO_CONTENT_KEY) {
                 Box(
