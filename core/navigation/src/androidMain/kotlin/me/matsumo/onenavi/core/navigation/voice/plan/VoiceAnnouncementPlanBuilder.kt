@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.core.navigation.voice.plan
 
+import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementBlock
@@ -182,6 +183,14 @@ internal class VoiceAnnouncementPlanBuilder {
             idSuffix = idSuffix,
         )
 
+        logBlockBreakdown(
+            guidancePoint = guidancePoint,
+            block = block,
+            kind = kind,
+            triggerSourceMeters = triggerSourceMeters,
+            triggerGeometryMeters = triggerGeometryMeters,
+        )
+
         return AnnouncementStage(
             id = id,
             kind = kind,
@@ -191,6 +200,33 @@ internal class VoiceAnnouncementPlanBuilder {
             categories = block.categories,
         )
     }
+
+    // ---------------------------------------------------------------------
+    // 診断ログ (issue #41 Phase 3 実機検証用、確認後に撤去予定)
+    // ---------------------------------------------------------------------
+
+    /**
+     * 段を組む過程の生値をダンプする。anchor 距離と triggerDistance を出して trigGeo を分解し、
+     * 「自地点から遠すぎる位置でトリガする block」がどう生成されたかを切り分けるため。
+     */
+    private fun logBlockBreakdown(
+        guidancePoint: GuidancePoint,
+        block: GuideAnnouncementBlock,
+        kind: AnnouncementStageKind,
+        triggerSourceMeters: Double,
+        triggerGeometryMeters: Double,
+    ) {
+        Napier.d(tag = TAG) {
+            "gp=${guidancePoint.index} block=${block.id} kind=$kind " +
+                "srcGp=${block.anchor.sourceGuidancePointIndex} srcBlockIdx=${block.anchor.sourceBlockIndex} " +
+                "anchorSrc=${block.anchor.sourceDistanceFromStartMetres} triggerDist=${block.triggerDistanceMetres} " +
+                "trigSrc=$triggerSourceMeters trigGeo=$triggerGeometryMeters text=\"${previewOf(block)}\""
+        }
+    }
+
+    /** ブロックの発話素片の text を結合してプレビュー文字列にする。 */
+    private fun previewOf(block: GuideAnnouncementBlock): String =
+        block.pieces.joinToString(separator = "") { piece -> piece.text }
 
     /**
      * 距離段の安定キーを組み立てる。距離 override で複製した段は手前距離を suffix に付ける。
@@ -229,4 +265,10 @@ internal class VoiceAnnouncementPlanBuilder {
     /** source 距離を対応付けられる (anchor 距離が非 null の) block かを返す。 */
     private fun GuideAnnouncementBlock.hasMappableAnchor(): Boolean =
         anchor.sourceDistanceFromStartMetres != null
+
+    private companion object {
+
+        /** ブロック分解の診断ログを絞り込むためのタグ。 */
+        const val TAG = "VoiceAnnouncementBlock"
+    }
 }
