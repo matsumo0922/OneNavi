@@ -22,19 +22,22 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation
+import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementController
 
 /**
  * Guidance 期 (案内中) のマネージャ。
  *
  * 地図描画・callout・音声案内はすべて自前で行い、Google Navigation SDK の Navigator は使わない。
  * この manager は route payload を tracker に attach し、端末位置 tick を流して [GuidanceState] を更新する。
- * 音声案内・リルート判定・到着判定は [me.matsumo.onenavi.core.navigation.extnav] 配下の周辺コンポーネントへ
+ * 音声案内は attach 時に [VoiceAnnouncementController] へ同じ payload / 距離変換 context を渡し、tracker snapshot を
+ * 流して発話を駆動する。リルート判定・到着判定は [me.matsumo.onenavi.core.navigation.extnav] 配下の周辺コンポーネントへ
  * 順次 fan-out する。
  */
-class NewGuidanceManager(
+class NewGuidanceManager internal constructor(
     private val routeRegistry: ExtNavRouteRegistry? = null,
     private val guidanceTracker: ExtNavGuidanceTracker? = null,
     private val locationDataSource: CurrentLocationDataSource? = null,
+    private val voiceController: VoiceAnnouncementController? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
 
@@ -140,7 +143,8 @@ class NewGuidanceManager(
             return null
         }
 
-        tracker.attach(payload = payload, route = route)
+        val attachment = tracker.attach(payload = payload, route = route)
+        voiceController?.start(payload = payload, distanceContext = attachment.distanceContext)
         tracker.onLocation(route.toOriginUserLocation())
 
         val snapshot = tracker.snapshot.value
@@ -203,11 +207,7 @@ class NewGuidanceManager(
             tracker.snapshot.collect { snapshot ->
                 if (snapshot == null) return@collect
                 if (!isActiveSession(sessionId)) return@collect
-                _state.value = GuidanceState.Guiding(
-                    route = route,
-                    progress = snapshot.progress,
-                    presentation = snapshot.presentation,
-                )
+                publishGuidance(route = route, snapshot = snapshot)
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -218,6 +218,26 @@ class NewGuidanceManager(
                 error = error,
             )
         }
+    }
+
+    /**
+     * 1 件の snapshot を UI と音声案内へ反映する。
+     *
+     * UI が読む [GuidanceState.Guiding] を更新し、同じ snapshot を音声案内へ流して発話 tick に変換させる。
+     *
+     * @param route 案内対象ルート
+     * @param snapshot tracker が発行した進捗 snapshot
+     */
+    private fun publishGuidance(
+        route: RouteDetail,
+        snapshot: ExtNavProgressSnapshot,
+    ) {
+        _state.value = GuidanceState.Guiding(
+            route = route,
+            progress = snapshot.progress,
+            presentation = snapshot.presentation,
+        )
+        voiceController?.onSnapshot(snapshot)
     }
 
     /**
@@ -303,6 +323,7 @@ class NewGuidanceManager(
 
         if (detachTracker) {
             guidanceTracker?.detach()
+            voiceController?.stop()
         }
     }
 
