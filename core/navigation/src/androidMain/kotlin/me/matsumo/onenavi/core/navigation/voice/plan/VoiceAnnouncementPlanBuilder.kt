@@ -1,9 +1,11 @@
 package me.matsumo.onenavi.core.navigation.voice.plan
 
 import io.github.aakira.napier.Napier
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementBlock
+import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDistanceContext
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRoutePayload
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
@@ -54,8 +56,10 @@ internal class VoiceAnnouncementPlanBuilder {
     /**
      * 1 GP を [AnnouncementTarget] に変換する。発話可能な block が無ければ null を返す。
      *
-     * source 距離を対応付けられない block (anchor 距離が null) は除外する。残った block のうち
-     * 最も手前 (最小 triggerDistanceMetres) の段を FINAL、それ以外を MIDDLE として扱う。
+     * source 距離を対応付けられない block (anchor 距離が null) は除外する。外部データは同一 GP に
+     * まったく同じ発話内容の block を複数距離で重複させて持つため、発話内容が同じ block は
+     * 案内点に近い 1 つに畳む ([dedupBlocksByPieces])。残った block のうち最も手前 (最小
+     * triggerDistanceMetres) の段を FINAL、それ以外を MIDDLE として扱う。
      */
     private fun buildTarget(
         routeId: String,
@@ -67,11 +71,12 @@ internal class VoiceAnnouncementPlanBuilder {
 
         if (validBlocks.isEmpty()) return null
 
-        val finalBlockIndex = selectFinalBlockIndex(validBlocks)
+        val uniqueBlocks = dedupBlocksByPieces(validBlocks)
+        val finalBlockIndex = selectFinalBlockIndex(uniqueBlocks)
         val stages = mutableListOf<AnnouncementStage>()
 
-        for (blockIndex in validBlocks.indices) {
-            val block = validBlocks[blockIndex]
+        for (blockIndex in uniqueBlocks.indices) {
+            val block = uniqueBlocks[blockIndex]
             val blockStages = buildStagesForBlock(
                 routeId = routeId,
                 guidancePoint = guidancePoint,
@@ -242,6 +247,40 @@ internal class VoiceAnnouncementPlanBuilder {
 
         return VoiceAnnouncementId(full)
     }
+
+    /**
+     * 発話内容 (pieces) が完全に一致する重複 block を 1 つに畳む。
+     *
+     * 外部データは同一 GP に同じ文言の block を複数の手前距離で重複させて持つ
+     * (例: 「この信号を左方向です」を 110 / 100 / 80 / 59m 手前の 4 block で重複)。これを全部鳴らすと
+     * 同じ案内が連続するため、発話内容が同じ block 群は **案内点に最も近い (triggerDistanceMetres が
+     * 最小の) 1 つ**に畳む。距離 override 由来の複製は単一 block を後段で複製するもので、本 dedup は
+     * block 単位で行うため衝突しない (異なる文言の block は畳まれない)。
+     *
+     * @param blocks 同一 GP の発話可能な block 群 (出現順)
+     * @return 発話内容ごとに 1 つだけ残した block 群
+     */
+    private fun dedupBlocksByPieces(blocks: List<GuideAnnouncementBlock>): List<GuideAnnouncementBlock> {
+        val nearestByPieces = LinkedHashMap<ImmutableList<GuideAnnouncementPiece>, GuideAnnouncementBlock>()
+
+        for (block in blocks) {
+            val existing = nearestByPieces[block.pieces]
+            if (existing == null) {
+                nearestByPieces[block.pieces] = block
+                continue
+            }
+            nearestByPieces[block.pieces] = nearerBlock(existing, block)
+        }
+
+        return nearestByPieces.values.toList()
+    }
+
+    /** 重複 block のうち案内点に近い (triggerDistanceMetres が小さい) 方を返す。同値なら先着を残す。 */
+    private fun nearerBlock(
+        current: GuideAnnouncementBlock,
+        candidate: GuideAnnouncementBlock,
+    ): GuideAnnouncementBlock =
+        if (candidate.triggerDistanceMetres < current.triggerDistanceMetres) candidate else current
 
     /**
      * GP 内で FINAL とみなす block の index を返す。最も手前 (最小 triggerDistanceMetres) の
