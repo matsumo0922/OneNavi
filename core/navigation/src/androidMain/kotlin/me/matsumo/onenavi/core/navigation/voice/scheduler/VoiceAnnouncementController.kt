@@ -1,9 +1,13 @@
 package me.matsumo.onenavi.core.navigation.voice.scheduler
 
+import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavProgressSnapshot
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDistanceContext
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRoutePayload
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
+import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
+import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementTarget
+import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlan
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlanBuilder
 
 /**
@@ -37,6 +41,7 @@ internal class VoiceAnnouncementController(
             distanceContext = distanceContext,
             config = config,
         )
+        logPlan(plan)
         speechRunner.attach(plan)
     }
 
@@ -52,5 +57,43 @@ internal class VoiceAnnouncementController(
     /** 音声案内を停止し、発話プランと進行中の発話を破棄する。 */
     fun stop() {
         speechRunner.detach()
+    }
+
+    // ---------------------------------------------------------------------
+    // 診断ログ (issue #41 Phase 3 実機検証用、確認後に撤去予定)
+    // ---------------------------------------------------------------------
+
+    /** attach 時にプラン全体をダンプする。重複ブロック・全段構成・トリガ距離を裏取りするため。 */
+    private fun logPlan(plan: VoiceAnnouncementPlan) {
+        Napier.d(tag = TAG) { "plan routeId=${plan.routeId} targets=${plan.targets.size}" }
+
+        for (targetIndex in plan.targets.indices) {
+            val target = plan.targets[targetIndex]
+            Napier.d(tag = TAG) {
+                "target[$targetIndex] gp=${target.guidancePointIndex} geo=${target.geometryMeters} " +
+                    "stages=${target.stages.size}"
+            }
+            logStages(target)
+        }
+    }
+
+    /** target 内の各段の id / kind / トリガ距離 / 発話プレビューを出力する。 */
+    private fun logStages(target: AnnouncementTarget) {
+        for (stage in target.stages) {
+            Napier.d(tag = TAG) {
+                "  stage id=${stage.id.value} kind=${stage.kind} trigSrc=${stage.triggerSourceMeters} " +
+                    "trigGeo=${stage.triggerGeometryMeters} text=\"${stagePreview(stage)}\""
+            }
+        }
+    }
+
+    /** 段の発話素片の text を結合してプレビュー文字列にする。 */
+    private fun stagePreview(stage: AnnouncementStage): String =
+        stage.pieces.joinToString(separator = "") { piece -> piece.text }
+
+    private companion object {
+
+        /** プランダンプの診断ログを絞り込むためのタグ。 */
+        const val TAG = "VoiceAnnouncementPlan"
     }
 }

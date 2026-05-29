@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.core.navigation.voice.scheduler
 
+import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementRequest
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
@@ -107,12 +108,14 @@ internal class VoiceAnnouncementScheduler(
     ): VoiceAnnouncementCommand? {
         val content = contentRenderer.render(selection.stage)
         if (content == null) {
+            logSkippedEmpty(selection, tick)
             state = state.withStageFired(selection.stage.id)
             return null
         }
 
         val request = VoiceAnnouncementRequest.from(selection, content)
         val decision = policy.decide(state, selection, tick)
+        logDecision(decision, selection, tick)
 
         return when (decision) {
             VoiceAnnouncementDispatchDecision.PLAY -> startSpeaking(request)
@@ -125,8 +128,12 @@ internal class VoiceAnnouncementScheduler(
     private fun dispatchNextFromQueue(): VoiceAnnouncementCommand? {
         while (pendingQueue.isNotEmpty()) {
             val request = pendingQueue.removeFirst()
-            if (state.isTargetPassed(request.targetIndex)) continue
+            if (state.isTargetPassed(request.targetIndex)) {
+                Napier.d(tag = TAG) { "drain-skip passed stage=${request.stageId.value} target=${request.targetIndex}" }
+                continue
+            }
 
+            Napier.d(tag = TAG) { "drain stage=${request.stageId.value}" }
             return startSpeaking(request)
         }
 
@@ -161,4 +168,35 @@ internal class VoiceAnnouncementScheduler(
         targetGeometryMeters = request.targetGeometryMeters,
         kind = request.kind,
     )
+
+    // ---------------------------------------------------------------------
+    // 診断ログ (issue #41 Phase 3 実機検証用、確認後に撤去予定)
+    // ---------------------------------------------------------------------
+
+    /** 発話確定時に decision と段・距離を出力する。重複が別 stage か再発火かを stage id で見分けるため。 */
+    private fun logDecision(
+        decision: VoiceAnnouncementDispatchDecision,
+        selection: VoiceAnnouncementSelection,
+        tick: VoiceTick,
+    ) {
+        Napier.d(tag = TAG) {
+            "decide=$decision stage=${selection.stage.id.value} kind=${selection.stage.kind} " +
+                "trigGeo=${selection.stage.triggerGeometryMeters} current=${tick.currentCumulativeMeters} " +
+                "remaining=${selection.urgency.remainingMeters} speed=${tick.speedMetersPerSecond}"
+        }
+    }
+
+    /** 発話内容が空で畳んだ段を出力する。 */
+    private fun logSkippedEmpty(selection: VoiceAnnouncementSelection, tick: VoiceTick) {
+        Napier.d(tag = TAG) {
+            "skip-empty stage=${selection.stage.id.value} kind=${selection.stage.kind} " +
+                "current=${tick.currentCumulativeMeters}"
+        }
+    }
+
+    private companion object {
+
+        /** 発話判定の診断ログを絞り込むためのタグ。 */
+        const val TAG = "VoiceAnnouncementDecision"
+    }
 }
