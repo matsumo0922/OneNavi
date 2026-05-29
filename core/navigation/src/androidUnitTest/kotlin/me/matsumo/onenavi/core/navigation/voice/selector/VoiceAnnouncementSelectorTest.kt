@@ -121,6 +121,29 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
+    fun `近い中間段を採った後 追い越された遠い中間段は蒸し返さない`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 5_000.0,
+                stages = listOf(
+                    middleStage("m3000", triggerGeometryMeters = 3_000.0),
+                    middleStage("m4000", triggerGeometryMeters = 4_000.0),
+                ),
+            ),
+        )
+
+        // 1km 手前 (m4000) を採る。
+        val firstTick = selector.select(plan, tickOf(current = 4_200.0), emptyState())
+        // m4000 だけ処理済みにした次 tick。追い越された 2km 手前 (m3000) は蒸し返さない。
+        val afterNear = selector.select(plan, tickOf(current = 4_300.0), emptyState().withStageFired(VoiceAnnouncementId("m4000")))
+
+        assertEquals(VoiceAnnouncementId("m4000"), firstTick?.stage?.id)
+        assertNull(afterNear)
+    }
+
+    @Test
     fun `同時に複数 target が鳴りたい tick では最も近い案内地点が選ばれる`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         val plan = planOf(

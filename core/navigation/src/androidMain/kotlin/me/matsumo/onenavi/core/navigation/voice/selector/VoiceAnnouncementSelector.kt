@@ -87,6 +87,7 @@ internal class VoiceAnnouncementSelector(
 
         for (stage in target.stages) {
             if (state.isStageFired(stage.id)) continue
+            if (isOvertakenByProcessedStage(target, stage, state)) continue
             if (!isStageTriggered(stage, target, tick)) continue
 
             val urgency = VoiceAnnouncementUrgency.of(
@@ -133,6 +134,27 @@ internal class VoiceAnnouncementSelector(
     /** 案内地点がまだ前方にあるか (通過していないか) を返す。 */
     private fun isTargetAhead(target: AnnouncementTarget, tick: VoiceTick): Boolean =
         tick.currentCumulativeMeters < target.geometryMeters
+
+    /**
+     * 同一 target 内で、この段より手前 (triggerGeometryMeters が大きい) の段が既に処理済みかを返す。
+     *
+     * level 判定では到達済みの未処理段がずっと候補に残るため、より近い予告や FINAL を鳴らした後に
+     * 追い越された古い予告を蒸し返してしまう。これを防ぐための判定。
+     * 例: 2km と 1km の予告で 1km を採ったら、追い越された 2km は捨てる。FINAL は最も手前に来るため、
+     * FINAL を鳴らした後はその target の MIDDLE はすべて追い越し済みとして抑止される。
+     */
+    private fun isOvertakenByProcessedStage(
+        target: AnnouncementTarget,
+        stage: AnnouncementStage,
+        state: VoiceAnnouncementSpeechState,
+    ): Boolean {
+        for (other in target.stages) {
+            if (other.triggerGeometryMeters <= stage.triggerGeometryMeters) continue
+            if (state.isStageFired(other.id)) return true
+        }
+
+        return false
+    }
 
     /** 段のトリガ条件を満たすかを返す。MIDDLE は到達判定、FINAL は到達リードタイム逆算。 */
     private fun isStageTriggered(
