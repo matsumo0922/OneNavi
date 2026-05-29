@@ -1,12 +1,10 @@
 package me.matsumo.onenavi.core.navigation.voice.plan
 
 import io.github.aakira.napier.Napier
-import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementBlock
-import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDistanceContext
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRoutePayload
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
@@ -72,7 +70,7 @@ internal class VoiceAnnouncementPlanBuilder {
 
         if (validBlocks.isEmpty()) return null
 
-        val uniqueBlocks = dedupBlocksByPieces(validBlocks)
+        val uniqueBlocks = dedupBlocksBySpokenText(validBlocks)
         val finalBlockIndex = selectFinalBlockIndex(uniqueBlocks)
         val stages = mutableListOf<AnnouncementStage>()
 
@@ -228,13 +226,9 @@ internal class VoiceAnnouncementPlanBuilder {
                 "anchorSrc=${block.anchor.sourceDistanceFromStartMetres} triggerDist=${block.triggerDistanceMetres} " +
                 "trigSrc=$triggerSourceMeters trigGeo=$triggerGeometryMeters " +
                 "cats=${block.categories} pieceTmpl=${templateRefsOf(block)} pieceCats=${pieceCategoriesOf(block)} " +
-                "text=\"${previewOf(block)}\""
+                "text=\"${spokenTextOf(block)}\""
         }
     }
-
-    /** ブロックの発話素片の text を結合してプレビュー文字列にする。 */
-    private fun previewOf(block: GuideAnnouncementBlock): String =
-        block.pieces.joinToString(separator = "") { piece -> piece.text }
 
     /** 素片ごとの templateRef 一覧。ブロックの役割 (テンプレート種別) を切り分けるための診断値。 */
     private fun templateRefsOf(block: GuideAnnouncementBlock): List<Int?> =
@@ -260,31 +254,37 @@ internal class VoiceAnnouncementPlanBuilder {
     }
 
     /**
-     * 発話内容 (pieces) が完全に一致する重複 block を 1 つに畳む。
+     * 読み上げテキストが一致する重複 block を 1 つに畳む。
      *
      * 外部データは同一 GP に同じ文言の block を複数の手前距離で重複させて持つ
-     * (例: 「この信号を左方向です」を 110 / 100 / 80 / 59m 手前の 4 block で重複)。これを全部鳴らすと
-     * 同じ案内が連続するため、発話内容が同じ block 群は **案内点に最も近い (triggerDistanceMetres が
-     * 最小の) 1 つ**に畳む。距離 override 由来の複製は単一 block を後段で複製するもので、本 dedup は
-     * block 単位で行うため衝突しない (異なる文言の block は畳まれない)。
+     * (例: 「この信号を左方向です」を 110 / 100 / 80 / 59m 手前の 4 block で重複)。さらに、文言が完全に
+     * 同じでも piece の templateRef / category が異なる (トリガ理由違いの) 重複もあるため、piece タプルでなく
+     * **結合後の読み上げテキスト**でキーにする。同テキストの block 群は **案内点に最も近い
+     * (triggerDistanceMetres が最小の) 1 つ**に畳む。距離 override 由来の複製は単一 block を後段で複製する
+     * もので、本 dedup は block 単位で行うため衝突しない (異なる文言の block は畳まれない)。
      *
      * @param blocks 同一 GP の発話可能な block 群 (出現順)
-     * @return 発話内容ごとに 1 つだけ残した block 群
+     * @return 読み上げテキストごとに 1 つだけ残した block 群
      */
-    private fun dedupBlocksByPieces(blocks: List<GuideAnnouncementBlock>): List<GuideAnnouncementBlock> {
-        val nearestByPieces = LinkedHashMap<ImmutableList<GuideAnnouncementPiece>, GuideAnnouncementBlock>()
+    private fun dedupBlocksBySpokenText(blocks: List<GuideAnnouncementBlock>): List<GuideAnnouncementBlock> {
+        val nearestByText = LinkedHashMap<String, GuideAnnouncementBlock>()
 
         for (block in blocks) {
-            val existing = nearestByPieces[block.pieces]
+            val spokenText = spokenTextOf(block)
+            val existing = nearestByText[spokenText]
             if (existing == null) {
-                nearestByPieces[block.pieces] = block
+                nearestByText[spokenText] = block
                 continue
             }
-            nearestByPieces[block.pieces] = nearerBlock(existing, block)
+            nearestByText[spokenText] = nearerBlock(existing, block)
         }
 
-        return nearestByPieces.values.toList()
+        return nearestByText.values.toList()
     }
+
+    /** block の全 piece の text を結合した読み上げテキスト。重複判定のキーに使う。 */
+    private fun spokenTextOf(block: GuideAnnouncementBlock): String =
+        block.pieces.joinToString(separator = "") { piece -> piece.text }
 
     /** 重複 block のうち案内点に近い (triggerDistanceMetres が小さい) 方を返す。同値なら先着を残す。 */
     private fun nearerBlock(

@@ -286,6 +286,44 @@ class VoiceAnnouncementPlanBuilderTest {
         assertEquals(AnnouncementStageKind.FINAL, dupStage.kind)
     }
 
+    @Test
+    fun `読み上げテキストが同一なら piece の category が違っても1段に畳む`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // 同一テキストだがトリガ理由 (category) が異なる重複。外部データに実在するパターン。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock(
+                    "speedReason",
+                    anchorSourceMetres = 5_000.0,
+                    triggerDistanceMetres = 80,
+                    categories = listOf(GuidanceCategory.SpeedAdjustment),
+                    text = "この信号を左方向です",
+                ),
+                buildBlock(
+                    "signalReason",
+                    anchorSourceMetres = 5_000.0,
+                    triggerDistanceMetres = 59,
+                    categories = listOf(GuidanceCategory.TrafficLight),
+                    text = "この信号を左方向です",
+                ),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        // category が違っても読み上げが同じなら畳まれ、最寄り (triggerDistance 59) の1段だけ残る。
+        val stage = plan.targets.single().stages.single()
+        assertEquals(VoiceAnnouncementId("R-1#gp0#signalReason"), stage.id)
+    }
+
     private fun buildIdentityDistanceContext(totalMetres: Double): ExtNavRouteDistanceContext =
         buildDistanceContext(sourceTotalMetres = totalMetres, geometryTotalMetres = totalMetres)
 
