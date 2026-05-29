@@ -34,6 +34,7 @@ import kotlin.math.roundToInt
 class ExtNavGuidanceTracker {
 
     private val routeMapper = GuidanceRouteMapper()
+    private val distanceContextFactory = RouteDistanceContextFactory()
     private val routeSelector = GuidanceRouteSelector()
     private val presentationProjector = GuidancePresentationProjector()
 
@@ -51,16 +52,25 @@ class ExtNavGuidanceTracker {
      * 案内対象の route と、Preview 時にキャッシュした外部ナビ API ライブラリ由来 payload を紐付ける。
      *
      * tick ごとの計算を軽くするため、ここで geometry の累積距離を事前計算し、payload を
-     * [GuidanceRoute] に射影する。
+     * [GuidanceRoute] に射影する。射影済みの案内ルートと source→geometry 距離変換 context を
+     * [ExtNavGuidanceAttachment] として返し、音声プランなど後段が同じ成果物を共有できるようにする。
+     *
+     * @param payload Preview 時に取得した外部ナビ API ライブラリ由来 payload
+     * @param route 案内対象の中立 route
+     * @return tick 非依存の attach 時成果物
      */
     @Suppress("unused")
-    fun attach(payload: ExtNavRoutePayload, route: RouteDetail) {
+    internal fun attach(payload: ExtNavRoutePayload, route: RouteDetail): ExtNavGuidanceAttachment {
         val attached = buildAttachedRoute(payload, route)
         attachedRoute = attached
         lastProjection = null
         offRouteCandidate = null
         guidanceStartTimestampMillis = null
         _snapshot.value = null
+        return ExtNavGuidanceAttachment(
+            guidanceRoute = attached.guidanceRoute,
+            distanceContext = attached.distanceContext,
+        )
     }
 
     /**
@@ -119,6 +129,12 @@ class ExtNavGuidanceTracker {
         val cumulativeMetres = buildCumulativeGeometryMetres(route.geometry)
         val totalGeometryMetres = cumulativeMetres.lastOrNull() ?: 0.0
         val guidanceRoute = routeMapper.map(payload = payload, route = route)
+        val distanceContext = distanceContextFactory.create(
+            payload = payload,
+            route = route,
+            cumulativeMetres = cumulativeMetres,
+            totalGeometryMetres = totalGeometryMetres,
+        )
         val projectionContext = RouteProjectionContext(
             route = route,
             cumulativeMetres = cumulativeMetres,
@@ -133,6 +149,7 @@ class ExtNavGuidanceTracker {
             cumulativeMetres = cumulativeMetres,
             totalGeometryMetres = totalGeometryMetres,
             guidanceRoute = guidanceRoute,
+            distanceContext = distanceContext,
             projectionContext = projectionContext,
             primaryEventMetres = primaryEventMetres,
         )
@@ -874,6 +891,7 @@ class ExtNavGuidanceTracker {
      * @param cumulativeMetres geometry index ごとの累積距離
      * @param totalGeometryMetres geometry の総距離
      * @param guidanceRoute payload を射影した位置非依存の案内ルート
+     * @param distanceContext source→geometry 距離変換 context
      * @param projectionContext 道路種別 / ETA を解決する geometry コンテキスト
      * @param primaryEventMetres 主案内イベントの geometry 距離一覧 (off-route 判定用)
      */
@@ -882,6 +900,7 @@ class ExtNavGuidanceTracker {
         val cumulativeMetres: DoubleArray,
         val totalGeometryMetres: Double,
         val guidanceRoute: GuidanceRoute,
+        val distanceContext: ExtNavRouteDistanceContext,
         val projectionContext: RouteProjectionContext,
         val primaryEventMetres: List<Double>,
     )
