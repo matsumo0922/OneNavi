@@ -71,14 +71,18 @@ class VoiceAnnouncementSpeechRunnerTest {
         val runner = runnerOf(dispatcher, this)
         runner.attach(
             planOf(
-                targetOf(index = 0, geometryMeters = 760.0, finalStage("nearFinal")),
-                targetOf(index = 1, geometryMeters = 2_000.0, middleStage("farMiddle", 700.0)),
+                targetOf(
+                    index = 0,
+                    geometryMeters = 1_000.0,
+                    middleStage("farMiddle", triggerGeometryMeters = 100.0),
+                    finalStage("nearFinal", triggerGeometryMeters = 900.0),
+                ),
             ),
         )
 
-        runner.submit(tickOf(current = 700.0)) // farMiddle を発話開始 (gate で保留)
+        runner.submit(tickOf(current = 150.0)) // farMiddle を発話開始 (gate で保留)
         advanceUntilIdle()
-        runner.submit(tickOf(current = 735.0)) // nearFinal が割り込み、farMiddle を中断
+        runner.submit(tickOf(current = 975.0)) // nearFinal が割り込み、farMiddle を中断
         advanceUntilIdle()
         runner.detach()
 
@@ -187,8 +191,8 @@ class VoiceAnnouncementSpeechRunnerTest {
     private fun middleStage(id: String, triggerGeometryMeters: Double): AnnouncementStage =
         stageOf(id, AnnouncementStageKind.MIDDLE, triggerGeometryMeters)
 
-    private fun finalStage(id: String): AnnouncementStage =
-        stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters = 0.0)
+    private fun finalStage(id: String, triggerGeometryMeters: Double = 0.0): AnnouncementStage =
+        stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters)
 
     private fun stageOf(
         id: String,

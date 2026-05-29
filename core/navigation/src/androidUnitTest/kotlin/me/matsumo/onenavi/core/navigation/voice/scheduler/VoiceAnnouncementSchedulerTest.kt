@@ -62,17 +62,22 @@ class VoiceAnnouncementSchedulerTest {
     @Test
     fun `発話中より緊急な直前段は中断して割り込む`() {
         val scheduler = schedulerOf()
+        // 同一案内地点の遠い中間段 (発話中) に、直前段が割り込むケース。
         scheduler.attach(
             planOf(
-                targetOf(index = 0, geometryMeters = 760.0, finalStage("nearFinal")),
-                targetOf(index = 1, geometryMeters = 2_000.0, middleStage("farMiddle", 700.0)),
+                targetOf(
+                    index = 0,
+                    geometryMeters = 1_000.0,
+                    middleStage("farMiddle", triggerGeometryMeters = 100.0),
+                    finalStage("nearFinal", triggerGeometryMeters = 900.0),
+                ),
             ),
         )
 
-        // far の中間段を先に発話開始 (near の FINAL はまだ手前距離に達していない)。
-        val first = scheduler.onTick(tickOf(current = 700.0))
-        // near の FINAL が手前距離に達し、発話中の far より緊急 → 中断+割り込み。
-        val bargeIn = scheduler.onTick(tickOf(current = 735.0))
+        // 遠い中間段を先に発話開始 (FINAL はまだ手前距離に達していない)。
+        val first = scheduler.onTick(tickOf(current = 150.0))
+        // FINAL が手前距離に達し、発話中の中間段より緊急 → 中断+割り込み。
+        val bargeIn = scheduler.onTick(tickOf(current = 975.0))
 
         assertEquals(
             VoiceAnnouncementId("farMiddle"),
@@ -176,8 +181,9 @@ class VoiceAnnouncementSchedulerTest {
 
     private fun finalStage(
         id: String,
+        triggerGeometryMeters: Double = 0.0,
         category: GuidanceCategory = GuidanceCategory.IntersectionGuide,
-    ): AnnouncementStage = stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters = 0.0, category)
+    ): AnnouncementStage = stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters, category)
 
     private fun stageOf(
         id: String,
