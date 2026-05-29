@@ -35,6 +35,7 @@ internal class RouteDistanceContextFactory {
         val summaryMetres = payload.routeGuidance.summary.distanceMetres
             .toDouble()
             .takeIf { metres -> metres > 0.0 }
+
         val routeMetres = route.distanceMeters.takeIf { metres -> metres > 0.0 }
         val sourceTotalMetres = summaryMetres ?: routeMetres ?: totalGeometryMetres
         val sourceGeometryRange = sourceGeometryDistanceRange(
@@ -42,6 +43,7 @@ internal class RouteDistanceContextFactory {
             route = route,
             cumulativeMetres = cumulativeMetres,
         )
+
         val sourceGeometryStartMetres = sourceGeometryRange?.first ?: 0.0
         val sourceGeometryEndMetres = sourceGeometryRange?.second ?: totalGeometryMetres
 
@@ -72,8 +74,8 @@ internal class RouteDistanceContextFactory {
         cumulativeMetres: DoubleArray,
     ): Pair<Double, Double>? {
         val sourcePolyline = payload.routeGuidance.polyline
-        if (sourcePolyline.isEmpty()) return null
 
+        if (sourcePolyline.isEmpty()) return null
         if (route.geometry.isEmpty() || cumulativeMetres.isEmpty()) return null
 
         val sourceStart = sourcePolyline.first().toRoutePoint()

@@ -31,6 +31,7 @@ internal class VoiceAnnouncementPlanBuilder {
     ): VoiceAnnouncementPlan {
         val routeId = payload.id
         val targets = mutableListOf<AnnouncementTarget>()
+
         for (guidancePoint in payload.routeGuidance.guidancePoints) {
             val target = buildTarget(
                 routeId = routeId,
@@ -40,10 +41,12 @@ internal class VoiceAnnouncementPlanBuilder {
             )
             if (target != null) targets += target
         }
-        targets.sortBy { target -> target.geometryMeters }
+
         return VoiceAnnouncementPlan(
             routeId = routeId,
-            targets = targets.toImmutableList(),
+            targets = targets
+                .sortedBy { target -> target.geometryMeters }
+                .toImmutableList(),
         )
     }
 
@@ -60,10 +63,12 @@ internal class VoiceAnnouncementPlanBuilder {
         config: VoiceAnnouncementConfig,
     ): AnnouncementTarget? {
         val validBlocks = guidancePoint.announcementBlocks.filter { block -> block.hasMappableAnchor() }
+
         if (validBlocks.isEmpty()) return null
 
         val finalBlockIndex = selectFinalBlockIndex(validBlocks)
         val stages = mutableListOf<AnnouncementStage>()
+
         for (blockIndex in validBlocks.indices) {
             val block = validBlocks[blockIndex]
             val blockStages = buildStagesForBlock(
@@ -76,13 +81,17 @@ internal class VoiceAnnouncementPlanBuilder {
             )
             stages += blockStages
         }
-        stages.sortBy { stage -> stage.triggerSourceMeters }
 
-        val geometryMeters = distanceContext.geometryMetresFor(guidancePoint.distanceFromStartMetres.toDouble())
+        val geometryMeters = distanceContext.geometryMetresFor(
+            sourceMetres = guidancePoint.distanceFromStartMetres.toDouble(),
+        )
+
         return AnnouncementTarget(
             guidancePointIndex = guidancePoint.index,
             geometryMeters = geometryMeters,
-            stages = stages.toImmutableList(),
+            stages = stages
+                .sortedBy { stage -> stage.triggerSourceMeters }
+                .toImmutableList(),
         )
     }
 
@@ -119,6 +128,7 @@ internal class VoiceAnnouncementPlanBuilder {
         }
 
         val overrideDistances = config.distanceOverrides.overrideFor(block.categories)
+
         if (overrideDistances == null) {
             val triggerSource = anchorSource - block.triggerDistanceMetres.toDouble()
             val middleStage = buildStage(
@@ -134,6 +144,7 @@ internal class VoiceAnnouncementPlanBuilder {
         }
 
         val stages = mutableListOf<AnnouncementStage>()
+
         for (leadDistanceMeters in overrideDistances) {
             val triggerSource = anchorSource - leadDistanceMeters
             val stage = buildStage(
@@ -147,6 +158,7 @@ internal class VoiceAnnouncementPlanBuilder {
             )
             stages += stage
         }
+
         return stages
     }
 
@@ -169,6 +181,7 @@ internal class VoiceAnnouncementPlanBuilder {
             blockId = block.id,
             idSuffix = idSuffix,
         )
+
         return AnnouncementStage(
             id = id,
             kind = kind,
@@ -190,6 +203,7 @@ internal class VoiceAnnouncementPlanBuilder {
     ): VoiceAnnouncementId {
         val base = "$routeId#gp$guidancePointIndex#$blockId"
         val full = if (idSuffix == null) base else "$base#$idSuffix"
+
         return VoiceAnnouncementId(full)
     }
 
@@ -200,6 +214,7 @@ internal class VoiceAnnouncementPlanBuilder {
     private fun selectFinalBlockIndex(blocks: List<GuideAnnouncementBlock>): Int {
         var bestIndex = 0
         var bestLeadDistance = blocks[0].triggerDistanceMetres
+
         for (index in 1 until blocks.size) {
             val leadDistance = blocks[index].triggerDistanceMetres
             if (leadDistance < bestLeadDistance) {
@@ -207,6 +222,7 @@ internal class VoiceAnnouncementPlanBuilder {
                 bestLeadDistance = leadDistance
             }
         }
+
         return bestIndex
     }
 
