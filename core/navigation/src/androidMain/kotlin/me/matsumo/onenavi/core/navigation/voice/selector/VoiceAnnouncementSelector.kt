@@ -34,12 +34,12 @@ internal class VoiceAnnouncementSelector(
         var best: VoiceAnnouncementSelection? = null
 
         for (targetIndex in plan.targets.indices) {
-            if (state.isTargetPassed(targetIndex)) continue
-
             val target = plan.targets[targetIndex]
+            val candidate = selectStageForTarget(targetIndex, target, tick, state)
+
+            if (state.isTargetPassed(targetIndex)) continue
             if (!isTargetAhead(target, tick)) continue
 
-            val candidate = selectStageForTarget(targetIndex, target, tick, state)
             best = moreUrgentOf(best, candidate)
         }
 
@@ -80,12 +80,18 @@ internal class VoiceAnnouncementSelector(
             if (state.isStageFired(stage.id)) continue
             if (!isStageTriggered(stage, target, tick)) continue
 
-            val urgency = urgencyOf(stage, target, tick)
+            val urgency = VoiceAnnouncementUrgency.of(
+                targetGeometryMeters = target.geometryMeters,
+                currentCumulativeMeters = tick.currentCumulativeMeters,
+                kind = stage.kind,
+            )
             val candidate = VoiceAnnouncementSelection(
                 targetIndex = targetIndex,
+                targetGeometryMeters = target.geometryMeters,
                 stage = stage,
                 urgency = urgency,
             )
+
             best = moreUrgentOf(best, candidate)
         }
 
@@ -150,19 +156,5 @@ internal class VoiceAnnouncementSelector(
         val leadByTimeMeters = speed * config.leadTimeSeconds
 
         return max(leadByTimeMeters, config.minLeadMeters)
-    }
-
-    /** 段の緊急度を残距離と種別から求める。 */
-    private fun urgencyOf(
-        stage: AnnouncementStage,
-        target: AnnouncementTarget,
-        tick: VoiceTick,
-    ): VoiceAnnouncementUrgency {
-        val remainingMeters = target.geometryMeters - tick.currentCumulativeMeters
-
-        return VoiceAnnouncementUrgency(
-            remainingMeters = remainingMeters,
-            kind = stage.kind,
-        )
     }
 }

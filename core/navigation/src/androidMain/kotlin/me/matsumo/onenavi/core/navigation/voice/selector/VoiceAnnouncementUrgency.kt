@@ -30,4 +30,25 @@ internal data class VoiceAnnouncementUrgency(
         AnnouncementStageKind.MIDDLE -> 0
         AnnouncementStageKind.FINAL -> 1
     }
+
+    internal companion object {
+
+        /**
+         * 案内地点位置と現在累積距離から残距離を求めて緊急度を構築する。
+         *
+         * 緊急度は現在地に対する相対量なので、発話中の段でも tick ごとに再計算して比較する。
+         *
+         * @param targetGeometryMeters 案内地点の geometry 累積距離 (m)
+         * @param currentCumulativeMeters 現 tick の geometry 累積距離 (m)
+         * @param kind 距離段の種別
+         */
+        fun of(
+            targetGeometryMeters: Double,
+            currentCumulativeMeters: Double,
+            kind: AnnouncementStageKind,
+        ): VoiceAnnouncementUrgency = VoiceAnnouncementUrgency(
+            remainingMeters = targetGeometryMeters - currentCumulativeMeters,
+            kind = kind,
+        )
+    }
 }

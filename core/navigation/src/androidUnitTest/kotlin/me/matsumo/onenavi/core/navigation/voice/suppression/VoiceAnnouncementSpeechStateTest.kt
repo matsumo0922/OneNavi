@@ -2,7 +2,6 @@ package me.matsumo.onenavi.core.navigation.voice.suppression
 
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
-import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementUrgency
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -50,6 +49,7 @@ class VoiceAnnouncementSpeechStateTest {
 
     private fun speakingOf(id: String): SpeakingAnnouncement = SpeakingAnnouncement(
         stageId = VoiceAnnouncementId(id),
-        urgency = VoiceAnnouncementUrgency(remainingMeters = 100.0, kind = AnnouncementStageKind.MIDDLE),
+        targetGeometryMeters = 1_000.0,
+        kind = AnnouncementStageKind.MIDDLE,
     )
 }

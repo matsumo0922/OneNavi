@@ -8,9 +8,10 @@ import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
 /**
  * route 寿命内で発話の重複・追い越しを抑止するための状態。tick ごとに不変コピーで更新していく。
  *
- * skip した段も再評価を避けるため [firedStageIds] に含める (= 「発話 or 確定スキップ済み」)。
+ * 発話開始・割り込み・キュー投入のいずれかで処理が確定した段は、再選択を避けるため
+ * [firedStageIds] に含める (= 「処理が確定済み」)。
  *
- * @property firedStageIds 発話開始または skip 確定した段の id 集合。再トリガを防ぐ
+ * @property firedStageIds 発話・割り込み・キュー投入のいずれかで処理が確定した段の id 集合。再トリガを防ぐ
  * @property passedTargetIndices 通過済み案内地点の plan 内 index 集合。残段の遅延発話を防ぐ
  * @property speaking 現在発話中の段。無発話なら null
  */
@@ -21,13 +22,13 @@ internal data class VoiceAnnouncementSpeechState(
     val speaking: SpeakingAnnouncement? = null,
 ) {
 
-    /** 段が発話済み (または skip 済み) かを返す。 */
+    /** 段の処理が確定済み (発話・割り込み・キュー投入のいずれか) かを返す。 */
     fun isStageFired(stageId: VoiceAnnouncementId): Boolean = stageId in firedStageIds
 
     /** 案内地点が通過済みかを返す。 */
     fun isTargetPassed(targetIndex: Int): Boolean = targetIndex in passedTargetIndices
 
-    /** 段を発話済み (または skip 済み) として記録した新しい状態を返す。 */
+    /** 段を処理確定済みとして記録した新しい状態を返す。 */
     fun withStageFired(stageId: VoiceAnnouncementId): VoiceAnnouncementSpeechState =
         copy(firedStageIds = firedStageIds.add(stageId))
 
