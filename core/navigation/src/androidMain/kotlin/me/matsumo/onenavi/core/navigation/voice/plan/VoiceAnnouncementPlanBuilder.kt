@@ -3,6 +3,7 @@ package me.matsumo.onenavi.core.navigation.voice.plan
 import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementBlock
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
@@ -225,13 +226,23 @@ internal class VoiceAnnouncementPlanBuilder {
             "gp=${guidancePoint.index} block=${block.id} kind=$kind " +
                 "srcGp=${block.anchor.sourceGuidancePointIndex} srcBlockIdx=${block.anchor.sourceBlockIndex} " +
                 "anchorSrc=${block.anchor.sourceDistanceFromStartMetres} triggerDist=${block.triggerDistanceMetres} " +
-                "trigSrc=$triggerSourceMeters trigGeo=$triggerGeometryMeters text=\"${previewOf(block)}\""
+                "trigSrc=$triggerSourceMeters trigGeo=$triggerGeometryMeters " +
+                "cats=${block.categories} pieceTmpl=${templateRefsOf(block)} pieceCats=${pieceCategoriesOf(block)} " +
+                "text=\"${previewOf(block)}\""
         }
     }
 
     /** ブロックの発話素片の text を結合してプレビュー文字列にする。 */
     private fun previewOf(block: GuideAnnouncementBlock): String =
         block.pieces.joinToString(separator = "") { piece -> piece.text }
+
+    /** 素片ごとの templateRef 一覧。ブロックの役割 (テンプレート種別) を切り分けるための診断値。 */
+    private fun templateRefsOf(block: GuideAnnouncementBlock): List<Int?> =
+        block.pieces.map { piece -> piece.templateRef }
+
+    /** 素片ごとの category 一覧。ブロックの役割を切り分けるための診断値。 */
+    private fun pieceCategoriesOf(block: GuideAnnouncementBlock): List<GuidanceCategory?> =
+        block.pieces.map { piece -> piece.category }
 
     /**
      * 距離段の安定キーを組み立てる。距離 override で複製した段は手前距離を suffix に付ける。
