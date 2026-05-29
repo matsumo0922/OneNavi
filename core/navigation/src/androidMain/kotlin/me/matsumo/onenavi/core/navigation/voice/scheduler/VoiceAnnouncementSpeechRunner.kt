@@ -1,5 +1,7 @@
 package me.matsumo.onenavi.core.navigation.voice.scheduler
 
+import io.github.aakira.napier.Napier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -96,10 +98,21 @@ internal class VoiceAnnouncementSpeechRunner(
         }
     }
 
-    /** 発話 coroutine を起こす。完了したら完了 event をループへ戻し、キュー消化を進める。 */
+    /**
+     * 発話 coroutine を起こす。完了したら完了 event をループへ戻し、キュー消化を進める。
+     *
+     * barge-in による cancel は協調キャンセルとして再 throw する (発話中マークは割り込み側が差し替え済み)。
+     * それ以外の発話失敗はログして完了として扱い、speaking が詰まってキューが止まるのを防ぐ。
+     */
     private fun startSpeech(request: VoiceAnnouncementRequest, channel: Channel<SpeechEvent>) {
         speechJob = scope.launch {
-            dispatcher.speak(request.content)
+            try {
+                dispatcher.speak(request.content)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Throwable) {
+                Napier.w(tag = TAG, throwable = error) { "voice dispatch failed: ${request.stageId.value}" }
+            }
             channel.trySend(SpeechEvent.SpeechFinished(request.stageId))
         }
     }
@@ -122,5 +135,11 @@ internal class VoiceAnnouncementSpeechRunner(
          * @property stageId 完了した発話段の id
          */
         data class SpeechFinished(val stageId: VoiceAnnouncementId) : SpeechEvent
+    }
+
+    private companion object {
+
+        /** Logcat で発話実行系のログを絞り込むためのタグ。 */
+        const val TAG = "VoiceAnnouncement"
     }
 }

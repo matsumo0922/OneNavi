@@ -71,6 +71,33 @@ class VoiceAnnouncementContentRendererTest {
     }
 
     @Test
+    fun `SSML と plain text が混在しても plain 素片を escape して取り込む`() {
+        val renderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn)
+        val stage = stageOf(
+            pieceOf(text = "300m先 ", ssml = null, category = GuidanceCategory.IntersectionGuide),
+            pieceOf(text = "右です", ssml = "右です", category = GuidanceCategory.IntersectionGuide),
+        )
+
+        val content = renderer.render(stage)
+
+        // plain 素片 (300m先) が SSML から欠落せず、ssml 素片と結合される。
+        assertEquals("<speak>300m先 右です</speak>", content?.ssml)
+    }
+
+    @Test
+    fun `SSML 経路に取り込む plain text の XML 特殊文字を escape する`() {
+        val renderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn)
+        val stage = stageOf(
+            pieceOf(text = "A&B<C> ", ssml = null, category = GuidanceCategory.IntersectionGuide),
+            pieceOf(text = "右です", ssml = "右です", category = GuidanceCategory.IntersectionGuide),
+        )
+
+        val content = renderer.render(stage)
+
+        assertEquals("<speak>A&amp;B&lt;C&gt; 右です</speak>", content?.ssml)
+    }
+
+    @Test
     fun `SSML を持つ素片が無ければ ssml は null`() {
         val renderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn)
         val stage = stageOf(

@@ -38,16 +38,28 @@ internal class VoiceAnnouncementContentRenderer(
         pieces.joinToString(separator = "") { piece -> piece.text }
 
     /**
-     * 有効な素片の SSML を結合し、Google Cloud TTS 向けへ変換する。
+     * 有効な素片を結合し、Google Cloud TTS 向けの SSML へ変換する。
      *
-     * SSML を 1 つも持たない場合は null を返し、dispatcher 側にプレーンテキストでの読み上げを委ねる。
+     * SSML を持つ素片が 1 つも無ければ null を返し、dispatcher 側にプレーンテキストでの読み上げを委ねる。
+     * SSML 素片が 1 つでもあれば、SSML を持たない素片はその text を escape して取り込む。SSML だけを
+     * 結合すると、混在時に plain text 素片 (例:「300m先」) が SSML 経路から欠落して読み上げられないため。
      */
     private fun buildSsml(pieces: List<GuideAnnouncementPiece>): String? {
-        val rawSsml = pieces
-            .mapNotNull { piece -> piece.ssml }
-            .joinToString(separator = "")
-        if (rawSsml.isBlank()) return null
+        val hasAnySsml = pieces.any { piece -> piece.ssml != null }
+        if (!hasAnySsml) return null
+
+        val rawSsml = pieces.joinToString(separator = "") { piece -> ssmlFragmentOf(piece) }
 
         return PhonemeConverter.toGoogleCloudSsml(rawSsml)
     }
+
+    /** 素片の SSML を取り出す。SSML を持たない素片は text を escape したものを使う。 */
+    private fun ssmlFragmentOf(piece: GuideAnnouncementPiece): String =
+        piece.ssml ?: escapeSsmlText(piece.text)
+
+    /** SSML 本文に直接埋め込めるよう、最低限の XML 特殊文字 (`&` `<` `>`) を escape する。 */
+    private fun escapeSsmlText(text: String): String = text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
 }

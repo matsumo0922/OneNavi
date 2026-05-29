@@ -98,6 +98,27 @@ class VoiceAnnouncementSpeechRunnerTest {
         assertEquals(emptyList(), dispatcher.spoken)
     }
 
+    @Test
+    fun `発話が例外で失敗しても speaking が詰まらず次の発話を再生する`() = runTest {
+        val dispatcher = FailFirstDispatcher()
+        val runner = runnerOf(dispatcher, this)
+        runner.attach(
+            planOf(
+                targetOf(index = 0, geometryMeters = 500.0, middleStage("a", 400.0)),
+                targetOf(index = 1, geometryMeters = 1_500.0, middleStage("b", 1_000.0)),
+            ),
+        )
+
+        runner.submit(tickOf(current = 450.0)) // a を発話開始 → speak が例外
+        advanceUntilIdle()
+        runner.submit(tickOf(current = 1_100.0)) // 詰まっていなければ b を発話できる
+        advanceUntilIdle()
+        runner.detach()
+
+        // a は失敗 (記録されない) が state は解除され、b が再生される。
+        assertEquals(listOf("b"), dispatcher.spoken)
+    }
+
     private fun runnerOf(
         dispatcher: VoiceAnnouncementDispatcher,
         scope: CoroutineScope,
@@ -128,6 +149,23 @@ class VoiceAnnouncementSpeechRunnerTest {
 
         fun releaseNext() {
             gates.removeFirst().complete(Unit)
+        }
+    }
+
+    /**
+     * 最初の発話だけ例外を投げ、以降は記録する dispatcher。発話失敗後に state が解除されるかの検証用。
+     */
+    private class FailFirstDispatcher : VoiceAnnouncementDispatcher {
+
+        val spoken = mutableListOf<String>()
+        private var shouldFail = true
+
+        override suspend fun speak(content: VoiceAnnouncementContent) {
+            if (shouldFail) {
+                shouldFail = false
+                error("speak failed")
+            }
+            spoken += content.text
         }
     }
 
