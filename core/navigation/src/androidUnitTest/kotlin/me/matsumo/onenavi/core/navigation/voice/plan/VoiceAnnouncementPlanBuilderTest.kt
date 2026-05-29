@@ -251,6 +251,79 @@ class VoiceAnnouncementPlanBuilderTest {
         assertEquals(listOf(2_000.0, 5_000.0), plan.targets.map { target -> target.geometryMeters })
     }
 
+    @Test
+    fun `発話内容が同一の重複 block は案内点に近い1段に畳まれる`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // 「この信号を左」を 3 距離で重複させ、別文言の「500m先左」を 1 つ持つ GP。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("dupFar", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 300, text = "この信号を左"),
+                buildBlock("dupMid", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 200, text = "この信号を左"),
+                buildBlock("dupNear", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 100, text = "この信号を左"),
+                buildBlock("ahead", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 500, text = "500m先左"),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        val stages = plan.targets.single().stages
+        // 重複 3 つは最寄り (triggerDistance 100) の dupNear 1 段に畳まれ、ahead と合わせて 2 段。
+        assertEquals(2, stages.size)
+        assertEquals(
+            listOf(VoiceAnnouncementId("R-1#gp0#ahead"), VoiceAnnouncementId("R-1#gp0#dupNear")),
+            stages.map { stage -> stage.id },
+        )
+        // 残った最寄りの重複段が FINAL になる。
+        val dupStage = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#dupNear") }
+        assertEquals(AnnouncementStageKind.FINAL, dupStage.kind)
+    }
+
+    @Test
+    fun `読み上げテキストが同一なら piece の category が違っても1段に畳む`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // 同一テキストだがトリガ理由 (category) が異なる重複。外部データに実在するパターン。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock(
+                    "speedReason",
+                    anchorSourceMetres = 5_000.0,
+                    triggerDistanceMetres = 80,
+                    categories = listOf(GuidanceCategory.SpeedAdjustment),
+                    text = "この信号を左方向です",
+                ),
+                buildBlock(
+                    "signalReason",
+                    anchorSourceMetres = 5_000.0,
+                    triggerDistanceMetres = 59,
+                    categories = listOf(GuidanceCategory.TrafficLight),
+                    text = "この信号を左方向です",
+                ),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        // category が違っても読み上げが同じなら畳まれ、最寄り (triggerDistance 59) の1段だけ残る。
+        val stage = plan.targets.single().stages.single()
+        assertEquals(VoiceAnnouncementId("R-1#gp0#signalReason"), stage.id)
+    }
+
     private fun buildIdentityDistanceContext(totalMetres: Double): ExtNavRouteDistanceContext =
         buildDistanceContext(sourceTotalMetres = totalMetres, geometryTotalMetres = totalMetres)
 
@@ -316,17 +389,18 @@ class VoiceAnnouncementPlanBuilderTest {
         anchorSourceMetres: Double?,
         triggerDistanceMetres: Int,
         categories: List<GuidanceCategory> = listOf(GuidanceCategory.IntersectionGuide),
+        text: String = id,
     ): GuideAnnouncementBlock {
-        val pieces = categories
-            .map { category ->
-                GuideAnnouncementPiece(
-                    text = category.name,
-                    ssml = null,
-                    templateRef = null,
-                    category = category,
-                )
-            }
-            .toImmutableList()
+        // 既定ではブロックごとに別文言 (text = id) とし、dedup で畳まれないようにする。
+        // 重複を再現するテストだけ同一 text を渡す。
+        val pieces = persistentListOf(
+            GuideAnnouncementPiece(
+                text = text,
+                ssml = null,
+                templateRef = null,
+                category = categories.firstOrNull(),
+            ),
+        )
         return GuideAnnouncementBlock(
             id = id,
             anchor = ExternalGuideAnchor(

@@ -1,6 +1,8 @@
 package me.matsumo.onenavi.core.navigation.voice.plan
 
+import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.toImmutableList
+import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementBlock
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDistanceContext
@@ -53,8 +55,10 @@ internal class VoiceAnnouncementPlanBuilder {
     /**
      * 1 GP を [AnnouncementTarget] に変換する。発話可能な block が無ければ null を返す。
      *
-     * source 距離を対応付けられない block (anchor 距離が null) は除外する。残った block のうち
-     * 最も手前 (最小 triggerDistanceMetres) の段を FINAL、それ以外を MIDDLE として扱う。
+     * source 距離を対応付けられない block (anchor 距離が null) は除外する。外部データは同一 GP に
+     * まったく同じ発話内容の block を複数距離で重複させて持つため、発話内容が同じ block は
+     * 案内点に近い 1 つに畳む ([dedupBlocksByPieces])。残った block のうち最も手前 (最小
+     * triggerDistanceMetres) の段を FINAL、それ以外を MIDDLE として扱う。
      */
     private fun buildTarget(
         routeId: String,
@@ -66,11 +70,12 @@ internal class VoiceAnnouncementPlanBuilder {
 
         if (validBlocks.isEmpty()) return null
 
-        val finalBlockIndex = selectFinalBlockIndex(validBlocks)
+        val uniqueBlocks = dedupBlocksBySpokenText(validBlocks)
+        val finalBlockIndex = selectFinalBlockIndex(uniqueBlocks)
         val stages = mutableListOf<AnnouncementStage>()
 
-        for (blockIndex in validBlocks.indices) {
-            val block = validBlocks[blockIndex]
+        for (blockIndex in uniqueBlocks.indices) {
+            val block = uniqueBlocks[blockIndex]
             val blockStages = buildStagesForBlock(
                 routeId = routeId,
                 guidancePoint = guidancePoint,
@@ -182,6 +187,14 @@ internal class VoiceAnnouncementPlanBuilder {
             idSuffix = idSuffix,
         )
 
+        logBlockBreakdown(
+            guidancePoint = guidancePoint,
+            block = block,
+            kind = kind,
+            triggerSourceMeters = triggerSourceMeters,
+            triggerGeometryMeters = triggerGeometryMeters,
+        )
+
         return AnnouncementStage(
             id = id,
             kind = kind,
@@ -191,6 +204,39 @@ internal class VoiceAnnouncementPlanBuilder {
             categories = block.categories,
         )
     }
+
+    // ---------------------------------------------------------------------
+    // 診断ログ (issue #41 Phase 3 実機検証用、確認後に撤去予定)
+    // ---------------------------------------------------------------------
+
+    /**
+     * 段を組む過程の生値をダンプする。anchor 距離と triggerDistance を出して trigGeo を分解し、
+     * 「自地点から遠すぎる位置でトリガする block」がどう生成されたかを切り分けるため。
+     */
+    private fun logBlockBreakdown(
+        guidancePoint: GuidancePoint,
+        block: GuideAnnouncementBlock,
+        kind: AnnouncementStageKind,
+        triggerSourceMeters: Double,
+        triggerGeometryMeters: Double,
+    ) {
+        Napier.d(tag = TAG) {
+            "gp=${guidancePoint.index} block=${block.id} kind=$kind " +
+                "srcGp=${block.anchor.sourceGuidancePointIndex} srcBlockIdx=${block.anchor.sourceBlockIndex} " +
+                "anchorSrc=${block.anchor.sourceDistanceFromStartMetres} triggerDist=${block.triggerDistanceMetres} " +
+                "trigSrc=$triggerSourceMeters trigGeo=$triggerGeometryMeters " +
+                "cats=${block.categories} pieceTmpl=${templateRefsOf(block)} pieceCats=${pieceCategoriesOf(block)} " +
+                "text=\"${spokenTextOf(block)}\""
+        }
+    }
+
+    /** 素片ごとの templateRef 一覧。ブロックの役割 (テンプレート種別) を切り分けるための診断値。 */
+    private fun templateRefsOf(block: GuideAnnouncementBlock): List<Int?> =
+        block.pieces.map { piece -> piece.templateRef }
+
+    /** 素片ごとの category 一覧。ブロックの役割を切り分けるための診断値。 */
+    private fun pieceCategoriesOf(block: GuideAnnouncementBlock): List<GuidanceCategory?> =
+        block.pieces.map { piece -> piece.category }
 
     /**
      * 距離段の安定キーを組み立てる。距離 override で複製した段は手前距離を suffix に付ける。
@@ -206,6 +252,46 @@ internal class VoiceAnnouncementPlanBuilder {
 
         return VoiceAnnouncementId(full)
     }
+
+    /**
+     * 読み上げテキストが一致する重複 block を 1 つに畳む。
+     *
+     * 外部データは同一 GP に同じ文言の block を複数の手前距離で重複させて持つ
+     * (例: 「この信号を左方向です」を 110 / 100 / 80 / 59m 手前の 4 block で重複)。さらに、文言が完全に
+     * 同じでも piece の templateRef / category が異なる (トリガ理由違いの) 重複もあるため、piece タプルでなく
+     * **結合後の読み上げテキスト**でキーにする。同テキストの block 群は **案内点に最も近い
+     * (triggerDistanceMetres が最小の) 1 つ**に畳む。距離 override 由来の複製は単一 block を後段で複製する
+     * もので、本 dedup は block 単位で行うため衝突しない (異なる文言の block は畳まれない)。
+     *
+     * @param blocks 同一 GP の発話可能な block 群 (出現順)
+     * @return 読み上げテキストごとに 1 つだけ残した block 群
+     */
+    private fun dedupBlocksBySpokenText(blocks: List<GuideAnnouncementBlock>): List<GuideAnnouncementBlock> {
+        val nearestByText = LinkedHashMap<String, GuideAnnouncementBlock>()
+
+        for (block in blocks) {
+            val spokenText = spokenTextOf(block)
+            val existing = nearestByText[spokenText]
+            if (existing == null) {
+                nearestByText[spokenText] = block
+                continue
+            }
+            nearestByText[spokenText] = nearerBlock(existing, block)
+        }
+
+        return nearestByText.values.toList()
+    }
+
+    /** block の全 piece の text を結合した読み上げテキスト。重複判定のキーに使う。 */
+    private fun spokenTextOf(block: GuideAnnouncementBlock): String =
+        block.pieces.joinToString(separator = "") { piece -> piece.text }
+
+    /** 重複 block のうち案内点に近い (triggerDistanceMetres が小さい) 方を返す。同値なら先着を残す。 */
+    private fun nearerBlock(
+        current: GuideAnnouncementBlock,
+        candidate: GuideAnnouncementBlock,
+    ): GuideAnnouncementBlock =
+        if (candidate.triggerDistanceMetres < current.triggerDistanceMetres) candidate else current
 
     /**
      * GP 内で FINAL とみなす block の index を返す。最も手前 (最小 triggerDistanceMetres) の
@@ -229,4 +315,10 @@ internal class VoiceAnnouncementPlanBuilder {
     /** source 距離を対応付けられる (anchor 距離が非 null の) block かを返す。 */
     private fun GuideAnnouncementBlock.hasMappableAnchor(): Boolean =
         anchor.sourceDistanceFromStartMetres != null
+
+    private companion object {
+
+        /** ブロック分解の診断ログを絞り込むためのタグ。 */
+        const val TAG = "VoiceAnnouncementBlock"
+    }
 }

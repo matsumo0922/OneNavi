@@ -166,6 +166,27 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
+    fun `手前の案内地点が未発話なら後続地点の段は発話せず 区切り後に解禁される`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // 手前 A (FINAL のみ) と、1km 級手前でトリガする後続 B の早出し段。
+        val plan = planOf(
+            targetOf(index = 0, geometryMeters = 500.0, stages = listOf(finalStage("aFinal"))),
+            targetOf(index = 1, geometryMeters = 2_000.0, stages = listOf(middleStage("bEarly", triggerGeometryMeters = 100.0))),
+        )
+
+        // A はまだ直前距離に達せず未発話・未通過。B の早出し段は到達済みだが、手前 A 未区切りなので持ち越し。
+        val blockedByEarlier = selector.select(plan, tickOf(current = 150.0), emptyState())
+        // A の FINAL が発話済みになれば B が解禁される。
+        val afterFinal = selector.select(plan, tickOf(current = 150.0), emptyState().withStageFired(VoiceAnnouncementId("aFinal")))
+        // A を通過済みにしても B が解禁される。
+        val afterPassed = selector.select(plan, tickOf(current = 150.0), emptyState().withTargetPassed(0))
+
+        assertNull(blockedByEarlier)
+        assertEquals(VoiceAnnouncementId("bEarly"), afterFinal?.stage?.id)
+        assertEquals(VoiceAnnouncementId("bEarly"), afterPassed?.stage?.id)
+    }
+
+    @Test
     fun `route が発話不能なら何も選ばない`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         val plan = planOf(

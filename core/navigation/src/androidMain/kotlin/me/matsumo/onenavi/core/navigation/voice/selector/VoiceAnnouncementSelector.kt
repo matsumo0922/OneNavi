@@ -38,15 +38,56 @@ internal class VoiceAnnouncementSelector(
 
         for (targetIndex in plan.targets.indices) {
             val target = plan.targets[targetIndex]
-            val candidate = selectStageForTarget(targetIndex, target, tick, state)
 
             if (state.isTargetPassed(targetIndex)) continue
             if (!isTargetAhead(target, tick)) continue
+            if (!areEarlierTargetsAnnounced(plan, targetIndex, state)) continue
 
+            val candidate = selectStageForTarget(targetIndex, target, tick, state)
             best = moreUrgentOf(best, candidate)
         }
 
         return best
+    }
+
+    /**
+     * 自分より手前 (route 順で前) の案内地点がすべて「発話済み or 通過済み」かを返す。
+     *
+     * 外部データには、ある案内地点の発話を 1km 級の手前でトリガする bare な段があり、これを放置すると
+     * 手前の地点の案内中に後続地点の案内が割り込んでしまう (例: 1 つ目の交差点へ向かう途中で 2 つ目の
+     * 交差点の方向だけが鳴る)。route 順を保つため、手前の地点がすべて区切り済みになるまで後続地点は
+     * 候補にしない。区切り済みでなければ後続段は次 tick 以降に持ち越される (level 判定なので落ちない)。
+     *
+     * 「○m先」のような予告は手前の地点が通過する前に鳴るのが正常なため、「通過済み」だけでなく
+     * 「その地点の FINAL (= 最寄り段) が発話済み」も区切り済みとみなす。これにより手前の地点の直前案内が
+     * 出た後は、後続地点の予告が即座に解禁される。
+     */
+    private fun areEarlierTargetsAnnounced(
+        plan: VoiceAnnouncementPlan,
+        targetIndex: Int,
+        state: VoiceAnnouncementSpeechState,
+    ): Boolean {
+        for (earlierIndex in 0 until targetIndex) {
+            val earlierTarget = plan.targets[earlierIndex]
+            if (isTargetAnnounced(earlierTarget, earlierIndex, state)) continue
+
+            return false
+        }
+
+        return true
+    }
+
+    /** 案内地点が区切り済み (通過済み、または最寄り段が発話済み) かを返す。 */
+    private fun isTargetAnnounced(
+        target: AnnouncementTarget,
+        targetIndex: Int,
+        state: VoiceAnnouncementSpeechState,
+    ): Boolean {
+        if (state.isTargetPassed(targetIndex)) return true
+
+        val nearestStage = target.stages.maxByOrNull { stage -> stage.triggerGeometryMeters } ?: return true
+
+        return state.isStageFired(nearestStage.id)
     }
 
     /**

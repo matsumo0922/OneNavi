@@ -17,6 +17,17 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
+import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
+import me.matsumo.onenavi.core.navigation.voice.dispatch.LoggingVoiceAnnouncementDispatcher
+import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
+import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispatcher
+import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlanBuilder
+import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementController
+import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementScheduler
+import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementSpeechRunner
+import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceTickFactory
+import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelector
+import me.matsumo.onenavi.core.navigation.voice.suppression.VoiceAnnouncementSelectionPolicy
 import org.koin.android.ext.koin.androidApplication
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
@@ -28,11 +39,44 @@ val navigationModule: Module = module {
     single { NavigationSdkManager(androidApplication(), get()) }
     single { NewRouteManager(routeRepository = get()) }
     single { ExtNavGuidanceTracker() }
+    single { VoiceAnnouncementConfig() }
+    single { VoiceAnnouncementPlanBuilder() }
+    single { VoiceAnnouncementSelector(config = get()) }
+    single { VoiceAnnouncementSelectionPolicy() }
+    single<VoiceAnnouncementDispatcher> { LoggingVoiceAnnouncementDispatcher() }
+    single {
+        VoiceAnnouncementContentRenderer(
+            categoryGate = get<VoiceAnnouncementConfig>().categoryGates,
+        )
+    }
+    single {
+        VoiceAnnouncementScheduler(
+            selector = get(),
+            policy = get(),
+            contentRenderer = get(),
+        )
+    }
+    single {
+        VoiceAnnouncementSpeechRunner(
+            scheduler = get(),
+            dispatcher = get(),
+        )
+    }
+    single { VoiceTickFactory() }
+    single {
+        VoiceAnnouncementController(
+            planBuilder = get(),
+            tickFactory = get(),
+            speechRunner = get(),
+            config = get(),
+        )
+    }
     single {
         NewGuidanceManager(
             routeRegistry = get(),
             guidanceTracker = get(),
             locationDataSource = get(),
+            voiceController = get(),
         )
     }
     single<HttpClient>(qualifier = named("googleCloudTts")) {
