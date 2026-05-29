@@ -30,7 +30,6 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepRoadName
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepSignpost
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import me.matsumo.drive.supporter.api.core.model.Coord as ExtNavCoord
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind as ExtNavGuidanceFacilityKind
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint as ExtNavGuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection as ExtNavIntersection
@@ -53,6 +52,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.LaneInfo as ExtNavLaneInfo
 internal class GuidanceRouteMapper {
 
     private val laneDiagramParser = LaneDiagramParser()
+    private val distanceContextFactory = RouteDistanceContextFactory()
 
     /**
      * payload と中立 route から [GuidanceRoute] を構築する。
@@ -65,7 +65,7 @@ internal class GuidanceRouteMapper {
         val geometry = route.geometry
         val cumulativeMetres = RouteGeometryMath.cumulativeMetres(geometry)
         val totalGeometryMetres = cumulativeMetres.lastOrNull() ?: 0.0
-        val distanceMapper = buildDistanceMapper(
+        val distanceContext = distanceContextFactory.create(
             payload = payload,
             route = route,
             cumulativeMetres = cumulativeMetres,
@@ -80,8 +80,7 @@ internal class GuidanceRouteMapper {
             payload = payload,
             route = route,
             cumulativeMetres = cumulativeMetres,
-            totalGeometryMetres = totalGeometryMetres,
-            distanceMapper = distanceMapper,
+            distanceContext = distanceContext,
             intersectionAnchors = intersectionAnchors,
         )
 
@@ -91,73 +90,6 @@ internal class GuidanceRouteMapper {
             tollTotalYen = routeTollYen(route),
             events = events,
         )
-    }
-
-    /**
-     * 外部 API の source 距離基準を OneNavi geometry 距離基準へ変換する mapper を作る。
-     *
-     * source 総距離は summary 距離 → route 詳細距離 → geometry 積算距離の優先順で決める。
-     * API polyline が geometry の一部区間として入っている場合は、その区間を source 距離の
-     * 始端 / 終端に対応させる。
-     */
-    private fun buildDistanceMapper(
-        payload: ExtNavRoutePayload,
-        route: RouteDetail,
-        cumulativeMetres: DoubleArray,
-        totalGeometryMetres: Double,
-    ): RouteDistanceMapper {
-        val summaryMetres = payload.routeGuidance.summary.distanceMetres
-            .toDouble()
-            .takeIf { metres -> metres > 0.0 }
-        val routeMetres = route.distanceMeters.takeIf { metres -> metres > 0.0 }
-        val sourceTotalMetres = summaryMetres ?: routeMetres ?: totalGeometryMetres
-        val sourceGeometryRange = sourceGeometryDistanceRange(
-            payload = payload,
-            route = route,
-            cumulativeMetres = cumulativeMetres,
-        )
-        val sourceGeometryStartMetres = sourceGeometryRange?.first ?: 0.0
-        val sourceGeometryEndMetres = sourceGeometryRange?.second ?: totalGeometryMetres
-
-        return RouteDistanceMapper(
-            anchors = listOf(
-                DistanceAnchor(sourceMetres = 0.0, geometryMetres = sourceGeometryStartMetres),
-                DistanceAnchor(sourceMetres = sourceTotalMetres, geometryMetres = sourceGeometryEndMetres),
-            ),
-        )
-    }
-
-    /**
-     * API source 距離が対応する route geometry 上の区間を返す。
-     *
-     * [ExtNavRouteDataSource] は地図表示用に origin / destination を geometry の前後へ足すことが
-     * ある。一方、GUIDE の source 距離は API polyline の距離系なので、0m を geometry 全体の
-     * 0m に対応させると案内点が手前へずれる。API polyline の両端が geometry 内で占める距離を
-     * 使い、距離変換の基準をそろえる。
-     */
-    private fun sourceGeometryDistanceRange(
-        payload: ExtNavRoutePayload,
-        route: RouteDetail,
-        cumulativeMetres: DoubleArray,
-    ): Pair<Double, Double>? {
-        val sourcePolyline = payload.routeGuidance.polyline
-        if (sourcePolyline.isEmpty()) return null
-
-        if (route.geometry.isEmpty() || cumulativeMetres.isEmpty()) return null
-
-        val sourceStart = sourcePolyline.first().toRoutePoint()
-        val sourceEnd = sourcePolyline.last().toRoutePoint()
-        val sourceStartIndex = route.geometry.indexOfFirst { point -> point == sourceStart }
-        val sourceEndIndex = route.geometry.indexOfLast { point -> point == sourceEnd }
-
-        if (sourceStartIndex < 0 || sourceEndIndex < 0 || sourceEndIndex <= sourceStartIndex) return null
-
-        val sourceStartMetres = cumulativeMetres.valueAtOrNull(sourceStartIndex) ?: return null
-        val sourceEndMetres = cumulativeMetres.valueAtOrNull(sourceEndIndex) ?: return null
-
-        if (sourceEndMetres <= sourceStartMetres) return null
-
-        return sourceStartMetres to sourceEndMetres
     }
 
     /**
@@ -195,8 +127,7 @@ internal class GuidanceRouteMapper {
         payload: ExtNavRoutePayload,
         route: RouteDetail,
         cumulativeMetres: DoubleArray,
-        totalGeometryMetres: Double,
-        distanceMapper: RouteDistanceMapper,
+        distanceContext: ExtNavRouteDistanceContext,
         intersectionAnchors: List<IntersectionAnchor>,
     ): ImmutableList<GuidanceEvent> {
         val guidancePoints = payload.routeGuidance.guidancePoints
@@ -212,8 +143,7 @@ internal class GuidanceRouteMapper {
                 lastIndex = lastIndex,
                 route = route,
                 cumulativeMetres = cumulativeMetres,
-                totalGeometryMetres = totalGeometryMetres,
-                distanceMapper = distanceMapper,
+                distanceContext = distanceContext,
                 intersectionAnchors = intersectionAnchors,
             )
             val event = buildEvent(
@@ -328,13 +258,11 @@ internal class GuidanceRouteMapper {
         lastIndex: Int,
         route: RouteDetail,
         cumulativeMetres: DoubleArray,
-        totalGeometryMetres: Double,
-        distanceMapper: RouteDistanceMapper,
+        distanceContext: ExtNavRouteDistanceContext,
         intersectionAnchors: List<IntersectionAnchor>,
     ): EventContext {
         val sourceDistanceMetres = guidancePoint.distanceFromStartMetres.toDouble()
-        val mappedMetres = distanceMapper.mapSourceToGeometry(sourceDistanceMetres)
-        val geometryMetres = mappedMetres.coerceIn(0.0, totalGeometryMetres)
+        val geometryMetres = distanceContext.geometryMetresFor(sourceDistanceMetres)
         val location = RouteGeometryMath.pointAt(
             geometry = route.geometry,
             cumulativeMetres = cumulativeMetres,
@@ -613,12 +541,6 @@ internal class GuidanceRouteMapper {
     /** index 範囲内の累積距離を返す。範囲外なら null。 */
     private fun DoubleArray.valueAtOrNull(index: Int): Double? =
         if (index in indices) this[index] else null
-
-    /** 外部 API 座標を route geometry の座標型へ変換する。 */
-    private fun ExtNavCoord.toRoutePoint(): RoutePoint = RoutePoint(
-        latitude = latDegrees,
-        longitude = lonDegrees,
-    )
 
     /** 外部 API 由来の施設種別を semantic 施設種別へ変換する。端点は null。 */
     private fun ExtNavGuidanceFacilityKind.toFacilityKind(): FacilityKind? = when (this) {

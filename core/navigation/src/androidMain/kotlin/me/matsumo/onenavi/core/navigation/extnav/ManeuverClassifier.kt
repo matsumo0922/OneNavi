@@ -152,7 +152,7 @@ internal object ManeuverClassifier {
     fun isRouteDecisionDirection(direction: ExtNavManeuverDirection): Boolean = when (direction) {
         ExtNavManeuverDirection.Straight,
         ExtNavManeuverDirection.Unknown,
-            -> false
+        -> false
 
         ExtNavManeuverDirection.UTurn,
         ExtNavManeuverDirection.Left,
@@ -161,7 +161,7 @@ internal object ManeuverClassifier {
         ExtNavManeuverDirection.Right,
         ExtNavManeuverDirection.SlantRight,
         ExtNavManeuverDirection.ThisSideRight,
-            -> true
+        -> true
     }
 
     /**
@@ -185,28 +185,28 @@ internal object ManeuverClassifier {
     fun toManeuverModifier(direction: ExtNavManeuverDirection): ManeuverModifier = when (direction) {
         ExtNavManeuverDirection.Straight,
         ExtNavManeuverDirection.Unknown,
-            -> ManeuverModifier.STRAIGHT
+        -> ManeuverModifier.STRAIGHT
 
         ExtNavManeuverDirection.UTurn,
-            -> ManeuverModifier.UTURN
+        -> ManeuverModifier.UTURN
 
         ExtNavManeuverDirection.Left,
-            -> ManeuverModifier.LEFT
+        -> ManeuverModifier.LEFT
 
         ExtNavManeuverDirection.SlantLeft,
-            -> ManeuverModifier.SLIGHT_LEFT
+        -> ManeuverModifier.SLIGHT_LEFT
 
         ExtNavManeuverDirection.ThisSideLeft,
-            -> ManeuverModifier.SHARP_LEFT
+        -> ManeuverModifier.SHARP_LEFT
 
         ExtNavManeuverDirection.Right,
-            -> ManeuverModifier.RIGHT
+        -> ManeuverModifier.RIGHT
 
         ExtNavManeuverDirection.SlantRight,
-            -> ManeuverModifier.SLIGHT_RIGHT
+        -> ManeuverModifier.SLIGHT_RIGHT
 
         ExtNavManeuverDirection.ThisSideRight,
-            -> ManeuverModifier.SHARP_RIGHT
+        -> ManeuverModifier.SHARP_RIGHT
     }
 
     /** 浅い角度の左右 modifier を返す。 */
