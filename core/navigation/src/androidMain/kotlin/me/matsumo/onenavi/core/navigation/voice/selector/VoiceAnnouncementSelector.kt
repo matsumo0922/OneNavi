@@ -21,8 +21,11 @@ internal class VoiceAnnouncementSelector(
     /**
      * 現 tick で発話すべき距離段を選ぶ。該当が無ければ null。
      *
-     * route が発話不能状態なら常に null。各 target について通過済み・既発話を除外し、トリガ条件
-     * (MIDDLE は越え判定、FINAL は到達リードタイム逆算) を満たす段のうち最緊急を返す。
+     * route が発話不能状態なら常に null。各 target について通過済み・既処理を除外し、トリガ条件
+     * (MIDDLE は到達判定、FINAL は到達リードタイム逆算) を満たす段のうち最緊急を返す。
+     *
+     * 1 tick につき最緊急 1 件だけを返す。選ばれなかった候補は既処理マークが付かない限り
+     * 次 tick 以降に再評価されるため、同 tick で複数段を跨いでも取りこぼさない。
      */
     fun select(
         plan: VoiceAnnouncementPlan,
@@ -47,10 +50,11 @@ internal class VoiceAnnouncementSelector(
     }
 
     /**
-     * この tick で通過し終えた (= これ以上発話する意味が無い) 案内地点の index を返す。
+     * 現時点で通過し終えた (= これ以上発話する意味が無い) 案内地点の index を返す。
      *
      * scheduler はこれを [VoiceAnnouncementSpeechState.withTargetPassed] に流し、通過済み地点の
-     * 未発話段を恒久的に抑止する。判定は前 tick→現 tick の区間で GP 位置を跨いだかで行う。
+     * 未発話段を恒久的に抑止する。現在地が GP 位置に到達済みかで判定する level 方式で、毎 tick
+     * 通過済みの全 index を返す (記録側が冪等に union する想定)。
      *
      * route が発話不能状態 (OFF_ROUTE_CONFIRMED 等) の tick では空を返す。投影距離だけが進んで
      * いる可能性があり、通過済みと誤記録すると復帰時に案内を失うため、発話状態は維持する。
@@ -62,7 +66,7 @@ internal class VoiceAnnouncementSelector(
 
         for (targetIndex in plan.targets.indices) {
             val target = plan.targets[targetIndex]
-            if (isTargetJustPassed(target, tick)) passed += targetIndex
+            if (!isTargetAhead(target, tick)) passed += targetIndex
         }
 
         return passed
@@ -130,32 +134,24 @@ internal class VoiceAnnouncementSelector(
     private fun isTargetAhead(target: AnnouncementTarget, tick: VoiceTick): Boolean =
         tick.currentCumulativeMeters < target.geometryMeters
 
-    /** この tick で案内地点の位置を跨いだか (= ちょうど通過したか) を返す。 */
-    private fun isTargetJustPassed(target: AnnouncementTarget, tick: VoiceTick): Boolean {
-        val wasAhead = target.geometryMeters > tick.previousCumulativeMeters
-        val nowReached = target.geometryMeters <= tick.currentCumulativeMeters
-
-        return wasAhead && nowReached
-    }
-
-    /** 段のトリガ条件を満たすかを返す。MIDDLE は越え判定、FINAL は到達リードタイム逆算。 */
+    /** 段のトリガ条件を満たすかを返す。MIDDLE は到達判定、FINAL は到達リードタイム逆算。 */
     private fun isStageTriggered(
         stage: AnnouncementStage,
         target: AnnouncementTarget,
         tick: VoiceTick,
     ): Boolean = when (stage.kind) {
-        AnnouncementStageKind.MIDDLE -> isMiddleCrossed(stage, tick)
+        AnnouncementStageKind.MIDDLE -> isMiddleReached(stage, tick)
         AnnouncementStageKind.FINAL -> isFinalReached(target, tick)
     }
 
-    /** 中間段: トリガ距離を前 tick→現 tick の区間 (previous, current] で跨いだかを返す。 */
-    private fun isMiddleCrossed(stage: AnnouncementStage, tick: VoiceTick): Boolean {
-        val triggerMeters = stage.triggerGeometryMeters
-        val justEntered = triggerMeters > tick.previousCumulativeMeters
-        val reached = triggerMeters <= tick.currentCumulativeMeters
-
-        return justEntered && reached
-    }
+    /**
+     * 中間段: 現在地がトリガ距離に到達したかを返す (level 判定)。
+     *
+     * 一度きりの発話保証は呼び出し側の既処理マークが担う。これにより同 tick で複数段を跨いで
+     * 選ばれなかった段も、未処理なら次 tick 以降に再評価される。
+     */
+    private fun isMiddleReached(stage: AnnouncementStage, tick: VoiceTick): Boolean =
+        stage.triggerGeometryMeters <= tick.currentCumulativeMeters
 
     /** 直前段: 現在地が到達リードタイムぶん手前に達したかを返す。手前距離は速度から逆算する。 */
     private fun isFinalReached(target: AnnouncementTarget, tick: VoiceTick): Boolean {

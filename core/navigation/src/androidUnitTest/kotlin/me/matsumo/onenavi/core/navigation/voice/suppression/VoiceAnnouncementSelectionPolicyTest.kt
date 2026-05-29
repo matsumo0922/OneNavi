@@ -139,7 +139,6 @@ class VoiceAnnouncementSelectionPolicyTest {
         )
 
     private fun tickOf(current: Double): VoiceTick = VoiceTick(
-        previousCumulativeMeters = current,
         currentCumulativeMeters = current,
         speedMetersPerSecond = null,
         isRouteUsable = true,
