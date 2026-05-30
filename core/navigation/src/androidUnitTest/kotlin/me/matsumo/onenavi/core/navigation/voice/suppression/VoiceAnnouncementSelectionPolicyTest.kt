@@ -131,6 +131,7 @@ class VoiceAnnouncementSelectionPolicyTest {
     private fun stageOf(id: String, kind: AnnouncementStageKind): AnnouncementStage =
         AnnouncementStage(
             id = VoiceAnnouncementId(id),
+            groupKey = VoiceAnnouncementId("$id-group"),
             kind = kind,
             triggerSourceMeters = 0.0,
             triggerGeometryMeters = 0.0,

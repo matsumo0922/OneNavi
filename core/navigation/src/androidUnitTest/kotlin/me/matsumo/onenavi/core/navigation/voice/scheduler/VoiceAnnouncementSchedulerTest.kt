@@ -217,25 +217,29 @@ class VoiceAnnouncementSchedulerTest {
         id: String,
         triggerGeometryMeters: Double,
         category: GuidanceCategory = GuidanceCategory.IntersectionGuide,
+        groupKey: String = "grp",
     ): AnnouncementStage = stageOf(
         id = id,
         kind = AnnouncementStageKind.MIDDLE,
         triggerGeometryMeters = triggerGeometryMeters,
         category = category,
+        groupKey = groupKey,
         window = AnnouncementDistanceWindow(enterGeometryMeters = triggerGeometryMeters, exitGeometryMeters = Double.MAX_VALUE),
     )
 
-    // 距離違いの代替候補をタイル状の窓で表す MIDDLE 段。グループ消費の統合テストで使う。
+    // 距離違いの代替候補をタイル状の窓で表す MIDDLE 段。同一 groupKey で束ね、グループ消費の統合テストで使う。
     private fun middleStageWindowed(
         id: String,
         enter: Double,
         exit: Double,
         category: GuidanceCategory = GuidanceCategory.IntersectionGuide,
+        groupKey: String = "grp",
     ): AnnouncementStage = stageOf(
         id = id,
         kind = AnnouncementStageKind.MIDDLE,
         triggerGeometryMeters = enter,
         category = category,
+        groupKey = groupKey,
         window = AnnouncementDistanceWindow(enterGeometryMeters = enter, exitGeometryMeters = exit),
     )
 
@@ -243,11 +247,13 @@ class VoiceAnnouncementSchedulerTest {
         id: String,
         triggerGeometryMeters: Double = 0.0,
         category: GuidanceCategory = GuidanceCategory.IntersectionGuide,
+        groupKey: String = "final-grp",
     ): AnnouncementStage = stageOf(
         id = id,
         kind = AnnouncementStageKind.FINAL,
         triggerGeometryMeters = triggerGeometryMeters,
         category = category,
+        groupKey = groupKey,
         window = null,
     )
 
@@ -256,9 +262,11 @@ class VoiceAnnouncementSchedulerTest {
         kind: AnnouncementStageKind,
         triggerGeometryMeters: Double,
         category: GuidanceCategory,
+        groupKey: String,
         window: AnnouncementDistanceWindow?,
     ): AnnouncementStage = AnnouncementStage(
         id = VoiceAnnouncementId(id),
+        groupKey = VoiceAnnouncementId(groupKey),
         kind = kind,
         triggerSourceMeters = triggerGeometryMeters,
         triggerGeometryMeters = triggerGeometryMeters,

@@ -386,6 +386,8 @@ class GuidanceRouteMapperTest {
                 sourceBlockIndex = 0,
             ),
             triggerDistanceMetres = 0,
+            groupId = 0,
+            window = null,
             pieces = pieces,
             categories = categories.toImmutableSet(),
         )

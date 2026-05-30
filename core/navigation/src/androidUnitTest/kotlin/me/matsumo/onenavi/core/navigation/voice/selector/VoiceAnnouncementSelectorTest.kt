@@ -325,24 +325,28 @@ class VoiceAnnouncementSelectorTest {
         stages = stages.toImmutableList(),
     )
 
-    private fun middleStage(id: String, enter: Double, exit: Double): AnnouncementStage =
+    // 同一案内地点の距離違い候補は既定で同一 groupKey に束ね、グループ消費 (1 グループ 1 発話) を再現する。
+    private fun middleStage(id: String, enter: Double, exit: Double, groupKey: String = "grp"): AnnouncementStage =
         stageOf(
             id = id,
             kind = AnnouncementStageKind.MIDDLE,
             triggerGeometryMeters = enter,
+            groupKey = groupKey,
             window = AnnouncementDistanceWindow(enterGeometryMeters = enter, exitGeometryMeters = exit),
         )
 
-    private fun finalStage(id: String): AnnouncementStage =
-        stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters = 0.0, window = null)
+    private fun finalStage(id: String, groupKey: String = "final-grp"): AnnouncementStage =
+        stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters = 0.0, groupKey = groupKey, window = null)
 
     private fun stageOf(
         id: String,
         kind: AnnouncementStageKind,
         triggerGeometryMeters: Double,
+        groupKey: String,
         window: AnnouncementDistanceWindow?,
     ): AnnouncementStage = AnnouncementStage(
         id = VoiceAnnouncementId(id),
+        groupKey = VoiceAnnouncementId(groupKey),
         kind = kind,
         triggerSourceMeters = triggerGeometryMeters,
         triggerGeometryMeters = triggerGeometryMeters,

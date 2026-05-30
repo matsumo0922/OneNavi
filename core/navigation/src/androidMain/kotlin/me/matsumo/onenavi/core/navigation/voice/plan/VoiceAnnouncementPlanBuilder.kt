@@ -72,6 +72,9 @@ internal class VoiceAnnouncementPlanBuilder {
 
         val uniqueBlocks = dedupBlocksBySpokenText(validBlocks)
         val finalBlockIndex = selectFinalBlockIndex(uniqueBlocks)
+        val geometryMeters = distanceContext.geometryMetresFor(
+            sourceMetres = guidancePoint.distanceFromStartMetres.toDouble(),
+        )
         val stages = mutableListOf<AnnouncementStage>()
 
         for (blockIndex in uniqueBlocks.indices) {
@@ -81,64 +84,35 @@ internal class VoiceAnnouncementPlanBuilder {
                 guidancePoint = guidancePoint,
                 block = block,
                 isFinalBlock = blockIndex == finalBlockIndex,
+                gpGeometryMeters = geometryMeters,
                 distanceContext = distanceContext,
                 config = config,
             )
             stages += blockStages
         }
 
-        val geometryMeters = distanceContext.geometryMetresFor(
-            sourceMetres = guidancePoint.distanceFromStartMetres.toDouble(),
-        )
-        val sortedStages = stages.sortedBy { stage -> stage.triggerSourceMeters }
-        val windowedStages = assignMiddleWindows(sortedStages, geometryMeters)
-
         return AnnouncementTarget(
             guidancePointIndex = guidancePoint.index,
             geometryMeters = geometryMeters,
-            stages = windowedStages.toImmutableList(),
+            stages = stages
+                .sortedBy { stage -> stage.triggerSourceMeters }
+                .toImmutableList(),
         )
-    }
-
-    /**
-     * trigger 距離昇順 (遠い予告 → 近い予告 → FINAL) に並んだ段に、MIDDLE 段の距離窓を割り当てる。
-     *
-     * 同一案内地点の MIDDLE 群は距離違いの代替候補なので、各 MIDDLE の窓を
-     * `[自分のトリガ点, 次に近い段のトリガ点)` のタイルで隙間なく敷く。最も近い MIDDLE の窓の終端は、
-     * 後続段 (FINAL など) があればそのトリガ点、無ければ案内地点 ([gpGeometryMeters]) とする。
-     * FINAL 段は到達リードタイム逆算で発話するため窓を持たない (null のまま)。
-     *
-     * @param sortedStages triggerSourceMeters 昇順に並んだ段
-     * @param gpGeometryMeters 案内地点の geometry 累積距離 (m)。最も近い MIDDLE の窓の終端に使う
-     * @return MIDDLE 段に距離窓を割り当てた段リスト (並び順は維持)
-     */
-    private fun assignMiddleWindows(
-        sortedStages: List<AnnouncementStage>,
-        gpGeometryMeters: Double,
-    ): List<AnnouncementStage> = sortedStages.mapIndexed { stageIndex, stage ->
-        if (stage.kind != AnnouncementStageKind.MIDDLE) return@mapIndexed stage
-
-        val nextStage = sortedStages.getOrNull(stageIndex + 1)
-        val windowExitMeters = nextStage?.triggerGeometryMeters ?: gpGeometryMeters
-        val window = AnnouncementDistanceWindow(
-            enterGeometryMeters = stage.triggerGeometryMeters,
-            exitGeometryMeters = windowExitMeters,
-        )
-
-        stage.copy(middleWindow = window)
     }
 
     /**
      * 1 block を距離段に変換する。
      *
      * FINAL block は 1 つの FINAL 段にする。MIDDLE block は距離 override があれば手前距離の
-     * 数だけ複製し、無ければ block 自身の triggerDistanceMetres で 1 段にする。
+     * 数だけ複製し、無ければ block 自身の triggerDistanceMetres で 1 段にする。MIDDLE 段の発話有効範囲
+     * (距離窓) は外部データの [GuideAnnouncementBlock.window] 由来で、同一 group_id の候補が代替として束ねられる。
      */
     private fun buildStagesForBlock(
         routeId: String,
         guidancePoint: GuidancePoint,
         block: GuideAnnouncementBlock,
         isFinalBlock: Boolean,
+        gpGeometryMeters: Double,
         distanceContext: ExtNavRouteDistanceContext,
         config: VoiceAnnouncementConfig,
     ): List<AnnouncementStage> {
@@ -155,6 +129,7 @@ internal class VoiceAnnouncementPlanBuilder {
                 triggerSourceMeters = triggerSource,
                 kind = AnnouncementStageKind.FINAL,
                 idSuffix = null,
+                gpGeometryMeters = gpGeometryMeters,
                 distanceContext = distanceContext,
             )
             return listOf(finalStage)
@@ -171,6 +146,7 @@ internal class VoiceAnnouncementPlanBuilder {
                 triggerSourceMeters = triggerSource,
                 kind = AnnouncementStageKind.MIDDLE,
                 idSuffix = null,
+                gpGeometryMeters = gpGeometryMeters,
                 distanceContext = distanceContext,
             )
             return listOf(middleStage)
@@ -187,6 +163,7 @@ internal class VoiceAnnouncementPlanBuilder {
                 triggerSourceMeters = triggerSource,
                 kind = AnnouncementStageKind.MIDDLE,
                 idSuffix = leadDistanceMeters.roundToInt().toString(),
+                gpGeometryMeters = gpGeometryMeters,
                 distanceContext = distanceContext,
             )
             stages += stage
@@ -197,6 +174,9 @@ internal class VoiceAnnouncementPlanBuilder {
 
     /**
      * 単一の距離段を組み立てる。source トリガ距離を geometry 距離へ変換して保持する。
+     *
+     * MIDDLE 段には [computeMiddleWindow] で発話有効範囲 (距離窓) を、全段に group_id 由来の
+     * [groupKeyOf] を割り当てる。
      */
     private fun buildStage(
         routeId: String,
@@ -205,6 +185,7 @@ internal class VoiceAnnouncementPlanBuilder {
         triggerSourceMeters: Double,
         kind: AnnouncementStageKind,
         idSuffix: String?,
+        gpGeometryMeters: Double,
         distanceContext: ExtNavRouteDistanceContext,
     ): AnnouncementStage {
         val triggerGeometryMeters = distanceContext.geometryMetresFor(triggerSourceMeters)
@@ -214,6 +195,21 @@ internal class VoiceAnnouncementPlanBuilder {
             blockId = block.id,
             idSuffix = idSuffix,
         )
+        val groupKey = groupKeyOf(
+            routeId = routeId,
+            guidancePointIndex = guidancePoint.index,
+            groupId = block.groupId,
+        )
+        val middleWindow = if (kind == AnnouncementStageKind.MIDDLE) {
+            computeMiddleWindow(
+                block = block,
+                triggerGeometryMeters = triggerGeometryMeters,
+                gpGeometryMeters = gpGeometryMeters,
+                distanceContext = distanceContext,
+            )
+        } else {
+            null
+        }
 
         logBlockBreakdown(
             guidancePoint = guidancePoint,
@@ -225,13 +221,61 @@ internal class VoiceAnnouncementPlanBuilder {
 
         return AnnouncementStage(
             id = id,
+            groupKey = groupKey,
             kind = kind,
             triggerSourceMeters = triggerSourceMeters,
             triggerGeometryMeters = triggerGeometryMeters,
-            middleWindow = null,
+            middleWindow = middleWindow,
             pieces = block.pieces,
             categories = block.categories,
         )
+    }
+
+    /**
+     * MIDDLE 段の発話有効範囲 (距離窓) を geometry 累積距離で求める。
+     *
+     * 外部データに発話有効範囲 ([GuideAnnouncementBlock.window]、案内点までの残距離) があれば、それを
+     * source→geometry 変換して窓にする (案内点に近い端 → 窓の終端、遠い端 → 窓の開始)。範囲が取れない
+     * block は暫定的に「自分のトリガ点から案内点まで」を窓とする (同一 group のグループ消費で 1 回に絞られる)。
+     */
+    private fun computeMiddleWindow(
+        block: GuideAnnouncementBlock,
+        triggerGeometryMeters: Double,
+        gpGeometryMeters: Double,
+        distanceContext: ExtNavRouteDistanceContext,
+    ): AnnouncementDistanceWindow {
+        val window = block.window
+        val anchorSource = block.anchor.sourceDistanceFromStartMetres
+        if (window == null || anchorSource == null) {
+            return AnnouncementDistanceWindow(
+                enterGeometryMeters = triggerGeometryMeters,
+                exitGeometryMeters = gpGeometryMeters,
+            )
+        }
+
+        val enterSourceMeters = anchorSource - window.farMetres
+        val exitSourceMeters = anchorSource - window.nearMetres
+
+        return AnnouncementDistanceWindow(
+            enterGeometryMeters = distanceContext.geometryMetresFor(enterSourceMeters),
+            exitGeometryMeters = distanceContext.geometryMetresFor(exitSourceMeters),
+        )
+    }
+
+    /**
+     * 同一案内点内で距離違い候補を束ねる groupKey を組み立てる。
+     *
+     * 外部データの group_id が有効ならそれで束ね (予告グループ / 直前グループ等が別 key になる)、
+     * 0 (未設定) のときは案内点単位の既定グループに束ねる。
+     */
+    private fun groupKeyOf(
+        routeId: String,
+        guidancePointIndex: Int,
+        groupId: Int,
+    ): VoiceAnnouncementId {
+        val groupToken = if (groupId != 0) "grp$groupId" else "grpDefault"
+
+        return VoiceAnnouncementId("$routeId#gp$guidancePointIndex#$groupToken")
     }
 
     // ---------------------------------------------------------------------

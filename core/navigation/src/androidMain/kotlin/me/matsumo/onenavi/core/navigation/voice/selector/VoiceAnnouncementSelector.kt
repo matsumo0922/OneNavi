@@ -4,6 +4,7 @@ import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementTarget
+import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlan
 import me.matsumo.onenavi.core.navigation.voice.suppression.VoiceAnnouncementSpeechState
 import kotlin.math.max
@@ -120,9 +121,10 @@ internal class VoiceAnnouncementSelector(
     /**
      * target 内で発話すべき最緊急の段を選ぶ。該当が無ければ null。
      *
-     * MIDDLE 群は代替候補なので、いずれか 1 段が処理済みなら ([isMiddleGroupConsumed]) 残りは選ばない。
-     * 距離窓は隣接段とタイル状に区切られており同時に複数の MIDDLE が候補になることはないが、FINAL が
-     * 同 tick で発話可能になった場合は緊急度比較で最緊急 (= FINAL) を採用する。
+     * 距離違いの MIDDLE は外部データの group_id ごとに代替候補として束ねられ、同一グループのいずれか 1 段が
+     * 処理済みなら ([consumedGroupKeysOf]) そのグループの残りは選ばない (1 グループ 1 発話)。距離窓が
+     * 非重複なので同時に複数候補が成立することは稀だが、FINAL が同 tick で発話可能になった場合は緊急度比較で
+     * 最緊急 (= FINAL) を採用する。
      */
     private fun selectStageForTarget(
         targetIndex: Int,
@@ -130,12 +132,12 @@ internal class VoiceAnnouncementSelector(
         tick: VoiceTick,
         state: VoiceAnnouncementSpeechState,
     ): VoiceAnnouncementSelection? {
-        val middleGroupConsumed = isMiddleGroupConsumed(target, state)
+        val consumedGroupKeys = consumedGroupKeysOf(target, state)
         var best: VoiceAnnouncementSelection? = null
 
         for (stage in target.stages) {
             if (state.isStageFired(stage.id)) continue
-            if (!isStageSpeakable(stage, target, tick, middleGroupConsumed)) continue
+            if (!isStageSpeakable(stage, target, tick, consumedGroupKeys)) continue
 
             val candidate = selectionOf(targetIndex, target, stage, tick)
             best = moreUrgentOf(best, candidate)
@@ -166,18 +168,20 @@ internal class VoiceAnnouncementSelector(
     }
 
     /**
-     * 同一案内地点の MIDDLE 群が既に消費済みかを返す。
+     * 既に処理済みの段が属する groupKey の集合 (= 消費済みグループ) を返す。
      *
-     * 距離違いの MIDDLE は代替候補で、発話するのは 1 機会 1 つだけ。いずれかの段が処理済み (発話・割り込み・
-     * キュー投入・空畳み込み) になった時点でグループ全体を消費したとみなし、以後その案内地点の MIDDLE は
-     * 選ばない。FINAL が先に発話された場合も、取り残された MIDDLE が後から鳴らないよう同様に消費扱いにする
-     * (= target 内のいずれかの段が処理済みなら消費)。FINAL 自体は MIDDLE 群の消費に左右されず、自身の
-     * 既処理マークと到達リードタイムだけで判定される。
+     * 距離違いの MIDDLE は group_id ごとの代替候補で、発話するのは 1 グループ 1 つだけ。同一グループの段が
+     * 処理済み (発話・割り込み・キュー投入・空畳み込み) になった時点でそのグループを消費したとみなし、以後
+     * 同 groupKey の MIDDLE は選ばない。FINAL は自身の groupKey の消費に左右されず、自身の既処理マークと
+     * 到達リードタイムだけで判定される (= FINAL 用の判定で消費集合は参照しない)。
      */
-    private fun isMiddleGroupConsumed(
+    private fun consumedGroupKeysOf(
         target: AnnouncementTarget,
         state: VoiceAnnouncementSpeechState,
-    ): Boolean = target.stages.any { stage -> state.isStageFired(stage.id) }
+    ): Set<VoiceAnnouncementId> = target.stages
+        .filter { stage -> state.isStageFired(stage.id) }
+        .map { stage -> stage.groupKey }
+        .toSet()
 
     /**
      * 2 候補のうち緊急度が高い方を返す。null は「候補なし」を表す。
@@ -208,24 +212,24 @@ internal class VoiceAnnouncementSelector(
 
     /**
      * 段が現 tick で発話可能かを返す。MIDDLE は距離窓に現在地が入っているか、FINAL は到達リードタイムに
-     * 達しているかで判定する。MIDDLE は同一案内地点の群が消費済み ([middleGroupConsumed]) なら発話しない。
+     * 達しているかで判定する。MIDDLE は自身の groupKey が消費済み ([consumedGroupKeys] に含まれる) なら発話しない。
      */
     private fun isStageSpeakable(
         stage: AnnouncementStage,
         target: AnnouncementTarget,
         tick: VoiceTick,
-        middleGroupConsumed: Boolean,
+        consumedGroupKeys: Set<VoiceAnnouncementId>,
     ): Boolean = when (stage.kind) {
-        AnnouncementStageKind.MIDDLE -> !middleGroupConsumed && isMiddleWindowActive(stage, tick)
+        AnnouncementStageKind.MIDDLE -> stage.groupKey !in consumedGroupKeys && isMiddleWindowActive(stage, tick)
         AnnouncementStageKind.FINAL -> isFinalReached(target, tick)
     }
 
     /**
      * 中間段: 現在地が距離窓 [enter, exit) に入っているかを返す。
      *
-     * 窓は隣接する距離違い候補との間でタイル状に区切られているため、現在地が属する距離帯の候補だけが
-     * 発話可能になる。これにより route 途中から開始したとき背後の遠い予告まで一斉発火する片側しきい値の
-     * 弊害を避ける。窓を持たない (= 想定外の) MIDDLE 段は発話しない。
+     * 窓は外部データの発話有効範囲由来で、現在地が属する距離帯の候補だけが発話可能になる。これにより
+     * route 途中から開始したとき背後の遠い予告まで一斉発火する片側しきい値の弊害を避ける。
+     * 窓を持たない (= 想定外の) MIDDLE 段は発話しない。
      */
     private fun isMiddleWindowActive(stage: AnnouncementStage, tick: VoiceTick): Boolean {
         val window = stage.middleWindow ?: return false

@@ -201,6 +201,7 @@ class VoiceAnnouncementSpeechRunnerTest {
         triggerGeometryMeters: Double,
     ): AnnouncementStage = AnnouncementStage(
         id = VoiceAnnouncementId(id),
+        groupKey = VoiceAnnouncementId("$id-grp"),
         kind = kind,
         triggerSourceMeters = triggerGeometryMeters,
         triggerGeometryMeters = triggerGeometryMeters,
