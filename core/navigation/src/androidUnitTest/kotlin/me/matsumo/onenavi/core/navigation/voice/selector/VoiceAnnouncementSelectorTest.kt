@@ -230,6 +230,35 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
+    fun `最寄り FINAL が同グループ消費で鳴らなくても後続 target は区切り済みとして解禁される`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // target0 の直前グループ "grp65" に MIDDLE と最寄り FINAL が同居 (FINAL が nearest = triggerGeo 最大、本番同様)。
+        // 後続 target1 の予告窓は target0 通過より手前で開く。
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("aDirectMiddle", enter = 930.0, exit = 980.0, groupKey = "grp65"),
+                    finalStage("aFinal", groupKey = "grp65", triggerGeometryMeters = 970.0),
+                ),
+            ),
+            targetOf(
+                index = 1,
+                geometryMeters = 2_000.0,
+                stages = listOf(middleStage("bEarly", enter = 900.0, exit = 1_100.0, groupKey = "grp131")),
+            ),
+        )
+
+        // target0 の MIDDLE が処理済み = 直前グループ消費。最寄り FINAL は消費で鳴らない (fired にならない) が、
+        // target0 は区切り済み扱いになり、target0 通過前でも target1 の予告が解禁される。
+        val consumed = emptyState().withStageFired(VoiceAnnouncementId("aDirectMiddle"))
+        val selection = selector.select(plan, tickOf(current = 950.0), consumed)
+
+        assertEquals(VoiceAnnouncementId("bEarly"), selection?.stage?.id)
+    }
+
+    @Test
     fun `別グループの FINAL は MIDDLE のグループ消費に影響されない`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         // 予告グループ "grp131" の MIDDLE と、別グループ "grp65" の直前 FINAL。
@@ -432,8 +461,12 @@ class VoiceAnnouncementSelectorTest {
             isGeneric = isGeneric,
         )
 
-    private fun finalStage(id: String, groupKey: String = "final-grp"): AnnouncementStage =
-        stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters = 0.0, groupKey = groupKey, window = null)
+    private fun finalStage(
+        id: String,
+        groupKey: String = "final-grp",
+        triggerGeometryMeters: Double = 0.0,
+    ): AnnouncementStage =
+        stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters = triggerGeometryMeters, groupKey = groupKey, window = null)
 
     private fun stageOf(
         id: String,

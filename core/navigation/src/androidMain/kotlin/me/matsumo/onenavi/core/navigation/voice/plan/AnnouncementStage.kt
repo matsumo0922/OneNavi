@@ -36,9 +36,9 @@ internal enum class AnnouncementStageKind {
  *   MIDDLE 段では [AnnouncementDistanceWindow.enterGeometryMeters] と一致する
  * @property middleWindow MIDDLE 段が発話候補になれる距離窓 (外部データの発話有効範囲由来)。
  *   FINAL 段は到達リードタイム逆算で発話するため null
- * @property isGeneric 全 piece が汎用テンプレート (template_id=100「指定なし」) の段か。同一グループに
- *   具体テンプレートの候補があるとき、選抜時にこの汎用段を避ける (外部ナビ API 参照実装の汎用回避)。
- *   テキストではなく外部データのテンプレート ID から決める
+ * @property isGeneric 先頭 piece が汎用テンプレート (template_id=100「指定なし」) の段か。同一グループに
+ *   具体テンプレートの候補があるとき、選抜時にこの汎用段を避ける (外部ナビ API 参照実装の汎用回避は
+ *   先頭フレーズの template_id を見る)。テキストではなく外部データのテンプレート ID から決める
  * @property pieces 発話素片。category gate / 結合は発話 dispatch 直前に適用する
  * @property categories この段が属する block の category 群
  */

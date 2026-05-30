@@ -82,7 +82,14 @@ internal class VoiceAnnouncementSelector(
         return true
     }
 
-    /** 案内地点が区切り済み (通過済み、または最寄り段が発話済み) かを返す。 */
+    /**
+     * 案内地点が区切り済み (通過済み、または最寄り段が処理済み) かを返す。
+     *
+     * 最寄り段 (= 案内点に最も近い段、通常は FINAL) 自体が発話済みなら区切り済み。加えて、最寄り段と同一
+     * グループの別段が発話済みでグループ消費された場合も区切り済みとみなす。最寄り段がグループ消費で発話
+     * 不能になると自身は fired にならないため、ここで groupKey 消費も見ないと後続地点の解禁が案内点通過まで
+     * 止まり、後続の予告窓を取り逃がす。
+     */
     private fun isTargetAnnounced(
         target: AnnouncementTarget,
         targetIndex: Int,
@@ -91,8 +98,9 @@ internal class VoiceAnnouncementSelector(
         if (state.isTargetPassed(targetIndex)) return true
 
         val nearestStage = target.stages.maxByOrNull { stage -> stage.triggerGeometryMeters } ?: return true
+        if (state.isStageFired(nearestStage.id)) return true
 
-        return state.isStageFired(nearestStage.id)
+        return nearestStage.groupKey in consumedGroupKeysOf(target, state)
     }
 
     /**
