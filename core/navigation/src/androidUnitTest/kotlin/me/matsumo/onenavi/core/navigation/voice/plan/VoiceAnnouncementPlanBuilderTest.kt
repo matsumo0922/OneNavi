@@ -99,6 +99,65 @@ class VoiceAnnouncementPlanBuilderTest {
     }
 
     @Test
+    fun `MIDDLE 段には隣接段との間でタイル状の距離窓が割り当てられ FINAL は窓を持たない`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("b2000", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 2_000),
+                buildBlock("b1000", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 1_000),
+                buildBlock("b300", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 300),
+                buildBlock("b100", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 100),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        // triggerGeometry 昇順: 3000(MIDDLE) -> 4000(MIDDLE) -> 4700(MIDDLE) -> 4900(FINAL)。GP は 5000。
+        val stages = plan.targets.single().stages
+        val windows = stages.map { stage -> stage.middleWindow }
+        // 各 MIDDLE の窓 = [自トリガ, 次段トリガ)。最も手前 MIDDLE の終端は次段 (FINAL) のトリガ 4900。
+        assertEquals(AnnouncementDistanceWindow(3_000.0, 4_000.0), windows[0])
+        assertEquals(AnnouncementDistanceWindow(4_000.0, 4_700.0), windows[1])
+        assertEquals(AnnouncementDistanceWindow(4_700.0, 4_900.0), windows[2])
+        // FINAL は到達リードタイム逆算で発話するため窓を持たない。
+        assertEquals(null, windows[3])
+    }
+
+    @Test
+    fun `後続段が無い MIDDLE のみの GP は窓の終端が案内地点になる`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // FINAL は最も手前の 1 段だけなので、MIDDLE が 1 段だけ残る GP を作る。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("b500", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 500),
+                buildBlock("b100", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 100),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        // MIDDLE は b500 (trigger geo 4500) のみ。終端は次段 FINAL b100 (trigger geo 4900)。
+        val middleStage = plan.targets.single().stages.first { stage -> stage.kind == AnnouncementStageKind.MIDDLE }
+        assertEquals(AnnouncementDistanceWindow(4_500.0, 4_900.0), middleStage.middleWindow)
+    }
+
+    @Test
     fun `block が 1 つだけの GP はその段が FINAL になる`() {
         val builder = VoiceAnnouncementPlanBuilder()
         val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)

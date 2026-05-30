@@ -90,14 +90,42 @@ internal class VoiceAnnouncementPlanBuilder {
         val geometryMeters = distanceContext.geometryMetresFor(
             sourceMetres = guidancePoint.distanceFromStartMetres.toDouble(),
         )
+        val sortedStages = stages.sortedBy { stage -> stage.triggerSourceMeters }
+        val windowedStages = assignMiddleWindows(sortedStages, geometryMeters)
 
         return AnnouncementTarget(
             guidancePointIndex = guidancePoint.index,
             geometryMeters = geometryMeters,
-            stages = stages
-                .sortedBy { stage -> stage.triggerSourceMeters }
-                .toImmutableList(),
+            stages = windowedStages.toImmutableList(),
         )
+    }
+
+    /**
+     * trigger 距離昇順 (遠い予告 → 近い予告 → FINAL) に並んだ段に、MIDDLE 段の距離窓を割り当てる。
+     *
+     * 同一案内地点の MIDDLE 群は距離違いの代替候補なので、各 MIDDLE の窓を
+     * `[自分のトリガ点, 次に近い段のトリガ点)` のタイルで隙間なく敷く。最も近い MIDDLE の窓の終端は、
+     * 後続段 (FINAL など) があればそのトリガ点、無ければ案内地点 ([gpGeometryMeters]) とする。
+     * FINAL 段は到達リードタイム逆算で発話するため窓を持たない (null のまま)。
+     *
+     * @param sortedStages triggerSourceMeters 昇順に並んだ段
+     * @param gpGeometryMeters 案内地点の geometry 累積距離 (m)。最も近い MIDDLE の窓の終端に使う
+     * @return MIDDLE 段に距離窓を割り当てた段リスト (並び順は維持)
+     */
+    private fun assignMiddleWindows(
+        sortedStages: List<AnnouncementStage>,
+        gpGeometryMeters: Double,
+    ): List<AnnouncementStage> = sortedStages.mapIndexed { stageIndex, stage ->
+        if (stage.kind != AnnouncementStageKind.MIDDLE) return@mapIndexed stage
+
+        val nextStage = sortedStages.getOrNull(stageIndex + 1)
+        val windowExitMeters = nextStage?.triggerGeometryMeters ?: gpGeometryMeters
+        val window = AnnouncementDistanceWindow(
+            enterGeometryMeters = stage.triggerGeometryMeters,
+            exitGeometryMeters = windowExitMeters,
+        )
+
+        stage.copy(middleWindow = window)
     }
 
     /**
@@ -200,6 +228,7 @@ internal class VoiceAnnouncementPlanBuilder {
             kind = kind,
             triggerSourceMeters = triggerSourceMeters,
             triggerGeometryMeters = triggerGeometryMeters,
+            middleWindow = null,
             pieces = block.pieces,
             categories = block.categories,
         )

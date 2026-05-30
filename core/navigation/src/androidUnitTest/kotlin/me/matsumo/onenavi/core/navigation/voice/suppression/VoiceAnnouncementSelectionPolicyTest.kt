@@ -134,6 +134,7 @@ class VoiceAnnouncementSelectionPolicyTest {
             kind = kind,
             triggerSourceMeters = 0.0,
             triggerGeometryMeters = 0.0,
+            middleWindow = null,
             pieces = persistentListOf(),
             categories = persistentSetOf(),
         )

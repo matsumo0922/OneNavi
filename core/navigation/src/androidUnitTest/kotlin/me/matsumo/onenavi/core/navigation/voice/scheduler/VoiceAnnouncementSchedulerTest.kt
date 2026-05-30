@@ -8,6 +8,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementCategoryGate
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
+import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementDistanceWindow
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementTarget
@@ -195,11 +196,20 @@ class VoiceAnnouncementSchedulerTest {
         kind = kind,
         triggerSourceMeters = triggerGeometryMeters,
         triggerGeometryMeters = triggerGeometryMeters,
+        middleWindow = middleWindowFor(kind, triggerGeometryMeters),
         pieces = persistentListOf(
             GuideAnnouncementPiece(text = id, ssml = null, templateRef = null, category = category),
         ),
         categories = persistentSetOf(),
     )
+
+    // dispatch の状態遷移を検証するテストなので、窓上限は実質無制限にして「トリガ到達後は候補」とする。
+    private fun middleWindowFor(kind: AnnouncementStageKind, triggerGeometryMeters: Double): AnnouncementDistanceWindow? =
+        if (kind == AnnouncementStageKind.MIDDLE) {
+            AnnouncementDistanceWindow(enterGeometryMeters = triggerGeometryMeters, exitGeometryMeters = Double.MAX_VALUE)
+        } else {
+            null
+        }
 
     private fun tickOf(
         current: Double,

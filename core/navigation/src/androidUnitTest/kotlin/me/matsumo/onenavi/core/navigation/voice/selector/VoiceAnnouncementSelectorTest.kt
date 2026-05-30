@@ -302,6 +302,7 @@ class VoiceAnnouncementSelectorTest {
         kind = kind,
         triggerSourceMeters = triggerGeometryMeters,
         triggerGeometryMeters = triggerGeometryMeters,
+        middleWindow = null,
         pieces = persistentListOf(),
         categories = persistentSetOf(),
     )
