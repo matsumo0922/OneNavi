@@ -131,6 +131,44 @@ class VoiceAnnouncementSchedulerTest {
     }
 
     @Test
+    fun `距離違いの予告は連発せず 予告1回と直前1回に収まる`() {
+        val scheduler = schedulerOf()
+        // GP geo 1000。500m / 300m / 100m 帯の予告 (タイル窓) と、直前の FINAL。
+        scheduler.attach(
+            planOf(
+                targetOf(
+                    index = 0,
+                    geometryMeters = 1_000.0,
+                    middleStageWindowed("m500", enter = 500.0, exit = 700.0),
+                    middleStageWindowed("m300", enter = 700.0, exit = 900.0),
+                    middleStageWindowed("m100", enter = 900.0, exit = 1_000.0),
+                    finalStage("final"),
+                ),
+            ),
+        )
+
+        // 500m 帯で予告を 1 回開始し、完了させる。
+        val prediction = scheduler.onTick(tickOf(current = 550.0))
+        scheduler.onSpeechFinished(VoiceAnnouncementId("m500"))
+        // 300m 帯・100m 帯に入っても、グループ消費で予告は二度と鳴らない。
+        val atM300Band = scheduler.onTick(tickOf(current = 750.0))
+        val atM100Band = scheduler.onTick(tickOf(current = 950.0))
+        // 直前で FINAL だけが鳴る。
+        val finalCommand = scheduler.onTick(tickOf(current = 975.0))
+
+        assertEquals(
+            VoiceAnnouncementId("m500"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(prediction).request.stageId,
+        )
+        assertNull(atM300Band)
+        assertNull(atM100Band)
+        assertEquals(
+            VoiceAnnouncementId("final"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(finalCommand).request.stageId,
+        )
+    }
+
+    @Test
     fun `detach 後の tick は何も発話しない`() {
         val scheduler = schedulerOf()
         scheduler.attach(planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0))))
@@ -174,42 +212,62 @@ class VoiceAnnouncementSchedulerTest {
         stages = stages.toList().toImmutableList(),
     )
 
+    // dispatch の状態遷移を検証するテストなので、既定では窓上限を実質無制限にして「トリガ到達後は候補」とする。
     private fun middleStage(
         id: String,
         triggerGeometryMeters: Double,
         category: GuidanceCategory = GuidanceCategory.IntersectionGuide,
-    ): AnnouncementStage = stageOf(id, AnnouncementStageKind.MIDDLE, triggerGeometryMeters, category)
+    ): AnnouncementStage = stageOf(
+        id = id,
+        kind = AnnouncementStageKind.MIDDLE,
+        triggerGeometryMeters = triggerGeometryMeters,
+        category = category,
+        window = AnnouncementDistanceWindow(enterGeometryMeters = triggerGeometryMeters, exitGeometryMeters = Double.MAX_VALUE),
+    )
+
+    // 距離違いの代替候補をタイル状の窓で表す MIDDLE 段。グループ消費の統合テストで使う。
+    private fun middleStageWindowed(
+        id: String,
+        enter: Double,
+        exit: Double,
+        category: GuidanceCategory = GuidanceCategory.IntersectionGuide,
+    ): AnnouncementStage = stageOf(
+        id = id,
+        kind = AnnouncementStageKind.MIDDLE,
+        triggerGeometryMeters = enter,
+        category = category,
+        window = AnnouncementDistanceWindow(enterGeometryMeters = enter, exitGeometryMeters = exit),
+    )
 
     private fun finalStage(
         id: String,
         triggerGeometryMeters: Double = 0.0,
         category: GuidanceCategory = GuidanceCategory.IntersectionGuide,
-    ): AnnouncementStage = stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters, category)
+    ): AnnouncementStage = stageOf(
+        id = id,
+        kind = AnnouncementStageKind.FINAL,
+        triggerGeometryMeters = triggerGeometryMeters,
+        category = category,
+        window = null,
+    )
 
     private fun stageOf(
         id: String,
         kind: AnnouncementStageKind,
         triggerGeometryMeters: Double,
         category: GuidanceCategory,
+        window: AnnouncementDistanceWindow?,
     ): AnnouncementStage = AnnouncementStage(
         id = VoiceAnnouncementId(id),
         kind = kind,
         triggerSourceMeters = triggerGeometryMeters,
         triggerGeometryMeters = triggerGeometryMeters,
-        middleWindow = middleWindowFor(kind, triggerGeometryMeters),
+        middleWindow = window,
         pieces = persistentListOf(
             GuideAnnouncementPiece(text = id, ssml = null, templateRef = null, category = category),
         ),
         categories = persistentSetOf(),
     )
-
-    // dispatch の状態遷移を検証するテストなので、窓上限は実質無制限にして「トリガ到達後は候補」とする。
-    private fun middleWindowFor(kind: AnnouncementStageKind, triggerGeometryMeters: Double): AnnouncementDistanceWindow? =
-        if (kind == AnnouncementStageKind.MIDDLE) {
-            AnnouncementDistanceWindow(enterGeometryMeters = triggerGeometryMeters, exitGeometryMeters = Double.MAX_VALUE)
-        } else {
-            null
-        }
 
     private fun tickOf(
         current: Double,
