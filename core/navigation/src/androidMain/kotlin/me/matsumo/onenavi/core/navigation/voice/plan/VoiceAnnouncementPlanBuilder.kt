@@ -75,15 +75,21 @@ internal class VoiceAnnouncementPlanBuilder {
         val geometryMeters = distanceContext.geometryMetresFor(
             sourceMetres = guidancePoint.distanceFromStartMetres.toDouble(),
         )
+        val groupIdsWithSpecificPredict = groupIdsWithSpecificPredict(uniqueBlocks, finalBlockIndex)
         val stages = mutableListOf<AnnouncementStage>()
 
         for (blockIndex in uniqueBlocks.indices) {
             val block = uniqueBlocks[blockIndex]
+            val isFinalBlock = blockIndex == finalBlockIndex
+            if (!isFinalBlock && !shouldAnnounceAsPredict(block, groupIdsWithSpecificPredict)) {
+                logSkippedPredict(guidancePoint, block)
+                continue
+            }
             val blockStages = buildStagesForBlock(
                 routeId = routeId,
                 guidancePoint = guidancePoint,
                 block = block,
-                isFinalBlock = blockIndex == finalBlockIndex,
+                isFinalBlock = isFinalBlock,
                 gpGeometryMeters = geometryMeters,
                 distanceContext = distanceContext,
                 config = config,
@@ -278,9 +284,65 @@ internal class VoiceAnnouncementPlanBuilder {
         return VoiceAnnouncementId("$routeId#gp$guidancePointIndex#$groupToken")
     }
 
+    /**
+     * 非 FINAL block を「予告 (MIDDLE)」として鳴らすべきかを返す。
+     *
+     * 外部データは同一案内点に、距離手がかり (「○○m先」「まもなく」等) を持つ予告 block と、距離手がかりの
+     * 無い裸の方向句 block (「ポーン右方向です」等、汎用テンプレート) を併せ持つことがある。後者は本来
+     * 案内点直前 (= FINAL) で鳴らすべき文言で、遠方で鳴ると「直前案内が手前で鳴る」誤発話になる。そこで:
+     *
+     * - **距離手がかりが無い裸句**は予告にしない (FINAL でのみ鳴らす)。これが大泉ルートの「ポーン右方向です」を
+     *   500m 手前で鳴らしていた原因への対処。
+     * - **汎用句 (全 piece が generic テンプレート) で、同一 group に距離付きの具体候補がある**場合も予告にしない
+     *   (参照実装の generic-avoidance: 具体句があれば汎用句は鳴らさない)。
+     *
+     * メタ情報 (テンプレート ID) だけでは役割を判別できない (汎用テンプレートが予告にも直前にも現れる) ため、
+     * 距離手がかりはテキストで判定する。手がかり語は [DISTANCE_CUE_MARKERS] で調整できる。
+     */
+    private fun shouldAnnounceAsPredict(
+        block: GuideAnnouncementBlock,
+        groupIdsWithSpecificPredict: Set<Int>,
+    ): Boolean {
+        if (!block.hasDistanceCue()) return false
+        if (block.isGenericPhrase() && block.groupId in groupIdsWithSpecificPredict) return false
+
+        return true
+    }
+
+    /**
+     * 非 FINAL block のうち「距離付きの具体予告 (汎用テンプレートでない)」を持つ group_id の集合を返す。
+     * generic-avoidance ([shouldAnnounceAsPredict]) で、具体候補がある group の汎用句を抑止するのに使う。
+     */
+    private fun groupIdsWithSpecificPredict(
+        blocks: List<GuideAnnouncementBlock>,
+        finalBlockIndex: Int,
+    ): Set<Int> = blocks
+        .filterIndexed { index, block -> index != finalBlockIndex && block.hasDistanceCue() && !block.isGenericPhrase() }
+        .map { block -> block.groupId }
+        .toSet()
+
+    /** block の読み上げテキストに距離 / タイミングの手がかり語が含まれるか (「○○m先」「まもなく」等)。 */
+    private fun GuideAnnouncementBlock.hasDistanceCue(): Boolean {
+        val spokenText = pieces.joinToString(separator = "") { piece -> piece.text }
+
+        return DISTANCE_CUE_MARKERS.any { marker -> spokenText.contains(marker) }
+    }
+
+    /** 全 piece が汎用テンプレート ([GENERIC_TEMPLATE_ID]) の block か。具体的な役割テンプレートを持たない。 */
+    private fun GuideAnnouncementBlock.isGenericPhrase(): Boolean =
+        pieces.isNotEmpty() && pieces.all { piece -> piece.templateRef == GENERIC_TEMPLATE_ID }
+
     // ---------------------------------------------------------------------
     // 診断ログ (issue #41 Phase 3 実機検証用、確認後に撤去予定)
     // ---------------------------------------------------------------------
+
+    /** 予告 (MIDDLE) として鳴らさず畳んだ block を出力する。裸句の遠方発話抑止 / generic-avoidance の確認用。 */
+    private fun logSkippedPredict(guidancePoint: GuidancePoint, block: GuideAnnouncementBlock) {
+        Napier.d(tag = TAG) {
+            "skip-predict gp=${guidancePoint.index} block=${block.id} group=${block.groupId} " +
+                "generic=${block.isGenericPhrase()} cue=${block.hasDistanceCue()} text=\"${spokenTextOf(block)}\""
+        }
+    }
 
     /**
      * 段を組む過程の生値をダンプする。anchor 距離と triggerDistance を出して trigGeo を分解し、
@@ -393,5 +455,18 @@ internal class VoiceAnnouncementPlanBuilder {
 
         /** ブロック分解の診断ログを絞り込むためのタグ。 */
         const val TAG = "VoiceAnnouncementBlock"
+
+        /**
+         * 汎用テンプレート (「指定なし」相当) の template_id。これだけで構成される block は役割が判別できない
+         * 汎用句とみなす。外部データの GuideTemplate.template_id 100 に対応。
+         */
+        const val GENERIC_TEMPLATE_ID = 100
+
+        /**
+         * 「予告 (○○m手前で鳴らす案内)」とみなすための距離 / タイミング手がかり語。これらを 1 つも含まない
+         * block は裸の方向句 (= 案内点直前で鳴らすべき文言) とみなし、遠方の予告にはしない。
+         * テンプレート ID では役割を判別できないためテキストで判定する。実走行ログで調整する想定。
+         */
+        val DISTANCE_CUE_MARKERS = listOf("先", "まもなく")
     }
 }

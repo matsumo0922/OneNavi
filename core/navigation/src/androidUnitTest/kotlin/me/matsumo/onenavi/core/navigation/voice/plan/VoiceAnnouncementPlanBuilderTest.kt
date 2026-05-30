@@ -431,6 +431,68 @@ class VoiceAnnouncementPlanBuilderTest {
         assertEquals(VoiceAnnouncementId("R-1#gp0#signalReason"), stage.id)
     }
 
+    @Test
+    fun `距離手がかりの無い裸の方向句ブロックは予告にせず FINAL のみにする`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // 遠方汎用の裸句 (group=0, 距離手がかり無し), 距離付き予告, 直前の裸句。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("bareFar", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 500, text = "右方向です", groupId = 0, templateRef = 100),
+                buildBlock("predict", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 200, text = "およそ200m先右方向です", groupId = 131, templateRef = 104),
+                buildBlock("direct", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 59, text = "右方向です", groupId = 65, templateRef = 100),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        val stages = plan.targets.single().stages
+        // 裸の遠方汎用句 (bareFar) は予告にされず脱落。距離付き予告 + 直前 (FINAL) の 2 段だけ残る。
+        assertEquals(
+            listOf(VoiceAnnouncementId("R-1#gp0#predict"), VoiceAnnouncementId("R-1#gp0#direct")),
+            stages.map { stage -> stage.id },
+        )
+        assertEquals(AnnouncementStageKind.MIDDLE, stages[0].kind)
+        assertEquals(AnnouncementStageKind.FINAL, stages[1].kind)
+    }
+
+    @Test
+    fun `同一 group に距離付きの具体予告があれば汎用句の予告は抑止する`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // 同一予告 group 131 に「まもなく」(汎用) と「200m先」(具体) があるケース。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("soon", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 250, text = "まもなく右方向です", groupId = 131, templateRef = 100),
+                buildBlock("approx", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 200, text = "およそ200m先右方向です", groupId = 131, templateRef = 104),
+                buildBlock("direct", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 59, text = "右方向です", groupId = 65, templateRef = 100),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        val stages = plan.targets.single().stages
+        // 汎用句「まもなく」(soon) は同 group に具体予告 (approx) があるため抑止され、approx + FINAL の 2 段。
+        assertEquals(
+            listOf(VoiceAnnouncementId("R-1#gp0#approx"), VoiceAnnouncementId("R-1#gp0#direct")),
+            stages.map { stage -> stage.id },
+        )
+    }
+
     private fun buildIdentityDistanceContext(totalMetres: Double): ExtNavRouteDistanceContext =
         buildDistanceContext(sourceTotalMetres = totalMetres, geometryTotalMetres = totalMetres)
 
@@ -496,17 +558,18 @@ class VoiceAnnouncementPlanBuilderTest {
         anchorSourceMetres: Double?,
         triggerDistanceMetres: Int,
         categories: List<GuidanceCategory> = listOf(GuidanceCategory.IntersectionGuide),
-        text: String = id,
+        text: String = "${id}先",
         groupId: Int = 0,
         window: GuideAnnouncementWindow? = null,
+        templateRef: Int? = null,
     ): GuideAnnouncementBlock {
-        // 既定ではブロックごとに別文言 (text = id) とし、dedup で畳まれないようにする。
-        // 重複を再現するテストだけ同一 text を渡す。
+        // 既定ではブロックごとに別文言とし、dedup で畳まれないようにする。距離手がかり ("先") を含めて
+        // 予告として扱われるようにする (裸句抑止のテストだけ手がかりの無い text を明示的に渡す)。
         val pieces = persistentListOf(
             GuideAnnouncementPiece(
                 text = text,
                 ssml = null,
-                templateRef = null,
+                templateRef = templateRef,
                 category = categories.firstOrNull(),
             ),
         )
