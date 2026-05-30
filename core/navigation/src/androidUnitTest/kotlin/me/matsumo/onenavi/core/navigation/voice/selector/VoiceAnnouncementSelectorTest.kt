@@ -4,6 +4,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
+import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementDistanceWindow
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementTarget
@@ -16,48 +17,83 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * [VoiceAnnouncementSelector] の到達判定 / 到達リードタイム判定 / 緊急度選択 / 抑止のテスト。
+ * [VoiceAnnouncementSelector] の距離窓判定 / グループ消費 / 到達リードタイム判定 / 緊急度選択 / 抑止のテスト。
  */
 class VoiceAnnouncementSelectorTest {
 
     @Test
-    fun `中間段は到達後 未処理なら再評価され 既処理になると止まる`() {
+    fun `中間段は距離窓に入った間だけ候補になり 既処理になると止まる`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         val plan = planOf(
             targetOf(
                 index = 0,
                 geometryMeters = 1_000.0,
-                stages = listOf(middleStage("m800", triggerGeometryMeters = 800.0)),
+                stages = listOf(middleStage("m800", enter = 800.0, exit = 1_000.0)),
             ),
         )
 
-        // 到達していなければ出ない。到達後は未処理の間 (level 判定) 選ばれ続ける。
-        val beforeReach = selector.select(plan, tickOf(current = 750.0), emptyState())
-        val reached = selector.select(plan, tickOf(current = 850.0), emptyState())
+        // 窓 [800, 1000) の外なら出ない。窓に入れば未処理の間は選ばれる。
+        val beforeWindow = selector.select(plan, tickOf(current = 750.0), emptyState())
+        val inWindow = selector.select(plan, tickOf(current = 850.0), emptyState())
         // 既処理マークが付いたら止まる。
         val afterProcessed = selector.select(plan, tickOf(current = 900.0), emptyState().withStageFired(VoiceAnnouncementId("m800")))
 
-        assertNull(beforeReach)
-        assertEquals(VoiceAnnouncementId("m800"), reached?.stage?.id)
+        assertNull(beforeWindow)
+        assertEquals(VoiceAnnouncementId("m800"), inWindow?.stage?.id)
         assertNull(afterProcessed)
     }
 
     @Test
-    fun `同 tick で選ばれなかった遠い中間段が次 tick で取りこぼされない`() {
+    fun `距離違いの予告は1機会1つだけ選ばれ グループ消費で距離ラダーが連発しない`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
-        // 近い A (geo 500, trigger 400) と遠い B (geo 1000, trigger 450)。
+        // GP geo 1000。500m / 300m / 100m 手前の予告をタイル状の窓で持ち、最も手前が FINAL。
         val plan = planOf(
-            targetOf(index = 0, geometryMeters = 500.0, stages = listOf(middleStage("near", triggerGeometryMeters = 400.0))),
-            targetOf(index = 1, geometryMeters = 1_000.0, stages = listOf(middleStage("far", triggerGeometryMeters = 450.0))),
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("m500", enter = 500.0, exit = 700.0),
+                    middleStage("m300", enter = 700.0, exit = 900.0),
+                    middleStage("m100", enter = 900.0, exit = 1_000.0),
+                    finalStage("final"),
+                ),
+            ),
         )
 
-        // 同 tick で両方のトリガ距離を跨ぐ。最緊急の near が返る。
-        val firstTick = selector.select(plan, tickOf(current = 480.0), emptyState())
-        // near を処理済みにした次 tick。edge 判定なら far は二度と候補化しないが、level なら拾える。
-        val secondTick = selector.select(plan, tickOf(current = 510.0), emptyState().withStageFired(VoiceAnnouncementId("near")))
+        // 遠くから接近し、最初の発話機会 (500m 帯) で m500 を採る。
+        val firstOpportunity = selector.select(plan, tickOf(current = 550.0), emptyState())
+        // m500 が処理済みになると、以後どの距離帯に入っても MIDDLE はもう鳴らない (グループ消費)。
+        val consumedState = emptyState().withStageFired(VoiceAnnouncementId("m500"))
+        val atM300Band = selector.select(plan, tickOf(current = 750.0), consumedState)
+        val atM100Band = selector.select(plan, tickOf(current = 950.0), consumedState)
+        // FINAL はグループ消費に左右されず、到達リードタイムに達したら鳴る。
+        val finalSelection = selector.select(plan, tickOf(current = 975.0), consumedState)
 
-        assertEquals(VoiceAnnouncementId("near"), firstTick?.stage?.id)
-        assertEquals(VoiceAnnouncementId("far"), secondTick?.stage?.id)
+        assertEquals(VoiceAnnouncementId("m500"), firstOpportunity?.stage?.id)
+        assertNull(atM300Band)
+        assertNull(atM100Band)
+        assertEquals(AnnouncementStageKind.FINAL, finalSelection?.stage?.kind)
+    }
+
+    @Test
+    fun `route 途中から開始すると背後の遠い予告は鳴らず現在の距離帯の予告が選ばれる`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("m500", enter = 500.0, exit = 700.0),
+                    middleStage("m300", enter = 700.0, exit = 900.0),
+                    middleStage("m100", enter = 900.0, exit = 1_000.0),
+                ),
+            ),
+        )
+
+        // 現在地 750m はすでに 500m 帯の窓 [500, 700) を通り過ぎている。300m 帯の予告だけが候補になる。
+        val selection = selector.select(plan, tickOf(current = 750.0), emptyState())
+
+        assertEquals(VoiceAnnouncementId("m300"), selection?.stage?.id)
     }
 
     @Test
@@ -100,47 +136,49 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
-    fun `同一 target で複数の中間段に同時到達したら最も手前の段を選ぶ`() {
+    fun `現在地が属する距離帯の中間段だけが候補になる`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
-        // stages は遠い順 (triggerSource 昇順) で並ぶ前提。2km と 1km 手前に同 tick で到達。
+        // 2km 帯 [3000, 4000) と 1km 帯 [4000, 4900) の予告。
         val plan = planOf(
             targetOf(
                 index = 0,
                 geometryMeters = 5_000.0,
                 stages = listOf(
-                    middleStage("m3000", triggerGeometryMeters = 3_000.0),
-                    middleStage("m4000", triggerGeometryMeters = 4_000.0),
+                    middleStage("m3000", enter = 3_000.0, exit = 4_000.0),
+                    middleStage("m4000", enter = 4_000.0, exit = 4_900.0),
                 ),
             ),
         )
 
-        val selection = selector.select(plan, tickOf(current = 4_200.0), emptyState())
+        val inFarBand = selector.select(plan, tickOf(current = 3_500.0), emptyState())
+        val inNearBand = selector.select(plan, tickOf(current = 4_200.0), emptyState())
 
-        // 両方に到達しているが、より手前 (1km 手前 = triggerGeometry 大) の段を採る。
-        assertEquals(VoiceAnnouncementId("m4000"), selection?.stage?.id)
+        // 距離窓は非重複なので、現在地が入っている帯の段だけが選ばれる。
+        assertEquals(VoiceAnnouncementId("m3000"), inFarBand?.stage?.id)
+        assertEquals(VoiceAnnouncementId("m4000"), inNearBand?.stage?.id)
     }
 
     @Test
-    fun `近い中間段を採った後 追い越された遠い中間段は蒸し返さない`() {
+    fun `中間段を1つ採ったら同一案内地点の他の中間段はグループ消費で蒸し返さない`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         val plan = planOf(
             targetOf(
                 index = 0,
                 geometryMeters = 5_000.0,
                 stages = listOf(
-                    middleStage("m3000", triggerGeometryMeters = 3_000.0),
-                    middleStage("m4000", triggerGeometryMeters = 4_000.0),
+                    middleStage("m3000", enter = 3_000.0, exit = 4_000.0),
+                    middleStage("m4000", enter = 4_000.0, exit = 4_900.0),
                 ),
             ),
         )
 
-        // 1km 手前 (m4000) を採る。
-        val firstTick = selector.select(plan, tickOf(current = 4_200.0), emptyState())
-        // m4000 だけ処理済みにした次 tick。追い越された 2km 手前 (m3000) は蒸し返さない。
-        val afterNear = selector.select(plan, tickOf(current = 4_300.0), emptyState().withStageFired(VoiceAnnouncementId("m4000")))
+        // 2km 帯で m3000 を採る。
+        val firstTick = selector.select(plan, tickOf(current = 3_500.0), emptyState())
+        // m3000 を処理済みにすると、1km 帯に入っても m4000 は鳴らない (グループ消費)。
+        val afterConsumed = selector.select(plan, tickOf(current = 4_200.0), emptyState().withStageFired(VoiceAnnouncementId("m3000")))
 
-        assertEquals(VoiceAnnouncementId("m4000"), firstTick?.stage?.id)
-        assertNull(afterNear)
+        assertEquals(VoiceAnnouncementId("m3000"), firstTick?.stage?.id)
+        assertNull(afterConsumed)
     }
 
     @Test
@@ -150,12 +188,12 @@ class VoiceAnnouncementSelectorTest {
             targetOf(
                 index = 0,
                 geometryMeters = 500.0,
-                stages = listOf(middleStage("near", triggerGeometryMeters = 400.0)),
+                stages = listOf(middleStage("near", enter = 400.0, exit = 500.0)),
             ),
             targetOf(
                 index = 1,
                 geometryMeters = 1_000.0,
-                stages = listOf(middleStage("far", triggerGeometryMeters = 400.0)),
+                stages = listOf(middleStage("far", enter = 400.0, exit = 1_000.0)),
             ),
         )
 
@@ -168,13 +206,13 @@ class VoiceAnnouncementSelectorTest {
     @Test
     fun `手前の案内地点が未発話なら後続地点の段は発話せず 区切り後に解禁される`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
-        // 手前 A (FINAL のみ) と、1km 級手前でトリガする後続 B の早出し段。
+        // 手前 A (FINAL のみ) と、1km 級手前から窓が始まる後続 B の予告。
         val plan = planOf(
             targetOf(index = 0, geometryMeters = 500.0, stages = listOf(finalStage("aFinal"))),
-            targetOf(index = 1, geometryMeters = 2_000.0, stages = listOf(middleStage("bEarly", triggerGeometryMeters = 100.0))),
+            targetOf(index = 1, geometryMeters = 2_000.0, stages = listOf(middleStage("bEarly", enter = 100.0, exit = 2_000.0))),
         )
 
-        // A はまだ直前距離に達せず未発話・未通過。B の早出し段は到達済みだが、手前 A 未区切りなので持ち越し。
+        // A はまだ直前距離に達せず未発話・未通過。B の予告は窓内だが、手前 A 未区切りなので持ち越し。
         val blockedByEarlier = selector.select(plan, tickOf(current = 150.0), emptyState())
         // A の FINAL が発話済みになれば B が解禁される。
         val afterFinal = selector.select(plan, tickOf(current = 150.0), emptyState().withStageFired(VoiceAnnouncementId("aFinal")))
@@ -193,7 +231,7 @@ class VoiceAnnouncementSelectorTest {
             targetOf(
                 index = 0,
                 geometryMeters = 1_000.0,
-                stages = listOf(middleStage("m800", triggerGeometryMeters = 800.0)),
+                stages = listOf(middleStage("m800", enter = 800.0, exit = 1_000.0)),
             ),
         )
 
@@ -213,7 +251,7 @@ class VoiceAnnouncementSelectorTest {
             targetOf(
                 index = 0,
                 geometryMeters = 1_000.0,
-                stages = listOf(middleStage("m800", triggerGeometryMeters = 800.0)),
+                stages = listOf(middleStage("m800", enter = 800.0, exit = 1_000.0)),
             ),
         )
         val passedState = emptyState().withTargetPassed(0)
@@ -230,7 +268,7 @@ class VoiceAnnouncementSelectorTest {
             targetOf(
                 index = 0,
                 geometryMeters = 1_000.0,
-                stages = listOf(middleStage("m800", triggerGeometryMeters = 800.0)),
+                stages = listOf(middleStage("m800", enter = 800.0, exit = 1_000.0)),
             ),
         )
         val firedState = emptyState().withStageFired(VoiceAnnouncementId("m800"))
@@ -287,22 +325,28 @@ class VoiceAnnouncementSelectorTest {
         stages = stages.toImmutableList(),
     )
 
-    private fun middleStage(id: String, triggerGeometryMeters: Double): AnnouncementStage =
-        stageOf(id, AnnouncementStageKind.MIDDLE, triggerGeometryMeters)
+    private fun middleStage(id: String, enter: Double, exit: Double): AnnouncementStage =
+        stageOf(
+            id = id,
+            kind = AnnouncementStageKind.MIDDLE,
+            triggerGeometryMeters = enter,
+            window = AnnouncementDistanceWindow(enterGeometryMeters = enter, exitGeometryMeters = exit),
+        )
 
     private fun finalStage(id: String): AnnouncementStage =
-        stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters = 0.0)
+        stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters = 0.0, window = null)
 
     private fun stageOf(
         id: String,
         kind: AnnouncementStageKind,
         triggerGeometryMeters: Double,
+        window: AnnouncementDistanceWindow?,
     ): AnnouncementStage = AnnouncementStage(
         id = VoiceAnnouncementId(id),
         kind = kind,
         triggerSourceMeters = triggerGeometryMeters,
         triggerGeometryMeters = triggerGeometryMeters,
-        middleWindow = null,
+        middleWindow = window,
         pieces = persistentListOf(),
         categories = persistentSetOf(),
     )

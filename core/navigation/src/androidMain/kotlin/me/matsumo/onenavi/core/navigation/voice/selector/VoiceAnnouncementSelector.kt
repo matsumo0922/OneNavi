@@ -21,11 +21,14 @@ internal class VoiceAnnouncementSelector(
     /**
      * 現 tick で発話すべき距離段を選ぶ。該当が無ければ null。
      *
-     * route が発話不能状態なら常に null。各 target について通過済み・既処理を除外し、トリガ条件
-     * (MIDDLE は到達判定、FINAL は到達リードタイム逆算) を満たす段のうち最緊急を返す。
+     * route が発話不能状態なら常に null。各 target について通過済み・既処理を除外し、発話可能な段
+     * (MIDDLE は距離窓に現在地が入っている段、FINAL は到達リードタイム逆算で発話する段) のうち最緊急を返す。
      *
-     * 1 tick につき最緊急 1 件だけを返す。選ばれなかった候補は既処理マークが付かない限り
-     * 次 tick 以降に再評価されるため、同 tick で複数段を跨いでも取りこぼさない。
+     * 同一案内地点の距離違い MIDDLE 群は「代替候補」で、いずれか 1 段が処理済みになるとグループ全体を消費する
+     * (= 1 発話機会につき 1 つだけ選ぶ)。これにより「500m先 → 300m → 200m → …」と距離違いが連発するのを防ぐ。
+     *
+     * 1 tick につき最緊急 1 件だけを返す。選ばれなかった候補は既処理マークが付かない限り次 tick 以降に
+     * 再評価されるため、同 tick で複数 target を跨いでも取りこぼさない。
      */
     fun select(
         plan: VoiceAnnouncementPlan,
@@ -56,7 +59,8 @@ internal class VoiceAnnouncementSelector(
      * 外部データには、ある案内地点の発話を 1km 級の手前でトリガする bare な段があり、これを放置すると
      * 手前の地点の案内中に後続地点の案内が割り込んでしまう (例: 1 つ目の交差点へ向かう途中で 2 つ目の
      * 交差点の方向だけが鳴る)。route 順を保つため、手前の地点がすべて区切り済みになるまで後続地点は
-     * 候補にしない。区切り済みでなければ後続段は次 tick 以降に持ち越される (level 判定なので落ちない)。
+     * 候補にしない。区切り済みでなければ後続段は次 tick 以降に持ち越され、距離窓内にいる間は候補に残るため、
+     * 区切り後にその時点の距離帯の予告が鳴る (距離窓を通り過ぎた遠い予告は自然に対象外になる)。
      *
      * 「○m先」のような予告は手前の地点が通過する前に鳴るのが正常なため、「通過済み」だけでなく
      * 「その地点の FINAL (= 最寄り段) が発話済み」も区切り済みとみなす。これにより手前の地点の直前案内が
@@ -116,7 +120,9 @@ internal class VoiceAnnouncementSelector(
     /**
      * target 内で発話すべき最緊急の段を選ぶ。該当が無ければ null。
      *
-     * 1 tick の移動量が大きく複数段を同時に跨いだ場合でも、最も緊急な段だけを採用する。
+     * MIDDLE 群は代替候補なので、いずれか 1 段が処理済みなら ([isMiddleGroupConsumed]) 残りは選ばない。
+     * 距離窓は隣接段とタイル状に区切られており同時に複数の MIDDLE が候補になることはないが、FINAL が
+     * 同 tick で発話可能になった場合は緊急度比較で最緊急 (= FINAL) を採用する。
      */
     private fun selectStageForTarget(
         targetIndex: Int,
@@ -124,37 +130,61 @@ internal class VoiceAnnouncementSelector(
         tick: VoiceTick,
         state: VoiceAnnouncementSpeechState,
     ): VoiceAnnouncementSelection? {
+        val middleGroupConsumed = isMiddleGroupConsumed(target, state)
         var best: VoiceAnnouncementSelection? = null
 
         for (stage in target.stages) {
             if (state.isStageFired(stage.id)) continue
-            if (isOvertakenByProcessedStage(target, stage, state)) continue
-            if (!isStageTriggered(stage, target, tick)) continue
+            if (!isStageSpeakable(stage, target, tick, middleGroupConsumed)) continue
 
-            val urgency = VoiceAnnouncementUrgency.of(
-                targetGeometryMeters = target.geometryMeters,
-                currentCumulativeMeters = tick.currentCumulativeMeters,
-                kind = stage.kind,
-            )
-            val candidate = VoiceAnnouncementSelection(
-                targetIndex = targetIndex,
-                targetGeometryMeters = target.geometryMeters,
-                stage = stage,
-                urgency = urgency,
-            )
-
+            val candidate = selectionOf(targetIndex, target, stage, tick)
             best = moreUrgentOf(best, candidate)
         }
 
         return best
     }
 
+    /** target / stage / 現在地から発話候補 (緊急度付き) を作る。 */
+    private fun selectionOf(
+        targetIndex: Int,
+        target: AnnouncementTarget,
+        stage: AnnouncementStage,
+        tick: VoiceTick,
+    ): VoiceAnnouncementSelection {
+        val urgency = VoiceAnnouncementUrgency.of(
+            targetGeometryMeters = target.geometryMeters,
+            currentCumulativeMeters = tick.currentCumulativeMeters,
+            kind = stage.kind,
+        )
+
+        return VoiceAnnouncementSelection(
+            targetIndex = targetIndex,
+            targetGeometryMeters = target.geometryMeters,
+            stage = stage,
+            urgency = urgency,
+        )
+    }
+
+    /**
+     * 同一案内地点の MIDDLE 群が既に消費済みかを返す。
+     *
+     * 距離違いの MIDDLE は代替候補で、発話するのは 1 機会 1 つだけ。いずれかの段が処理済み (発話・割り込み・
+     * キュー投入・空畳み込み) になった時点でグループ全体を消費したとみなし、以後その案内地点の MIDDLE は
+     * 選ばない。FINAL が先に発話された場合も、取り残された MIDDLE が後から鳴らないよう同様に消費扱いにする
+     * (= target 内のいずれかの段が処理済みなら消費)。FINAL 自体は MIDDLE 群の消費に左右されず、自身の
+     * 既処理マークと到達リードタイムだけで判定される。
+     */
+    private fun isMiddleGroupConsumed(
+        target: AnnouncementTarget,
+        state: VoiceAnnouncementSpeechState,
+    ): Boolean = target.stages.any { stage -> state.isStageFired(stage.id) }
+
     /**
      * 2 候補のうち緊急度が高い方を返す。null は「候補なし」を表す。
      *
-     * urgency は target の残距離と種別だけで決まるため、同一 target の同種別段 (複数の MIDDLE 等)
-     * では同値になる。その場合はより手前でトリガする ([AnnouncementStage.triggerGeometryMeters] が
-     * 大きい) 段を採り、一度に複数段を跨いだとき近い予告を選ぶ (例: 2km と 1km を同時に越えたら 1km)。
+     * urgency は target の残距離と種別だけで決まるため、残距離が等しい別 target の同種別段では同値になる。
+     * その場合はより手前でトリガする ([AnnouncementStage.triggerGeometryMeters] が大きい) 段を採る。
+     * 同一 target の MIDDLE 群は距離窓がタイル状で同時には 1 つしか候補化しないため、ここで競合しない。
      */
     private fun moreUrgentOf(
         current: VoiceAnnouncementSelection?,
@@ -177,44 +207,31 @@ internal class VoiceAnnouncementSelector(
         tick.currentCumulativeMeters < target.geometryMeters
 
     /**
-     * 同一 target 内で、この段より手前 (triggerGeometryMeters が大きい) の段が既に処理済みかを返す。
-     *
-     * level 判定では到達済みの未処理段がずっと候補に残るため、より近い予告や FINAL を鳴らした後に
-     * 追い越された古い予告を蒸し返してしまう。これを防ぐための判定。
-     * 例: 2km と 1km の予告で 1km を採ったら、追い越された 2km は捨てる。FINAL は最も手前に来るため、
-     * FINAL を鳴らした後はその target の MIDDLE はすべて追い越し済みとして抑止される。
+     * 段が現 tick で発話可能かを返す。MIDDLE は距離窓に現在地が入っているか、FINAL は到達リードタイムに
+     * 達しているかで判定する。MIDDLE は同一案内地点の群が消費済み ([middleGroupConsumed]) なら発話しない。
      */
-    private fun isOvertakenByProcessedStage(
-        target: AnnouncementTarget,
-        stage: AnnouncementStage,
-        state: VoiceAnnouncementSpeechState,
-    ): Boolean {
-        for (other in target.stages) {
-            if (other.triggerGeometryMeters <= stage.triggerGeometryMeters) continue
-            if (state.isStageFired(other.id)) return true
-        }
-
-        return false
-    }
-
-    /** 段のトリガ条件を満たすかを返す。MIDDLE は到達判定、FINAL は到達リードタイム逆算。 */
-    private fun isStageTriggered(
+    private fun isStageSpeakable(
         stage: AnnouncementStage,
         target: AnnouncementTarget,
         tick: VoiceTick,
+        middleGroupConsumed: Boolean,
     ): Boolean = when (stage.kind) {
-        AnnouncementStageKind.MIDDLE -> isMiddleReached(stage, tick)
+        AnnouncementStageKind.MIDDLE -> !middleGroupConsumed && isMiddleWindowActive(stage, tick)
         AnnouncementStageKind.FINAL -> isFinalReached(target, tick)
     }
 
     /**
-     * 中間段: 現在地がトリガ距離に到達したかを返す (level 判定)。
+     * 中間段: 現在地が距離窓 [enter, exit) に入っているかを返す。
      *
-     * 一度きりの発話保証は呼び出し側の既処理マークが担う。これにより同 tick で複数段を跨いで
-     * 選ばれなかった段も、未処理なら次 tick 以降に再評価される。
+     * 窓は隣接する距離違い候補との間でタイル状に区切られているため、現在地が属する距離帯の候補だけが
+     * 発話可能になる。これにより route 途中から開始したとき背後の遠い予告まで一斉発火する片側しきい値の
+     * 弊害を避ける。窓を持たない (= 想定外の) MIDDLE 段は発話しない。
      */
-    private fun isMiddleReached(stage: AnnouncementStage, tick: VoiceTick): Boolean =
-        stage.triggerGeometryMeters <= tick.currentCumulativeMeters
+    private fun isMiddleWindowActive(stage: AnnouncementStage, tick: VoiceTick): Boolean {
+        val window = stage.middleWindow ?: return false
+
+        return window.contains(tick.currentCumulativeMeters)
+    }
 
     /** 直前段: 現在地が到達リードタイムぶん手前に達したかを返す。手前距離は速度から逆算する。 */
     private fun isFinalReached(target: AnnouncementTarget, tick: VoiceTick): Boolean {

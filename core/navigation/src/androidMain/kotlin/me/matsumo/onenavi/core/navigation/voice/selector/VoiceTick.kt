@@ -5,9 +5,9 @@ import androidx.compose.runtime.Immutable
 /**
  * 発話判定 1 回ぶんの位置入力。実 tick (GPS 更新) のうち、発話レイヤが必要とする最小情報に絞ったもの。
  *
- * 発話トリガは「現在地がトリガ距離に到達したか」の level 判定で行い、一度きりの発話保証は
+ * 発話トリガは現在地スカラと段の距離窓 (MIDDLE) / 到達リードタイム (FINAL) で判定する位置依存の純粋判定で、
+ * 前 tick 値は持たない。一度きりの発話保証や距離違い代替候補の消費は
  * [me.matsumo.onenavi.core.navigation.voice.suppression.VoiceAnnouncementSpeechState] の既処理マークが担う。
- * これにより同 tick で複数段を跨いでも、選ばれなかった段が次 tick で再評価される (前 tick 値は持たない)。
  * snapshot から本型への変換は scheduler (Phase 3) が担い、発話レイヤを route 追従の実装詳細から切り離す。
  *
  * @property currentCumulativeMeters 現 tick の geometry 累積距離 (m)
