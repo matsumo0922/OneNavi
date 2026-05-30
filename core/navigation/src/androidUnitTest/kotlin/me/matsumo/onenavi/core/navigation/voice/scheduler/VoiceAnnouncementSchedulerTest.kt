@@ -169,6 +169,56 @@ class VoiceAnnouncementSchedulerTest {
     }
 
     @Test
+    fun `同一案内地点で発話済みと同じテキストの段は二重発話せず畳む`() {
+        val scheduler = schedulerOf()
+        // 同一 target に、別グループ・別 stage だが render 後テキストが同じ 2 段
+        // (category gate 適用後に同一文言へ畳まれるケースの再現)。
+        scheduler.attach(
+            planOf(
+                targetOf(
+                    index = 0,
+                    geometryMeters = 1_000.0,
+                    middleStageWindowed("first", enter = 500.0, exit = 700.0, groupKey = "grpA", text = "右方向です"),
+                    middleStageWindowed("second", enter = 700.0, exit = 900.0, groupKey = "grpB", text = "右方向です"),
+                ),
+            ),
+        )
+
+        // first を発話開始し完了させる (テキスト "右方向です" を発話確定済みに記録)。
+        val firstCommand = scheduler.onTick(tickOf(current = 550.0))
+        scheduler.onSpeechFinished(VoiceAnnouncementId("first"))
+        // second は別グループで窓に入るが、同一案内地点で同じテキストが発話済みなので抑止 (指示なし)。
+        val secondCommand = scheduler.onTick(tickOf(current = 750.0))
+
+        assertEquals(
+            VoiceAnnouncementId("first"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(firstCommand).request.stageId,
+        )
+        assertNull(secondCommand)
+    }
+
+    @Test
+    fun `別の案内地点なら同じテキストでも発話する`() {
+        val scheduler = schedulerOf()
+        // 連続する別 target が同じ「右方向です」を持つ正当なケース (案内地点が違えば抑止しない)。
+        scheduler.attach(
+            planOf(
+                targetOf(index = 0, geometryMeters = 500.0, middleStageWindowed("t0", enter = 400.0, exit = 500.0, text = "右方向です")),
+                targetOf(index = 1, geometryMeters = 1_500.0, middleStageWindowed("t1", enter = 1_400.0, exit = 1_500.0, text = "右方向です")),
+            ),
+        )
+
+        // target0 で発話・完了。
+        val command0 = scheduler.onTick(tickOf(current = 450.0))
+        scheduler.onSpeechFinished(VoiceAnnouncementId("t0"))
+        // target0 を通過した後 target1 で同じテキストでも別案内なので発話する。
+        val command1 = scheduler.onTick(tickOf(current = 1_450.0))
+
+        assertEquals(VoiceAnnouncementId("t0"), assertIs<VoiceAnnouncementCommand.StartSpeaking>(command0).request.stageId)
+        assertEquals(VoiceAnnouncementId("t1"), assertIs<VoiceAnnouncementCommand.StartSpeaking>(command1).request.stageId)
+    }
+
+    @Test
     fun `detach 後の tick は何も発話しない`() {
         val scheduler = schedulerOf()
         scheduler.attach(planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0))))
@@ -234,6 +284,7 @@ class VoiceAnnouncementSchedulerTest {
         exit: Double,
         category: GuidanceCategory = GuidanceCategory.IntersectionGuide,
         groupKey: String = "grp",
+        text: String = id,
     ): AnnouncementStage = stageOf(
         id = id,
         kind = AnnouncementStageKind.MIDDLE,
@@ -241,6 +292,7 @@ class VoiceAnnouncementSchedulerTest {
         category = category,
         groupKey = groupKey,
         window = AnnouncementDistanceWindow(enterGeometryMeters = enter, exitGeometryMeters = exit),
+        text = text,
     )
 
     private fun finalStage(
@@ -264,6 +316,7 @@ class VoiceAnnouncementSchedulerTest {
         category: GuidanceCategory,
         groupKey: String,
         window: AnnouncementDistanceWindow?,
+        text: String = id,
     ): AnnouncementStage = AnnouncementStage(
         id = VoiceAnnouncementId(id),
         groupKey = VoiceAnnouncementId(groupKey),
@@ -273,7 +326,7 @@ class VoiceAnnouncementSchedulerTest {
         middleWindow = window,
         isGeneric = false,
         pieces = persistentListOf(
-            GuideAnnouncementPiece(text = id, ssml = null, templateRef = null, category = category),
+            GuideAnnouncementPiece(text = text, ssml = null, templateRef = null, category = category),
         ),
         categories = persistentSetOf(),
     )

@@ -339,6 +339,9 @@ class VoiceAnnouncementPlanBuilderTest {
         assertWindowApprox(windowsByTrigger[0], expectedEnter = 3_000.0, expectedExit = 3_060.0)
         assertWindowApprox(windowsByTrigger[1], expectedEnter = 4_000.0, expectedExit = 4_060.0)
         assertWindowApprox(windowsByTrigger[2], expectedEnter = 4_700.0, expectedExit = 4_760.0)
+        // 各 override 段は別 groupKey になる (グループ消費で 1 回に潰れず、指定距離ごとに鳴る)。
+        val middleGroupKeys = middleStages.map { stage -> stage.groupKey }.toSet()
+        assertEquals(3, middleGroupKeys.size)
     }
 
     private fun assertWindowApprox(window: AnnouncementDistanceWindow?, expectedEnter: Double, expectedExit: Double) {

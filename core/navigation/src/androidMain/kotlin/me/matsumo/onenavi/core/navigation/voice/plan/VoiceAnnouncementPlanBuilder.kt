@@ -209,6 +209,7 @@ internal class VoiceAnnouncementPlanBuilder {
             guidancePointIndex = guidancePoint.index,
             groupId = block.groupId,
             blockId = block.id,
+            idSuffix = idSuffix,
         )
         val middleWindow = if (kind == AnnouncementStageKind.MIDDLE) {
             computeMiddleWindow(
@@ -303,16 +304,22 @@ internal class VoiceAnnouncementPlanBuilder {
      * 外部データの group_id が有効ならそれで束ね (予告グループ / 直前グループ等が別 key になり、選抜では
      * グループごとに 1 つだけ鳴らして消費する)。0 は「グループ無し (単独候補)」を表し、参照実装でも束ねない
      * ため block 単位で一意な key にして個別に発話・消費させる (例: 遠方予告「○km先 ○○ 方向」は互いに束ねない)。
+     *
+     * 距離 override で 1 block を複数段に複製したときは [idSuffix] (= 手前距離) を key に含めて段ごとに別 group
+     * にする。同一 group のままだとグループ消費で最初の 1 段しか鳴らず、「指定した距離それぞれで鳴らす」という
+     * override の意図 (= 各距離で 1 回ずつ) を満たせないため。
      */
     private fun groupKeyOf(
         routeId: String,
         guidancePointIndex: Int,
         groupId: Int,
         blockId: String,
+        idSuffix: String?,
     ): VoiceAnnouncementId {
         val groupToken = if (groupId != 0) "grp$groupId" else "grpDefault#$blockId"
+        val full = if (idSuffix == null) groupToken else "$groupToken#$idSuffix"
 
-        return VoiceAnnouncementId("$routeId#gp$guidancePointIndex#$groupToken")
+        return VoiceAnnouncementId("$routeId#gp$guidancePointIndex#$full")
     }
 
     /**
