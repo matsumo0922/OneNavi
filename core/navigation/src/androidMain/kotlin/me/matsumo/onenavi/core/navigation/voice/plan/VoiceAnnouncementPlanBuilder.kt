@@ -69,7 +69,7 @@ internal class VoiceAnnouncementPlanBuilder {
         distanceContext: ExtNavRouteDistanceContext,
         config: VoiceAnnouncementConfig,
     ): AnnouncementTarget? {
-        val validBlocks = guidancePoint.announcementBlocks.filter { block -> block.hasMappableAnchor() }
+        val validBlocks = guidancePoint.announcementBlocks.filter { block -> block.isAnnounceable(guidancePoint) }
 
         if (validBlocks.isEmpty()) return null
 
@@ -358,6 +358,14 @@ internal class VoiceAnnouncementPlanBuilder {
         }
     }
 
+    /** 空の地点名スロットを持つ (無名 advance-notice) ため発話対象から外した block を出力する。 */
+    private fun logSkippedNamelessAdvance(guidancePoint: GuidancePoint, block: GuideAnnouncementBlock) {
+        Napier.d(tag = TAG) {
+            "skip-nameless-advance gp=${guidancePoint.index} block=${block.id} group=${block.groupId} " +
+                "triggerDist=${block.triggerDistanceMetres} text=\"${spokenTextOf(block)}\""
+        }
+    }
+
     /** 素片ごとの templateRef 一覧。ブロックの役割 (テンプレート種別) を切り分けるための診断値。 */
     private fun templateRefsOf(block: GuideAnnouncementBlock): List<Int?> =
         block.pieces.map { piece -> piece.templateRef }
@@ -436,9 +444,25 @@ internal class VoiceAnnouncementPlanBuilder {
         return bestIndex
     }
 
-    /** source 距離を対応付けられる (anchor 距離が非 null の) block かを返す。 */
-    private fun GuideAnnouncementBlock.hasMappableAnchor(): Boolean =
-        anchor.sourceDistanceFromStartMetres != null
+    /**
+     * 発話プランに載せる対象の block かを返す。
+     *
+     * source 距離を対応付けられる (anchor 距離が非 null) ことに加え、**空の announcement スロットを
+     * 持つ block (= 無名 advance-notice) は除外**する。手前で地点名を読み上げる advance-notice
+     * (「(ビープ) <地点名> ○方向です」) は案内点が無名のとき地点名スロットが空になり、外部データ上は
+     * 「(ビープ) ○方向です」という裸の方向句として残る。地点名の無い advance は参照アプリでは発話されず、
+     * 鳴らすと「直前案内が遠方で鳴る」誤発話になるため、データの空スロット ([hasBlankAnnouncementSlot]) で
+     * 落とす (テキスト一致ではなく構造シグナルで判定)。
+     */
+    private fun GuideAnnouncementBlock.isAnnounceable(guidancePoint: GuidancePoint): Boolean {
+        if (anchor.sourceDistanceFromStartMetres == null) return false
+        if (hasBlankAnnouncementSlot) {
+            logSkippedNamelessAdvance(guidancePoint, this)
+            return false
+        }
+
+        return true
+    }
 
     private companion object {
 

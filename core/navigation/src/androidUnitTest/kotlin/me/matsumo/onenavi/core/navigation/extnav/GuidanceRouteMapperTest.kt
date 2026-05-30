@@ -389,6 +389,7 @@ class GuidanceRouteMapperTest {
             groupId = 0,
             window = null,
             pieces = pieces,
+            hasBlankAnnouncementSlot = false,
             categories = categories.toImmutableSet(),
         )
         return GuidancePoint(

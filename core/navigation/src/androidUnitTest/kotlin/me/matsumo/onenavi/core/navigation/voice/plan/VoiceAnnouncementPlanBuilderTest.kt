@@ -546,6 +546,36 @@ class VoiceAnnouncementPlanBuilderTest {
         assertTrue(!approx.isGeneric)
     }
 
+    @Test
+    fun `空の地点名スロットを持つ無名 advance ブロックは発話対象から外す`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // 無名交差点の advance (地点名スロットが空 → 裸の方向句) と、距離付き予告・直前。
+        val guidancePoint = buildGuidancePoint(
+            index = 2,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("namelessAdvance", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 500, text = "ポーン右方向です", groupId = 0, hasBlankAnnouncementSlot = true),
+                buildBlock("predict", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 200, text = "およそ200m先右方向です", groupId = 131, templateRef = 104),
+                buildBlock("direct", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 59, text = "右方向です", groupId = 65, templateRef = 100),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        val stages = plan.targets.single().stages
+        // 空スロットの無名 advance は段にならず、予告 (MIDDLE) + 直前 (FINAL) の 2 段だけ残る。
+        assertEquals(
+            listOf(VoiceAnnouncementId("R-1#gp2#predict"), VoiceAnnouncementId("R-1#gp2#direct")),
+            stages.map { stage -> stage.id },
+        )
+    }
+
     private fun buildIdentityDistanceContext(totalMetres: Double): ExtNavRouteDistanceContext =
         buildDistanceContext(sourceTotalMetres = totalMetres, geometryTotalMetres = totalMetres)
 
@@ -616,6 +646,7 @@ class VoiceAnnouncementPlanBuilderTest {
         window: GuideAnnouncementWindow? = null,
         templateRef: Int? = null,
         tailTemplateRef: Int? = null,
+        hasBlankAnnouncementSlot: Boolean = false,
     ): GuideAnnouncementBlock {
         // 既定ではブロックごとに別文言 ("${id}先") とし、dedup で畳まれないようにする。
         // tailTemplateRef を渡すと先頭 piece と別テンプレートの 2 つ目 piece を足す (先頭 piece 判定の検証用)。
@@ -644,6 +675,7 @@ class VoiceAnnouncementPlanBuilderTest {
             groupId = groupId,
             window = window,
             pieces = pieces,
+            hasBlankAnnouncementSlot = hasBlankAnnouncementSlot,
             categories = categories.toImmutableSet(),
         )
     }
