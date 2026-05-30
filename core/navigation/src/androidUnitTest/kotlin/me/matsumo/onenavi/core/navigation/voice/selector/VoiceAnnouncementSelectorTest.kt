@@ -4,6 +4,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
+import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementDistanceWindow
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementTarget
@@ -16,48 +17,83 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * [VoiceAnnouncementSelector] の到達判定 / 到達リードタイム判定 / 緊急度選択 / 抑止のテスト。
+ * [VoiceAnnouncementSelector] の距離窓判定 / グループ消費 / 到達リードタイム判定 / 緊急度選択 / 抑止のテスト。
  */
 class VoiceAnnouncementSelectorTest {
 
     @Test
-    fun `中間段は到達後 未処理なら再評価され 既処理になると止まる`() {
+    fun `中間段は距離窓に入った間だけ候補になり 既処理になると止まる`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         val plan = planOf(
             targetOf(
                 index = 0,
                 geometryMeters = 1_000.0,
-                stages = listOf(middleStage("m800", triggerGeometryMeters = 800.0)),
+                stages = listOf(middleStage("m800", enter = 800.0, exit = 1_000.0)),
             ),
         )
 
-        // 到達していなければ出ない。到達後は未処理の間 (level 判定) 選ばれ続ける。
-        val beforeReach = selector.select(plan, tickOf(current = 750.0), emptyState())
-        val reached = selector.select(plan, tickOf(current = 850.0), emptyState())
+        // 窓 [800, 1000) の外なら出ない。窓に入れば未処理の間は選ばれる。
+        val beforeWindow = selector.select(plan, tickOf(current = 750.0), emptyState())
+        val inWindow = selector.select(plan, tickOf(current = 850.0), emptyState())
         // 既処理マークが付いたら止まる。
         val afterProcessed = selector.select(plan, tickOf(current = 900.0), emptyState().withStageFired(VoiceAnnouncementId("m800")))
 
-        assertNull(beforeReach)
-        assertEquals(VoiceAnnouncementId("m800"), reached?.stage?.id)
+        assertNull(beforeWindow)
+        assertEquals(VoiceAnnouncementId("m800"), inWindow?.stage?.id)
         assertNull(afterProcessed)
     }
 
     @Test
-    fun `同 tick で選ばれなかった遠い中間段が次 tick で取りこぼされない`() {
+    fun `距離違いの予告は1機会1つだけ選ばれ グループ消費で距離ラダーが連発しない`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
-        // 近い A (geo 500, trigger 400) と遠い B (geo 1000, trigger 450)。
+        // GP geo 1000。500m / 300m / 100m 手前の予告をタイル状の窓で持ち、最も手前が FINAL。
         val plan = planOf(
-            targetOf(index = 0, geometryMeters = 500.0, stages = listOf(middleStage("near", triggerGeometryMeters = 400.0))),
-            targetOf(index = 1, geometryMeters = 1_000.0, stages = listOf(middleStage("far", triggerGeometryMeters = 450.0))),
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("m500", enter = 500.0, exit = 700.0),
+                    middleStage("m300", enter = 700.0, exit = 900.0),
+                    middleStage("m100", enter = 900.0, exit = 1_000.0),
+                    finalStage("final"),
+                ),
+            ),
         )
 
-        // 同 tick で両方のトリガ距離を跨ぐ。最緊急の near が返る。
-        val firstTick = selector.select(plan, tickOf(current = 480.0), emptyState())
-        // near を処理済みにした次 tick。edge 判定なら far は二度と候補化しないが、level なら拾える。
-        val secondTick = selector.select(plan, tickOf(current = 510.0), emptyState().withStageFired(VoiceAnnouncementId("near")))
+        // 遠くから接近し、最初の発話機会 (500m 帯) で m500 を採る。
+        val firstOpportunity = selector.select(plan, tickOf(current = 550.0), emptyState())
+        // m500 が処理済みになると、以後どの距離帯に入っても MIDDLE はもう鳴らない (グループ消費)。
+        val consumedState = emptyState().withStageFired(VoiceAnnouncementId("m500"))
+        val atM300Band = selector.select(plan, tickOf(current = 750.0), consumedState)
+        val atM100Band = selector.select(plan, tickOf(current = 950.0), consumedState)
+        // FINAL はグループ消費に左右されず、到達リードタイムに達したら鳴る。
+        val finalSelection = selector.select(plan, tickOf(current = 975.0), consumedState)
 
-        assertEquals(VoiceAnnouncementId("near"), firstTick?.stage?.id)
-        assertEquals(VoiceAnnouncementId("far"), secondTick?.stage?.id)
+        assertEquals(VoiceAnnouncementId("m500"), firstOpportunity?.stage?.id)
+        assertNull(atM300Band)
+        assertNull(atM100Band)
+        assertEquals(AnnouncementStageKind.FINAL, finalSelection?.stage?.kind)
+    }
+
+    @Test
+    fun `route 途中から開始すると背後の遠い予告は鳴らず現在の距離帯の予告が選ばれる`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("m500", enter = 500.0, exit = 700.0),
+                    middleStage("m300", enter = 700.0, exit = 900.0),
+                    middleStage("m100", enter = 900.0, exit = 1_000.0),
+                ),
+            ),
+        )
+
+        // 現在地 750m はすでに 500m 帯の窓 [500, 700) を通り過ぎている。300m 帯の予告だけが候補になる。
+        val selection = selector.select(plan, tickOf(current = 750.0), emptyState())
+
+        assertEquals(VoiceAnnouncementId("m300"), selection?.stage?.id)
     }
 
     @Test
@@ -100,47 +136,168 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
-    fun `同一 target で複数の中間段に同時到達したら最も手前の段を選ぶ`() {
+    fun `現在地が属する距離帯の中間段だけが候補になる`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
-        // stages は遠い順 (triggerSource 昇順) で並ぶ前提。2km と 1km 手前に同 tick で到達。
+        // 2km 帯 [3000, 4000) と 1km 帯 [4000, 4900) の予告。
         val plan = planOf(
             targetOf(
                 index = 0,
                 geometryMeters = 5_000.0,
                 stages = listOf(
-                    middleStage("m3000", triggerGeometryMeters = 3_000.0),
-                    middleStage("m4000", triggerGeometryMeters = 4_000.0),
+                    middleStage("m3000", enter = 3_000.0, exit = 4_000.0),
+                    middleStage("m4000", enter = 4_000.0, exit = 4_900.0),
                 ),
             ),
         )
 
-        val selection = selector.select(plan, tickOf(current = 4_200.0), emptyState())
+        val inFarBand = selector.select(plan, tickOf(current = 3_500.0), emptyState())
+        val inNearBand = selector.select(plan, tickOf(current = 4_200.0), emptyState())
 
-        // 両方に到達しているが、より手前 (1km 手前 = triggerGeometry 大) の段を採る。
-        assertEquals(VoiceAnnouncementId("m4000"), selection?.stage?.id)
+        // 距離窓は非重複なので、現在地が入っている帯の段だけが選ばれる。
+        assertEquals(VoiceAnnouncementId("m3000"), inFarBand?.stage?.id)
+        assertEquals(VoiceAnnouncementId("m4000"), inNearBand?.stage?.id)
     }
 
     @Test
-    fun `近い中間段を採った後 追い越された遠い中間段は蒸し返さない`() {
+    fun `中間段を1つ採ったら同一案内地点の他の中間段はグループ消費で蒸し返さない`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         val plan = planOf(
             targetOf(
                 index = 0,
                 geometryMeters = 5_000.0,
                 stages = listOf(
-                    middleStage("m3000", triggerGeometryMeters = 3_000.0),
-                    middleStage("m4000", triggerGeometryMeters = 4_000.0),
+                    middleStage("m3000", enter = 3_000.0, exit = 4_000.0),
+                    middleStage("m4000", enter = 4_000.0, exit = 4_900.0),
                 ),
             ),
         )
 
-        // 1km 手前 (m4000) を採る。
-        val firstTick = selector.select(plan, tickOf(current = 4_200.0), emptyState())
-        // m4000 だけ処理済みにした次 tick。追い越された 2km 手前 (m3000) は蒸し返さない。
-        val afterNear = selector.select(plan, tickOf(current = 4_300.0), emptyState().withStageFired(VoiceAnnouncementId("m4000")))
+        // 2km 帯で m3000 を採る。
+        val firstTick = selector.select(plan, tickOf(current = 3_500.0), emptyState())
+        // m3000 を処理済みにすると、1km 帯に入っても m4000 は鳴らない (グループ消費)。
+        val afterConsumed = selector.select(plan, tickOf(current = 4_200.0), emptyState().withStageFired(VoiceAnnouncementId("m3000")))
 
-        assertEquals(VoiceAnnouncementId("m4000"), firstTick?.stage?.id)
-        assertNull(afterNear)
+        assertEquals(VoiceAnnouncementId("m3000"), firstTick?.stage?.id)
+        assertNull(afterConsumed)
+    }
+
+    @Test
+    fun `同一グループで具体候補と汎用候補が同時に窓内なら具体候補を選ぶ`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // 同一 group "grp131" に汎用「まもなく」(窓 [700,1000)) と具体「200m先」(窓 [800,1000))。
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("soon", enter = 700.0, exit = 1_000.0, groupKey = "grp131", isGeneric = true),
+                    middleStage("approx", enter = 800.0, exit = 1_000.0, groupKey = "grp131", isGeneric = false),
+                ),
+            ),
+        )
+
+        // 両方の窓に入る 850m。参照実装の汎用回避で具体「200m先」(approx) を採る。
+        val bothActive = selector.select(plan, tickOf(current = 850.0), emptyState())
+        // 具体候補の窓外 (750m) では汎用「まもなく」しか無いのでそれを採る。
+        val onlyGenericActive = selector.select(plan, tickOf(current = 750.0), emptyState())
+
+        assertEquals(VoiceAnnouncementId("approx"), bothActive?.stage?.id)
+        assertEquals(VoiceAnnouncementId("soon"), onlyGenericActive?.stage?.id)
+    }
+
+    @Test
+    fun `同一グループの MIDDLE が発話済みなら FINAL も消費されて鳴らない`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // 直前グループ "grp65" に、近接窓の MIDDLE と FINAL が同居するケース (group_id 共有)。
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("directMiddle", enter = 930.0, exit = 980.0, groupKey = "grp65"),
+                    finalStage("directFinal", groupKey = "grp65"),
+                ),
+            ),
+        )
+
+        // MIDDLE 未処理なら FINAL は到達リードで鳴れる (緊急度で FINAL が勝つ)。
+        val beforeConsume = selector.select(plan, tickOf(current = 975.0), emptyState())
+        // 同一グループの MIDDLE が処理済みになると、同 groupKey の FINAL も消費されて鳴らない (1 グループ 1 発話)。
+        val afterConsume = selector.select(plan, tickOf(current = 975.0), emptyState().withStageFired(VoiceAnnouncementId("directMiddle")))
+
+        assertEquals(VoiceAnnouncementId("directFinal"), beforeConsume?.stage?.id)
+        assertNull(afterConsume)
+    }
+
+    @Test
+    fun `最寄り FINAL が同グループ消費で鳴らなくても後続 target は区切り済みとして解禁される`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // target0 の直前グループ "grp65" に MIDDLE と最寄り FINAL が同居 (FINAL が nearest = triggerGeo 最大、本番同様)。
+        // 後続 target1 の予告窓は target0 通過より手前で開く。
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("aDirectMiddle", enter = 930.0, exit = 980.0, groupKey = "grp65"),
+                    finalStage("aFinal", groupKey = "grp65", triggerGeometryMeters = 970.0),
+                ),
+            ),
+            targetOf(
+                index = 1,
+                geometryMeters = 2_000.0,
+                stages = listOf(middleStage("bEarly", enter = 900.0, exit = 1_100.0, groupKey = "grp131")),
+            ),
+        )
+
+        // target0 の MIDDLE が処理済み = 直前グループ消費。最寄り FINAL は消費で鳴らない (fired にならない) が、
+        // target0 は区切り済み扱いになり、target0 通過前でも target1 の予告が解禁される。
+        val consumed = emptyState().withStageFired(VoiceAnnouncementId("aDirectMiddle"))
+        val selection = selector.select(plan, tickOf(current = 950.0), consumed)
+
+        assertEquals(VoiceAnnouncementId("bEarly"), selection?.stage?.id)
+    }
+
+    @Test
+    fun `別グループの FINAL は MIDDLE のグループ消費に影響されない`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // 予告グループ "grp131" の MIDDLE と、別グループ "grp65" の直前 FINAL。
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("predict", enter = 500.0, exit = 800.0, groupKey = "grp131"),
+                    finalStage("final", groupKey = "grp65"),
+                ),
+            ),
+        )
+
+        // 予告 (grp131) を消費しても、別グループの FINAL (grp65) は到達リードで鳴る。
+        val consumed = emptyState().withStageFired(VoiceAnnouncementId("predict"))
+        val finalSelection = selector.select(plan, tickOf(current = 975.0), consumed)
+
+        assertEquals(VoiceAnnouncementId("final"), finalSelection?.stage?.id)
+    }
+
+    @Test
+    fun `別グループの汎用候補は汎用回避で消されない`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // 具体候補と汎用候補が別グループなら回避対象外 (回避は同一グループ内だけ)。
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("genericFar", enter = 500.0, exit = 700.0, groupKey = "grpDefault#far", isGeneric = true),
+                ),
+            ),
+        )
+
+        // 別グループの単独汎用候補は窓内なら鳴る。
+        val selection = selector.select(plan, tickOf(current = 600.0), emptyState())
+
+        assertEquals(VoiceAnnouncementId("genericFar"), selection?.stage?.id)
     }
 
     @Test
@@ -150,12 +307,12 @@ class VoiceAnnouncementSelectorTest {
             targetOf(
                 index = 0,
                 geometryMeters = 500.0,
-                stages = listOf(middleStage("near", triggerGeometryMeters = 400.0)),
+                stages = listOf(middleStage("near", enter = 400.0, exit = 500.0)),
             ),
             targetOf(
                 index = 1,
                 geometryMeters = 1_000.0,
-                stages = listOf(middleStage("far", triggerGeometryMeters = 400.0)),
+                stages = listOf(middleStage("far", enter = 400.0, exit = 1_000.0)),
             ),
         )
 
@@ -168,13 +325,13 @@ class VoiceAnnouncementSelectorTest {
     @Test
     fun `手前の案内地点が未発話なら後続地点の段は発話せず 区切り後に解禁される`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
-        // 手前 A (FINAL のみ) と、1km 級手前でトリガする後続 B の早出し段。
+        // 手前 A (FINAL のみ) と、1km 級手前から窓が始まる後続 B の予告。
         val plan = planOf(
             targetOf(index = 0, geometryMeters = 500.0, stages = listOf(finalStage("aFinal"))),
-            targetOf(index = 1, geometryMeters = 2_000.0, stages = listOf(middleStage("bEarly", triggerGeometryMeters = 100.0))),
+            targetOf(index = 1, geometryMeters = 2_000.0, stages = listOf(middleStage("bEarly", enter = 100.0, exit = 2_000.0))),
         )
 
-        // A はまだ直前距離に達せず未発話・未通過。B の早出し段は到達済みだが、手前 A 未区切りなので持ち越し。
+        // A はまだ直前距離に達せず未発話・未通過。B の予告は窓内だが、手前 A 未区切りなので持ち越し。
         val blockedByEarlier = selector.select(plan, tickOf(current = 150.0), emptyState())
         // A の FINAL が発話済みになれば B が解禁される。
         val afterFinal = selector.select(plan, tickOf(current = 150.0), emptyState().withStageFired(VoiceAnnouncementId("aFinal")))
@@ -193,7 +350,7 @@ class VoiceAnnouncementSelectorTest {
             targetOf(
                 index = 0,
                 geometryMeters = 1_000.0,
-                stages = listOf(middleStage("m800", triggerGeometryMeters = 800.0)),
+                stages = listOf(middleStage("m800", enter = 800.0, exit = 1_000.0)),
             ),
         )
 
@@ -213,7 +370,7 @@ class VoiceAnnouncementSelectorTest {
             targetOf(
                 index = 0,
                 geometryMeters = 1_000.0,
-                stages = listOf(middleStage("m800", triggerGeometryMeters = 800.0)),
+                stages = listOf(middleStage("m800", enter = 800.0, exit = 1_000.0)),
             ),
         )
         val passedState = emptyState().withTargetPassed(0)
@@ -230,7 +387,7 @@ class VoiceAnnouncementSelectorTest {
             targetOf(
                 index = 0,
                 geometryMeters = 1_000.0,
-                stages = listOf(middleStage("m800", triggerGeometryMeters = 800.0)),
+                stages = listOf(middleStage("m800", enter = 800.0, exit = 1_000.0)),
             ),
         )
         val firedState = emptyState().withStageFired(VoiceAnnouncementId("m800"))
@@ -287,21 +444,45 @@ class VoiceAnnouncementSelectorTest {
         stages = stages.toImmutableList(),
     )
 
-    private fun middleStage(id: String, triggerGeometryMeters: Double): AnnouncementStage =
-        stageOf(id, AnnouncementStageKind.MIDDLE, triggerGeometryMeters)
+    // 同一案内地点の距離違い候補は既定で同一 groupKey に束ね、グループ消費 (1 グループ 1 発話) を再現する。
+    private fun middleStage(
+        id: String,
+        enter: Double,
+        exit: Double,
+        groupKey: String = "grp",
+        isGeneric: Boolean = false,
+    ): AnnouncementStage =
+        stageOf(
+            id = id,
+            kind = AnnouncementStageKind.MIDDLE,
+            triggerGeometryMeters = enter,
+            groupKey = groupKey,
+            window = AnnouncementDistanceWindow(enterGeometryMeters = enter, exitGeometryMeters = exit),
+            isGeneric = isGeneric,
+        )
 
-    private fun finalStage(id: String): AnnouncementStage =
-        stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters = 0.0)
+    private fun finalStage(
+        id: String,
+        groupKey: String = "final-grp",
+        triggerGeometryMeters: Double = 0.0,
+    ): AnnouncementStage =
+        stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters = triggerGeometryMeters, groupKey = groupKey, window = null)
 
     private fun stageOf(
         id: String,
         kind: AnnouncementStageKind,
         triggerGeometryMeters: Double,
+        groupKey: String,
+        window: AnnouncementDistanceWindow?,
+        isGeneric: Boolean = false,
     ): AnnouncementStage = AnnouncementStage(
         id = VoiceAnnouncementId(id),
+        groupKey = VoiceAnnouncementId(groupKey),
         kind = kind,
         triggerSourceMeters = triggerGeometryMeters,
         triggerGeometryMeters = triggerGeometryMeters,
+        middleWindow = window,
+        isGeneric = isGeneric,
         pieces = persistentListOf(),
         categories = persistentSetOf(),
     )

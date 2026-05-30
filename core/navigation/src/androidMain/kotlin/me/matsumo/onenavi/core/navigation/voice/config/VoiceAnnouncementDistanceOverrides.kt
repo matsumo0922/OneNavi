@@ -31,7 +31,8 @@ internal sealed interface VoiceAnnouncementDistanceOverrides {
     /**
      * category 別に手前距離リストで上書きする設定。
      *
-     * 1 つの block を距離リストの数だけ複製して MIDDLE 段化する (= 1 block → N stage)。
+     * 1 つの block を距離リストの数だけ複製して MIDDLE 段化する (= 1 block → N stage)。複製した各段は
+     * それぞれ別グループとして扱われ、指定した距離ごとに 1 回ずつ鳴る (グループ消費で 1 回に潰れない)。
      * 例: `IntersectionGuide → [2000.0, 1000.0, 300.0]` で 3 段の予告にそろえる。
      * N 社の挙動からは離れるため、OneNavi 独自 UX として明示的に有効化するときだけ使う。
      *

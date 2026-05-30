@@ -386,7 +386,10 @@ class GuidanceRouteMapperTest {
                 sourceBlockIndex = 0,
             ),
             triggerDistanceMetres = 0,
+            groupId = 0,
+            window = null,
             pieces = pieces,
+            hasBlankAnnouncementSlot = false,
             categories = categories.toImmutableSet(),
         )
         return GuidancePoint(

@@ -10,6 +10,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementBlock
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
+import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementWindow
 import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
 import me.matsumo.onenavi.core.navigation.extnav.DistanceAnchor
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDistanceContext
@@ -96,6 +97,113 @@ class VoiceAnnouncementPlanBuilderTest {
             ),
             stages.map { stage -> stage.kind },
         )
+    }
+
+    @Test
+    fun `MIDDLE 段の距離窓は外部データの発話有効範囲から作られ FINAL は窓を持たない`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // 予告候補 (手前 60〜144m) と直前候補 (手前 0〜30m)。GP は source 5000m。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock(
+                    id = "yokoku",
+                    anchorSourceMetres = 5_000.0,
+                    triggerDistanceMetres = 144,
+                    groupId = 100,
+                    window = GuideAnnouncementWindow(nearMetres = 60, farMetres = 144),
+                ),
+                buildBlock(
+                    id = "chokuzen",
+                    anchorSourceMetres = 5_000.0,
+                    triggerDistanceMetres = 30,
+                    groupId = 200,
+                    window = GuideAnnouncementWindow(nearMetres = 0, farMetres = 30),
+                ),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        val stages = plan.targets.single().stages
+        // chokuzen (最小 triggerDistance) が FINAL、yokoku が MIDDLE。
+        val yokoku = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#yokoku") }
+        val chokuzen = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#chokuzen") }
+        assertEquals(AnnouncementStageKind.MIDDLE, yokoku.kind)
+        assertEquals(AnnouncementStageKind.FINAL, chokuzen.kind)
+        // MIDDLE の窓は [anchor - far, anchor - near] = [5000-144, 5000-60] = [4856, 4940] (identity 変換)。
+        assertEquals(AnnouncementDistanceWindow(4_856.0, 4_940.0), yokoku.middleWindow)
+        // FINAL は窓を持たない。
+        assertEquals(null, chokuzen.middleWindow)
+        // group_id が異なる候補は別 groupKey になる。
+        assertEquals(VoiceAnnouncementId("R-1#gp0#grp100"), yokoku.groupKey)
+        assertEquals(VoiceAnnouncementId("R-1#gp0#grp200"), chokuzen.groupKey)
+    }
+
+    @Test
+    fun `距離窓が無い MIDDLE は delta 周りの狭い窓になり案内地点まで広げない`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // window 無し (旧データ互換 / 抽出漏れ)。FINAL を別に置いて b500 を MIDDLE にする。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("b500", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 500),
+                buildBlock("b100", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 100),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        // window が無いので delta(500) 周りの狭い窓 = 残距離 [500-60, 500] → source [4500, 4560] (identity)。
+        // 案内地点 geo 5000 までは広げない (広い窓は遠方トリガ block の誤発話を生むため)。
+        val middleStage = plan.targets.single().stages.first { stage -> stage.kind == AnnouncementStageKind.MIDDLE }
+        assertEquals(AnnouncementDistanceWindow(4_500.0, 4_560.0), middleStage.middleWindow)
+    }
+
+    @Test
+    fun `同一 group_id の距離違い候補は同じ groupKey に束ねられる`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // 同一 group_id 131075 の予告 2 候補 (別文言) と、別 group_id の直前候補。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("soon", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 250, groupId = 131_075, text = "まもなく右方向です"),
+                buildBlock("approx", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 100, groupId = 131_075, text = "およそ100m先右方向です"),
+                buildBlock("bare", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 30, groupId = 65_539, text = "右方向です"),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        val stages = plan.targets.single().stages
+        val soon = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#soon") }
+        val approx = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#approx") }
+        val bare = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#bare") }
+        // 予告 2 候補は同じ groupKey、直前は別 groupKey。
+        assertEquals(soon.groupKey, approx.groupKey)
+        assertEquals(VoiceAnnouncementId("R-1#gp0#grp131075"), soon.groupKey)
+        assertEquals(VoiceAnnouncementId("R-1#gp0#grp65539"), bare.groupKey)
     }
 
     @Test
@@ -223,6 +331,23 @@ class VoiceAnnouncementPlanBuilderTest {
             ),
             middleIdsByTrigger,
         )
+        // 複製段の窓は元 block の triggerDistance ではなく各 override 距離周りに作られる (identity 変換、幅 60)。
+        // 残距離 [override-60, override] → source [anchor-override, anchor-(override-60)]。
+        val windowsByTrigger = middleStages
+            .sortedBy { stage -> stage.triggerSourceMeters }
+            .map { stage -> stage.middleWindow }
+        assertWindowApprox(windowsByTrigger[0], expectedEnter = 3_000.0, expectedExit = 3_060.0)
+        assertWindowApprox(windowsByTrigger[1], expectedEnter = 4_000.0, expectedExit = 4_060.0)
+        assertWindowApprox(windowsByTrigger[2], expectedEnter = 4_700.0, expectedExit = 4_760.0)
+        // 各 override 段は別 groupKey になる (グループ消費で 1 回に潰れず、指定距離ごとに鳴る)。
+        val middleGroupKeys = middleStages.map { stage -> stage.groupKey }.toSet()
+        assertEquals(3, middleGroupKeys.size)
+    }
+
+    private fun assertWindowApprox(window: AnnouncementDistanceWindow?, expectedEnter: Double, expectedExit: Double) {
+        val actual = requireNotNull(window) { "MIDDLE 段は距離窓を持つ" }
+        assertEquals(expectedEnter, actual.enterGeometryMeters, absoluteTolerance = 0.01)
+        assertEquals(expectedExit, actual.exitGeometryMeters, absoluteTolerance = 0.01)
     }
 
     @Test
@@ -324,6 +449,133 @@ class VoiceAnnouncementPlanBuilderTest {
         assertEquals(VoiceAnnouncementId("R-1#gp0#signalReason"), stage.id)
     }
 
+    @Test
+    fun `group_id 0 の候補は束ねず block 単位の grpDefault key になる`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // group_id=0 (グループ無し) の遠方予告 2 つ。参照実装と同じく互いに束ねない。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("far2km", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 2_000, text = "2km先右方向", groupId = 0),
+                buildBlock("far1km", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 1_000, text = "1km先右方向", groupId = 0),
+                buildBlock("direct", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 59, text = "右方向です", groupId = 65),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        val stages = plan.targets.single().stages
+        val far2km = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#far2km") }
+        val far1km = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#far1km") }
+        // group_id=0 同士は別 key (block 単位で一意)。束ねるとどちらか 1 つしか鳴らなくなるため。
+        assertTrue(far2km.groupKey != far1km.groupKey)
+        assertEquals(VoiceAnnouncementId("R-1#gp0#grpDefault#far2km"), far2km.groupKey)
+        assertEquals(VoiceAnnouncementId("R-1#gp0#grpDefault#far1km"), far1km.groupKey)
+    }
+
+    @Test
+    fun `汎用フラグはテンプレート ID から決まり全候補が段として残る`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // 同一予告 group 131 に「まもなく」(汎用 template 100) と「200m先」(具体 template 104)。
+        // 絞り込みは発話時の選抜 (Selector) が担うため、プラン構築では全候補を段として残す。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("soon", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 250, text = "まもなく右方向です", groupId = 131, templateRef = 100),
+                buildBlock("approx", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 200, text = "およそ200m先右方向です", groupId = 131, templateRef = 104),
+                buildBlock("direct", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 59, text = "右方向です", groupId = 65, templateRef = 100),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        val stages = plan.targets.single().stages
+        val soon = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#soon") }
+        val approx = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#approx") }
+        // 全候補が段として残る (脱落させない)。
+        assertEquals(3, stages.size)
+        // 全 piece が template 100 の soon は汎用、template 104 を含む approx は非汎用。
+        assertTrue(soon.isGeneric)
+        assertTrue(!approx.isGeneric)
+        // 同一 group の予告は同じ groupKey。
+        assertEquals(soon.groupKey, approx.groupKey)
+    }
+
+    @Test
+    fun `汎用フラグは先頭 piece のテンプレートで決まる`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // 先頭 piece が汎用(100)で後続に別テンプレ(416)が混ざる予告と、先頭が具体(104)の予告。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("soonMixed", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 250, text = "まもなく右方向です", groupId = 131, templateRef = 100, tailTemplateRef = 416),
+                buildBlock("approx", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 200, text = "およそ200m先右方向です", groupId = 131, templateRef = 104, tailTemplateRef = 416),
+                buildBlock("direct", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 59, text = "右方向です", groupId = 65, templateRef = 100),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        val stages = plan.targets.single().stages
+        val soonMixed = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#soonMixed") }
+        val approx = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#approx") }
+        // 後続 piece に別テンプレが混ざっても、先頭 piece が 100 の soonMixed は汎用。
+        assertTrue(soonMixed.isGeneric)
+        // 先頭が 104 の approx は後続が混ざっても非汎用。
+        assertTrue(!approx.isGeneric)
+    }
+
+    @Test
+    fun `空の地点名スロットを持つ無名 advance ブロックは発話対象から外す`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // 無名交差点の advance (地点名スロットが空 → 裸の方向句) と、距離付き予告・直前。
+        val guidancePoint = buildGuidancePoint(
+            index = 2,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("namelessAdvance", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 500, text = "ポーン右方向です", groupId = 0, hasBlankAnnouncementSlot = true),
+                buildBlock("predict", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 200, text = "およそ200m先右方向です", groupId = 131, templateRef = 104),
+                buildBlock("direct", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 59, text = "右方向です", groupId = 65, templateRef = 100),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        val stages = plan.targets.single().stages
+        // 空スロットの無名 advance は段にならず、予告 (MIDDLE) + 直前 (FINAL) の 2 段だけ残る。
+        assertEquals(
+            listOf(VoiceAnnouncementId("R-1#gp2#predict"), VoiceAnnouncementId("R-1#gp2#direct")),
+            stages.map { stage -> stage.id },
+        )
+    }
+
     private fun buildIdentityDistanceContext(totalMetres: Double): ExtNavRouteDistanceContext =
         buildDistanceContext(sourceTotalMetres = totalMetres, geometryTotalMetres = totalMetres)
 
@@ -389,18 +641,29 @@ class VoiceAnnouncementPlanBuilderTest {
         anchorSourceMetres: Double?,
         triggerDistanceMetres: Int,
         categories: List<GuidanceCategory> = listOf(GuidanceCategory.IntersectionGuide),
-        text: String = id,
+        text: String = "${id}先",
+        groupId: Int = 0,
+        window: GuideAnnouncementWindow? = null,
+        templateRef: Int? = null,
+        tailTemplateRef: Int? = null,
+        hasBlankAnnouncementSlot: Boolean = false,
     ): GuideAnnouncementBlock {
-        // 既定ではブロックごとに別文言 (text = id) とし、dedup で畳まれないようにする。
-        // 重複を再現するテストだけ同一 text を渡す。
-        val pieces = persistentListOf(
-            GuideAnnouncementPiece(
-                text = text,
-                ssml = null,
-                templateRef = null,
-                category = categories.firstOrNull(),
-            ),
+        // 既定ではブロックごとに別文言 ("${id}先") とし、dedup で畳まれないようにする。
+        // tailTemplateRef を渡すと先頭 piece と別テンプレートの 2 つ目 piece を足す (先頭 piece 判定の検証用)。
+        val headPiece = GuideAnnouncementPiece(
+            text = text,
+            ssml = null,
+            templateRef = templateRef,
+            category = categories.firstOrNull(),
         )
+        val pieces = if (tailTemplateRef == null) {
+            persistentListOf(headPiece)
+        } else {
+            persistentListOf(
+                headPiece,
+                GuideAnnouncementPiece(text = "$text-tail", ssml = null, templateRef = tailTemplateRef, category = null),
+            )
+        }
         return GuideAnnouncementBlock(
             id = id,
             anchor = ExternalGuideAnchor(
@@ -409,7 +672,10 @@ class VoiceAnnouncementPlanBuilderTest {
                 sourceBlockIndex = null,
             ),
             triggerDistanceMetres = triggerDistanceMetres,
+            groupId = groupId,
+            window = window,
             pieces = pieces,
+            hasBlankAnnouncementSlot = hasBlankAnnouncementSlot,
             categories = categories.toImmutableSet(),
         )
     }

@@ -8,6 +8,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementCategoryGate
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
+import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementDistanceWindow
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementTarget
@@ -130,6 +131,94 @@ class VoiceAnnouncementSchedulerTest {
     }
 
     @Test
+    fun `距離違いの予告は連発せず 予告1回と直前1回に収まる`() {
+        val scheduler = schedulerOf()
+        // GP geo 1000。500m / 300m / 100m 帯の予告 (タイル窓) と、直前の FINAL。
+        scheduler.attach(
+            planOf(
+                targetOf(
+                    index = 0,
+                    geometryMeters = 1_000.0,
+                    middleStageWindowed("m500", enter = 500.0, exit = 700.0),
+                    middleStageWindowed("m300", enter = 700.0, exit = 900.0),
+                    middleStageWindowed("m100", enter = 900.0, exit = 1_000.0),
+                    finalStage("final"),
+                ),
+            ),
+        )
+
+        // 500m 帯で予告を 1 回開始し、完了させる。
+        val prediction = scheduler.onTick(tickOf(current = 550.0))
+        scheduler.onSpeechFinished(VoiceAnnouncementId("m500"))
+        // 300m 帯・100m 帯に入っても、グループ消費で予告は二度と鳴らない。
+        val atM300Band = scheduler.onTick(tickOf(current = 750.0))
+        val atM100Band = scheduler.onTick(tickOf(current = 950.0))
+        // 直前で FINAL だけが鳴る。
+        val finalCommand = scheduler.onTick(tickOf(current = 975.0))
+
+        assertEquals(
+            VoiceAnnouncementId("m500"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(prediction).request.stageId,
+        )
+        assertNull(atM300Band)
+        assertNull(atM100Band)
+        assertEquals(
+            VoiceAnnouncementId("final"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(finalCommand).request.stageId,
+        )
+    }
+
+    @Test
+    fun `同一案内地点で発話済みと同じテキストの段は二重発話せず畳む`() {
+        val scheduler = schedulerOf()
+        // 同一 target に、別グループ・別 stage だが render 後テキストが同じ 2 段
+        // (category gate 適用後に同一文言へ畳まれるケースの再現)。
+        scheduler.attach(
+            planOf(
+                targetOf(
+                    index = 0,
+                    geometryMeters = 1_000.0,
+                    middleStageWindowed("first", enter = 500.0, exit = 700.0, groupKey = "grpA", text = "右方向です"),
+                    middleStageWindowed("second", enter = 700.0, exit = 900.0, groupKey = "grpB", text = "右方向です"),
+                ),
+            ),
+        )
+
+        // first を発話開始し完了させる (テキスト "右方向です" を発話確定済みに記録)。
+        val firstCommand = scheduler.onTick(tickOf(current = 550.0))
+        scheduler.onSpeechFinished(VoiceAnnouncementId("first"))
+        // second は別グループで窓に入るが、同一案内地点で同じテキストが発話済みなので抑止 (指示なし)。
+        val secondCommand = scheduler.onTick(tickOf(current = 750.0))
+
+        assertEquals(
+            VoiceAnnouncementId("first"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(firstCommand).request.stageId,
+        )
+        assertNull(secondCommand)
+    }
+
+    @Test
+    fun `別の案内地点なら同じテキストでも発話する`() {
+        val scheduler = schedulerOf()
+        // 連続する別 target が同じ「右方向です」を持つ正当なケース (案内地点が違えば抑止しない)。
+        scheduler.attach(
+            planOf(
+                targetOf(index = 0, geometryMeters = 500.0, middleStageWindowed("t0", enter = 400.0, exit = 500.0, text = "右方向です")),
+                targetOf(index = 1, geometryMeters = 1_500.0, middleStageWindowed("t1", enter = 1_400.0, exit = 1_500.0, text = "右方向です")),
+            ),
+        )
+
+        // target0 で発話・完了。
+        val command0 = scheduler.onTick(tickOf(current = 450.0))
+        scheduler.onSpeechFinished(VoiceAnnouncementId("t0"))
+        // target0 を通過した後 target1 で同じテキストでも別案内なので発話する。
+        val command1 = scheduler.onTick(tickOf(current = 1_450.0))
+
+        assertEquals(VoiceAnnouncementId("t0"), assertIs<VoiceAnnouncementCommand.StartSpeaking>(command0).request.stageId)
+        assertEquals(VoiceAnnouncementId("t1"), assertIs<VoiceAnnouncementCommand.StartSpeaking>(command1).request.stageId)
+    }
+
+    @Test
     fun `detach 後の tick は何も発話しない`() {
         val scheduler = schedulerOf()
         scheduler.attach(planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0))))
@@ -173,30 +262,71 @@ class VoiceAnnouncementSchedulerTest {
         stages = stages.toList().toImmutableList(),
     )
 
+    // dispatch の状態遷移を検証するテストなので、既定では窓上限を実質無制限にして「トリガ到達後は候補」とする。
     private fun middleStage(
         id: String,
         triggerGeometryMeters: Double,
         category: GuidanceCategory = GuidanceCategory.IntersectionGuide,
-    ): AnnouncementStage = stageOf(id, AnnouncementStageKind.MIDDLE, triggerGeometryMeters, category)
+        groupKey: String = "grp",
+    ): AnnouncementStage = stageOf(
+        id = id,
+        kind = AnnouncementStageKind.MIDDLE,
+        triggerGeometryMeters = triggerGeometryMeters,
+        category = category,
+        groupKey = groupKey,
+        window = AnnouncementDistanceWindow(enterGeometryMeters = triggerGeometryMeters, exitGeometryMeters = Double.MAX_VALUE),
+    )
+
+    // 距離違いの代替候補をタイル状の窓で表す MIDDLE 段。同一 groupKey で束ね、グループ消費の統合テストで使う。
+    private fun middleStageWindowed(
+        id: String,
+        enter: Double,
+        exit: Double,
+        category: GuidanceCategory = GuidanceCategory.IntersectionGuide,
+        groupKey: String = "grp",
+        text: String = id,
+    ): AnnouncementStage = stageOf(
+        id = id,
+        kind = AnnouncementStageKind.MIDDLE,
+        triggerGeometryMeters = enter,
+        category = category,
+        groupKey = groupKey,
+        window = AnnouncementDistanceWindow(enterGeometryMeters = enter, exitGeometryMeters = exit),
+        text = text,
+    )
 
     private fun finalStage(
         id: String,
         triggerGeometryMeters: Double = 0.0,
         category: GuidanceCategory = GuidanceCategory.IntersectionGuide,
-    ): AnnouncementStage = stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters, category)
+        groupKey: String = "final-grp",
+    ): AnnouncementStage = stageOf(
+        id = id,
+        kind = AnnouncementStageKind.FINAL,
+        triggerGeometryMeters = triggerGeometryMeters,
+        category = category,
+        groupKey = groupKey,
+        window = null,
+    )
 
     private fun stageOf(
         id: String,
         kind: AnnouncementStageKind,
         triggerGeometryMeters: Double,
         category: GuidanceCategory,
+        groupKey: String,
+        window: AnnouncementDistanceWindow?,
+        text: String = id,
     ): AnnouncementStage = AnnouncementStage(
         id = VoiceAnnouncementId(id),
+        groupKey = VoiceAnnouncementId(groupKey),
         kind = kind,
         triggerSourceMeters = triggerGeometryMeters,
         triggerGeometryMeters = triggerGeometryMeters,
+        middleWindow = window,
+        isGeneric = false,
         pieces = persistentListOf(
-            GuideAnnouncementPiece(text = id, ssml = null, templateRef = null, category = category),
+            GuideAnnouncementPiece(text = text, ssml = null, templateRef = null, category = category),
         ),
         categories = persistentSetOf(),
     )

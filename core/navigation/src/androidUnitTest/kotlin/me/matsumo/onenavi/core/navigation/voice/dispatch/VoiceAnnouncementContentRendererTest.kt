@@ -122,9 +122,12 @@ class VoiceAnnouncementContentRendererTest {
 
     private fun stageOf(vararg pieces: GuideAnnouncementPiece): AnnouncementStage = AnnouncementStage(
         id = VoiceAnnouncementId("stage"),
+        groupKey = VoiceAnnouncementId("group"),
         kind = AnnouncementStageKind.MIDDLE,
         triggerSourceMeters = 0.0,
         triggerGeometryMeters = 0.0,
+        middleWindow = null,
+        isGeneric = false,
         pieces = pieces.toList().toImmutableList(),
         categories = persistentSetOf(),
     )
