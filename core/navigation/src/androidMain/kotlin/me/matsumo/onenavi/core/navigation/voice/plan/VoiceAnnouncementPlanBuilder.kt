@@ -2,7 +2,6 @@ package me.matsumo.onenavi.core.navigation.voice.plan
 
 import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.toImmutableList
-import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementBlock
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDistanceContext
@@ -57,8 +56,12 @@ internal class VoiceAnnouncementPlanBuilder {
      *
      * source 距離を対応付けられない block (anchor 距離が null) は除外する。外部データは同一 GP に
      * まったく同じ発話内容の block を複数距離で重複させて持つため、発話内容が同じ block は
-     * 案内点に近い 1 つに畳む ([dedupBlocksByPieces])。残った block のうち最も手前 (最小
+     * 案内点に近い 1 つに畳む ([dedupBlocksBySpokenText])。残った block のうち最も手前 (最小
      * triggerDistanceMetres) の段を FINAL、それ以外を MIDDLE として扱う。
+     *
+     * 距離違い候補のうち「どれを鳴らすか」はプラン構築では絞り込まず、発話時に group_id・距離窓・
+     * テンプレート種別から選抜する (外部ナビ API 参照実装と同じデータ駆動方式)。ここでは全 block を
+     * 段に変換し、選抜に必要な groupKey / 距離窓 / 汎用フラグを付与するだけに留める。
      */
     private fun buildTarget(
         routeId: String,
@@ -75,16 +78,11 @@ internal class VoiceAnnouncementPlanBuilder {
         val geometryMeters = distanceContext.geometryMetresFor(
             sourceMetres = guidancePoint.distanceFromStartMetres.toDouble(),
         )
-        val groupIdsWithSpecificPredict = groupIdsWithSpecificPredict(uniqueBlocks, finalBlockIndex)
         val stages = mutableListOf<AnnouncementStage>()
 
         for (blockIndex in uniqueBlocks.indices) {
             val block = uniqueBlocks[blockIndex]
             val isFinalBlock = blockIndex == finalBlockIndex
-            if (!isFinalBlock && !shouldAnnounceAsPredict(block, groupIdsWithSpecificPredict)) {
-                logSkippedPredict(guidancePoint, block)
-                continue
-            }
             val blockStages = buildStagesForBlock(
                 routeId = routeId,
                 guidancePoint = guidancePoint,
@@ -205,6 +203,7 @@ internal class VoiceAnnouncementPlanBuilder {
             routeId = routeId,
             guidancePointIndex = guidancePoint.index,
             groupId = block.groupId,
+            blockId = block.id,
         )
         val middleWindow = if (kind == AnnouncementStageKind.MIDDLE) {
             computeMiddleWindow(
@@ -223,6 +222,7 @@ internal class VoiceAnnouncementPlanBuilder {
             kind = kind,
             triggerSourceMeters = triggerSourceMeters,
             triggerGeometryMeters = triggerGeometryMeters,
+            middleWindow = middleWindow,
         )
 
         return AnnouncementStage(
@@ -232,6 +232,7 @@ internal class VoiceAnnouncementPlanBuilder {
             triggerSourceMeters = triggerSourceMeters,
             triggerGeometryMeters = triggerGeometryMeters,
             middleWindow = middleWindow,
+            isGeneric = block.isGenericBlock(),
             pieces = block.pieces,
             categories = block.categories,
         )
@@ -240,9 +241,15 @@ internal class VoiceAnnouncementPlanBuilder {
     /**
      * MIDDLE 段の発話有効範囲 (距離窓) を geometry 累積距離で求める。
      *
-     * 外部データに発話有効範囲 ([GuideAnnouncementBlock.window]、案内点までの残距離) があれば、それを
-     * source→geometry 変換して窓にする (案内点に近い端 → 窓の終端、遠い端 → 窓の開始)。範囲が取れない
-     * block は暫定的に「自分のトリガ点から案内点まで」を窓とする (同一 group のグループ消費で 1 回に絞られる)。
+     * 外部データに発話有効範囲 ([GuideAnnouncementBlock.window]、案内点までの残距離 near/far) があれば
+     * それを使い、無ければ名目トリガ距離 (delta) 周りの狭い帯 ([FALLBACK_WINDOW_METERS] 幅) を代用する。
+     * いずれも案内点までの残距離 [near, far] を source 距離へ直し、source→geometry 変換して窓にする
+     * (残距離が遠い端 → 窓の開始、近い端 → 窓の終端)。
+     *
+     * **発話有効範囲が無い block を「自分のトリガ点から案内点まで」の広い窓にしてはならない**。広い窓は
+     * 遠方トリガ block を案内点までずっと発話可能にし、手前の案内地点の直後に遠方の予告が鳴る誤発話
+     * (例: 大泉ルートで裸の「右方向です」が 300m 手前で鳴る) を生むため。狭い帯なら、その帯が手前の
+     * 案内地点より遠いときは route 順ゲートで解禁前に通り過ぎ、自然に鳴らない。
      */
     private fun computeMiddleWindow(
         block: GuideAnnouncementBlock,
@@ -250,17 +257,22 @@ internal class VoiceAnnouncementPlanBuilder {
         gpGeometryMeters: Double,
         distanceContext: ExtNavRouteDistanceContext,
     ): AnnouncementDistanceWindow {
-        val window = block.window
         val anchorSource = block.anchor.sourceDistanceFromStartMetres
-        if (window == null || anchorSource == null) {
-            return AnnouncementDistanceWindow(
-                enterGeometryMeters = triggerGeometryMeters,
-                exitGeometryMeters = gpGeometryMeters,
-            )
+            ?: return AnnouncementDistanceWindow(triggerGeometryMeters, gpGeometryMeters)
+
+        val window = block.window
+        val nearRemainingMeters: Int
+        val farRemainingMeters: Int
+        if (window != null) {
+            nearRemainingMeters = window.nearMetres
+            farRemainingMeters = window.farMetres
+        } else {
+            farRemainingMeters = block.triggerDistanceMetres
+            nearRemainingMeters = (block.triggerDistanceMetres - FALLBACK_WINDOW_METERS).coerceAtLeast(0)
         }
 
-        val enterSourceMeters = anchorSource - window.farMetres
-        val exitSourceMeters = anchorSource - window.nearMetres
+        val enterSourceMeters = anchorSource - farRemainingMeters
+        val exitSourceMeters = anchorSource - nearRemainingMeters
 
         return AnnouncementDistanceWindow(
             enterGeometryMeters = distanceContext.geometryMetresFor(enterSourceMeters),
@@ -271,82 +283,32 @@ internal class VoiceAnnouncementPlanBuilder {
     /**
      * 同一案内点内で距離違い候補を束ねる groupKey を組み立てる。
      *
-     * 外部データの group_id が有効ならそれで束ね (予告グループ / 直前グループ等が別 key になる)、
-     * 0 (未設定) のときは案内点単位の既定グループに束ねる。
+     * 外部データの group_id が有効ならそれで束ね (予告グループ / 直前グループ等が別 key になり、選抜では
+     * グループごとに 1 つだけ鳴らして消費する)。0 は「グループ無し (単独候補)」を表し、参照実装でも束ねない
+     * ため block 単位で一意な key にして個別に発話・消費させる (例: 遠方予告「○km先 ○○ 方向」は互いに束ねない)。
      */
     private fun groupKeyOf(
         routeId: String,
         guidancePointIndex: Int,
         groupId: Int,
+        blockId: String,
     ): VoiceAnnouncementId {
-        val groupToken = if (groupId != 0) "grp$groupId" else "grpDefault"
+        val groupToken = if (groupId != 0) "grp$groupId" else "grpDefault#$blockId"
 
         return VoiceAnnouncementId("$routeId#gp$guidancePointIndex#$groupToken")
     }
 
-    /**
-     * 非 FINAL block を「予告 (MIDDLE)」として鳴らすべきかを返す。
-     *
-     * 外部データは同一案内点に、距離手がかり (「○○m先」「まもなく」等) を持つ予告 block と、距離手がかりの
-     * 無い裸の方向句 block (「ポーン右方向です」等、汎用テンプレート) を併せ持つことがある。後者は本来
-     * 案内点直前 (= FINAL) で鳴らすべき文言で、遠方で鳴ると「直前案内が手前で鳴る」誤発話になる。そこで:
-     *
-     * - **距離手がかりが無い裸句**は予告にしない (FINAL でのみ鳴らす)。これが大泉ルートの「ポーン右方向です」を
-     *   500m 手前で鳴らしていた原因への対処。
-     * - **汎用句 (全 piece が generic テンプレート) で、同一 group に距離付きの具体候補がある**場合も予告にしない
-     *   (参照実装の generic-avoidance: 具体句があれば汎用句は鳴らさない)。
-     *
-     * メタ情報 (テンプレート ID) だけでは役割を判別できない (汎用テンプレートが予告にも直前にも現れる) ため、
-     * 距離手がかりはテキストで判定する。手がかり語は [DISTANCE_CUE_MARKERS] で調整できる。
-     */
-    private fun shouldAnnounceAsPredict(
-        block: GuideAnnouncementBlock,
-        groupIdsWithSpecificPredict: Set<Int>,
-    ): Boolean {
-        if (!block.hasDistanceCue()) return false
-        if (block.isGenericPhrase() && block.groupId in groupIdsWithSpecificPredict) return false
-
-        return true
-    }
-
-    /**
-     * 非 FINAL block のうち「距離付きの具体予告 (汎用テンプレートでない)」を持つ group_id の集合を返す。
-     * generic-avoidance ([shouldAnnounceAsPredict]) で、具体候補がある group の汎用句を抑止するのに使う。
-     */
-    private fun groupIdsWithSpecificPredict(
-        blocks: List<GuideAnnouncementBlock>,
-        finalBlockIndex: Int,
-    ): Set<Int> = blocks
-        .filterIndexed { index, block -> index != finalBlockIndex && block.hasDistanceCue() && !block.isGenericPhrase() }
-        .map { block -> block.groupId }
-        .toSet()
-
-    /** block の読み上げテキストに距離 / タイミングの手がかり語が含まれるか (「○○m先」「まもなく」等)。 */
-    private fun GuideAnnouncementBlock.hasDistanceCue(): Boolean {
-        val spokenText = pieces.joinToString(separator = "") { piece -> piece.text }
-
-        return DISTANCE_CUE_MARKERS.any { marker -> spokenText.contains(marker) }
-    }
-
-    /** 全 piece が汎用テンプレート ([GENERIC_TEMPLATE_ID]) の block か。具体的な役割テンプレートを持たない。 */
-    private fun GuideAnnouncementBlock.isGenericPhrase(): Boolean =
+    /** 全 piece が汎用テンプレート ([GENERIC_TEMPLATE_ID]) の block か。選抜時の汎用回避フラグに使う。 */
+    private fun GuideAnnouncementBlock.isGenericBlock(): Boolean =
         pieces.isNotEmpty() && pieces.all { piece -> piece.templateRef == GENERIC_TEMPLATE_ID }
 
     // ---------------------------------------------------------------------
     // 診断ログ (issue #41 Phase 3 実機検証用、確認後に撤去予定)
     // ---------------------------------------------------------------------
 
-    /** 予告 (MIDDLE) として鳴らさず畳んだ block を出力する。裸句の遠方発話抑止 / generic-avoidance の確認用。 */
-    private fun logSkippedPredict(guidancePoint: GuidancePoint, block: GuideAnnouncementBlock) {
-        Napier.d(tag = TAG) {
-            "skip-predict gp=${guidancePoint.index} block=${block.id} group=${block.groupId} " +
-                "generic=${block.isGenericPhrase()} cue=${block.hasDistanceCue()} text=\"${spokenTextOf(block)}\""
-        }
-    }
-
     /**
-     * 段を組む過程の生値をダンプする。anchor 距離と triggerDistance を出して trigGeo を分解し、
-     * 「自地点から遠すぎる位置でトリガする block」がどう生成されたかを切り分けるため。
+     * 段を組む過程の生値をダンプする。anchor 距離・triggerDistance に加え group_id・距離窓を出して、
+     * 「どの距離帯でどの候補が発話可能になるか」「遠すぎる位置でトリガする block」を切り分けるため。
      */
     private fun logBlockBreakdown(
         guidancePoint: GuidancePoint,
@@ -354,13 +316,15 @@ internal class VoiceAnnouncementPlanBuilder {
         kind: AnnouncementStageKind,
         triggerSourceMeters: Double,
         triggerGeometryMeters: Double,
+        middleWindow: AnnouncementDistanceWindow?,
     ) {
         Napier.d(tag = TAG) {
-            "gp=${guidancePoint.index} block=${block.id} kind=$kind " +
+            "gp=${guidancePoint.index} block=${block.id} kind=$kind group=${block.groupId} " +
+                "dataWin=${block.window} stageWin=$middleWindow generic=${block.isGenericBlock()} " +
                 "srcGp=${block.anchor.sourceGuidancePointIndex} srcBlockIdx=${block.anchor.sourceBlockIndex} " +
                 "anchorSrc=${block.anchor.sourceDistanceFromStartMetres} triggerDist=${block.triggerDistanceMetres} " +
                 "trigSrc=$triggerSourceMeters trigGeo=$triggerGeometryMeters " +
-                "cats=${block.categories} pieceTmpl=${templateRefsOf(block)} pieceCats=${pieceCategoriesOf(block)} " +
+                "cats=${block.categories} pieceTmpl=${templateRefsOf(block)} " +
                 "text=\"${spokenTextOf(block)}\""
         }
     }
@@ -368,10 +332,6 @@ internal class VoiceAnnouncementPlanBuilder {
     /** 素片ごとの templateRef 一覧。ブロックの役割 (テンプレート種別) を切り分けるための診断値。 */
     private fun templateRefsOf(block: GuideAnnouncementBlock): List<Int?> =
         block.pieces.map { piece -> piece.templateRef }
-
-    /** 素片ごとの category 一覧。ブロックの役割を切り分けるための診断値。 */
-    private fun pieceCategoriesOf(block: GuideAnnouncementBlock): List<GuidanceCategory?> =
-        block.pieces.map { piece -> piece.category }
 
     /**
      * 距離段の安定キーを組み立てる。距離 override で複製した段は手前距離を suffix に付ける。
@@ -457,16 +417,17 @@ internal class VoiceAnnouncementPlanBuilder {
         const val TAG = "VoiceAnnouncementBlock"
 
         /**
-         * 汎用テンプレート (「指定なし」相当) の template_id。これだけで構成される block は役割が判別できない
-         * 汎用句とみなす。外部データの GuideTemplate.template_id 100 に対応。
+         * 汎用テンプレート (「指定なし」相当) の template_id。全 piece がこれだけで構成される block を
+         * 汎用句とみなし、同一グループに具体テンプレートの候補があれば選抜時に避ける。外部データの
+         * GuideTemplate.template_id 100 に対応。
          */
         const val GENERIC_TEMPLATE_ID = 100
 
         /**
-         * 「予告 (○○m手前で鳴らす案内)」とみなすための距離 / タイミング手がかり語。これらを 1 つも含まない
-         * block は裸の方向句 (= 案内点直前で鳴らすべき文言) とみなし、遠方の予告にはしない。
-         * テンプレート ID では役割を判別できないためテキストで判定する。実走行ログで調整する想定。
+         * 発話有効範囲がデータに無い block の代用窓の幅 (m)。名目トリガ距離 (delta) から手前側へこの幅だけ
+         * 広げた `[delta - 幅, delta]` を残距離窓とする。広くしすぎると遠方トリガ block が手前の案内地点まで
+         * 発話可能になり誤発話を生むため、距離段の標準的な間隔程度に抑える。
          */
-        val DISTANCE_CUE_MARKERS = listOf("先", "まもなく")
+        const val FALLBACK_WINDOW_METERS = 60
     }
 }

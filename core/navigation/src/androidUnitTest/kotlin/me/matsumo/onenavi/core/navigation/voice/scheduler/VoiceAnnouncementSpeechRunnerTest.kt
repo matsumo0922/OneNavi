@@ -206,6 +206,7 @@ class VoiceAnnouncementSpeechRunnerTest {
         triggerSourceMeters = triggerGeometryMeters,
         triggerGeometryMeters = triggerGeometryMeters,
         middleWindow = middleWindowFor(kind, triggerGeometryMeters),
+        isGeneric = false,
         pieces = persistentListOf(
             GuideAnnouncementPiece(text = id, ssml = null, templateRef = null, category = GuidanceCategory.IntersectionGuide),
         ),

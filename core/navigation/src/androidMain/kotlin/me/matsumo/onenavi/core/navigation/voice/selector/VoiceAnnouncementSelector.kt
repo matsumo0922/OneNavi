@@ -122,9 +122,10 @@ internal class VoiceAnnouncementSelector(
      * target 内で発話すべき最緊急の段を選ぶ。該当が無ければ null。
      *
      * 距離違いの MIDDLE は外部データの group_id ごとに代替候補として束ねられ、同一グループのいずれか 1 段が
-     * 処理済みなら ([consumedGroupKeysOf]) そのグループの残りは選ばない (1 グループ 1 発話)。距離窓が
-     * 非重複なので同時に複数候補が成立することは稀だが、FINAL が同 tick で発話可能になった場合は緊急度比較で
-     * 最緊急 (= FINAL) を採用する。
+     * 処理済みなら ([consumedGroupKeysOf]) そのグループの残りは選ばない (1 グループ 1 発話)。さらに、同一
+     * グループに具体テンプレートの候補と汎用テンプレートの候補が同時に発話可能なときは汎用候補を避ける
+     * ([applyGenericAvoidance]、外部ナビ API 参照実装の汎用回避)。FINAL が同 tick で発話可能になった場合は
+     * 緊急度比較で最緊急 (= FINAL) を採用する。
      */
     private fun selectStageForTarget(
         targetIndex: Int,
@@ -133,17 +134,74 @@ internal class VoiceAnnouncementSelector(
         state: VoiceAnnouncementSpeechState,
     ): VoiceAnnouncementSelection? {
         val consumedGroupKeys = consumedGroupKeysOf(target, state)
+        val speakableStages = speakableStagesOf(target, tick, state, consumedGroupKeys)
+        val preferredStages = applyGenericAvoidance(speakableStages)
         var best: VoiceAnnouncementSelection? = null
 
-        for (stage in target.stages) {
-            if (state.isStageFired(stage.id)) continue
-            if (!isStageSpeakable(stage, target, tick, consumedGroupKeys)) continue
-
+        for (stage in preferredStages) {
             val candidate = selectionOf(targetIndex, target, stage, tick)
             best = moreUrgentOf(best, candidate)
         }
 
         return best
+    }
+
+    /** target の段のうち、現 tick で発話可能 (未処理かつ [isStageSpeakable]) な段を返す。 */
+    private fun speakableStagesOf(
+        target: AnnouncementTarget,
+        tick: VoiceTick,
+        state: VoiceAnnouncementSpeechState,
+        consumedGroupKeys: Set<VoiceAnnouncementId>,
+    ): List<AnnouncementStage> {
+        val result = mutableListOf<AnnouncementStage>()
+
+        for (stage in target.stages) {
+            if (state.isStageFired(stage.id)) continue
+            if (!isStageSpeakable(stage, target, tick, consumedGroupKeys)) continue
+
+            result += stage
+        }
+
+        return result
+    }
+
+    /**
+     * 汎用回避: 同一グループに具体テンプレートの MIDDLE 候補があれば、その汎用 MIDDLE 候補を除外する。
+     *
+     * 外部データは同一グループに、汎用テンプレート (「指定なし」) の言い換え (例: 「まもなく右方向です」) と
+     * 具体テンプレート (例: 「およそ200m先 右方向です」) を併せ持つ。外部ナビ API の参照実装は窓に入る候補の
+     * うち汎用より具体を優先するため、両方が同 tick で発話可能なら汎用を落として具体を残す。テキストではなく
+     * 外部データのテンプレート ID ([AnnouncementStage.isGeneric]) で判定する。FINAL は対象にしない。
+     */
+    private fun applyGenericAvoidance(stages: List<AnnouncementStage>): List<AnnouncementStage> {
+        val groupKeysWithSpecific = groupKeysWithSpecificMiddle(stages)
+
+        return stages.filterNot { stage -> isAvoidableGeneric(stage, groupKeysWithSpecific) }
+    }
+
+    /** 具体テンプレート (非汎用) の MIDDLE 候補を持つ groupKey の集合を返す。 */
+    private fun groupKeysWithSpecificMiddle(stages: List<AnnouncementStage>): Set<VoiceAnnouncementId> {
+        val result = mutableSetOf<VoiceAnnouncementId>()
+
+        for (stage in stages) {
+            if (stage.kind != AnnouncementStageKind.MIDDLE) continue
+            if (stage.isGeneric) continue
+
+            result += stage.groupKey
+        }
+
+        return result
+    }
+
+    /** 同一グループに具体候補があるために避けるべき汎用 MIDDLE 段かを返す。 */
+    private fun isAvoidableGeneric(
+        stage: AnnouncementStage,
+        groupKeysWithSpecific: Set<VoiceAnnouncementId>,
+    ): Boolean {
+        if (stage.kind != AnnouncementStageKind.MIDDLE) return false
+        if (!stage.isGeneric) return false
+
+        return stage.groupKey in groupKeysWithSpecific
     }
 
     /** target / stage / 現在地から発話候補 (緊急度付き) を作る。 */

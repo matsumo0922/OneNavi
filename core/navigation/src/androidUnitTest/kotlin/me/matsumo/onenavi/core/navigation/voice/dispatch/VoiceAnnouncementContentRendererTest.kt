@@ -127,6 +127,7 @@ class VoiceAnnouncementContentRendererTest {
         triggerSourceMeters = 0.0,
         triggerGeometryMeters = 0.0,
         middleWindow = null,
+        isGeneric = false,
         pieces = pieces.toList().toImmutableList(),
         categories = persistentSetOf(),
     )

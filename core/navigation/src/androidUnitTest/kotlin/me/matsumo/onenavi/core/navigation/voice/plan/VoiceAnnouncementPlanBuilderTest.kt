@@ -148,10 +148,10 @@ class VoiceAnnouncementPlanBuilderTest {
     }
 
     @Test
-    fun `距離窓が無い MIDDLE は自トリガから案内地点までを暫定窓にする`() {
+    fun `距離窓が無い MIDDLE は delta 周りの狭い窓になり案内地点まで広げない`() {
         val builder = VoiceAnnouncementPlanBuilder()
         val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
-        // window 無し (旧データ互換)。FINAL を別に置いて b500 を MIDDLE にする。
+        // window 無し (旧データ互換 / 抽出漏れ)。FINAL を別に置いて b500 を MIDDLE にする。
         val guidancePoint = buildGuidancePoint(
             index = 0,
             distanceFromStartMetres = 5_000,
@@ -168,9 +168,10 @@ class VoiceAnnouncementPlanBuilderTest {
             config = VoiceAnnouncementConfig(),
         )
 
-        // window が無いので暫定窓は [自トリガ geo 4500, 案内地点 geo 5000]。
+        // window が無いので delta(500) 周りの狭い窓 = 残距離 [500-60, 500] → source [4500, 4560] (identity)。
+        // 案内地点 geo 5000 までは広げない (広い窓は遠方トリガ block の誤発話を生むため)。
         val middleStage = plan.targets.single().stages.first { stage -> stage.kind == AnnouncementStageKind.MIDDLE }
-        assertEquals(AnnouncementDistanceWindow(4_500.0, 5_000.0), middleStage.middleWindow)
+        assertEquals(AnnouncementDistanceWindow(4_500.0, 4_560.0), middleStage.middleWindow)
     }
 
     @Test
@@ -432,17 +433,17 @@ class VoiceAnnouncementPlanBuilderTest {
     }
 
     @Test
-    fun `距離手がかりの無い裸の方向句ブロックは予告にせず FINAL のみにする`() {
+    fun `group_id 0 の候補は束ねず block 単位の grpDefault key になる`() {
         val builder = VoiceAnnouncementPlanBuilder()
         val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
-        // 遠方汎用の裸句 (group=0, 距離手がかり無し), 距離付き予告, 直前の裸句。
+        // group_id=0 (グループ無し) の遠方予告 2 つ。参照実装と同じく互いに束ねない。
         val guidancePoint = buildGuidancePoint(
             index = 0,
             distanceFromStartMetres = 5_000,
             blocks = listOf(
-                buildBlock("bareFar", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 500, text = "右方向です", groupId = 0, templateRef = 100),
-                buildBlock("predict", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 200, text = "およそ200m先右方向です", groupId = 131, templateRef = 104),
-                buildBlock("direct", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 59, text = "右方向です", groupId = 65, templateRef = 100),
+                buildBlock("far2km", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 2_000, text = "2km先右方向", groupId = 0),
+                buildBlock("far1km", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 1_000, text = "1km先右方向", groupId = 0),
+                buildBlock("direct", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 59, text = "右方向です", groupId = 65),
             ),
         )
         val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
@@ -454,20 +455,20 @@ class VoiceAnnouncementPlanBuilderTest {
         )
 
         val stages = plan.targets.single().stages
-        // 裸の遠方汎用句 (bareFar) は予告にされず脱落。距離付き予告 + 直前 (FINAL) の 2 段だけ残る。
-        assertEquals(
-            listOf(VoiceAnnouncementId("R-1#gp0#predict"), VoiceAnnouncementId("R-1#gp0#direct")),
-            stages.map { stage -> stage.id },
-        )
-        assertEquals(AnnouncementStageKind.MIDDLE, stages[0].kind)
-        assertEquals(AnnouncementStageKind.FINAL, stages[1].kind)
+        val far2km = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#far2km") }
+        val far1km = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#far1km") }
+        // group_id=0 同士は別 key (block 単位で一意)。束ねるとどちらか 1 つしか鳴らなくなるため。
+        assertTrue(far2km.groupKey != far1km.groupKey)
+        assertEquals(VoiceAnnouncementId("R-1#gp0#grpDefault#far2km"), far2km.groupKey)
+        assertEquals(VoiceAnnouncementId("R-1#gp0#grpDefault#far1km"), far1km.groupKey)
     }
 
     @Test
-    fun `同一 group に距離付きの具体予告があれば汎用句の予告は抑止する`() {
+    fun `汎用フラグはテンプレート ID から決まり全候補が段として残る`() {
         val builder = VoiceAnnouncementPlanBuilder()
         val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
-        // 同一予告 group 131 に「まもなく」(汎用) と「200m先」(具体) があるケース。
+        // 同一予告 group 131 に「まもなく」(汎用 template 100) と「200m先」(具体 template 104)。
+        // 絞り込みは発話時の選抜 (Selector) が担うため、プラン構築では全候補を段として残す。
         val guidancePoint = buildGuidancePoint(
             index = 0,
             distanceFromStartMetres = 5_000,
@@ -486,11 +487,15 @@ class VoiceAnnouncementPlanBuilderTest {
         )
 
         val stages = plan.targets.single().stages
-        // 汎用句「まもなく」(soon) は同 group に具体予告 (approx) があるため抑止され、approx + FINAL の 2 段。
-        assertEquals(
-            listOf(VoiceAnnouncementId("R-1#gp0#approx"), VoiceAnnouncementId("R-1#gp0#direct")),
-            stages.map { stage -> stage.id },
-        )
+        val soon = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#soon") }
+        val approx = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#approx") }
+        // 全候補が段として残る (脱落させない)。
+        assertEquals(3, stages.size)
+        // 全 piece が template 100 の soon は汎用、template 104 を含む approx は非汎用。
+        assertTrue(soon.isGeneric)
+        assertTrue(!approx.isGeneric)
+        // 同一 group の予告は同じ groupKey。
+        assertEquals(soon.groupKey, approx.groupKey)
     }
 
     private fun buildIdentityDistanceContext(totalMetres: Double): ExtNavRouteDistanceContext =
@@ -563,8 +568,7 @@ class VoiceAnnouncementPlanBuilderTest {
         window: GuideAnnouncementWindow? = null,
         templateRef: Int? = null,
     ): GuideAnnouncementBlock {
-        // 既定ではブロックごとに別文言とし、dedup で畳まれないようにする。距離手がかり ("先") を含めて
-        // 予告として扱われるようにする (裸句抑止のテストだけ手がかりの無い text を明示的に渡す)。
+        // 既定ではブロックごとに別文言 ("${id}先") とし、dedup で畳まれないようにする。
         val pieces = persistentListOf(
             GuideAnnouncementPiece(
                 text = text,

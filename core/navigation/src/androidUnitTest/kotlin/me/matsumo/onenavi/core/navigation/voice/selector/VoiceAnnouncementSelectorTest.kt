@@ -182,6 +182,50 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
+    fun `同一グループで具体候補と汎用候補が同時に窓内なら具体候補を選ぶ`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // 同一 group "grp131" に汎用「まもなく」(窓 [700,1000)) と具体「200m先」(窓 [800,1000))。
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("soon", enter = 700.0, exit = 1_000.0, groupKey = "grp131", isGeneric = true),
+                    middleStage("approx", enter = 800.0, exit = 1_000.0, groupKey = "grp131", isGeneric = false),
+                ),
+            ),
+        )
+
+        // 両方の窓に入る 850m。参照実装の汎用回避で具体「200m先」(approx) を採る。
+        val bothActive = selector.select(plan, tickOf(current = 850.0), emptyState())
+        // 具体候補の窓外 (750m) では汎用「まもなく」しか無いのでそれを採る。
+        val onlyGenericActive = selector.select(plan, tickOf(current = 750.0), emptyState())
+
+        assertEquals(VoiceAnnouncementId("approx"), bothActive?.stage?.id)
+        assertEquals(VoiceAnnouncementId("soon"), onlyGenericActive?.stage?.id)
+    }
+
+    @Test
+    fun `別グループの汎用候補は汎用回避で消されない`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // 具体候補と汎用候補が別グループなら回避対象外 (回避は同一グループ内だけ)。
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("genericFar", enter = 500.0, exit = 700.0, groupKey = "grpDefault#far", isGeneric = true),
+                ),
+            ),
+        )
+
+        // 別グループの単独汎用候補は窓内なら鳴る。
+        val selection = selector.select(plan, tickOf(current = 600.0), emptyState())
+
+        assertEquals(VoiceAnnouncementId("genericFar"), selection?.stage?.id)
+    }
+
+    @Test
     fun `同時に複数 target が鳴りたい tick では最も近い案内地点が選ばれる`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         val plan = planOf(
@@ -326,13 +370,20 @@ class VoiceAnnouncementSelectorTest {
     )
 
     // 同一案内地点の距離違い候補は既定で同一 groupKey に束ね、グループ消費 (1 グループ 1 発話) を再現する。
-    private fun middleStage(id: String, enter: Double, exit: Double, groupKey: String = "grp"): AnnouncementStage =
+    private fun middleStage(
+        id: String,
+        enter: Double,
+        exit: Double,
+        groupKey: String = "grp",
+        isGeneric: Boolean = false,
+    ): AnnouncementStage =
         stageOf(
             id = id,
             kind = AnnouncementStageKind.MIDDLE,
             triggerGeometryMeters = enter,
             groupKey = groupKey,
             window = AnnouncementDistanceWindow(enterGeometryMeters = enter, exitGeometryMeters = exit),
+            isGeneric = isGeneric,
         )
 
     private fun finalStage(id: String, groupKey: String = "final-grp"): AnnouncementStage =
@@ -344,6 +395,7 @@ class VoiceAnnouncementSelectorTest {
         triggerGeometryMeters: Double,
         groupKey: String,
         window: AnnouncementDistanceWindow?,
+        isGeneric: Boolean = false,
     ): AnnouncementStage = AnnouncementStage(
         id = VoiceAnnouncementId(id),
         groupKey = VoiceAnnouncementId(groupKey),
@@ -351,6 +403,7 @@ class VoiceAnnouncementSelectorTest {
         triggerSourceMeters = triggerGeometryMeters,
         triggerGeometryMeters = triggerGeometryMeters,
         middleWindow = window,
+        isGeneric = isGeneric,
         pieces = persistentListOf(),
         categories = persistentSetOf(),
     )

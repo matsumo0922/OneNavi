@@ -271,6 +271,7 @@ class VoiceAnnouncementSchedulerTest {
         triggerSourceMeters = triggerGeometryMeters,
         triggerGeometryMeters = triggerGeometryMeters,
         middleWindow = window,
+        isGeneric = false,
         pieces = persistentListOf(
             GuideAnnouncementPiece(text = id, ssml = null, templateRef = null, category = category),
         ),
