@@ -133,6 +133,7 @@ internal class VoiceAnnouncementPlanBuilder {
                 triggerSourceMeters = triggerSource,
                 kind = AnnouncementStageKind.FINAL,
                 idSuffix = null,
+                windowRemainingMeters = null,
                 gpGeometryMeters = gpGeometryMeters,
                 distanceContext = distanceContext,
             )
@@ -150,6 +151,7 @@ internal class VoiceAnnouncementPlanBuilder {
                 triggerSourceMeters = triggerSource,
                 kind = AnnouncementStageKind.MIDDLE,
                 idSuffix = null,
+                windowRemainingMeters = null,
                 gpGeometryMeters = gpGeometryMeters,
                 distanceContext = distanceContext,
             )
@@ -167,6 +169,8 @@ internal class VoiceAnnouncementPlanBuilder {
                 triggerSourceMeters = triggerSource,
                 kind = AnnouncementStageKind.MIDDLE,
                 idSuffix = leadDistanceMeters.roundToInt().toString(),
+                // override は発話距離を再定義するため、窓もこの override 距離周りに作る (元 block の窓は使わない)。
+                windowRemainingMeters = leadDistanceMeters,
                 gpGeometryMeters = gpGeometryMeters,
                 distanceContext = distanceContext,
             )
@@ -189,6 +193,7 @@ internal class VoiceAnnouncementPlanBuilder {
         triggerSourceMeters: Double,
         kind: AnnouncementStageKind,
         idSuffix: String?,
+        windowRemainingMeters: Double?,
         gpGeometryMeters: Double,
         distanceContext: ExtNavRouteDistanceContext,
     ): AnnouncementStage {
@@ -208,6 +213,7 @@ internal class VoiceAnnouncementPlanBuilder {
         val middleWindow = if (kind == AnnouncementStageKind.MIDDLE) {
             computeMiddleWindow(
                 block = block,
+                windowRemainingMeters = windowRemainingMeters,
                 triggerGeometryMeters = triggerGeometryMeters,
                 gpGeometryMeters = gpGeometryMeters,
                 distanceContext = distanceContext,
@@ -241,10 +247,13 @@ internal class VoiceAnnouncementPlanBuilder {
     /**
      * MIDDLE 段の発話有効範囲 (距離窓) を geometry 累積距離で求める。
      *
-     * 外部データに発話有効範囲 ([GuideAnnouncementBlock.window]、案内点までの残距離 near/far) があれば
-     * それを使い、無ければ名目トリガ距離 (delta) 周りの狭い帯 ([FALLBACK_WINDOW_METERS] 幅) を代用する。
-     * いずれも案内点までの残距離 [near, far] を source 距離へ直し、source→geometry 変換して窓にする
-     * (残距離が遠い端 → 窓の開始、近い端 → 窓の終端)。
+     * 窓の遠い端 (far) / 近い端 (near) の残距離は次の優先順で決める。いずれも案内点までの残距離
+     * [near, far] を source 距離へ直し、source→geometry 変換して窓にする (遠い端 → 窓の開始、近い端 → 窓の終端)。
+     *
+     * 1. [windowRemainingMeters] が非 null (距離 override で複製した段) ならその距離を far とし、手前へ
+     *    [FALLBACK_WINDOW_METERS] 広げた帯にする。override は発話距離を再定義するので元 block の窓は使わない。
+     * 2. 外部データに発話有効範囲 ([GuideAnnouncementBlock.window]) があればそれを使う。
+     * 3. どちらも無ければ名目トリガ距離 (delta) 周りの狭い帯にする。
      *
      * **発話有効範囲が無い block を「自分のトリガ点から案内点まで」の広い窓にしてはならない**。広い窓は
      * 遠方トリガ block を案内点までずっと発話可能にし、手前の案内地点の直後に遠方の予告が鳴る誤発話
@@ -253,6 +262,7 @@ internal class VoiceAnnouncementPlanBuilder {
      */
     private fun computeMiddleWindow(
         block: GuideAnnouncementBlock,
+        windowRemainingMeters: Double?,
         triggerGeometryMeters: Double,
         gpGeometryMeters: Double,
         distanceContext: ExtNavRouteDistanceContext,
@@ -261,14 +271,21 @@ internal class VoiceAnnouncementPlanBuilder {
             ?: return AnnouncementDistanceWindow(triggerGeometryMeters, gpGeometryMeters)
 
         val window = block.window
-        val nearRemainingMeters: Int
-        val farRemainingMeters: Int
-        if (window != null) {
-            nearRemainingMeters = window.nearMetres
-            farRemainingMeters = window.farMetres
-        } else {
-            farRemainingMeters = block.triggerDistanceMetres
-            nearRemainingMeters = (block.triggerDistanceMetres - FALLBACK_WINDOW_METERS).coerceAtLeast(0)
+        val nearRemainingMeters: Double
+        val farRemainingMeters: Double
+        when {
+            windowRemainingMeters != null -> {
+                farRemainingMeters = windowRemainingMeters
+                nearRemainingMeters = (windowRemainingMeters - FALLBACK_WINDOW_METERS).coerceAtLeast(0.0)
+            }
+            window != null -> {
+                nearRemainingMeters = window.nearMetres.toDouble()
+                farRemainingMeters = window.farMetres.toDouble()
+            }
+            else -> {
+                farRemainingMeters = block.triggerDistanceMetres.toDouble()
+                nearRemainingMeters = (block.triggerDistanceMetres - FALLBACK_WINDOW_METERS).coerceAtLeast(0).toDouble()
+            }
         }
 
         val enterSourceMeters = anchorSource - farRemainingMeters
@@ -298,9 +315,14 @@ internal class VoiceAnnouncementPlanBuilder {
         return VoiceAnnouncementId("$routeId#gp$guidancePointIndex#$groupToken")
     }
 
-    /** 全 piece が汎用テンプレート ([GENERIC_TEMPLATE_ID]) の block か。選抜時の汎用回避フラグに使う。 */
+    /**
+     * 先頭 piece が汎用テンプレート ([GENERIC_TEMPLATE_ID]) の block か。選抜時の汎用回避フラグに使う。
+     *
+     * 外部ナビ API 参照実装の汎用回避は**先頭フレーズの template_id == 100** を見て具体候補へ差し替えるため、
+     * それに合わせて先頭 piece で判定する (後続 piece に別テンプレートや null が混ざっても先頭が汎用なら汎用扱い)。
+     */
     private fun GuideAnnouncementBlock.isGenericBlock(): Boolean =
-        pieces.isNotEmpty() && pieces.all { piece -> piece.templateRef == GENERIC_TEMPLATE_ID }
+        pieces.firstOrNull()?.templateRef == GENERIC_TEMPLATE_ID
 
     // ---------------------------------------------------------------------
     // 診断ログ (issue #41 Phase 3 実機検証用、確認後に撤去予定)
@@ -417,9 +439,9 @@ internal class VoiceAnnouncementPlanBuilder {
         const val TAG = "VoiceAnnouncementBlock"
 
         /**
-         * 汎用テンプレート (「指定なし」相当) の template_id。全 piece がこれだけで構成される block を
-         * 汎用句とみなし、同一グループに具体テンプレートの候補があれば選抜時に避ける。外部データの
-         * GuideTemplate.template_id 100 に対応。
+         * 汎用テンプレート (「指定なし」相当) の template_id。先頭 piece がこれの block を汎用句とみなし、
+         * 同一グループに具体テンプレートの候補があれば選抜時に避ける。外部データの GuideTemplate.template_id
+         * 100 に対応。
          */
         const val GENERIC_TEMPLATE_ID = 100
 

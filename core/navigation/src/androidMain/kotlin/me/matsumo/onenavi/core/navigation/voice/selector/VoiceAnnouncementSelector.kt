@@ -228,10 +228,10 @@ internal class VoiceAnnouncementSelector(
     /**
      * 既に処理済みの段が属する groupKey の集合 (= 消費済みグループ) を返す。
      *
-     * 距離違いの MIDDLE は group_id ごとの代替候補で、発話するのは 1 グループ 1 つだけ。同一グループの段が
+     * 距離違いの候補は group_id ごとの代替候補で、発話するのは 1 グループ 1 つだけ。同一グループの段が
      * 処理済み (発話・割り込み・キュー投入・空畳み込み) になった時点でそのグループを消費したとみなし、以後
-     * 同 groupKey の MIDDLE は選ばない。FINAL は自身の groupKey の消費に左右されず、自身の既処理マークと
-     * 到達リードタイムだけで判定される (= FINAL 用の判定で消費集合は参照しない)。
+     * 同 groupKey の段は MIDDLE / FINAL を問わず選ばない (1 グループ 1 発話)。FINAL は通常は単独グループ
+     * なので消費集合に自グループは入らず、到達リードタイムだけで鳴る。
      */
     private fun consumedGroupKeysOf(
         target: AnnouncementTarget,
@@ -270,16 +270,25 @@ internal class VoiceAnnouncementSelector(
 
     /**
      * 段が現 tick で発話可能かを返す。MIDDLE は距離窓に現在地が入っているか、FINAL は到達リードタイムに
-     * 達しているかで判定する。MIDDLE は自身の groupKey が消費済み ([consumedGroupKeys] に含まれる) なら発話しない。
+     * 達しているかで判定する。
+     *
+     * MIDDLE / FINAL いずれも自身の groupKey が消費済み ([consumedGroupKeys] に含まれる) なら発話しない。
+     * 外部データは距離違い候補を group_id で 1 枠に束ねており、参照実装はその枠を 1 回だけ発話して消費する。
+     * FINAL も同一グループの候補が既に発話済みなら鳴らさない (= 1 グループ 1 発話)。FINAL が単独グループの
+     * 通常ケースでは消費集合に自グループは入らないため、従来どおり到達リードタイムだけで鳴る。
      */
     private fun isStageSpeakable(
         stage: AnnouncementStage,
         target: AnnouncementTarget,
         tick: VoiceTick,
         consumedGroupKeys: Set<VoiceAnnouncementId>,
-    ): Boolean = when (stage.kind) {
-        AnnouncementStageKind.MIDDLE -> stage.groupKey !in consumedGroupKeys && isMiddleWindowActive(stage, tick)
-        AnnouncementStageKind.FINAL -> isFinalReached(target, tick)
+    ): Boolean {
+        if (stage.groupKey in consumedGroupKeys) return false
+
+        return when (stage.kind) {
+            AnnouncementStageKind.MIDDLE -> isMiddleWindowActive(stage, tick)
+            AnnouncementStageKind.FINAL -> isFinalReached(target, tick)
+        }
     }
 
     /**

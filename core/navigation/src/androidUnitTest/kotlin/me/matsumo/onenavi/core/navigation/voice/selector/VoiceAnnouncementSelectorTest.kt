@@ -206,6 +206,52 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
+    fun `同一グループの MIDDLE が発話済みなら FINAL も消費されて鳴らない`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // 直前グループ "grp65" に、近接窓の MIDDLE と FINAL が同居するケース (group_id 共有)。
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("directMiddle", enter = 930.0, exit = 980.0, groupKey = "grp65"),
+                    finalStage("directFinal", groupKey = "grp65"),
+                ),
+            ),
+        )
+
+        // MIDDLE 未処理なら FINAL は到達リードで鳴れる (緊急度で FINAL が勝つ)。
+        val beforeConsume = selector.select(plan, tickOf(current = 975.0), emptyState())
+        // 同一グループの MIDDLE が処理済みになると、同 groupKey の FINAL も消費されて鳴らない (1 グループ 1 発話)。
+        val afterConsume = selector.select(plan, tickOf(current = 975.0), emptyState().withStageFired(VoiceAnnouncementId("directMiddle")))
+
+        assertEquals(VoiceAnnouncementId("directFinal"), beforeConsume?.stage?.id)
+        assertNull(afterConsume)
+    }
+
+    @Test
+    fun `別グループの FINAL は MIDDLE のグループ消費に影響されない`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // 予告グループ "grp131" の MIDDLE と、別グループ "grp65" の直前 FINAL。
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("predict", enter = 500.0, exit = 800.0, groupKey = "grp131"),
+                    finalStage("final", groupKey = "grp65"),
+                ),
+            ),
+        )
+
+        // 予告 (grp131) を消費しても、別グループの FINAL (grp65) は到達リードで鳴る。
+        val consumed = emptyState().withStageFired(VoiceAnnouncementId("predict"))
+        val finalSelection = selector.select(plan, tickOf(current = 975.0), consumed)
+
+        assertEquals(VoiceAnnouncementId("final"), finalSelection?.stage?.id)
+    }
+
+    @Test
     fun `別グループの汎用候補は汎用回避で消されない`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         // 具体候補と汎用候補が別グループなら回避対象外 (回避は同一グループ内だけ)。

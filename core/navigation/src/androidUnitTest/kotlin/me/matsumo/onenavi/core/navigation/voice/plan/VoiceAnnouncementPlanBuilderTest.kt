@@ -331,6 +331,20 @@ class VoiceAnnouncementPlanBuilderTest {
             ),
             middleIdsByTrigger,
         )
+        // 複製段の窓は元 block の triggerDistance ではなく各 override 距離周りに作られる (identity 変換、幅 60)。
+        // 残距離 [override-60, override] → source [anchor-override, anchor-(override-60)]。
+        val windowsByTrigger = middleStages
+            .sortedBy { stage -> stage.triggerSourceMeters }
+            .map { stage -> stage.middleWindow }
+        assertWindowApprox(windowsByTrigger[0], expectedEnter = 3_000.0, expectedExit = 3_060.0)
+        assertWindowApprox(windowsByTrigger[1], expectedEnter = 4_000.0, expectedExit = 4_060.0)
+        assertWindowApprox(windowsByTrigger[2], expectedEnter = 4_700.0, expectedExit = 4_760.0)
+    }
+
+    private fun assertWindowApprox(window: AnnouncementDistanceWindow?, expectedEnter: Double, expectedExit: Double) {
+        val actual = requireNotNull(window) { "MIDDLE 段は距離窓を持つ" }
+        assertEquals(expectedEnter, actual.enterGeometryMeters, absoluteTolerance = 0.01)
+        assertEquals(expectedExit, actual.exitGeometryMeters, absoluteTolerance = 0.01)
     }
 
     @Test
@@ -498,6 +512,37 @@ class VoiceAnnouncementPlanBuilderTest {
         assertEquals(soon.groupKey, approx.groupKey)
     }
 
+    @Test
+    fun `汎用フラグは先頭 piece のテンプレートで決まる`() {
+        val builder = VoiceAnnouncementPlanBuilder()
+        val distanceContext = buildIdentityDistanceContext(totalMetres = 10_000.0)
+        // 先頭 piece が汎用(100)で後続に別テンプレ(416)が混ざる予告と、先頭が具体(104)の予告。
+        val guidancePoint = buildGuidancePoint(
+            index = 0,
+            distanceFromStartMetres = 5_000,
+            blocks = listOf(
+                buildBlock("soonMixed", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 250, text = "まもなく右方向です", groupId = 131, templateRef = 100, tailTemplateRef = 416),
+                buildBlock("approx", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 200, text = "およそ200m先右方向です", groupId = 131, templateRef = 104, tailTemplateRef = 416),
+                buildBlock("direct", anchorSourceMetres = 5_000.0, triggerDistanceMetres = 59, text = "右方向です", groupId = 65, templateRef = 100),
+            ),
+        )
+        val payload = buildPayload(routeId = "R-1", guidancePoints = listOf(guidancePoint))
+
+        val plan = builder.build(
+            payload = payload,
+            distanceContext = distanceContext,
+            config = VoiceAnnouncementConfig(),
+        )
+
+        val stages = plan.targets.single().stages
+        val soonMixed = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#soonMixed") }
+        val approx = stages.single { stage -> stage.id == VoiceAnnouncementId("R-1#gp0#approx") }
+        // 後続 piece に別テンプレが混ざっても、先頭 piece が 100 の soonMixed は汎用。
+        assertTrue(soonMixed.isGeneric)
+        // 先頭が 104 の approx は後続が混ざっても非汎用。
+        assertTrue(!approx.isGeneric)
+    }
+
     private fun buildIdentityDistanceContext(totalMetres: Double): ExtNavRouteDistanceContext =
         buildDistanceContext(sourceTotalMetres = totalMetres, geometryTotalMetres = totalMetres)
 
@@ -567,16 +612,24 @@ class VoiceAnnouncementPlanBuilderTest {
         groupId: Int = 0,
         window: GuideAnnouncementWindow? = null,
         templateRef: Int? = null,
+        tailTemplateRef: Int? = null,
     ): GuideAnnouncementBlock {
         // 既定ではブロックごとに別文言 ("${id}先") とし、dedup で畳まれないようにする。
-        val pieces = persistentListOf(
-            GuideAnnouncementPiece(
-                text = text,
-                ssml = null,
-                templateRef = templateRef,
-                category = categories.firstOrNull(),
-            ),
+        // tailTemplateRef を渡すと先頭 piece と別テンプレートの 2 つ目 piece を足す (先頭 piece 判定の検証用)。
+        val headPiece = GuideAnnouncementPiece(
+            text = text,
+            ssml = null,
+            templateRef = templateRef,
+            category = categories.firstOrNull(),
         )
+        val pieces = if (tailTemplateRef == null) {
+            persistentListOf(headPiece)
+        } else {
+            persistentListOf(
+                headPiece,
+                GuideAnnouncementPiece(text = "$text-tail", ssml = null, templateRef = tailTemplateRef, category = null),
+            )
+        }
         return GuideAnnouncementBlock(
             id = id,
             anchor = ExternalGuideAnchor(
