@@ -78,7 +78,7 @@ class GuidancePresentationProjectorTest {
     }
 
     @Test
-    fun `主案内を持たないレーンイベントがバナー下段のレーンに乗る`() {
+    fun `主案内を持たないレーンイベントはバナー下段に乗らない`() {
         val guidanceRoute = GuidanceRoute(
             totalDistanceMeters = 400.0,
             totalDurationSeconds = 300,
@@ -86,61 +86,44 @@ class GuidancePresentationProjectorTest {
             events = listOf(
                 laneFacilityEvent(id = "event-toll", geometryMeters = 100.0),
                 maneuverEvent(id = "event-3", guidancePointIndex = 3, geometryMeters = 300.0, type = ManeuverType.TURN),
+                maneuverEvent(id = "event-5", guidancePointIndex = 5, geometryMeters = 400.0, type = ManeuverType.ARRIVE),
             ).toImmutableList(),
         )
         val context = buildContext()
 
         val presentation = project(guidanceRoute = guidanceRoute, context = context)
 
-        // 主案内 (turn) ではなく、手前の主案内 null レーンイベント (料金所レーン) が下段に乗る。
-        val support = assertIs<BannerSupport.Lanes>(presentation.banner?.support)
-        val visualLanes = assertIs<LanePresentation.VisualLanes>(support.lane)
-        assertTrue(visualLanes.lanes.any { lane -> lane.isActive })
+        // バナー下段は上段の主案内 event-3 に紐付く補助だけを見るため、手前のレーンは表示しない。
+        val support = assertIs<BannerSupport.Followup>(presentation.banner?.support)
+        assertEquals(ManeuverType.ARRIVE, support.maneuver.type)
     }
 
     @Test
-    fun `主案内を持たないレーンイベントの矢印は geometry の方位差から決まる`() {
-        // 東進 → 北進に折れる geometry。折れ点のレーンイベントは左折の矢印になるべき。
-        val geometry = listOf(
-            RoutePoint(latitude = 35.0, longitude = 139.000),
-            RoutePoint(latitude = 35.0, longitude = 139.002),
-            RoutePoint(latitude = 35.0, longitude = 139.004),
-            RoutePoint(latitude = 35.002, longitude = 139.004),
-            RoutePoint(latitude = 35.004, longitude = 139.004),
-        )
-        val cumulativeMetres = RouteGeometryMath.cumulativeMetres(geometry)
-        val bendMeters = cumulativeMetres[2]
-        val context = RouteProjectionContext(
-            route = RouteDetail(
-                id = "projector-bend-test",
-                origin = geometry.first(),
-                destination = geometry.last(),
-                intermediateWaypoints = persistentListOf(),
-                geometry = geometry.toImmutableList(),
-                distanceMeters = cumulativeMetres.last(),
-                durationSeconds = 300.0,
-                steps = persistentListOf(),
-            ),
-            cumulativeMetres = cumulativeMetres,
-            totalGeometryMetres = cumulativeMetres.last(),
-        )
-        // 主案内が無いとバナーは作られないため、折れ点より先に主案内を 1 つ置く。
+    fun `次の主案内に紐付くレーンは主案内の向きでバナー下段に乗る`() {
         val guidanceRoute = GuidanceRoute(
-            totalDistanceMeters = cumulativeMetres.last(),
+            totalDistanceMeters = 400.0,
             totalDurationSeconds = 300,
             tollTotalYen = null,
             events = listOf(
-                laneFacilityEvent(id = "bend-lane", geometryMeters = bendMeters),
-                maneuverEvent(id = "after-turn", guidancePointIndex = 9, geometryMeters = cumulativeMetres.last(), type = ManeuverType.TURN),
+                maneuverEvent(
+                    id = "event-3",
+                    guidancePointIndex = 3,
+                    geometryMeters = 300.0,
+                    type = ManeuverType.TURN,
+                    modifier = ManeuverModifier.RIGHT,
+                    lane = markerLane(),
+                ),
+                maneuverEvent(id = "event-5", guidancePointIndex = 5, geometryMeters = 400.0, type = ManeuverType.ARRIVE),
             ).toImmutableList(),
         )
+        val context = buildContext()
 
         val presentation = project(guidanceRoute = guidanceRoute, context = context)
 
         val support = assertIs<BannerSupport.Lanes>(presentation.banner?.support)
         val visualLanes = assertIs<LanePresentation.VisualLanes>(support.lane)
         val recommendedLane = visualLanes.lanes.first { lane -> lane.isActive }
-        assertEquals(ManeuverModifier.LEFT, recommendedLane.recommendedDirection)
+        assertEquals(ManeuverModifier.RIGHT, recommendedLane.recommendedDirection)
     }
 
     @Test
@@ -214,16 +197,18 @@ class GuidancePresentationProjectorTest {
         guidancePointIndex: Int,
         geometryMeters: Double,
         type: ManeuverType,
+        modifier: ManeuverModifier = ManeuverModifier.STRAIGHT,
+        lane: GuidanceLane? = null,
     ): GuidanceEvent = GuidanceEvent(
         id = GuidanceEventId(id),
         anchor = anchorAt(geometryMeters = geometryMeters, guidancePointIndex = guidancePointIndex),
         primary = GuidanceManeuver(
             type = type,
-            modifier = ManeuverModifier.STRAIGHT,
+            modifier = modifier,
             intersectionName = null,
             exitNumber = null,
         ),
-        details = emptyDetails(facility = null),
+        details = emptyDetails(facility = null).copy(lane = lane),
         sourceRefs = persistentListOf(),
     )
 

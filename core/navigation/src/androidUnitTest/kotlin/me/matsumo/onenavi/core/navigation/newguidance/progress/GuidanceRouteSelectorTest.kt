@@ -20,6 +20,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.RouteAnchor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * [GuidanceRouteSelector] のカーソル導出テスト。
@@ -52,7 +53,7 @@ class GuidanceRouteSelectorTest {
     }
 
     @Test
-    fun `レーンを持つ通過イベントを主案内と独立に active lane として選ぶ`() {
+    fun `レーンを持つ通過イベントは先行イベントに残すが主案内カーソルにはしない`() {
         val selector = GuidanceRouteSelector()
         val route = GuidanceRoute(
             totalDistanceMeters = 400.0,
@@ -66,9 +67,8 @@ class GuidanceRouteSelectorTest {
 
         val selection = selector.select(route = route, currentCumulativeMeters = 0.0)
 
-        // 主案内 (turn) より手前にある主案内 null のレーンイベントを active lane に選ぶ。
-        assertEquals("toll-lane", selection.activeLaneEvent?.id?.value)
         assertEquals("turn", selection.nextPrimaryEvent?.id?.value)
+        assertTrue(selection.eventsAfterCurrent.any { event -> event.id.value == "toll-lane" })
     }
 
     private fun buildRoute(): GuidanceRoute = GuidanceRoute(

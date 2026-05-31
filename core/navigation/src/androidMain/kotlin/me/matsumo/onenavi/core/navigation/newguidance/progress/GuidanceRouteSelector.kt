@@ -29,14 +29,10 @@ internal class GuidanceRouteSelector {
         val thresholdMeters = currentCumulativeMeters + NEXT_EVENT_EPSILON_METRES
         val eventsAfterCurrent = route.events.filter { event -> event.anchor.geometryDistanceFromStartMeters > thresholdMeters }.toImmutableList()
         val primaryEvents = eventsAfterCurrent.filter { event -> event.primary != null }
-        // レーンは主案内に紐付くとは限らない (料金所レーン等は primary == null)。主案内カーソルとは
-        // 独立に、現在地より先で最初にレーンを持つイベントを拾う。
-        val activeLaneEvent = eventsAfterCurrent.firstOrNull { event -> event.details.lane != null }
 
         return GuidanceSelection(
             nextPrimaryEvent = primaryEvents.getOrNull(0),
             followupPrimaryEvent = primaryEvents.getOrNull(1),
-            activeLaneEvent = activeLaneEvent,
             eventsAfterCurrent = eventsAfterCurrent,
         )
     }
@@ -52,13 +48,11 @@ internal class GuidanceRouteSelector {
  *
  * @property nextPrimaryEvent 現在地より先の最初の主案内イベント。無ければ null。
  * @property followupPrimaryEvent その次の主案内イベント。無ければ null。
- * @property activeLaneEvent 現在地より先で最初にレーンを持つイベント (主案内の有無を問わない)。無ければ null。
  * @property eventsAfterCurrent 現在地より先の全イベント (geometry 距離の昇順)。
  */
 @Immutable
 data class GuidanceSelection(
     val nextPrimaryEvent: GuidanceEvent?,
     val followupPrimaryEvent: GuidanceEvent?,
-    val activeLaneEvent: GuidanceEvent?,
     val eventsAfterCurrent: ImmutableList<GuidanceEvent>,
 )
