@@ -15,7 +15,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment.Horizontal
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -158,6 +160,44 @@ private fun DrawScope.drawLaneGlyph(
     activeTint: Color,
     inactiveTint: Color,
 ) {
+    if (!isActive && inactiveTint.alpha < 1f) {
+        withLayerAlpha(inactiveTint.alpha) {
+            drawLaneGlyphContent(
+                directions = directions,
+                recommendedDirection = recommendedDirection,
+                isActive = false,
+                activeTint = activeTint,
+                inactiveTint = inactiveTint.copy(alpha = 1f),
+            )
+        }
+        return
+    }
+
+    drawLaneGlyphContent(
+        directions = directions,
+        recommendedDirection = recommendedDirection,
+        isActive = isActive,
+        activeTint = activeTint,
+        inactiveTint = inactiveTint,
+    )
+}
+
+/**
+ * レーングリフの実描画を行う。非アクティブ時の alpha 合成は呼び出し側でまとめて処理する。
+ *
+ * @param directions このレーンの進行方向
+ * @param recommendedDirection 推奨方向。無ければ null
+ * @param isActive 推奨車線か
+ * @param activeTint 推奨方向の色
+ * @param inactiveTint 非推奨車線の色
+ */
+private fun DrawScope.drawLaneGlyphContent(
+    directions: ImmutableList<ManeuverModifier>,
+    recommendedDirection: ManeuverModifier?,
+    isActive: Boolean,
+    activeTint: Color,
+    inactiveTint: Color,
+) {
     val hasStraight = directions.contains(ManeuverModifier.STRAIGHT)
     val hasUTurn = directions.contains(ManeuverModifier.UTURN)
 
@@ -196,6 +236,30 @@ private fun DrawScope.drawLaneGlyph(
 
     if (topDirection != null && directions.contains(topDirection)) {
         drawLaneElement(direction = topDirection, metrics = metrics, color = paint.colorFor(topDirection))
+    }
+}
+
+/**
+ * ブロック全体に 1 回だけ alpha を掛けて描画する。
+ *
+ * 半透明色で複数パーツを個別に描くと、重なった部分だけ濃く見える。いったん不透明色でレイヤーへ描き、
+ * レイヤー合成時に alpha を掛けることで、グリフ全体の透明度を一定に保つ。
+ *
+ * @param alpha レイヤーに掛ける透明度
+ * @param block レイヤー内で実行する描画処理
+ */
+private inline fun DrawScope.withLayerAlpha(
+    alpha: Float,
+    block: DrawScope.() -> Unit,
+) {
+    val paint = Paint().apply {
+        this.alpha = alpha
+    }
+    drawContext.canvas.saveLayer(Rect(offset = Offset.Zero, size = size), paint)
+    try {
+        block()
+    } finally {
+        drawContext.canvas.restore()
     }
 }
 
