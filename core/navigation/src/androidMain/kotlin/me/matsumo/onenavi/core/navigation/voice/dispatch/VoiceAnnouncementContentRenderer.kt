@@ -3,7 +3,7 @@ package me.matsumo.onenavi.core.navigation.voice.dispatch
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
 import me.matsumo.onenavi.core.navigation.tts.PhonemeConverter
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementCategoryGate
-import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer.Companion.PIECE_BREAK
+import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer.Companion.PAUSE
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
 
 /**
@@ -13,9 +13,10 @@ import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
  * category の素片を除外し、残りを 1 本の SSML に結合する。発話する内容が無ければ null を返し、scheduler は
  * 発話を起こさずに段を処理済みとして畳む。
  *
- * 発話は常に SSML で行う (SSML を持たない素片は text を escape して取り込む)。素片どうしは [PIECE_BREAK]
- * (ポーズ) で繋ぐ。素片は API が意味単位ごとに分割して送る区切りなので、その境界で間を空けることで
- * TTS が全文を一息で繋げて読むのを防ぐ。
+ * 発話は常に SSML で行う (SSML を持たない素片は text を escape して取り込む)。素片どうしは読点 ([PAUSE])
+ * で繋ぐ。素片は API が意味単位ごとに分割して送る区切りなので、その境界に文中ポーズを置くことで TTS が
+ * 全文を一息で繋げて読むのを防ぐ。`<break>` は文末扱いになりイントネーションが切れるため使わず、文中ポーズの
+ * 読点を使う。前の素片が既に句読点で終わっている場合は重複させない (「。、」「、、」を避ける)。
  */
 internal class VoiceAnnouncementContentRenderer(
     private val categoryGate: VoiceAnnouncementCategoryGate,
@@ -31,9 +32,19 @@ internal class VoiceAnnouncementContentRenderer(
         val enabledPieces = stage.pieces.filter { piece -> categoryGate.isEnabled(piece.category) }
         if (enabledPieces.isEmpty()) return null
 
-        val rawSsml = enabledPieces.joinToString(separator = PIECE_BREAK) { piece -> ssmlFragmentOf(piece) }
+        val rawSsml = enabledPieces
+            .map { piece -> ssmlFragmentOf(piece) }
+            .reduce { joined, fragment -> joined + separatorBefore(fragment, previous = joined) + fragment }
 
         return PhonemeConverter.toGoogleCloudSsml(rawSsml)
+    }
+
+    /** 直前の素片が句読点で終わっていれば追加のポーズは挟まず、そうでなければ読点を挟む。 */
+    private fun separatorBefore(fragment: String, previous: String): String {
+        if (fragment.isEmpty()) return ""
+
+        val lastChar = previous.trimEnd().lastOrNull()
+        return if (lastChar in PAUSE_PUNCTUATION) "" else PAUSE
     }
 
     /** 素片を SSML 断片にする。SSML を持つ素片はそのまま、持たない素片は text を escape して取り込む。 */
@@ -49,10 +60,13 @@ internal class VoiceAnnouncementContentRenderer(
     private companion object {
 
         /**
-         * 素片 (piece) 間に挟むポーズ。API が意味単位 (ポーン / 距離 / 方向 / 地点名 / 述語 など) ごとに
-         * 分割して送る piece の境界で間を空け、TTS が全文を一息で繋げて読むのを防ぐ。piece 内部
-         * (例: 施設名 + 述語) は API が分割しないため、ここでは区切らない。
+         * 素片 (piece) 間に挟む文中ポーズ。API が意味単位 (ポーン / 距離 / 方向 / 地点名 / 述語 など) ごとに
+         * 分割して送る piece の境界に置き、TTS が全文を一息で繋げて読むのを防ぐ。読点は文中ポーズなので
+         * イントネーションは 1 文として連続する (`<break>` のような文末区切りにならない)。
          */
-        const val PIECE_BREAK = "<break time=\"100ms\"/>"
+        const val PAUSE = "、"
+
+        /** 既にポーズになっている句読点。直前がこれらで終わるなら読点を重ねない。 */
+        val PAUSE_PUNCTUATION = setOf('、', '。', '，', '．', '！', '？', '!', '?')
     }
 }

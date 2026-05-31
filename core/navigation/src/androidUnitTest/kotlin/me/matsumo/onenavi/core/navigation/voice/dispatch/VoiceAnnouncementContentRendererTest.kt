@@ -13,12 +13,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * [VoiceAnnouncementContentRenderer] の category gate フィルタ / SSML 結合 (素片間ポーズ) のテスト。
+ * [VoiceAnnouncementContentRenderer] の category gate フィルタ / SSML 結合 (素片間の読点ポーズ) のテスト。
  */
 class VoiceAnnouncementContentRendererTest {
 
     @Test
-    fun `有効な素片を素片間ポーズで繋いだ SSML を作る`() {
+    fun `有効な素片を読点で繋いだ SSML を作る`() {
         val renderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn)
         val stage = stageOf(
             pieceOf(text = "300m先 ", category = GuidanceCategory.IntersectionGuide),
@@ -27,7 +27,22 @@ class VoiceAnnouncementContentRendererTest {
 
         val ssml = renderer.render(stage)
 
-        assertEquals("<speak>300m先 ${BREAK}右方向です</speak>", ssml)
+        assertEquals("<speak>300m先 、右方向です</speak>", ssml)
+    }
+
+    @Test
+    fun `直前が句読点で終わる素片には読点を重ねない`() {
+        val renderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn)
+        val stage = stageOf(
+            pieceOf(text = "右方向、", category = GuidanceCategory.IntersectionGuide),
+            pieceOf(text = "入口です。", category = GuidanceCategory.IntersectionGuide),
+            pieceOf(text = "その先", category = GuidanceCategory.IntersectionGuide),
+        )
+
+        val ssml = renderer.render(stage)
+
+        // 「右方向、」の後と「入口です。」の後は既に句読点があるので読点を足さない。
+        assertEquals("<speak>右方向、入口です。その先</speak>", ssml)
     }
 
     @Test
@@ -79,8 +94,8 @@ class VoiceAnnouncementContentRendererTest {
 
         val ssml = renderer.render(stage)
 
-        // plain 素片 (300m先) が SSML から欠落せず、ssml 素片とポーズで繋がる。
-        assertEquals("<speak>300m先 ${BREAK}右です</speak>", ssml)
+        // plain 素片 (300m先) が SSML から欠落せず、ssml 素片と読点で繋がる。
+        assertEquals("<speak>300m先 、右です</speak>", ssml)
     }
 
     @Test
@@ -93,7 +108,7 @@ class VoiceAnnouncementContentRendererTest {
 
         val ssml = renderer.render(stage)
 
-        assertEquals("<speak>A&amp;B&lt;C&gt; ${BREAK}右です</speak>", ssml)
+        assertEquals("<speak>A&amp;B&lt;C&gt; 、右です</speak>", ssml)
     }
 
     @Test
@@ -130,10 +145,4 @@ class VoiceAnnouncementContentRendererTest {
         pieces = pieces.toList().toImmutableList(),
         categories = persistentSetOf(),
     )
-
-    private companion object {
-
-        /** 素片間に挿入されるポーズ ([VoiceAnnouncementContentRenderer] の PIECE_BREAK と一致させる)。 */
-        const val BREAK = "<break time=\"100ms\"/>"
-    }
 }
