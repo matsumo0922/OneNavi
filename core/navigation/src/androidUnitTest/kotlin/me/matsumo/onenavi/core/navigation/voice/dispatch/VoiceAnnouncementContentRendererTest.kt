@@ -25,9 +25,9 @@ class VoiceAnnouncementContentRendererTest {
             pieceOf(text = "右方向です", category = GuidanceCategory.IntersectionGuide),
         )
 
-        val ssml = renderer.render(stage)
+        val content = renderer.render(stage)
 
-        assertEquals("<speak>300m先 、右方向です</speak>", ssml)
+        assertEquals("<speak>300m先 、右方向です</speak>", content?.ssml)
     }
 
     @Test
@@ -39,10 +39,10 @@ class VoiceAnnouncementContentRendererTest {
             pieceOf(text = "その先", category = GuidanceCategory.IntersectionGuide),
         )
 
-        val ssml = renderer.render(stage)
+        val content = renderer.render(stage)
 
         // 「右方向、」の後と「入口です。」の後は既に句読点があるので読点を足さない。
-        assertEquals("<speak>右方向、入口です。その先</speak>", ssml)
+        assertEquals("<speak>右方向、入口です。その先</speak>", content?.ssml)
     }
 
     @Test
@@ -54,9 +54,9 @@ class VoiceAnnouncementContentRendererTest {
             pieceOf(text = "急カーブ注意", category = GuidanceCategory.Curve),
         )
 
-        val ssml = renderer.render(stage)
+        val content = renderer.render(stage)
 
-        assertEquals("<speak>右方向です</speak>", ssml)
+        assertEquals("<speak>右方向です</speak>", content?.ssml)
     }
 
     @Test
@@ -67,9 +67,9 @@ class VoiceAnnouncementContentRendererTest {
             pieceOf(text = "急カーブ注意", category = GuidanceCategory.Curve),
         )
 
-        val ssml = renderer.render(stage)
+        val content = renderer.render(stage)
 
-        assertNull(ssml)
+        assertNull(content)
     }
 
     @Test
@@ -79,9 +79,9 @@ class VoiceAnnouncementContentRendererTest {
             pieceOf(text = "右です", ssml = "右です", category = GuidanceCategory.IntersectionGuide),
         )
 
-        val ssml = renderer.render(stage)
+        val content = renderer.render(stage)
 
-        assertEquals("<speak>右です</speak>", ssml)
+        assertEquals("<speak>右です</speak>", content?.ssml)
     }
 
     @Test
@@ -92,10 +92,10 @@ class VoiceAnnouncementContentRendererTest {
             pieceOf(text = "右です", ssml = "右です", category = GuidanceCategory.IntersectionGuide),
         )
 
-        val ssml = renderer.render(stage)
+        val content = renderer.render(stage)
 
         // plain 素片 (300m先) が SSML から欠落せず、ssml 素片と読点で繋がる。
-        assertEquals("<speak>300m先 、右です</speak>", ssml)
+        assertEquals("<speak>300m先 、右です</speak>", content?.ssml)
     }
 
     @Test
@@ -106,9 +106,9 @@ class VoiceAnnouncementContentRendererTest {
             pieceOf(text = "右です", ssml = "右です", category = GuidanceCategory.IntersectionGuide),
         )
 
-        val ssml = renderer.render(stage)
+        val content = renderer.render(stage)
 
-        assertEquals("<speak>A&amp;B&lt;C&gt; 、右です</speak>", ssml)
+        assertEquals("<speak>A&amp;B&lt;C&gt; 、右です</speak>", content?.ssml)
     }
 
     @Test
@@ -118,9 +118,48 @@ class VoiceAnnouncementContentRendererTest {
             pieceOf(text = "右です", ssml = null, category = GuidanceCategory.IntersectionGuide),
         )
 
-        val ssml = renderer.render(stage)
+        val content = renderer.render(stage)
 
-        assertEquals("<speak>右です</speak>", ssml)
+        assertEquals("<speak>右です</speak>", content?.ssml)
+    }
+
+    @Test
+    fun `ポーンを TTS に読ませずチャイム cue にする`() {
+        val renderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn)
+        val stage = stageOf(
+            pieceOf(text = "ポーン右方向です", category = GuidanceCategory.IntersectionGuide),
+        )
+
+        val content = renderer.render(stage)
+
+        assertEquals(VoiceAnnouncementCue.CHIME, content?.cue)
+        assertEquals("<speak>右方向です</speak>", content?.ssml)
+    }
+
+    @Test
+    fun `ポーンだけの素片はチャイムのみの内容にする`() {
+        val renderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn)
+        val stage = stageOf(
+            pieceOf(text = "ポーン", category = GuidanceCategory.IntersectionGuide),
+        )
+
+        val content = renderer.render(stage)
+
+        assertEquals(VoiceAnnouncementCue.CHIME, content?.cue)
+        assertNull(content?.ssml)
+    }
+
+    @Test
+    fun `OFF にした category のポーンはチャイムも鳴らさない`() {
+        val gate = VoiceAnnouncementCategoryGate.of(GuidanceCategory.Curve to false)
+        val renderer = VoiceAnnouncementContentRenderer(gate)
+        val stage = stageOf(
+            pieceOf(text = "ポーン", category = GuidanceCategory.Curve),
+        )
+
+        val content = renderer.render(stage)
+
+        assertNull(content)
     }
 
     private fun pieceOf(

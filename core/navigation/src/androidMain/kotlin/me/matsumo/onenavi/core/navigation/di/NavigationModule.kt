@@ -21,6 +21,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
 import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsApi
 import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsVoiceAnnouncementDispatcher
+import me.matsumo.onenavi.core.navigation.tts.GuidanceChimePlayer
 import me.matsumo.onenavi.core.navigation.tts.PcmAudioPlayer
 import me.matsumo.onenavi.core.navigation.tts.TtsAudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.TtsSigningCertificate
@@ -53,6 +54,7 @@ val navigationModule: Module = module {
     single<VoiceAnnouncementDispatcher> {
         val appConfig = get<AppConfig>()
         val context = androidContext()
+        val audioPlayer = PcmAudioPlayer()
         GoogleCloudTtsVoiceAnnouncementDispatcher(
             api = GoogleCloudTtsApi(
                 httpClient = get(named("googleCloudTts")),
@@ -60,7 +62,11 @@ val navigationModule: Module = module {
                 packageName = context.packageName,
                 signatureSha1 = TtsSigningCertificate.resolveSha1(context),
             ),
-            audioPlayer = PcmAudioPlayer(),
+            audioPlayer = audioPlayer,
+            chimePlayer = GuidanceChimePlayer(
+                context = context,
+                audioPlayer = audioPlayer,
+            ),
             audioFocusManager = TtsAudioFocusManager(context),
             apiKey = appConfig.googleCloudTtsApiKey,
         )

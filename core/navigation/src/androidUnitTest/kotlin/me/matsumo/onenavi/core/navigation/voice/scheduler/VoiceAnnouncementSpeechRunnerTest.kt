@@ -11,6 +11,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementCategoryGate
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
+import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContent
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispatcher
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementDistanceWindow
@@ -144,8 +145,8 @@ class VoiceAnnouncementSpeechRunnerTest {
         val spoken = mutableListOf<String>()
         private val gates = ArrayDeque<CompletableDeferred<Unit>>()
 
-        override suspend fun speak(ssml: String) {
-            spoken += ssml
+        override suspend fun speak(content: VoiceAnnouncementContent) {
+            spoken += requireNotNull(content.ssml)
             val gate = CompletableDeferred<Unit>()
             gates.addLast(gate)
             gate.await()
@@ -164,12 +165,12 @@ class VoiceAnnouncementSpeechRunnerTest {
         val spoken = mutableListOf<String>()
         private var shouldFail = true
 
-        override suspend fun speak(ssml: String) {
+        override suspend fun speak(content: VoiceAnnouncementContent) {
             if (shouldFail) {
                 shouldFail = false
                 error("speak failed")
             }
-            spoken += ssml
+            spoken += requireNotNull(content.ssml)
         }
     }
 

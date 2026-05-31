@@ -2,7 +2,6 @@ package me.matsumo.onenavi.core.navigation.tts
 
 import me.matsumo.onenavi.core.navigation.tts.PhonemeConverter.PAUSE
 
-
 /**
  * 外部ナビ API 由来の SSML (Toshiba `x-toshiba-ruby` 付き) を、表示用プレーンテキストや
  * Google Cloud TTS が解釈できる SSML へ変換するユーティリティ。

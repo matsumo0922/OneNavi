@@ -1,7 +1,7 @@
 package me.matsumo.onenavi.core.navigation.voice.dispatch
 
 /**
- * 確定した発話 SSML を実際の音声出力へ流す出口。TTS エンジン / MediaPlayer / AudioFocus 等の実装詳細を
+ * 確定した発話内容を実際の音声出力へ流す出口。TTS エンジン / MediaPlayer / AudioFocus 等の実装詳細を
  * scheduler から切り離すための抽象。
  *
  * [speak] は発話の完了 (または中断) まで suspend する契約とする。scheduler はこの suspend 完了をもって
@@ -11,9 +11,9 @@ package me.matsumo.onenavi.core.navigation.voice.dispatch
 internal interface VoiceAnnouncementDispatcher {
 
     /**
-     * 1 件の発話を読み上げる。読み上げ完了まで suspend する。
+     * 1 件の発話内容を再生する。再生完了まで suspend する。
      *
-     * @param ssml category gate / 結合を適用済みの読み上げ SSML (`<speak>` で囲み済み)
+     * @param content category gate / 結合を適用済みの発話内容
      */
-    suspend fun speak(ssml: String)
+    suspend fun speak(content: VoiceAnnouncementContent)
 }

@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.navigation.voice.scheduler
 
 import io.github.aakira.napier.Napier
+import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContent
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementRequest
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
@@ -100,32 +101,32 @@ internal class VoiceAnnouncementScheduler(
      * 選択結果を PLAY / BARGE_IN / ENQUEUE に振り分けて実行指示を確定する。
      *
      * 発話内容が空 (全 category OFF 等) の段は発話を起こさないが、level トリガで鳴り続けないよう
-     * 処理済みマークだけ付けて畳む。発話内容が**同一案内地点で既に発話確定済みの SSML と一致**する場合も
+     * 処理済みマークだけ付けて畳む。発話内容が**同一案内地点で既に発話確定済みの内容キーと一致**する場合も
      * 発話を起こさず畳む。距離違い候補は plan 構築時に raw text で dedup 済みだが、category gate 適用後に
-     * 別段が同一内容へ畳まれることがあるため、render 後の SSML でもう一度抑止する (外部ナビ API 参照実装の
-     * 同一文言抑止に対応)。発話に進む場合はその SSML を発話確定済みとして記録する。
+     * 別段が同一内容へ畳まれることがあるため、render 後の内容キーでもう一度抑止する (外部ナビ API 参照実装の
+     * 同一文言抑止に対応)。発話に進む場合はその内容キーを発話確定済みとして記録する。
      */
     private fun dispatchSelection(
         selection: VoiceAnnouncementSelection,
         tick: VoiceTick,
     ): VoiceAnnouncementCommand? {
-        val ssml = contentRenderer.render(selection.stage)
-        if (ssml == null) {
+        val content = contentRenderer.render(selection.stage)
+        if (content == null) {
             logSkippedEmpty(selection, tick)
             state = state.withStageFired(selection.stage.id)
             return null
         }
 
-        if (state.isContentSpoken(selection.targetIndex, ssml)) {
-            logSkippedDuplicateContent(selection, ssml, tick)
+        if (state.isContentSpoken(selection.targetIndex, content.dedupeKey)) {
+            logSkippedDuplicateContent(selection, content, tick)
             state = state.withStageFired(selection.stage.id)
             return null
         }
 
-        val request = VoiceAnnouncementRequest.from(selection, ssml)
+        val request = VoiceAnnouncementRequest.from(selection, content)
         val decision = policy.decide(state, selection, tick)
         logDecision(decision, selection, tick)
-        state = state.withContentSpoken(selection.targetIndex, ssml)
+        state = state.withContentSpoken(selection.targetIndex, content.dedupeKey)
 
         return when (decision) {
             VoiceAnnouncementDispatchDecision.PLAY -> startSpeaking(request)
@@ -205,10 +206,14 @@ internal class VoiceAnnouncementScheduler(
     }
 
     /** 同一案内地点で発話済みの SSML と一致したため畳んだ段を出力する。 */
-    private fun logSkippedDuplicateContent(selection: VoiceAnnouncementSelection, ssml: String, tick: VoiceTick) {
+    private fun logSkippedDuplicateContent(
+        selection: VoiceAnnouncementSelection,
+        content: VoiceAnnouncementContent,
+        tick: VoiceTick,
+    ) {
         Napier.d(tag = TAG) {
             "skip-dupcontent stage=${selection.stage.id.value} target=${selection.targetIndex} " +
-                "current=${tick.currentCumulativeMeters} ssml=\"$ssml\""
+                "current=${tick.currentCumulativeMeters} content=\"${content.dedupeKey}\""
         }
     }
 

@@ -10,33 +10,41 @@ import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
  * 距離段の発話素片を category gate に通し、読み上げる SSML に確定する。
  *
  * plan の段は素片を位置非依存で持つだけで、どの素片を鳴らすかは発話直前に決まる。本クラスは OFF にした
- * category の素片を除外し、残りを 1 本の SSML に結合する。発話する内容が無ければ null を返し、scheduler は
- * 発話を起こさずに段を処理済みとして畳む。
+ * category の素片を除外し、残りを 1 本の SSML とローカル効果音指定に結合する。発話する内容が無ければ null を
+ * 返し、scheduler は発話を起こさずに段を処理済みとして畳む。
  *
- * 発話は常に SSML で行う (SSML を持たない素片は text を escape して取り込む)。素片どうしは読点 ([PAUSE])
- * で繋ぐ。素片は API が意味単位ごとに分割して送る区切りなので、その境界に文中ポーズを置くことで TTS が
- * 全文を一息で繋げて読むのを防ぐ。`<break>` は文末扱いになりイントネーションが切れるため使わず、文中ポーズの
- * 読点を使う。前の素片が既に句読点で終わっている場合は重複させない (「。、」「、、」を避ける)。
+ * TTS に渡す部分は常に SSML で行う (SSML を持たない素片は text を escape して取り込む)。素片どうしは読点
+ * ([PAUSE]) で繋ぐ。素片は API が意味単位ごとに分割して送る区切りなので、その境界に文中ポーズを置くことで
+ * TTS が全文を一息で繋げて読むのを防ぐ。`<break>` は文末扱いになりイントネーションが切れるため使わず、
+ * 文中ポーズの読点を使う。前の素片が既に句読点で終わっている場合は重複させない (「。、」「、、」を避ける)。
  */
 internal class VoiceAnnouncementContentRenderer(
     private val categoryGate: VoiceAnnouncementCategoryGate,
 ) {
 
     /**
-     * 距離段を読み上げ用の SSML に変換する。発話すべき素片が無い (全 OFF) 場合は null。
+     * 距離段を読み上げ内容に変換する。発話すべき素片が無い (全 OFF) 場合は null。
      *
      * @param stage 発話対象の距離段
-     * @return `<speak>` で囲んだ Google Cloud TTS 向け SSML。発話するものが無ければ null
+     * @return TTS 用 SSML とローカル効果音指定。発話するものが無ければ null
      */
-    fun render(stage: AnnouncementStage): String? {
+    fun render(stage: AnnouncementStage): VoiceAnnouncementContent? {
         val enabledPieces = stage.pieces.filter { piece -> categoryGate.isEnabled(piece.category) }
         if (enabledPieces.isEmpty()) return null
 
-        val rawSsml = enabledPieces
+        val fragments = enabledPieces
             .map { piece -> ssmlFragmentOf(piece) }
-            .reduce { joined, fragment -> joined + separatorBefore(fragment, previous = joined) + fragment }
+            .filter { fragment -> fragment.isNotBlank() }
+        val rawSsml = fragments
+            .reduceOrNull { joined, fragment -> joined + separatorBefore(fragment, previous = joined) + fragment }
+        val ssml = rawSsml?.let(PhonemeConverter::toGoogleCloudSsml)
+        val cue = if (enabledPieces.any { piece -> piece.hasChimeCue() }) VoiceAnnouncementCue.CHIME else null
+        val content = VoiceAnnouncementContent(
+            ssml = ssml,
+            cue = cue,
+        )
 
-        return PhonemeConverter.toGoogleCloudSsml(rawSsml)
+        return content.takeIf { it.hasOutput }
     }
 
     /** 直前の素片が句読点で終わっていれば追加のポーズは挟まず、そうでなければ読点を挟む。 */
@@ -49,7 +57,15 @@ internal class VoiceAnnouncementContentRenderer(
 
     /** 素片を SSML 断片にする。SSML を持つ素片はそのまま、持たない素片は text を escape して取り込む。 */
     private fun ssmlFragmentOf(piece: GuideAnnouncementPiece): String =
-        piece.ssml ?: escapeSsmlText(piece.text)
+        piece.ssml?.removeChimeText() ?: escapeSsmlText(piece.text.removeChimeText())
+
+    /** 素片にローカル効果音へ差し替えるチャイム表現が含まれるか。 */
+    private fun GuideAnnouncementPiece.hasChimeCue(): Boolean =
+        text.contains(CHIME_TEXT) || ssml?.contains(CHIME_TEXT) == true
+
+    /** TTS に読ませないチャイム表現を取り除く。 */
+    private fun String.removeChimeText(): String =
+        if (contains(CHIME_TEXT)) replace(CHIME_TEXT, "").trimStart() else this
 
     /** SSML 本文に直接埋め込めるよう、最低限の XML 特殊文字 (`&` `<` `>`) を escape する。 */
     private fun escapeSsmlText(text: String): String = text
@@ -65,6 +81,9 @@ internal class VoiceAnnouncementContentRenderer(
          * イントネーションは 1 文として連続する (`<break>` のような文末区切りにならない)。
          */
         const val PAUSE = "、"
+
+        /** 外部データ上で案内前チャイムを表す文字列。 */
+        const val CHIME_TEXT = "ポーン"
 
         /** 既にポーズになっている句読点。直前がこれらで終わるなら読点を重ねない。 */
         val PAUSE_PUNCTUATION = setOf('、', '。', '，', '．', '！', '？', '!', '?')
