@@ -8,6 +8,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import me.matsumo.drive.supporter.api.core.model.LogLevel
 import me.matsumo.onenavi.core.datasource.RouteDataSource
+import me.matsumo.onenavi.core.model.AppConfig
 import me.matsumo.onenavi.core.navigation.NavigationSdkManager
 import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavAuthGateway
@@ -18,8 +19,12 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
+import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsApi
+import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsVoiceAnnouncementDispatcher
+import me.matsumo.onenavi.core.navigation.tts.PcmAudioPlayer
+import me.matsumo.onenavi.core.navigation.tts.TtsAudioFocusManager
+import me.matsumo.onenavi.core.navigation.tts.TtsSigningCertificate
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
-import me.matsumo.onenavi.core.navigation.voice.dispatch.LoggingVoiceAnnouncementDispatcher
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispatcher
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlanBuilder
@@ -45,7 +50,21 @@ val navigationModule: Module = module {
     single { VoiceAnnouncementPlanBuilder() }
     single { VoiceAnnouncementSelector(config = get()) }
     single { VoiceAnnouncementSelectionPolicy() }
-    single<VoiceAnnouncementDispatcher> { LoggingVoiceAnnouncementDispatcher() }
+    single<VoiceAnnouncementDispatcher> {
+        val appConfig = get<AppConfig>()
+        val context = androidContext()
+        GoogleCloudTtsVoiceAnnouncementDispatcher(
+            api = GoogleCloudTtsApi(
+                httpClient = get(named("googleCloudTts")),
+                apiKey = appConfig.googleCloudTtsApiKey,
+                packageName = context.packageName,
+                signatureSha1 = TtsSigningCertificate.resolveSha1(context),
+            ),
+            audioPlayer = PcmAudioPlayer(),
+            audioFocusManager = TtsAudioFocusManager(context),
+            apiKey = appConfig.googleCloudTtsApiKey,
+        )
+    }
     single {
         VoiceAnnouncementContentRenderer(
             categoryGate = get<VoiceAnnouncementConfig>().categoryGates,
@@ -86,15 +105,16 @@ val navigationModule: Module = module {
     single<HttpClient>(qualifier = named("googleCloudTts")) {
         HttpClient(OkHttp) {
             install(HttpTimeout) {
-                connectTimeoutMillis = 3_000
-                requestTimeoutMillis = 8_000
-                socketTimeoutMillis = 5_000
+                connectTimeoutMillis = 5_000
+                requestTimeoutMillis = 30_000
+                socketTimeoutMillis = 30_000
             }
             install(ContentNegotiation) {
                 json(
                     Json {
                         ignoreUnknownKeys = true
                         isLenient = true
+                        encodeDefaults = true
                     },
                 )
             }
