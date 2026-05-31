@@ -47,6 +47,7 @@ class ExtNavGuidanceTracker {
     private var lastProjection: RouteProjection? = null
     private var offRouteCandidate: OffRouteCandidate? = null
     private var guidanceStartTimestampMillis: Long? = null
+    private var previousRawPoint: RoutePoint? = null
 
     /**
      * 案内対象の route と、Preview 時にキャッシュした外部ナビ API ライブラリ由来 payload を紐付ける。
@@ -66,6 +67,7 @@ class ExtNavGuidanceTracker {
         lastProjection = null
         offRouteCandidate = null
         guidanceStartTimestampMillis = null
+        previousRawPoint = null
         _snapshot.value = null
         return ExtNavGuidanceAttachment(
             guidanceRoute = attached.guidanceRoute,
@@ -95,6 +97,7 @@ class ExtNavGuidanceTracker {
             location = location,
         )
         lastProjection = projection
+        previousRawPoint = location.toRoutePoint()
         _snapshot.value = snapshot
     }
 
@@ -105,6 +108,7 @@ class ExtNavGuidanceTracker {
         lastProjection = null
         offRouteCandidate = null
         guidanceStartTimestampMillis = null
+        previousRawPoint = null
         _snapshot.value = null
     }
 
@@ -189,16 +193,23 @@ class ExtNavGuidanceTracker {
             route = attached.guidanceRoute,
             currentCumulativeMeters = projection.currentCumulativeMeters,
         )
+        val vehicleHeadingDegrees = resolveVehicleHeading(location)
+        val wrongDirectionTick = isWrongDirectionTick(
+            projection = projection,
+            vehicleHeadingDegrees = vehicleHeadingDegrees,
+        )
         val offRouteCandidate = isOffRouteCandidate(
             projection = projection,
             location = location,
             attached = attached,
+            wrongDirectionTick = wrongDirectionTick,
         )
         val routeMatchState = updateRouteMatchState(
             attached = attached,
             projection = projection,
             location = location,
             isOffRouteCandidate = offRouteCandidate,
+            wrongDirectionTick = wrongDirectionTick,
         )
         val currentRoadClass = currentRoadClassFor(
             route = attached.route,
@@ -235,6 +246,7 @@ class ExtNavGuidanceTracker {
             routeMatchState = routeMatchState,
             isOffRouteCandidate = offRouteCandidate,
             nextGuidancePointIndex = selection.nextPrimaryEvent?.anchor?.sourceGuidancePointIndex,
+            headingDegrees = vehicleHeadingDegrees,
         )
     }
 
@@ -597,16 +609,22 @@ class ExtNavGuidanceTracker {
      * @param projection 今回 tick の projection
      * @param location 今回 tick の生 GPS
      * @param attached attach 済み route 情報
+     * @param wrongDirectionTick 今回 tick が逆走方向か
      * @return debounce 前の off-route 候補なら true
      */
     private fun isOffRouteCandidate(
         projection: RouteProjection,
         location: UserLocation,
         attached: AttachedRoute,
+        wrongDirectionTick: Boolean,
     ): Boolean {
         if (remainingDistanceMetres(attached, projection) <= ARRIVAL_SUPPRESSION_METRES) return false
         if (location.hasTooCoarseAccuracyForOffRoute()) return false
         if (location.hasTooSlowSpeedForOffRoute()) return false
+
+        // 逆走中は route polyline 上に乗ったままで横ズレが小さく、距離閾値では候補に上がらない。
+        // 進行方位が route 方向とほぼ真逆なら横ズレに関係なく候補とする。
+        if (wrongDirectionTick) return true
 
         return projection.projectionErrorMeters >= offRouteCandidateThreshold(location)
     }
@@ -621,6 +639,7 @@ class ExtNavGuidanceTracker {
      * @param projection 今回 tick の projection
      * @param location 今回 tick の生 GPS
      * @param isOffRouteCandidate 今回 tick が off-route 候補か
+     * @param wrongDirectionTick 今回 tick が逆走方向か
      * @return debounce 後の route match 状態
      */
     private fun updateRouteMatchState(
@@ -628,6 +647,7 @@ class ExtNavGuidanceTracker {
         projection: RouteProjection,
         location: UserLocation,
         isOffRouteCandidate: Boolean,
+        wrongDirectionTick: Boolean,
     ): RouteMatchState {
         if (!isOffRouteCandidate) {
             clearOffRouteCandidate()
@@ -650,6 +670,7 @@ class ExtNavGuidanceTracker {
                 projection = projection,
                 location = location,
                 candidate = candidate,
+                wrongDirectionTick = wrongDirectionTick,
             )
         ) {
             RouteMatchState.OFF_ROUTE_CONFIRMED
@@ -668,6 +689,7 @@ class ExtNavGuidanceTracker {
      * @param projection 今回 tick の projection
      * @param location 今回 tick の生 GPS
      * @param candidate 継続中の off-route 候補
+     * @param wrongDirectionTick 今回 tick が逆走方向か
      * @return リルート対象として確定できる場合 true
      */
     private fun isOffRouteConfirmedSample(
@@ -675,6 +697,7 @@ class ExtNavGuidanceTracker {
         projection: RouteProjection,
         location: UserLocation,
         candidate: OffRouteCandidate,
+        wrongDirectionTick: Boolean,
     ): Boolean {
         val exceedsConfirmedDistance = projection.projectionErrorMeters >= offRouteConfirmedThreshold(location)
         val hasEnoughSamples = candidate.sampleCount >= OFF_ROUTE_CONFIRMATION_SAMPLE_COUNT
@@ -682,6 +705,11 @@ class ExtNavGuidanceTracker {
             candidate.durationMillis >= OFF_ROUTE_CONFIRMATION_DURATION_MILLIS
 
         if (exceedsConfirmedDistance && (hasEnoughSamples || hasEnoughDuration)) {
+            return true
+        }
+
+        // 逆走が一定 tick 継続したら、横ズレが小さくてもリルート対象として確定する。
+        if (wrongDirectionTick && candidate.sampleCount >= WRONG_DIRECTION_CONFIRMATION_SAMPLE_COUNT) {
             return true
         }
 
@@ -774,6 +802,47 @@ class ExtNavGuidanceTracker {
         val bearingDiffDegrees = abs(normalizeDegrees(bearingDegrees - projection.segmentBearingDegrees))
 
         return bearingDiffDegrees >= OFF_ROUTE_DECISION_POINT_BEARING_DIFF_DEGREES
+    }
+
+    /**
+     * 今回 tick の進行方位が route 方向とほぼ真逆かを返す。
+     *
+     * 交差点に依存しない一般的な逆走判定。route polyline 上を逆向きに走ると横ズレが小さいまま
+     * 投影先 segment が手前に固定され、その segment の進行方位と車両方位がほぼ真逆になる。
+     * GPS 方位が無い provider (一部端末 / Fake GPS) では直前位置からの移動方位で代替する。
+     *
+     * @param projection 今回 tick の projection
+     * @param vehicleHeadingDegrees 解決済みの車両進行方位。求められなければ null
+     * @return 方位差が逆走閾値以上なら true
+     */
+    private fun isWrongDirectionTick(
+        projection: RouteProjection,
+        vehicleHeadingDegrees: Float?,
+    ): Boolean {
+        val headingDegrees = vehicleHeadingDegrees ?: return false
+        val bearingDiffDegrees = abs(normalizeDegrees(headingDegrees - projection.segmentBearingDegrees))
+
+        return bearingDiffDegrees >= WRONG_DIRECTION_BEARING_DIFF_DEGREES
+    }
+
+    /**
+     * 車両の進行方位を求める。
+     *
+     * GPS 方位が有効ならそれを使い、無ければ直前 tick の位置からの移動方位で代替する。移動量が
+     * 小さいと方位が不安定になるため、一定距離未満の移動では方位を確定しない。
+     *
+     * @param location 今回 tick の生 GPS
+     * @return 進行方位。求められなければ null
+     */
+    private fun resolveVehicleHeading(location: UserLocation): Float? {
+        val gpsBearingDegrees = location.bearingDegrees
+        if (gpsBearingDegrees != null && gpsBearingDegrees.isFinite()) return gpsBearingDegrees
+
+        val previousPoint = previousRawPoint ?: return null
+        val currentPoint = location.toRoutePoint()
+        if (haversineMetres(previousPoint, currentPoint) < MIN_HEADING_MOVE_METRES) return null
+
+        return bearingDegrees(previousPoint, currentPoint)
     }
 
     /**
@@ -1028,5 +1097,14 @@ class ExtNavGuidanceTracker {
 
         /** 案内判断点付近で使う GPS bearing と segment bearing の最小差分。 */
         private const val OFF_ROUTE_DECISION_POINT_BEARING_DIFF_DEGREES: Float = 45f
+
+        /** 交差点に依存せず逆走とみなす進行方位と segment 方位の最小差分。 */
+        private const val WRONG_DIRECTION_BEARING_DIFF_DEGREES: Float = 120f
+
+        /** 逆走で confirmed 判定に必要な連続 tick 数。 */
+        private const val WRONG_DIRECTION_CONFIRMATION_SAMPLE_COUNT: Int = 3
+
+        /** GPS 方位が無いときに移動方位を確定できる最小移動距離。 */
+        private const val MIN_HEADING_MOVE_METRES: Double = 3.0
     }
 }

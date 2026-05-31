@@ -15,14 +15,18 @@ import me.matsumo.onenavi.core.datasource.location.CurrentLocationDataSource
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RouteDetail
+import me.matsumo.onenavi.core.model.RouteResult
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavProgressSnapshot
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDecision
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation
 import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementController
+import me.matsumo.onenavi.core.repository.RouteRepository
 
 /**
  * Guidance 期 (案内中) のマネージャ。
@@ -30,14 +34,16 @@ import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementContr
  * 地図描画・callout・音声案内はすべて自前で行い、Google Navigation SDK の Navigator は使わない。
  * この manager は route payload を tracker に attach し、端末位置 tick を流して [GuidanceState] を更新する。
  * 音声案内は attach 時に [VoiceAnnouncementController] へ同じ payload / 距離変換 context を渡し、tracker snapshot を
- * 流して発話を駆動する。リルート判定・到着判定は [me.matsumo.onenavi.core.navigation.extnav] 配下の周辺コンポーネントへ
- * 順次 fan-out する。
+ * 流して発話を駆動する。tracker が `OFF_ROUTE_CONFIRMED` を確定したら [ExtNavRerouteDetector] が
+ * [ExtNavRerouteDecision.Request] を返し、この manager が [RouteRepository] で再探索して新ルートで案内を貼り直す。
  */
 class NewGuidanceManager internal constructor(
     private val routeRegistry: ExtNavRouteRegistry? = null,
     private val guidanceTracker: ExtNavGuidanceTracker? = null,
     private val locationDataSource: CurrentLocationDataSource? = null,
     private val voiceController: VoiceAnnouncementController? = null,
+    private val rerouteDetector: ExtNavRerouteDetector? = null,
+    private val routeRepository: RouteRepository? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
 
@@ -51,6 +57,9 @@ class NewGuidanceManager internal constructor(
 
     private var isSessionActive: Boolean = false
 
+    private var currentRoute: RouteDetail? = null
+    private var rerouteJob: Job? = null
+
     /** Guidance 期の現在状態。 */
     val state: StateFlow<GuidanceState> = _state.asStateFlow()
 
@@ -63,8 +72,26 @@ class NewGuidanceManager internal constructor(
      * @param route 案内対象ルート
      */
     fun startGuidance(route: RouteDetail) {
+        beginGuidance(route = route, resetReroute = true)
+    }
+
+    /**
+     * 指定ルートで案内 session を開始する内部処理。
+     *
+     * 初回の案内開始とリルート後の貼り直しの双方から呼ぶ。前者は [ExtNavRerouteDetector] を完全に
+     * リセットし、後者はウォームアップだけ attach 時に張り直して連発を防ぐ。
+     *
+     * @param route 案内対象ルート
+     * @param resetReroute true の場合はリルート判定器を完全リセットする (初回開始時)
+     */
+    private fun beginGuidance(
+        route: RouteDetail,
+        resetReroute: Boolean,
+    ) {
         stopGuidanceSession(detachTracker = isSessionActive)
+        if (resetReroute) rerouteDetector?.detach()
         Napier.i(tag = TAG) { "Guidance started: routeId=${route.id}" }
+        currentRoute = route
         val sessionId = consumeNextSessionId()
         val trackerSnapshot = startTrackerForRoute(route)
         activeSessionId = sessionId
@@ -108,7 +135,11 @@ class NewGuidanceManager internal constructor(
      */
     fun stopGuidance() {
         Napier.i(tag = TAG) { "Guidance stopped" }
+        rerouteJob?.cancel()
+        rerouteJob = null
         stopGuidanceSession(detachTracker = isSessionActive)
+        rerouteDetector?.detach()
+        currentRoute = null
         _state.value = GuidanceState.Idle
     }
 
@@ -145,6 +176,7 @@ class NewGuidanceManager internal constructor(
 
         val attachment = tracker.attach(payload = payload, route = route)
         voiceController?.start(payload = payload, distanceContext = attachment.distanceContext)
+        rerouteDetector?.attach(route)
         tracker.onLocation(route.toOriginUserLocation())
 
         val snapshot = tracker.snapshot.value
@@ -208,6 +240,7 @@ class NewGuidanceManager internal constructor(
                 if (snapshot == null) return@collect
                 if (!isActiveSession(sessionId)) return@collect
                 publishGuidance(route = route, snapshot = snapshot)
+                maybeRequestReroute(snapshot = snapshot, sessionId = sessionId)
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -238,6 +271,113 @@ class NewGuidanceManager internal constructor(
             presentation = snapshot.presentation,
         )
         voiceController?.onSnapshot(snapshot)
+    }
+
+    /**
+     * snapshot を [ExtNavRerouteDetector] にかけ、リルート要求なら再探索 job を起動する。
+     *
+     * 再探索 job は session job とは別に [scope] 上で起動する。job 内で session を止めても
+     * 自分自身がキャンセルされないようにするため。判定器か repository が未注入なら何もしない。
+     *
+     * @param snapshot tracker が発行した進捗 snapshot
+     * @param sessionId この案内 session の id
+     */
+    private fun maybeRequestReroute(
+        snapshot: ExtNavProgressSnapshot,
+        sessionId: Long,
+    ) {
+        val detector = rerouteDetector ?: return
+        if (routeRepository == null) return
+        if (rerouteJob?.isActive == true) return
+
+        val decision = detector.onSnapshot(snapshot)
+        if (decision !is ExtNavRerouteDecision.Request) return
+
+        rerouteJob = scope.launch {
+            handleReroute(request = decision, sessionId = sessionId)
+        }
+    }
+
+    /**
+     * リルート要求を受けて再探索し、新ルートで案内を貼り直す。
+     *
+     * 再探索中は現 session を止めて [GuidanceState.Rerouting] を保持する。成功時は同 priority を
+     * 優先して候補を選び新ルートで再案内、失敗 / 候補なしは旧ルートで案内を再開する。
+     *
+     * @param request リルート要求
+     * @param sessionId リルートを要求した案内 session の id
+     */
+    private suspend fun handleReroute(
+        request: ExtNavRerouteDecision.Request,
+        sessionId: Long,
+    ) {
+        if (!isActiveSession(sessionId)) return
+        val repository = routeRepository ?: return
+
+        Napier.i(tag = TAG) { "Reroute requested: reason=${request.reason}" }
+        stopGuidanceSession(detachTracker = true)
+        _state.value = GuidanceState.Rerouting
+
+        repository.searchRoutes(
+            originLatitude = request.origin.latitude,
+            originLongitude = request.origin.longitude,
+            destinationLatitude = request.destination.latitude,
+            destinationLongitude = request.destination.longitude,
+            intermediateWaypoints = request.remainingViaPoints.map { viaPoint ->
+                viaPoint.latitude to viaPoint.longitude
+            },
+            originDirectionDegrees = request.originDirectionDegrees,
+        )
+            .onSuccess { results ->
+                val nextRoute = selectRerouteCandidate(results = results, current = currentRoute)
+                if (nextRoute == null) {
+                    Napier.w(tag = TAG) { "Reroute returned no candidate" }
+                    resumeAfterFailedReroute()
+                } else {
+                    Napier.i(tag = TAG) { "Reroute ready: routeId=${nextRoute.id}" }
+                    beginGuidance(route = nextRoute, resetReroute = false)
+                }
+            }
+            .onFailure { error ->
+                Napier.w(tag = TAG, throwable = error) { "Reroute search failed" }
+                resumeAfterFailedReroute()
+            }
+    }
+
+    /**
+     * 再探索結果から再案内するルートを選ぶ。
+     *
+     * 現在案内中と同じ priority を優先し、無ければ先頭候補を使う。
+     *
+     * @param results 再探索で得た候補
+     * @param current 現在案内中のルート
+     * @return 再案内するルート。候補が無い場合は null
+     */
+    private fun selectRerouteCandidate(
+        results: List<RouteResult>,
+        current: RouteDetail?,
+    ): RouteDetail? {
+        val candidates = results.map { result -> result.detail }
+        if (candidates.isEmpty()) return null
+
+        val priority = current?.priority
+        return candidates.firstOrNull { candidate -> candidate.priority == priority }
+            ?: candidates.first()
+    }
+
+    /**
+     * リルートに失敗したとき旧ルートで案内を再開する。
+     *
+     * 旧ルートの payload は registry に残っているため再 attach できる。旧ルートも無ければ
+     * [GuidanceState.Failed] に落とす。
+     */
+    private fun resumeAfterFailedReroute() {
+        val route = currentRoute
+        if (route == null) {
+            _state.value = GuidanceState.Failed("reroute failed")
+            return
+        }
+        beginGuidance(route = route, resetReroute = false)
     }
 
     /**

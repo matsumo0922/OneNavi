@@ -21,6 +21,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePrese
  * @param routeMatchState 現在位置と案内 route の一致状態
  * @param isOffRouteCandidate debounce 前のオフルート候補
  * @param nextGuidancePointIndex 次の案内ポイント index
+ * @param headingDegrees 車両進行方位 (GPS 方位、無ければ直前位置からの移動方位)。求められなければ null
  */
 @Immutable
 data class ExtNavProgressSnapshot(
@@ -36,4 +37,5 @@ data class ExtNavProgressSnapshot(
     val routeMatchState: RouteMatchState,
     val isOffRouteCandidate: Boolean,
     val nextGuidancePointIndex: Int?,
+    val headingDegrees: Float? = null,
 )

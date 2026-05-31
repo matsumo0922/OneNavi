@@ -64,6 +64,7 @@ class ExtNavRouteDataSource(
         destinationLatitude: Double,
         destinationLongitude: Double,
         intermediateWaypoints: List<Pair<Double, Double>>,
+        originDirectionDegrees: Int?,
     ): Result<List<RouteResult>> = runCatching {
         authGateway.ensureSignedIn().getOrThrow()
 
@@ -80,6 +81,7 @@ class ExtNavRouteDataSource(
                 CarPriority.Express,
                 CarPriority.Free,
             ),
+            startDirection = originDirectionDegrees ?: RouteSearchCriteria.DIRECTION_UNSPECIFIED,
         )
 
         val (interchangeNameHints, guidanceResult) = coroutineScope {
