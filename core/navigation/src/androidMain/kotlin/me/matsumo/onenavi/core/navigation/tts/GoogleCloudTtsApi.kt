@@ -41,15 +41,14 @@ internal class GoogleCloudTtsApi(
 ) {
 
     /**
-     * テキスト (または SSML) を合成し、WAV (LINEAR16) バイト列を返す。
+     * SSML を合成し、WAV (LINEAR16) バイト列を返す。
      *
-     * @param text プレーンテキスト (ssml が null のとき使用)
-     * @param ssml 変換済み SSML (非 null なら text より優先)
+     * @param ssml 変換済み SSML (`<speak>` で囲み済み)
      * @return base64 デコード済みの WAV バイト列 (先頭 44byte は WAV ヘッダ)
      */
-    suspend fun synthesize(text: String, ssml: String?): ByteArray {
+    suspend fun synthesize(ssml: String): ByteArray {
         val request = SynthesizeRequest(
-            input = if (ssml != null) SynthesizeInput(ssml = ssml) else SynthesizeInput(text = text),
+            input = SynthesizeInput(ssml = ssml),
         )
 
         val response = httpClient.post(SYNTHESIZE_ENDPOINT) {

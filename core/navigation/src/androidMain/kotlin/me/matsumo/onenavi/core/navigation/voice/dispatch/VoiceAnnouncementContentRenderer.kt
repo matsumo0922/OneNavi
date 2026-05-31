@@ -3,57 +3,40 @@ package me.matsumo.onenavi.core.navigation.voice.dispatch
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
 import me.matsumo.onenavi.core.navigation.tts.PhonemeConverter
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementCategoryGate
+import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer.Companion.PIECE_BREAK
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
 
 /**
- * 距離段の発話素片を category gate に通し、読み上げる発話内容 ([VoiceAnnouncementContent]) に確定する。
+ * 距離段の発話素片を category gate に通し、読み上げる SSML に確定する。
  *
  * plan の段は素片を位置非依存で持つだけで、どの素片を鳴らすかは発話直前に決まる。本クラスは OFF にした
- * category の素片を除外し、残りの text / SSML を結合する。発話する内容が無ければ null を返し、scheduler は
+ * category の素片を除外し、残りを 1 本の SSML に結合する。発話する内容が無ければ null を返し、scheduler は
  * 発話を起こさずに段を処理済みとして畳む。
+ *
+ * 発話は常に SSML で行う (SSML を持たない素片は text を escape して取り込む)。素片どうしは [PIECE_BREAK]
+ * (ポーズ) で繋ぐ。素片は API が意味単位ごとに分割して送る区切りなので、その境界で間を空けることで
+ * TTS が全文を一息で繋げて読むのを防ぐ。
  */
 internal class VoiceAnnouncementContentRenderer(
     private val categoryGate: VoiceAnnouncementCategoryGate,
 ) {
 
     /**
-     * 距離段を発話内容に変換する。発話すべき素片が無い (全 OFF / 空文) 場合は null。
+     * 距離段を読み上げ用の SSML に変換する。発話すべき素片が無い (全 OFF) 場合は null。
      *
      * @param stage 発話対象の距離段
-     * @return category gate 適用後の発話内容。発話するものが無ければ null
+     * @return `<speak>` で囲んだ Google Cloud TTS 向け SSML。発話するものが無ければ null
      */
-    fun render(stage: AnnouncementStage): VoiceAnnouncementContent? {
+    fun render(stage: AnnouncementStage): String? {
         val enabledPieces = stage.pieces.filter { piece -> categoryGate.isEnabled(piece.category) }
-        val text = joinText(enabledPieces)
-        if (text.isBlank()) return null
+        if (enabledPieces.isEmpty()) return null
 
-        return VoiceAnnouncementContent(
-            text = text,
-            ssml = buildSsml(enabledPieces),
-        )
-    }
-
-    /** 有効な素片のプレーンテキストを順に結合する。 */
-    private fun joinText(pieces: List<GuideAnnouncementPiece>): String =
-        pieces.joinToString(separator = "") { piece -> piece.text }
-
-    /**
-     * 有効な素片を結合し、Google Cloud TTS 向けの SSML へ変換する。
-     *
-     * SSML を持つ素片が 1 つも無ければ null を返し、dispatcher 側にプレーンテキストでの読み上げを委ねる。
-     * SSML 素片が 1 つでもあれば、SSML を持たない素片はその text を escape して取り込む。SSML だけを
-     * 結合すると、混在時に plain text 素片 (例:「300m先」) が SSML 経路から欠落して読み上げられないため。
-     */
-    private fun buildSsml(pieces: List<GuideAnnouncementPiece>): String? {
-        val hasAnySsml = pieces.any { piece -> piece.ssml != null }
-        if (!hasAnySsml) return null
-
-        val rawSsml = pieces.joinToString(separator = "") { piece -> ssmlFragmentOf(piece) }
+        val rawSsml = enabledPieces.joinToString(separator = PIECE_BREAK) { piece -> ssmlFragmentOf(piece) }
 
         return PhonemeConverter.toGoogleCloudSsml(rawSsml)
     }
 
-    /** 素片の SSML を取り出す。SSML を持たない素片は text を escape したものを使う。 */
+    /** 素片を SSML 断片にする。SSML を持つ素片はそのまま、持たない素片は text を escape して取り込む。 */
     private fun ssmlFragmentOf(piece: GuideAnnouncementPiece): String =
         piece.ssml ?: escapeSsmlText(piece.text)
 
@@ -62,4 +45,14 @@ internal class VoiceAnnouncementContentRenderer(
         .replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
+
+    private companion object {
+
+        /**
+         * 素片 (piece) 間に挟むポーズ。API が意味単位 (ポーン / 距離 / 方向 / 地点名 / 述語 など) ごとに
+         * 分割して送る piece の境界で間を空け、TTS が全文を一息で繋げて読むのを防ぐ。piece 内部
+         * (例: 施設名 + 述語) は API が分割しないため、ここでは区切らない。
+         */
+        const val PIECE_BREAK = "<break time=\"100ms\"/>"
+    }
 }

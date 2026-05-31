@@ -10,8 +10,8 @@ import io.github.aakira.napier.Napier
  */
 internal class LoggingVoiceAnnouncementDispatcher : VoiceAnnouncementDispatcher {
 
-    override suspend fun speak(content: VoiceAnnouncementContent) {
-        Napier.d(tag = TAG) { "speak: text=\"${content.text}\" ssml=${content.ssml != null}" }
+    override suspend fun speak(ssml: String) {
+        Napier.d(tag = TAG) { "speak: ssml=\"$ssml\"" }
     }
 
     private companion object {

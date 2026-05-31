@@ -13,15 +13,15 @@ import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
  *
  * @property firedStageIds 発話・割り込み・キュー投入のいずれかで処理が確定した段の id 集合。再トリガを防ぐ
  * @property passedTargetIndices 通過済み案内地点の plan 内 index 集合。残段の遅延発話を防ぐ
- * @property spokenTexts 発話を確定した (案内地点 index, 読み上げテキスト) の集合。category gate 適用後に
- *   同一文言へ畳まれた段の二重発話を防ぐ
+ * @property spokenContents 発話を確定した (案内地点 index, 読み上げ SSML) の集合。category gate 適用後に
+ *   同一内容へ畳まれた段の二重発話を防ぐ
  * @property speaking 現在発話中の段。無発話なら null
  */
 @Immutable
 internal data class VoiceAnnouncementSpeechState(
     val firedStageIds: PersistentSet<VoiceAnnouncementId> = persistentSetOf(),
     val passedTargetIndices: PersistentSet<Int> = persistentSetOf(),
-    val spokenTexts: PersistentSet<SpokenAnnouncementText> = persistentSetOf(),
+    val spokenContents: PersistentSet<SpokenAnnouncementContent> = persistentSetOf(),
     val speaking: SpeakingAnnouncement? = null,
 ) {
 
@@ -31,9 +31,9 @@ internal data class VoiceAnnouncementSpeechState(
     /** 案内地点が通過済みかを返す。 */
     fun isTargetPassed(targetIndex: Int): Boolean = targetIndex in passedTargetIndices
 
-    /** 同一案内地点で同じ読み上げテキストを既に発話確定済みかを返す。 */
-    fun isTextSpoken(targetIndex: Int, text: String): Boolean =
-        SpokenAnnouncementText(targetIndex = targetIndex, text = text) in spokenTexts
+    /** 同一案内地点で同じ読み上げ SSML を既に発話確定済みかを返す。 */
+    fun isContentSpoken(targetIndex: Int, ssml: String): Boolean =
+        SpokenAnnouncementContent(targetIndex = targetIndex, ssml = ssml) in spokenContents
 
     /** 段を処理確定済みとして記録した新しい状態を返す。 */
     fun withStageFired(stageId: VoiceAnnouncementId): VoiceAnnouncementSpeechState =
@@ -43,9 +43,9 @@ internal data class VoiceAnnouncementSpeechState(
     fun withTargetPassed(targetIndex: Int): VoiceAnnouncementSpeechState =
         copy(passedTargetIndices = passedTargetIndices.add(targetIndex))
 
-    /** 案内地点 × 読み上げテキストを発話確定済みとして記録した新しい状態を返す。 */
-    fun withTextSpoken(targetIndex: Int, text: String): VoiceAnnouncementSpeechState =
-        copy(spokenTexts = spokenTexts.add(SpokenAnnouncementText(targetIndex = targetIndex, text = text)))
+    /** 案内地点 × 読み上げ SSML を発話確定済みとして記録した新しい状態を返す。 */
+    fun withContentSpoken(targetIndex: Int, ssml: String): VoiceAnnouncementSpeechState =
+        copy(spokenContents = spokenContents.add(SpokenAnnouncementContent(targetIndex = targetIndex, ssml = ssml)))
 
     /** 指定段の発話を開始した状態を返す。発話中マークと既発話マークを同時に立てる。 */
     fun withSpeakingStarted(announcement: SpeakingAnnouncement): VoiceAnnouncementSpeechState =

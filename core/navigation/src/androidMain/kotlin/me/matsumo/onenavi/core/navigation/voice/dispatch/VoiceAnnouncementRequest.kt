@@ -15,7 +15,7 @@ import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelect
  * @property targetIndex 案内地点の plan 内 index。キュー消化時の通過済み判定に使う
  * @property targetGeometryMeters 案内地点の geometry 累積距離 (m)。発話中の緊急度再計算の素材
  * @property kind 距離段の種別。発話中の緊急度 tie-break に使う
- * @property content 読み上げる確定発話内容
+ * @property ssml 読み上げる確定 SSML (`<speak>` で囲み済み)
  */
 @Immutable
 internal data class VoiceAnnouncementRequest(
@@ -23,26 +23,26 @@ internal data class VoiceAnnouncementRequest(
     val targetIndex: Int,
     val targetGeometryMeters: Double,
     val kind: AnnouncementStageKind,
-    val content: VoiceAnnouncementContent,
+    val ssml: String,
 ) {
 
     internal companion object {
 
         /**
-         * 選択結果とレンダリング済み発話内容からリクエストを作る。
+         * 選択結果とレンダリング済み SSML からリクエストを作る。
          *
          * @param selection scheduler が採用した距離段の選択結果
-         * @param content category gate / 結合を適用済みの発話内容
+         * @param ssml category gate / 結合を適用済みの読み上げ SSML
          */
         fun from(
             selection: VoiceAnnouncementSelection,
-            content: VoiceAnnouncementContent,
+            ssml: String,
         ): VoiceAnnouncementRequest = VoiceAnnouncementRequest(
             stageId = selection.stage.id,
             targetIndex = selection.targetIndex,
             targetGeometryMeters = selection.targetGeometryMeters,
             kind = selection.stage.kind,
-            content = content,
+            ssml = ssml,
         )
     }
 }

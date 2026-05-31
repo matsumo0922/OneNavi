@@ -11,24 +11,23 @@ import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
- * [VoiceAnnouncementContentRenderer] の category gate フィルタ / text・SSML 結合のテスト。
+ * [VoiceAnnouncementContentRenderer] の category gate フィルタ / SSML 結合 (素片間ポーズ) のテスト。
  */
 class VoiceAnnouncementContentRendererTest {
 
     @Test
-    fun `有効な素片の text を順に結合する`() {
+    fun `有効な素片を素片間ポーズで繋いだ SSML を作る`() {
         val renderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn)
         val stage = stageOf(
             pieceOf(text = "300m先 ", category = GuidanceCategory.IntersectionGuide),
             pieceOf(text = "右方向です", category = GuidanceCategory.IntersectionGuide),
         )
 
-        val content = renderer.render(stage)
+        val ssml = renderer.render(stage)
 
-        assertEquals("300m先 右方向です", content?.text)
+        assertEquals("<speak>300m先 ${BREAK}右方向です</speak>", ssml)
     }
 
     @Test
@@ -40,9 +39,9 @@ class VoiceAnnouncementContentRendererTest {
             pieceOf(text = "急カーブ注意", category = GuidanceCategory.Curve),
         )
 
-        val content = renderer.render(stage)
+        val ssml = renderer.render(stage)
 
-        assertEquals("右方向です", content?.text)
+        assertEquals("<speak>右方向です</speak>", ssml)
     }
 
     @Test
@@ -53,21 +52,21 @@ class VoiceAnnouncementContentRendererTest {
             pieceOf(text = "急カーブ注意", category = GuidanceCategory.Curve),
         )
 
-        val content = renderer.render(stage)
+        val ssml = renderer.render(stage)
 
-        assertNull(content)
+        assertNull(ssml)
     }
 
     @Test
-    fun `SSML を持つ素片があれば speak で囲んだ SSML を作る`() {
+    fun `SSML を持つ素片はそのまま speak で囲む`() {
         val renderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn)
         val stage = stageOf(
             pieceOf(text = "右です", ssml = "右です", category = GuidanceCategory.IntersectionGuide),
         )
 
-        val content = renderer.render(stage)
+        val ssml = renderer.render(stage)
 
-        assertEquals("<speak>右です</speak>", content?.ssml)
+        assertEquals("<speak>右です</speak>", ssml)
     }
 
     @Test
@@ -78,10 +77,10 @@ class VoiceAnnouncementContentRendererTest {
             pieceOf(text = "右です", ssml = "右です", category = GuidanceCategory.IntersectionGuide),
         )
 
-        val content = renderer.render(stage)
+        val ssml = renderer.render(stage)
 
-        // plain 素片 (300m先) が SSML から欠落せず、ssml 素片と結合される。
-        assertEquals("<speak>300m先 右です</speak>", content?.ssml)
+        // plain 素片 (300m先) が SSML から欠落せず、ssml 素片とポーズで繋がる。
+        assertEquals("<speak>300m先 ${BREAK}右です</speak>", ssml)
     }
 
     @Test
@@ -92,21 +91,21 @@ class VoiceAnnouncementContentRendererTest {
             pieceOf(text = "右です", ssml = "右です", category = GuidanceCategory.IntersectionGuide),
         )
 
-        val content = renderer.render(stage)
+        val ssml = renderer.render(stage)
 
-        assertEquals("<speak>A&amp;B&lt;C&gt; 右です</speak>", content?.ssml)
+        assertEquals("<speak>A&amp;B&lt;C&gt; ${BREAK}右です</speak>", ssml)
     }
 
     @Test
-    fun `SSML を持つ素片が無ければ ssml は null`() {
+    fun `SSML を持たない素片だけでも SSML として読み上げる`() {
         val renderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn)
         val stage = stageOf(
             pieceOf(text = "右です", ssml = null, category = GuidanceCategory.IntersectionGuide),
         )
 
-        val content = renderer.render(stage)
+        val ssml = renderer.render(stage)
 
-        assertTrue(content?.text == "右です" && content.ssml == null)
+        assertEquals("<speak>右です</speak>", ssml)
     }
 
     private fun pieceOf(
@@ -131,4 +130,10 @@ class VoiceAnnouncementContentRendererTest {
         pieces = pieces.toList().toImmutableList(),
         categories = persistentSetOf(),
     )
+
+    private companion object {
+
+        /** 素片間に挿入されるポーズ ([VoiceAnnouncementContentRenderer] の PIECE_BREAK と一致させる)。 */
+        const val BREAK = "<break time=\"100ms\"/>"
+    }
 }

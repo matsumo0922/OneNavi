@@ -107,7 +107,7 @@ internal class VoiceAnnouncementSpeechRunner(
     private fun startSpeech(request: VoiceAnnouncementRequest, channel: Channel<SpeechEvent>) {
         speechJob = scope.launch {
             try {
-                dispatcher.speak(request.content)
+                dispatcher.speak(request.ssml)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Throwable) {

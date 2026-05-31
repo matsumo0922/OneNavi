@@ -25,12 +25,23 @@ class PhonemeConverterTest {
     }
 
     @Test
-    fun `google cloud ssml wraps in speak and rewrites toshiba ruby`() {
+    fun `google cloud ssml wraps in speak and rewrites toshiba ruby to yomigana`() {
         val ssml = "直進方向、<phoneme alphabet=\"x-toshiba-ruby\" ph=\"しゅとこう\">首都高</phoneme>方面です。"
         val converted = PhonemeConverter.toGoogleCloudSsml(ssml)
         assertTrue(converted.startsWith("<speak>"))
         assertTrue(converted.endsWith("</speak>"))
-        assertTrue(converted.contains("<sub alias=\"しゅとこう\">首都高</sub>"))
+        assertTrue(converted.contains("<phoneme alphabet=\"yomigana\" ph=\"しゅとこう\">首都高</phoneme>"))
+    }
+
+    @Test
+    fun `google cloud ssml splits middle-dot readings into per-segment yomigana phonemes`() {
+        val ssml = "<phoneme alphabet=\"x-toshiba-ruby\" ph=\"がいかん・みさと\">外環・三郷</phoneme>方面です。"
+        val converted = PhonemeConverter.toGoogleCloudSsml(ssml)
+        assertEquals(
+            "<speak><phoneme alphabet=\"yomigana\" ph=\"がいかん\">外環</phoneme>、" +
+                "<phoneme alphabet=\"yomigana\" ph=\"みさと\">三郷</phoneme>方面です。</speak>",
+            converted,
+        )
     }
 
     @Test

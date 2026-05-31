@@ -11,7 +11,6 @@ import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementCategoryGate
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
-import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContent
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispatcher
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementDistanceWindow
@@ -41,7 +40,7 @@ class VoiceAnnouncementSpeechRunnerTest {
         advanceUntilIdle()
         runner.detach()
 
-        assertEquals(listOf("m800"), dispatcher.spoken)
+        assertEquals(listOf(spokenSsml("m800")), dispatcher.spoken)
     }
 
     @Test
@@ -63,7 +62,7 @@ class VoiceAnnouncementSpeechRunnerTest {
         advanceUntilIdle()
         runner.detach()
 
-        assertEquals(listOf("near", "far"), dispatcher.spoken)
+        assertEquals(listOf(spokenSsml("near"), spokenSsml("far")), dispatcher.spoken)
     }
 
     @Test
@@ -87,7 +86,7 @@ class VoiceAnnouncementSpeechRunnerTest {
         advanceUntilIdle()
         runner.detach()
 
-        assertEquals(listOf("farMiddle", "nearFinal"), dispatcher.spoken)
+        assertEquals(listOf(spokenSsml("farMiddle"), spokenSsml("nearFinal")), dispatcher.spoken)
     }
 
     @Test
@@ -121,7 +120,7 @@ class VoiceAnnouncementSpeechRunnerTest {
         runner.detach()
 
         // a は失敗 (記録されない) が state は解除され、b が再生される。
-        assertEquals(listOf("b"), dispatcher.spoken)
+        assertEquals(listOf(spokenSsml("b")), dispatcher.spoken)
     }
 
     private fun runnerOf(
@@ -145,8 +144,8 @@ class VoiceAnnouncementSpeechRunnerTest {
         val spoken = mutableListOf<String>()
         private val gates = ArrayDeque<CompletableDeferred<Unit>>()
 
-        override suspend fun speak(content: VoiceAnnouncementContent) {
-            spoken += content.text
+        override suspend fun speak(ssml: String) {
+            spoken += ssml
             val gate = CompletableDeferred<Unit>()
             gates.addLast(gate)
             gate.await()
@@ -165,14 +164,17 @@ class VoiceAnnouncementSpeechRunnerTest {
         val spoken = mutableListOf<String>()
         private var shouldFail = true
 
-        override suspend fun speak(content: VoiceAnnouncementContent) {
+        override suspend fun speak(ssml: String) {
             if (shouldFail) {
                 shouldFail = false
                 error("speak failed")
             }
-            spoken += content.text
+            spoken += ssml
         }
     }
+
+    // 各 stage は単一 piece (text=id, ssml なし) なので、render 後は <speak> で囲んだ SSML になる。
+    private fun spokenSsml(id: String): String = "<speak>$id</speak>"
 
     private fun planOf(vararg targets: AnnouncementTarget): VoiceAnnouncementPlan = VoiceAnnouncementPlan(
         routeId = "R",

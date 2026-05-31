@@ -2,7 +2,6 @@ package me.matsumo.onenavi.core.navigation.tts
 
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
-import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContent
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispatcher
 
 /**
@@ -27,7 +26,7 @@ internal class GoogleCloudTtsVoiceAnnouncementDispatcher(
     /** 認証・リクエスト不正など恒久エラーで落ちたら、プロセス中は以後一切合成しない。 */
     private var sessionDisabled = false
 
-    override suspend fun speak(content: VoiceAnnouncementContent) {
+    override suspend fun speak(ssml: String) {
         if (sessionDisabled) return
         if (apiKey.isBlank()) {
             Napier.w(tag = TAG) { "GOOGLE_CLOUD_TTS_API_KEY is blank; voice announcement disabled" }
@@ -37,8 +36,8 @@ internal class GoogleCloudTtsVoiceAnnouncementDispatcher(
         audioFocusManager.request()
 
         try {
-            Napier.d(tag = TAG) { "voice synthesize: $content" }
-            val audio = api.synthesize(text = content.text, ssml = content.ssml)
+            Napier.d(tag = TAG) { "voice synthesize: $ssml" }
+            val audio = api.synthesize(ssml)
             audioPlayer.playAndAwait(audio)
         } catch (cancellation: CancellationException) {
             throw cancellation
