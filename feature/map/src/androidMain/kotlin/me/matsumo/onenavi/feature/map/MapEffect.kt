@@ -87,8 +87,8 @@ internal fun MapEffect(
     }
 
     if (vehicleLocationState != null) {
-        val guiding = guidanceState as? GuidanceState.Guiding
-        val routeGeometry = guiding
+        val guidanceRoute = guidanceState.routeForMapOverlay()
+        val routeGeometry = guidanceRoute
             ?.route
             ?.geometry
             ?: persistentListOf()
@@ -97,7 +97,7 @@ internal fun MapEffect(
             googleMap = googleMap,
             cameraState = cameraState,
             vehicleLocationState = vehicleLocationState,
-            routeKey = guiding?.route?.id,
+            routeKey = guidanceRoute?.route?.id,
             routeGeometry = routeGeometry,
             zIndex = VEHICLE_PUCK_Z_INDEX,
         )
@@ -212,21 +212,23 @@ private fun NavigationEffect(
     bottomSheetPeekHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
-    val guiding = guidanceState as? GuidanceState.Guiding ?: return
+    val guidanceRoute = guidanceState.routeForMapOverlay() ?: return
 
     RoutePolylineEffect(
         googleMap = googleMap,
-        route = guiding.route,
+        route = guidanceRoute.route,
         isSelected = true,
     )
 
-    MapGuidanceManeuverCallOutMarkerEffect(
-        modifier = modifier,
-        googleMap = googleMap,
-        guidanceState = guidanceState,
-        topAppBarHeightPx = topAppBarHeightPx,
-        bottomSheetPeekHeight = bottomSheetPeekHeight,
-    )
+    if (guidanceState is GuidanceState.Guiding) {
+        MapGuidanceManeuverCallOutMarkerEffect(
+            modifier = modifier,
+            googleMap = googleMap,
+            guidanceState = guidanceState,
+            topAppBarHeightPx = topAppBarHeightPx,
+            bottomSheetPeekHeight = bottomSheetPeekHeight,
+        )
+    }
 }
 
 /**
@@ -249,6 +251,29 @@ private fun RoutePolylineEffect(
         roadClassSegments = if (isSelected) route.roadClassSegments else persistentListOf(),
         congestionSegments = if (isSelected) route.congestionSegments else persistentListOf(),
     )
+}
+
+/**
+ * 地図 overlay に使う案内ルート。
+ *
+ * @param route 描画対象 route
+ */
+private data class GuidanceOverlayRoute(
+    val route: RouteDetail,
+)
+
+/**
+ * 案内中または再探索中に地図へ表示すべきルートを返す。
+ *
+ * @return 表示対象 route。案内していなければ null
+ */
+private fun GuidanceState.routeForMapOverlay(): GuidanceOverlayRoute? = when (this) {
+    is GuidanceState.Guiding -> GuidanceOverlayRoute(route = route)
+    is GuidanceState.Rerouting -> GuidanceOverlayRoute(route = previousRoute)
+    GuidanceState.Arrived,
+    is GuidanceState.Failed,
+    GuidanceState.Idle,
+    -> null
 }
 
 /** 検索結果 marker の zIndex 起点。 */

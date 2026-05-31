@@ -313,10 +313,20 @@ class NewGuidanceManager internal constructor(
     ) {
         if (!isActiveSession(sessionId)) return
         val repository = routeRepository ?: return
+        val previousGuidingState = _state.value as? GuidanceState.Guiding
+        val previousRoute = previousGuidingState?.route ?: currentRoute
+        if (previousRoute == null) {
+            _state.value = GuidanceState.Failed("reroute failed")
+            return
+        }
+        val previousProgress = previousGuidingState?.progress ?: previousRoute.toInitialProgress()
 
         Napier.i(tag = TAG) { "Reroute requested: reason=${request.reason}" }
         stopGuidanceSession(detachTracker = true)
-        _state.value = GuidanceState.Rerouting
+        _state.value = GuidanceState.Rerouting(
+            previousRoute = previousRoute,
+            previousProgress = previousProgress,
+        )
 
         repository.searchRoutes(
             originLatitude = request.origin.latitude,

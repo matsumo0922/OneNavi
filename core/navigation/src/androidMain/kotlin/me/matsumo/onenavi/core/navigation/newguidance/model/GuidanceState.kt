@@ -33,8 +33,19 @@ sealed interface GuidanceState {
         val presentation: GuidancePresentation,
     ) : GuidanceState
 
-    /** 逸脱検知 → 外部ナビ API ライブラリで再探索中。 */
-    data object Rerouting : GuidanceState
+    /**
+     * 逸脱検知 → 外部ナビ API ライブラリで再探索中。
+     *
+     * 再探索が完了するまで地図上の旧ルート表示と、リルート中パネルに必要な進捗情報を保持する。
+     *
+     * @param previousRoute 再探索前に案内していたルート
+     * @param previousProgress 再探索を開始した時点の最後の進捗スナップショット
+     */
+    @Immutable
+    data class Rerouting(
+        val previousRoute: RouteDetail,
+        val previousProgress: GuidanceProgress,
+    ) : GuidanceState
 
     /** 目的地到達。 */
     data object Arrived : GuidanceState

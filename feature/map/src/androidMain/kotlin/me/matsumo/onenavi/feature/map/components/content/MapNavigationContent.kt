@@ -14,6 +14,7 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import dev.chrisbanes.haze.HazeState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationManeuverPanel
+import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationReroutingPanel
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 
 /**
@@ -31,7 +32,9 @@ internal fun MapNavigationContent(
 ) {
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     val guiding = guidanceState as? GuidanceState.Guiding
+    val rerouting = guidanceState as? GuidanceState.Rerouting
     val banner = guiding?.presentation?.banner
+    val shouldShowTopPanel = (guiding != null && banner != null) || rerouting != null
 
     NavigationEventHandler(
         state = navigationState,
@@ -39,8 +42,8 @@ internal fun MapNavigationContent(
         onUiEvent(MapUiEvent.OnNavigationStop)
     }
 
-    LaunchedEffect(banner?.primary?.guidancePointIndex) {
-        if (banner == null) {
+    LaunchedEffect(banner?.primary?.guidancePointIndex, shouldShowTopPanel) {
+        if (!shouldShowTopPanel) {
             onUiEvent(MapUiEvent.OnTopAppBarHeightChanged(0))
         }
     }
@@ -49,19 +52,31 @@ internal fun MapNavigationContent(
         modifier = modifier,
         contentAlignment = Alignment.TopCenter,
     ) {
-        if (guiding != null && banner != null) {
-            MapNavigationManeuverPanel(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .onGloballyPositioned { coordinates ->
-                        onUiEvent(MapUiEvent.OnTopAppBarHeightChanged(coordinates.size.height))
-                    },
-                banner = banner,
-                listItems = guiding.presentation.listItems,
-                progress = guiding.progress,
-                hazeState = hazeState,
-            )
+        val topPanelModifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .onGloballyPositioned { coordinates ->
+                onUiEvent(MapUiEvent.OnTopAppBarHeightChanged(coordinates.size.height))
+            }
+
+        when {
+            guiding != null && banner != null -> {
+                MapNavigationManeuverPanel(
+                    modifier = topPanelModifier,
+                    banner = banner,
+                    listItems = guiding.presentation.listItems,
+                    progress = guiding.progress,
+                    hazeState = hazeState,
+                )
+            }
+
+            rerouting != null -> {
+                MapNavigationReroutingPanel(
+                    modifier = topPanelModifier,
+                    routePriority = rerouting.previousRoute.priority,
+                    roadClass = rerouting.previousProgress.currentRoadClass,
+                )
+            }
         }
     }
 }

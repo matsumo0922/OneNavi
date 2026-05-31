@@ -179,6 +179,8 @@ private class FakeRouteDataSource : RouteDataSource {
     var nextResult: Result<List<RouteResult>> = Result.success(emptyList())
     var lastIntermediateWaypoints: List<Pair<Double, Double>> = emptyList()
         private set
+    var lastOriginDirectionDegrees: Int? = null
+        private set
 
     override suspend fun searchRoutes(
         originLatitude: Double,
@@ -186,8 +188,10 @@ private class FakeRouteDataSource : RouteDataSource {
         destinationLatitude: Double,
         destinationLongitude: Double,
         intermediateWaypoints: List<Pair<Double, Double>>,
+        originDirectionDegrees: Int?,
     ): Result<List<RouteResult>> {
         lastIntermediateWaypoints = intermediateWaypoints
+        lastOriginDirectionDegrees = originDirectionDegrees
         return nextResult
     }
 }

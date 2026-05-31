@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +36,7 @@ import dev.chrisbanes.haze.HazeState
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.model.RoadClass
+import me.matsumo.onenavi.core.model.RoutePriority
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.BannerSupport
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListItem
@@ -49,6 +51,7 @@ import me.matsumo.onenavi.core.resource.common_unit_kilometer
 import me.matsumo.onenavi.core.resource.common_unit_meter
 import me.matsumo.onenavi.core.resource.common_unit_minute
 import me.matsumo.onenavi.core.resource.home_map_navigation_followup
+import me.matsumo.onenavi.core.resource.home_map_navigation_rerouting_title
 import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
 import me.matsumo.onenavi.core.ui.theme.RouteColors
 import org.jetbrains.compose.resources.stringResource
@@ -124,6 +127,30 @@ internal fun MapNavigationManeuverPanel(
                 roadClass = banner.roadClass,
             )
         }
+    }
+}
+
+@Composable
+internal fun MapNavigationReroutingPanel(
+    routePriority: RoutePriority?,
+    roadClass: RoadClass,
+    modifier: Modifier = Modifier,
+) {
+    val title = stringResource(Res.string.home_map_navigation_rerouting_title)
+    val routeModeLabel = (routePriority ?: RoutePriority.Recommended).label
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        MapNavigationReroutingTopSection(
+            modifier = Modifier.fillMaxWidth(),
+            title = title,
+            subtitle = routeModeLabel,
+            roadClass = roadClass,
+            shape = RoundedCornerShape(16.dp),
+        )
     }
 }
 
@@ -217,6 +244,63 @@ private fun MapNavigationManeuverTopSection(
                         tint = contentColor,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapNavigationReroutingTopSection(
+    title: String,
+    subtitle: String,
+    roadClass: RoadClass,
+    shape: Shape,
+    modifier: Modifier = Modifier,
+) {
+    val panelColors = RouteColors.accent(roadClass)
+    val contentColor = panelColors.onPrimary
+
+    Surface(
+        modifier = modifier
+            .zIndex(1f)
+            .shadow(
+                elevation = 8.dp,
+                shape = shape,
+            ),
+        shape = shape,
+        color = panelColors.primary,
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(48.dp),
+                color = contentColor,
+                strokeWidth = 3.dp,
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = title,
+                    color = contentColor,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
+                Text(
+                    text = subtitle,
+                    color = contentColor,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }

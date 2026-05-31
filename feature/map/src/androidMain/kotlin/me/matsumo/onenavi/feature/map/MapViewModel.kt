@@ -93,7 +93,7 @@ class MapViewModel(
                 GuidanceState.Arrived,
                 is GuidanceState.Failed,
                 GuidanceState.Idle,
-                GuidanceState.Rerouting,
+                is GuidanceState.Rerouting,
                 -> vehicleLocationDataSource.locationUpdates()
             }
         }

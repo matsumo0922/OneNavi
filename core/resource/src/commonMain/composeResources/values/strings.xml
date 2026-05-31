@@ -101,6 +101,7 @@
     <string name="home_map_route_result_start_navigation">ナビ開始</string>
     <string name="home_map_route_placeholder">ルート</string>
     <string name="home_map_navigation_followup">その先</string>
+    <string name="home_map_navigation_rerouting_title">経路探索中...</string>
     <string name="home_map_navigation_panel_guidance_point">案内地点</string>
     <string name="home_map_navigation_panel_direction_sign">%1$s方面</string>
     <string name="home_map_navigation_panel_entrance">入口</string>
