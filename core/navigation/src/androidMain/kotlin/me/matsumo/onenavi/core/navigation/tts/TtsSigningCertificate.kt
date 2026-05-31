@@ -3,7 +3,6 @@ package me.matsumo.onenavi.core.navigation.tts
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.pm.Signature
-import android.os.Build
 import java.security.MessageDigest
 
 /**
