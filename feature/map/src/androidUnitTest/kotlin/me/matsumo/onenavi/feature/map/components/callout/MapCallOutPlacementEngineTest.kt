@@ -357,6 +357,66 @@ class MapCallOutPlacementEngineTest {
         assertEquals(MapCallOutTailSide.BottomLeft, placements[1].tailSide)
     }
 
+    @Test
+    fun pointFixedPrefersLeftBodyWhenAvoidanceRouteFlowsRight() {
+        val tip = Offset(200f, 220f)
+        val placements = MapCallOutPlacementEngine.place(
+            requests = listOf(
+                MapCallOutRequest(
+                    id = "fixed",
+                    target = MapCallOutTarget.PointFixed(tip.toRoutePoint()),
+                    avoidancePolylines = persistentListOf(
+                        persistentListOf(
+                            tip.toRoutePoint(),
+                            Offset(320f, 220f).toRoutePoint(),
+                        ),
+                    ),
+                    previousPlacement = MapCallOutPreviousPlacement(
+                        position = tip.toRoutePoint(),
+                        tailSide = MapCallOutTailSide.BottomLeft,
+                    ),
+                ),
+            ),
+            sizes = listOf(IntSize(96, 48)),
+            viewportSize = ViewportSize,
+            viewport = Viewport,
+            tailLengthPx = TailLengthPx,
+            shadowPaddingPx = ShadowPaddingPx,
+            project = ::projectForTest,
+        )
+
+        assertEquals(1, placements.size)
+        assertEquals(MapCallOutTailSide.BottomRight, placements.single().tailSide)
+    }
+
+    @Test
+    fun pointFixedPrefersRightBodyWhenAvoidanceRouteFlowsLeft() {
+        val tip = Offset(200f, 220f)
+        val placements = MapCallOutPlacementEngine.place(
+            requests = listOf(
+                MapCallOutRequest(
+                    id = "fixed",
+                    target = MapCallOutTarget.PointFixed(tip.toRoutePoint()),
+                    avoidancePolylines = persistentListOf(
+                        persistentListOf(
+                            tip.toRoutePoint(),
+                            Offset(80f, 220f).toRoutePoint(),
+                        ),
+                    ),
+                ),
+            ),
+            sizes = listOf(IntSize(96, 48)),
+            viewportSize = ViewportSize,
+            viewport = Viewport,
+            tailLengthPx = TailLengthPx,
+            shadowPaddingPx = ShadowPaddingPx,
+            project = ::projectForTest,
+        )
+
+        assertEquals(1, placements.size)
+        assertEquals(MapCallOutTailSide.BottomLeft, placements.single().tailSide)
+    }
+
     private fun placeForTest(
         requests: List<MapCallOutRequest>,
         sizes: List<IntSize>,

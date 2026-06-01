@@ -296,6 +296,9 @@ private fun List<MapCallOutRequest>.projectedPoints(googleMap: GoogleMap): Map<R
                 is MapCallOutTarget.PointFixed -> add(target.point)
                 is MapCallOutTarget.PolylineMovable -> addAll(target.points)
             }
+            request.avoidancePolylines.forEach { polyline ->
+                addAll(polyline)
+            }
 
             request.previousPlacement?.let { placement ->
                 add(placement.position)

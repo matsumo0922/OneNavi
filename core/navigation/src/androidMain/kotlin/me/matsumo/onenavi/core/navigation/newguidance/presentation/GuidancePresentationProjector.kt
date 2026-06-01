@@ -90,6 +90,7 @@ internal class GuidancePresentationProjector {
             type = primary.type,
             modifier = primary.modifier,
             location = targetEvent.anchor.location,
+            geometryDistanceFromStartMeters = targetEvent.anchor.geometryDistanceFromStartMeters,
             distanceToManeuverMeters = distanceToMeters(event = targetEvent, currentCumulativeMeters = currentCumulativeMeters),
             intersectionName = primary.intersectionName,
             exitNumber = primary.exitNumber,

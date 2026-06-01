@@ -16,10 +16,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.GoogleMap
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.ManeuverCallout
 import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
+import me.matsumo.onenavi.feature.map.state.RouteMeterIndex
 
 /**
  * 案内地点に固定した maneuver CallOut marker effect。
@@ -39,23 +43,22 @@ internal fun MapGuidanceManeuverCallOutMarkerEffect(
     val topPadding = with(density) { topAppBarHeightPx.toDp() } + GUIDANCE_CALLOUT_VIEWPORT_PADDING
     val nextManeuver = guiding.presentation.nextManeuver
     val followupManeuver = guiding.presentation.followupManeuver
-
-    val maneuvers = remember(
-        guiding.route.id,
-        nextManeuver?.guidancePointIndex,
-        followupManeuver?.guidancePointIndex,
-    ) {
-        listOfNotNull(
-            nextManeuver,
-            followupManeuver,
-        )
+    val maneuvers = listOfNotNull(
+        nextManeuver,
+        followupManeuver,
+    )
+    val routeMeterIndex = remember(guiding.route.id, guiding.route.geometry) {
+        RouteMeterIndex.from(guiding.route.geometry)
     }
+    val currentCumulativeMeters = guiding.progress.currentCumulativeMeters
 
-    val requests = remember(guiding.route.id, maneuvers) {
+    val requests = remember(guiding.route.id, maneuvers, routeMeterIndex, currentCumulativeMeters) {
         maneuvers.mapIndexed { index, maneuver ->
             maneuver.toCallOutRequest(
                 routeId = guiding.route.id,
                 order = index,
+                routeMeterIndex = routeMeterIndex,
+                currentCumulativeMeters = currentCumulativeMeters,
             )
         }.toImmutableList()
     }
@@ -126,6 +129,8 @@ private fun MapGuidanceManeuverCallOut(
 private fun ManeuverCallout.toCallOutRequest(
     routeId: String,
     order: Int,
+    routeMeterIndex: RouteMeterIndex?,
+    currentCumulativeMeters: Double,
 ): MapCallOutRequest {
     val priority = GUIDANCE_CALLOUT_PRIORITY_BASE - order
 
@@ -134,6 +139,10 @@ private fun ManeuverCallout.toCallOutRequest(
         target = MapCallOutTarget.PointFixed(location),
         priority = priority,
         zIndexPriority = GUIDANCE_CALLOUT_Z_INDEX_PRIORITY_BASE - order,
+        avoidancePolylines = avoidancePolylines(
+            routeMeterIndex = routeMeterIndex,
+            currentCumulativeMeters = currentCumulativeMeters,
+        ),
         contentKey = listOf(
             routeId,
             order,
@@ -146,11 +155,63 @@ private fun ManeuverCallout.toCallOutRequest(
     )
 }
 
+private fun ManeuverCallout.avoidancePolylines(
+    routeMeterIndex: RouteMeterIndex?,
+    currentCumulativeMeters: Double,
+): ImmutableList<ImmutableList<RoutePoint>> {
+    val routeWindow = routeMeterIndex
+        ?.maneuverRouteWindow(
+            currentCumulativeMeters = currentCumulativeMeters,
+            targetMeters = geometryDistanceFromStartMeters,
+        )
+        ?: return persistentListOf()
+    if (routeWindow.size < MIN_ROUTE_WINDOW_POINT_COUNT) return persistentListOf()
+
+    return persistentListOf(routeWindow.toImmutableList())
+}
+
+private fun RouteMeterIndex.maneuverRouteWindow(
+    currentCumulativeMeters: Double,
+    targetMeters: Double,
+): List<RoutePoint> {
+    val coercedCurrentMeters = coerceDistance(currentCumulativeMeters)
+    val coercedTargetMeters = coerceDistance(targetMeters)
+    val startMeters = maxOf(
+        coercedCurrentMeters,
+        coercedTargetMeters - GUIDANCE_CALLOUT_ROUTE_APPROACH_METERS,
+    ).coerceAtMost(coercedTargetMeters)
+    val endMeters = coerceDistance(coercedTargetMeters + GUIDANCE_CALLOUT_ROUTE_EXIT_METERS)
+    val approachPoints = pointsBetween(
+        startDistanceMeters = startMeters,
+        endDistanceMeters = coercedTargetMeters,
+        fallbackBearingDegrees = null,
+    )
+    val exitPoints = pointsBetween(
+        startDistanceMeters = coercedTargetMeters,
+        endDistanceMeters = endMeters,
+        fallbackBearingDegrees = null,
+    )
+
+    return (approachPoints + exitPoints.drop(1)).withoutAdjacentDuplicates()
+}
+
+private fun List<RoutePoint>.withoutAdjacentDuplicates(): List<RoutePoint> {
+    return fold(mutableListOf<RoutePoint>()) { uniquePoints, point ->
+        if (uniquePoints.lastOrNull() != point) {
+            uniquePoints += point
+        }
+        uniquePoints
+    }
+}
+
 private val GUIDANCE_CALLOUT_VIEWPORT_PADDING = 12.dp
 private val GUIDANCE_CALLOUT_ICON_SIZE = 20.dp
 private val GUIDANCE_CALLOUT_CONTENT_SPACING = 6.dp
 private val GUIDANCE_CALLOUT_MAX_WIDTH = 196.dp
 private val GUIDANCE_CALLOUT_TEXT_MAX_WIDTH = 160.dp
+private const val GUIDANCE_CALLOUT_ROUTE_APPROACH_METERS = 80.0
+private const val GUIDANCE_CALLOUT_ROUTE_EXIT_METERS = 100.0
+private const val MIN_ROUTE_WINDOW_POINT_COUNT = 2
 
 private const val GUIDANCE_CALLOUT_PRIORITY_BASE = 200
 private const val GUIDANCE_CALLOUT_Z_INDEX_PRIORITY_BASE = 200

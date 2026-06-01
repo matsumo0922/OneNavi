@@ -67,6 +67,7 @@ internal data class MapCallOutPreviousPlacement(
  * @param contentKey slot content を bitmap 化し直すための描画キー
  * @param allowsOffscreenPlacement 画面外に projected された候補も marker として配置する場合 true
  * @param supportedTailSides 許可する tail 側。空の場合は下側左右を使う
+ * @param avoidancePolylines body が隠すと減点する route polyline。案内中の交差点前後などに使う
  * @param previousPlacement 前回配置。ちらつき抑制の reward に使う
  */
 @Immutable
@@ -78,6 +79,7 @@ internal data class MapCallOutRequest(
     val contentKey: String? = null,
     val allowsOffscreenPlacement: Boolean = false,
     val supportedTailSides: ImmutableList<MapCallOutTailSide> = DEFAULT_MAP_CALLOUT_TAIL_SIDES,
+    val avoidancePolylines: ImmutableList<ImmutableList<RoutePoint>> = persistentListOf(),
     val previousPlacement: MapCallOutPreviousPlacement? = null,
 )
 

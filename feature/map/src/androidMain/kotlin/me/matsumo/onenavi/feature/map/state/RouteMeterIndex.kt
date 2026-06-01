@@ -61,6 +61,47 @@ internal class RouteMeterIndex private constructor(
     }
 
     /**
+     * 指定した route 距離範囲を、端点補間込みの polyline として返す。
+     *
+     * @param startDistanceMeters 範囲開始距離
+     * @param endDistanceMeters 範囲終了距離
+     * @param fallbackBearingDegrees segment 方位が使えない場合の向き
+     * @return 開始点・範囲内 geometry 点・終了点を走行順に並べた route 点
+     */
+    fun pointsBetween(
+        startDistanceMeters: Double,
+        endDistanceMeters: Double,
+        fallbackBearingDegrees: Float?,
+    ): List<RoutePoint> {
+        val lowerDistanceMeters = if (startDistanceMeters <= endDistanceMeters) {
+            startDistanceMeters
+        } else {
+            endDistanceMeters
+        }
+        val upperDistanceMeters = if (startDistanceMeters <= endDistanceMeters) {
+            endDistanceMeters
+        } else {
+            startDistanceMeters
+        }
+        val startMeters = coerceDistance(lowerDistanceMeters)
+        val endMeters = coerceDistance(upperDistanceMeters)
+        val pointsInRange = buildList {
+            add(poseAt(startMeters, fallbackBearingDegrees).location)
+
+            for (pointIndex in points.indices) {
+                val pointMeters = cumulativeMeters[pointIndex]
+                if (pointMeters > startMeters && pointMeters < endMeters) {
+                    add(points[pointIndex])
+                }
+            }
+
+            add(poseAt(endMeters, fallbackBearingDegrees).location)
+        }
+
+        return pointsInRange.withoutAdjacentDuplicates()
+    }
+
+    /**
      * 指定距離を含む geometry segment index を二分探索で返す。
      *
      * @param distanceMeters route 始点からの距離
@@ -82,6 +123,15 @@ internal class RouteMeterIndex private constructor(
         }
 
         return (low - 1).coerceIn(0, points.lastIndex - 1)
+    }
+
+    private fun List<RoutePoint>.withoutAdjacentDuplicates(): List<RoutePoint> {
+        return fold(mutableListOf<RoutePoint>()) { uniquePoints, point ->
+            if (uniquePoints.lastOrNull() != point) {
+                uniquePoints += point
+            }
+            uniquePoints
+        }
     }
 
     companion object {

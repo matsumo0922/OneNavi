@@ -29,11 +29,17 @@ internal object MapCallOutPlacementEngine {
             "requests (${requests.size}) and sizes (${sizes.size}) must have the same length"
         }
 
-        val allPolylines = requests.mapNotNull { request ->
+        val routePolylines = requests.mapNotNull { request ->
             (request.target as? MapCallOutTarget.PolylineMovable)
                 ?.points
                 ?.map(project)
         }
+        val projectedAvoidancePolylinesByRequest = requests.map { request ->
+            request.avoidancePolylines.map { polyline ->
+                polyline.map(project)
+            }
+        }
+        val allPolylines = routePolylines + projectedAvoidancePolylinesByRequest.flatten()
         val placed = mutableListOf<MapCallOutPlacement>()
         val orderedIndexes = requests.indices.sortedWith(
             compareByDescending<Int> { requests[it].priority }
@@ -56,6 +62,7 @@ internal object MapCallOutPlacementEngine {
                 tailLengthPx = tailLengthPx,
                 shadowPaddingPx = shadowPaddingPx,
                 allPolylines = allPolylines,
+                avoidancePolylines = projectedAvoidancePolylinesByRequest[requestIndex],
                 placed = placed,
                 preferredRouteFraction = routeSlotFractions[requestIndex],
                 project = project,
@@ -78,6 +85,7 @@ internal object MapCallOutPlacementEngine {
         tailLengthPx: Float,
         shadowPaddingPx: Float,
         allPolylines: List<List<Offset>>,
+        avoidancePolylines: List<List<Offset>>,
         placed: List<MapCallOutPlacement>,
         preferredRouteFraction: Float?,
         project: (RoutePoint) -> Offset,
@@ -101,6 +109,7 @@ internal object MapCallOutPlacementEngine {
                     tailLengthPx = tailLengthPx,
                     shadowPaddingPx = shadowPaddingPx,
                     allPolylines = allPolylines,
+                    avoidancePolylines = avoidancePolylines,
                     placed = placed,
                     preferredRouteFraction = preferredRouteFraction,
                 )
@@ -329,6 +338,7 @@ internal object MapCallOutPlacementEngine {
         tailLengthPx: Float,
         shadowPaddingPx: Float,
         allPolylines: List<List<Offset>>,
+        avoidancePolylines: List<List<Offset>>,
         placed: List<MapCallOutPlacement>,
         preferredRouteFraction: Float?,
     ): ScoredCandidate? {
@@ -361,11 +371,16 @@ internal object MapCallOutPlacementEngine {
             candidate = candidate,
             previousPlacement = request.previousPlacement,
         )
+        val tailSidePreferenceScore = tailSidePreferenceScore(
+            candidate = candidate,
+            avoidancePolylines = avoidancePolylines,
+        )
 
         val score = viewportRatio * VIEWPORT_WEIGHT +
             (1f - polylineCoverage) * POLYLINE_CLEARANCE_WEIGHT +
             dispersionScore * DISPERSION_WEIGHT +
             routeSlotScore * ROUTE_SLOT_WEIGHT +
+            tailSidePreferenceScore * TAIL_SIDE_PREFERENCE_WEIGHT +
             stickinessScore
 
         return ScoredCandidate(
@@ -478,6 +493,64 @@ internal object MapCallOutPlacementEngine {
 
         return (1f - abs(visibleFraction - preferredRouteFraction) / ROUTE_SLOT_SCORE_DISTANCE)
             .coerceIn(0f, 1f)
+    }
+
+    private fun tailSidePreferenceScore(
+        candidate: Candidate,
+        avoidancePolylines: List<List<Offset>>,
+    ): Float {
+        val preferredTailSide = preferredTailSideForRouteFlow(
+            tip = candidate.tip,
+            avoidancePolylines = avoidancePolylines,
+        ) ?: return 0f
+
+        return if (candidate.tailSide == preferredTailSide) 1f else 0f
+    }
+
+    private fun preferredTailSideForRouteFlow(
+        tip: Offset,
+        avoidancePolylines: List<List<Offset>>,
+    ): MapCallOutTailSide? {
+        val flowVector = avoidancePolylines
+            .asSequence()
+            .mapNotNull { polyline -> routeFlowVectorAfterTip(tip = tip, polyline = polyline) }
+            .maxByOrNull { vector -> abs(vector.x) }
+            ?: return null
+        val horizontalMagnitude = abs(flowVector.x)
+        val verticalMagnitude = abs(flowVector.y)
+
+        if (horizontalMagnitude < ROUTE_FLOW_HORIZONTAL_DEAD_ZONE_PX) return null
+        if (horizontalMagnitude < verticalMagnitude * ROUTE_FLOW_HORIZONTAL_RATIO) return null
+
+        return if (flowVector.x > 0f) {
+            MapCallOutTailSide.BottomRight
+        } else {
+            MapCallOutTailSide.BottomLeft
+        }
+    }
+
+    private fun routeFlowVectorAfterTip(
+        tip: Offset,
+        polyline: List<Offset>,
+    ): Offset? {
+        if (polyline.size < 2) return null
+
+        val nearestIndex = polyline.indices.minByOrNull { index ->
+            polyline[index].distanceTo(tip)
+        } ?: return null
+        val origin = polyline[nearestIndex]
+
+        for (pointIndex in nearestIndex + 1 until polyline.size) {
+            val next = polyline[pointIndex]
+            if (origin.distanceTo(next) >= ROUTE_FLOW_MIN_VECTOR_LENGTH_PX) {
+                return Offset(
+                    x = next.x - origin.x,
+                    y = next.y - origin.y,
+                )
+            }
+        }
+
+        return null
     }
 
     private fun stickinessScore(
@@ -622,10 +695,14 @@ private const val POLYLINE_CLEARANCE_WEIGHT = 35f
 private const val DISPERSION_WEIGHT = 28f
 private const val DISPERSION_TARGET_DISTANCE_PX = 360f
 private const val ROUTE_SLOT_WEIGHT = 45f
+private const val TAIL_SIDE_PREFERENCE_WEIGHT = 10f
 private const val ROUTE_SLOT_START_FRACTION = 0.2f
 private const val ROUTE_SLOT_CENTER_FRACTION = 0.5f
 private const val ROUTE_SLOT_END_FRACTION = 0.8f
 private const val ROUTE_SLOT_SCORE_DISTANCE = 0.5f
+private const val ROUTE_FLOW_MIN_VECTOR_LENGTH_PX = 12f
+private const val ROUTE_FLOW_HORIZONTAL_DEAD_ZONE_PX = 8f
+private const val ROUTE_FLOW_HORIZONTAL_RATIO = 0.35f
 private const val EXACT_PREVIOUS_REWARD = 6f
 private const val SAME_TAIL_SIDE_REWARD = 2f
 private const val SAME_POSITION_REWARD = 4f
