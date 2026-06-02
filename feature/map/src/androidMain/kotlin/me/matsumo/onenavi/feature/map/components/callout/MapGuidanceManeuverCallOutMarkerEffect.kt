@@ -160,48 +160,17 @@ private fun ManeuverCallout.avoidancePolylines(
     currentCumulativeMeters: Double,
 ): ImmutableList<ImmutableList<RoutePoint>> {
     val routeWindow = routeMeterIndex
-        ?.maneuverRouteWindow(
-            currentCumulativeMeters = currentCumulativeMeters,
-            targetMeters = geometryDistanceFromStartMeters,
+        ?.pointsAroundTarget(
+            currentDistanceMeters = currentCumulativeMeters,
+            targetDistanceMeters = geometryDistanceFromStartMeters,
+            approachMeters = GUIDANCE_CALLOUT_ROUTE_APPROACH_METERS,
+            exitMeters = GUIDANCE_CALLOUT_ROUTE_EXIT_METERS,
+            fallbackBearingDegrees = null,
         )
         ?: return persistentListOf()
     if (routeWindow.size < MIN_ROUTE_WINDOW_POINT_COUNT) return persistentListOf()
 
     return persistentListOf(routeWindow.toImmutableList())
-}
-
-private fun RouteMeterIndex.maneuverRouteWindow(
-    currentCumulativeMeters: Double,
-    targetMeters: Double,
-): List<RoutePoint> {
-    val coercedCurrentMeters = coerceDistance(currentCumulativeMeters)
-    val coercedTargetMeters = coerceDistance(targetMeters)
-    val startMeters = maxOf(
-        coercedCurrentMeters,
-        coercedTargetMeters - GUIDANCE_CALLOUT_ROUTE_APPROACH_METERS,
-    ).coerceAtMost(coercedTargetMeters)
-    val endMeters = coerceDistance(coercedTargetMeters + GUIDANCE_CALLOUT_ROUTE_EXIT_METERS)
-    val approachPoints = pointsBetween(
-        startDistanceMeters = startMeters,
-        endDistanceMeters = coercedTargetMeters,
-        fallbackBearingDegrees = null,
-    )
-    val exitPoints = pointsBetween(
-        startDistanceMeters = coercedTargetMeters,
-        endDistanceMeters = endMeters,
-        fallbackBearingDegrees = null,
-    )
-
-    return (approachPoints + exitPoints.drop(1)).withoutAdjacentDuplicates()
-}
-
-private fun List<RoutePoint>.withoutAdjacentDuplicates(): List<RoutePoint> {
-    return fold(mutableListOf<RoutePoint>()) { uniquePoints, point ->
-        if (uniquePoints.lastOrNull() != point) {
-            uniquePoints += point
-        }
-        uniquePoints
-    }
 }
 
 private val GUIDANCE_CALLOUT_VIEWPORT_PADDING = 12.dp

@@ -8,6 +8,7 @@ import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
+import me.matsumo.onenavi.feature.map.components.MapGuidanceManeuverArrowEffect
 import me.matsumo.onenavi.feature.map.components.MapMarker
 import me.matsumo.onenavi.feature.map.components.MapNumberedMarker
 import me.matsumo.onenavi.feature.map.components.MapPolyline
@@ -221,6 +222,11 @@ private fun NavigationEffect(
     )
 
     if (guidanceState is GuidanceState.Guiding) {
+        MapGuidanceManeuverArrowEffect(
+            googleMap = googleMap,
+            guidanceState = guidanceState,
+        )
+
         MapGuidanceManeuverCallOutMarkerEffect(
             modifier = modifier,
             googleMap = googleMap,

@@ -102,12 +102,59 @@ internal class RouteMeterIndex private constructor(
     }
 
     /**
+     * 案内地点の前後を、現在位置による切り詰めと端点補間込みで返す。
+     *
+     * @param currentDistanceMeters route 始点から現在地までの距離。null の場合は接近側全体を使う
+     * @param targetDistanceMeters route 始点から案内地点までの距離
+     * @param approachMeters 案内地点手前に含める距離
+     * @param exitMeters 案内地点通過後に含める距離
+     * @param fallbackBearingDegrees segment 方位が使えない場合の向き
+     * @return 案内地点前後の route 点
+     */
+    fun pointsAroundTarget(
+        currentDistanceMeters: Double?,
+        targetDistanceMeters: Double,
+        approachMeters: Double,
+        exitMeters: Double,
+        fallbackBearingDegrees: Float?,
+    ): List<RoutePoint> {
+        val coercedTargetMeters = coerceDistance(targetDistanceMeters)
+        val approachStartMeters = coerceDistance(coercedTargetMeters - approachMeters)
+        val currentStartMeters = currentDistanceMeters?.let(::coerceDistance)
+        val startMeters = maxOf(approachStartMeters, currentStartMeters ?: approachStartMeters).coerceAtMost(coercedTargetMeters)
+        val endMeters = coerceDistance(coercedTargetMeters + exitMeters)
+        val approachPoints = pointsBetween(
+            startDistanceMeters = startMeters,
+            endDistanceMeters = coercedTargetMeters,
+            fallbackBearingDegrees = fallbackBearingDegrees,
+        )
+        val exitPoints = pointsBetween(
+            startDistanceMeters = coercedTargetMeters,
+            endDistanceMeters = endMeters,
+            fallbackBearingDegrees = fallbackBearingDegrees,
+        )
+
+        return (approachPoints + exitPoints.drop(1)).withoutAdjacentDuplicates()
+    }
+
+    /**
+     * 指定距離を含む geometry segment index を返す。
+     *
+     * @param distanceMeters route 始点からの距離
+     * @return [points] の segment 開始 index
+     */
+    fun segmentIndexAt(distanceMeters: Double): Int {
+        val targetMeters = coerceDistance(distanceMeters)
+        return findSegmentIndexAt(targetMeters)
+    }
+
+    /**
      * 指定距離を含む geometry segment index を二分探索で返す。
      *
      * @param distanceMeters route 始点からの距離
      * @return [points] の segment 開始 index
      */
-    private fun segmentIndexAt(distanceMeters: Double): Int {
+    private fun findSegmentIndexAt(distanceMeters: Double): Int {
         var low = 0
         var high = cumulativeMeters.lastIndex
 
