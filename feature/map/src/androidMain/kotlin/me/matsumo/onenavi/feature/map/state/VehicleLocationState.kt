@@ -11,10 +11,7 @@ enum class VehicleLocationSource {
     /** 案内中 route geometry に投影した位置。 */
     ROUTE_SNAPPED,
 
-    /** Navigation SDK の road-snapped location。 */
-    SDK_ROAD_SNAPPED,
-
-    /** road-snapped location が使えない場合の生 GPS 位置。 */
+    /** 端末から取得した raw GPS 位置。 */
     RAW_GPS,
 }
 

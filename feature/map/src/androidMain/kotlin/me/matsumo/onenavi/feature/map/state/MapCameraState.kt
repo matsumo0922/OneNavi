@@ -259,7 +259,7 @@ internal class MapCameraState internal constructor() {
         handledGuidanceManeuverFocusIndex = null
         vehicleCameraPositionFactory.setGuidanceCameraActive(true)
         cameraState = cameraState.copy(
-            perspective = GoogleMap.CameraPerspective.TILTED,
+            perspective = MapCameraPerspective.TILTED,
             isFollowingMyLocation = true,
         )
 
@@ -284,7 +284,7 @@ internal class MapCameraState internal constructor() {
             onFinished = {
                 updateCameraPosition(activeMap.cameraPosition)
                 cameraState = cameraState.copy(
-                    perspective = GoogleMap.CameraPerspective.TILTED,
+                    perspective = MapCameraPerspective.TILTED,
                     isFollowingMyLocation = true,
                 )
             },
@@ -345,7 +345,7 @@ internal class MapCameraState internal constructor() {
         gestureController.clear()
         cameraState = cameraState.copy(
             zoom = GUIDANCE_MANEUVER_FOCUS_ZOOM,
-            perspective = GoogleMap.CameraPerspective.TOP_DOWN_NORTH_UP,
+            perspective = MapCameraPerspective.TOP_DOWN_NORTH_UP,
             isFollowingMyLocation = true,
         )
 
@@ -357,7 +357,7 @@ internal class MapCameraState internal constructor() {
             onFinished = {
                 updateCameraPosition(map.cameraPosition)
                 cameraState = cameraState.copy(
-                    perspective = GoogleMap.CameraPerspective.TOP_DOWN_NORTH_UP,
+                    perspective = MapCameraPerspective.TOP_DOWN_NORTH_UP,
                     isFollowingMyLocation = true,
                 )
             },
@@ -430,10 +430,10 @@ internal class MapCameraState internal constructor() {
      * 減衰補間で tilt / bearing をアニメーションさせる。
      */
     fun toggleCompassPerspective() {
-        val nextPerspective = if (cameraState.perspective == GoogleMap.CameraPerspective.TILTED) {
-            GoogleMap.CameraPerspective.TOP_DOWN_NORTH_UP
+        val nextPerspective = if (cameraState.perspective == MapCameraPerspective.TILTED) {
+            MapCameraPerspective.TOP_DOWN_NORTH_UP
         } else {
-            GoogleMap.CameraPerspective.TILTED
+            MapCameraPerspective.TILTED
         }
 
         animateCompassPerspective(nextPerspective)
@@ -606,7 +606,7 @@ internal class MapCameraState internal constructor() {
     /**
      * コンパス button の perspective 変更を fly-to と同じ減衰補間で実行する。
      *
-     * @param perspective 切り替え後の [GoogleMap.CameraPerspective]
+     * @param perspective 切り替え後の [MapCameraPerspective]
      */
     private fun animateCompassPerspective(perspective: Int) {
         val map = googleMap ?: return
@@ -700,7 +700,7 @@ internal class MapCameraState internal constructor() {
                 vehiclePose = vehiclePose,
                 current = current,
                 zoom = DEFAULT_CAMERA_ZOOM,
-                perspective = GoogleMap.CameraPerspective.TILTED,
+                perspective = MapCameraPerspective.TILTED,
             )
         }
 
@@ -708,7 +708,7 @@ internal class MapCameraState internal constructor() {
             .target(current.target)
             .zoom(DEFAULT_CAMERA_ZOOM)
             .bearing(current.bearing)
-            .tilt(vehicleCameraPositionFactory.vehicleTiltDegrees(GoogleMap.CameraPerspective.TILTED))
+            .tilt(vehicleCameraPositionFactory.vehicleTiltDegrees(MapCameraPerspective.TILTED))
             .build()
     }
 
@@ -957,14 +957,14 @@ private data class GuidanceManeuverCameraFocus(
  *
  * @param zoom 現在のズーム値
  * @param bearing 現在のカメラの向き
- * @param perspective GoogleMap.CameraPerspective
+ * @param perspective [MapCameraPerspective]
  * @param isFollowingMyLocation マップカメラが現在自分の位置に追従しているかどうか
  */
 @Stable
 internal data class MapCameraSnapshot(
     val zoom: Float = DEFAULT_CAMERA_ZOOM,
     val bearing: Double = 0.0,
-    val perspective: Int = GoogleMap.CameraPerspective.TILTED,
+    val perspective: Int = MapCameraPerspective.TILTED,
     val isFollowingMyLocation: Boolean = false,
 )
 

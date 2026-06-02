@@ -18,8 +18,6 @@ kotlin {
             implementation(project(":core:datasource"))
             implementation(project(":core:repository"))
 
-            implementation(libs.google.navigation)
-            implementation(libs.play.services.location)
             implementation(libs.ktor.core)
             implementation(libs.ktor.okhttp)
             implementation(libs.ktor.content.negotiation)

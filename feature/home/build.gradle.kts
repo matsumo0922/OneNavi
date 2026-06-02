@@ -22,8 +22,6 @@ kotlin {
             implementation(project(":core:resource"))
 
             implementation(libs.kotlinx.datetime)
-            implementation(libs.google.navigation)
-            implementation(libs.play.services.location)
         }
     }
 }

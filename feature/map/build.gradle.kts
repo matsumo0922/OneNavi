@@ -22,8 +22,7 @@ kotlin {
             implementation(project(":core:resource"))
 
             implementation(libs.kotlinx.datetime)
-            implementation(libs.google.navigation)
-            implementation(libs.play.services.location)
+            implementation(libs.play.services.maps)
         }
 
         androidUnitTest.dependencies {

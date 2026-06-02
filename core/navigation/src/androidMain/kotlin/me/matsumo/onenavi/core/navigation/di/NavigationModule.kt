@@ -9,8 +9,6 @@ import kotlinx.serialization.json.Json
 import me.matsumo.drive.supporter.api.core.model.LogLevel
 import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.model.AppConfig
-import me.matsumo.onenavi.core.navigation.NavigationSdkManager
-import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavAuthGateway
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavClientProvider
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
@@ -36,15 +34,12 @@ import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementSpeec
 import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceTickFactory
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelector
 import me.matsumo.onenavi.core.navigation.voice.suppression.VoiceAnnouncementSelectionPolicy
-import org.koin.android.ext.koin.androidApplication
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 val navigationModule: Module = module {
-    single { RouteManager() }
-    single { NavigationSdkManager(androidApplication(), get()) }
     single { NewRouteManager(routeRepository = get()) }
     single { ExtNavGuidanceTracker() }
     single { ExtNavRerouteDetector() }
