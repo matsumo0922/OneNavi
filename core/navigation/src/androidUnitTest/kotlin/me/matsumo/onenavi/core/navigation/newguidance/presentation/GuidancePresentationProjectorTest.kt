@@ -129,6 +129,36 @@ class GuidancePresentationProjectorTest {
     }
 
     @Test
+    fun `遠方の主案内に紐付くレーンもバナー下段に乗る`() {
+        val guidanceRoute = GuidanceRoute(
+            totalDistanceMeters = 1_400.0,
+            totalDurationSeconds = 600,
+            tollTotalYen = null,
+            events = listOf(
+                maneuverEvent(
+                    id = "event-3",
+                    guidancePointIndex = 3,
+                    geometryMeters = 1_200.0,
+                    type = ManeuverType.TURN,
+                    modifier = ManeuverModifier.RIGHT,
+                    lane = markerLane(),
+                ),
+                maneuverEvent(
+                    id = "event-5",
+                    guidancePointIndex = 5,
+                    geometryMeters = 1_400.0,
+                    type = ManeuverType.ARRIVE,
+                ),
+            ).toImmutableList(),
+        )
+        val context = buildContext()
+
+        val presentation = project(guidanceRoute = guidanceRoute, context = context)
+
+        assertIs<BannerSupport.Lanes>(presentation.banner?.support)
+    }
+
+    @Test
     fun `主案内の方面看板画像 key はバナーに乗る`() {
         val imageKey = GuideImageKey(major = 101, minor = 123_456)
         val guidanceRoute = GuidanceRoute(

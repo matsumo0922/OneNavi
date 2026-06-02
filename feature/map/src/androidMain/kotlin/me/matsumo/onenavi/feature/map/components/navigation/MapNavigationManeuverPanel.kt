@@ -322,6 +322,22 @@ private fun MapNavigationManeuverBottomSection(
     modifier: Modifier = Modifier,
 ) {
     when {
+        guideImage != null -> {
+            val panelColors = RouteColors.maneuver(roadClass)
+            Surface(
+                modifier = modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
+                color = panelColors.container,
+            ) {
+                MapNavigationManeuverGuideImage(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = ManeuverGuideImageMaxHeight),
+                    guideImage = guideImage,
+                )
+            }
+        }
+
         laneCells != null -> {
             val panelColors = RouteColors.maneuver(roadClass)
             Surface(
@@ -336,22 +352,6 @@ private fun MapNavigationManeuverBottomSection(
                     lanes = laneCells,
                     activeTint = panelColors.onContainer,
                     inactiveTint = panelColors.onContainer.copy(alpha = SecondaryContentAlpha),
-                )
-            }
-        }
-
-        guideImage != null -> {
-            val panelColors = RouteColors.maneuver(roadClass)
-            Surface(
-                modifier = modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
-                color = panelColors.container,
-            ) {
-                MapNavigationManeuverGuideImage(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = ManeuverGuideImageMaxHeight),
-                    guideImage = guideImage,
                 )
             }
         }
