@@ -55,13 +55,13 @@ internal fun MapCameraEffect(
     val distanceToManeuverMeters = nextManeuver?.distanceToManeuverMeters
     val isOnRoute = guiding?.progress?.routeMatchState == RouteMatchState.ON_ROUTE
     val isManeuverPassed = distanceToManeuverMeters != null &&
-        distanceToManeuverMeters <= GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS
+            distanceToManeuverMeters <= GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS
     val shouldStartManeuverFocus = isGuidanceCameraActive &&
-        isOnRoute &&
-        guidancePointIndex != null &&
-        distanceToManeuverMeters != null &&
-        distanceToManeuverMeters > GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS &&
-        distanceToManeuverMeters <= GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS
+            isOnRoute &&
+            guidancePointIndex != null &&
+            distanceToManeuverMeters != null &&
+            distanceToManeuverMeters > GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS &&
+            distanceToManeuverMeters <= GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS
 
     LaunchedEffect(guiding?.route?.id) {
         cameraState.clearGuidanceManeuverFocus()
@@ -131,35 +131,30 @@ internal fun MapCameraEffect(
         guidanceState.routeOverviewKey(),
     ) {
         val ready = routePreviewState as? RoutePreviewState.Ready
-        when {
-            screenState is MapScreenState.RoutePreview && ready != null -> ready.routes.flatMap { it.geometry }
-            screenState is MapScreenState.Navigating && uiState.isNavigationRoutePreviewing -> when (guidanceState) {
+        when (screenState) {
+            is MapScreenState.RoutePreview if ready != null -> ready.routes.flatMap { it.geometry }
+            is MapScreenState.Navigating if uiState.isNavigationRoutePreviewing -> when (guidanceState) {
                 is GuidanceState.Guiding -> remainingRouteOverviewPoints(
                     route = guidanceState.route,
                     progress = guidanceState.progress,
                 )
+
                 is GuidanceState.Rerouting -> remainingRouteOverviewPoints(
                     route = guidanceState.previousRoute,
                     progress = guidanceState.previousProgress,
                 )
-                GuidanceState.Arrived,
+
+                is GuidanceState.Arrived,
                 is GuidanceState.Failed,
-                GuidanceState.Idle,
-                -> null
+                is GuidanceState.Idle -> null
             }
+
             else -> null
         }
     }
-    val routeOverviewTopPaddingKey = if (screenState is MapScreenState.RoutePreview) {
-        uiState.topAppBarHeight
-    } else {
-        0
-    }
-    val routeOverviewBottomPaddingKey = if (screenState is MapScreenState.RoutePreview) {
-        uiState.bottomSheetPeekHeight
-    } else {
-        0.dp
-    }
+
+    val routeOverviewTopPaddingKey = if (screenState is MapScreenState.RoutePreview) uiState.topAppBarHeight else 0
+    val routeOverviewBottomPaddingKey = if (screenState is MapScreenState.RoutePreview) uiState.bottomSheetPeekHeight else 0.dp
 
     // RoutePreview
     LaunchedEffect(routeOverviewPoints, routeOverviewTopPaddingKey, routeOverviewBottomPaddingKey) {
@@ -195,6 +190,7 @@ internal fun MapCameraEffect(
                         longitude = points.first().longitude,
                         zoom = 16f,
                     )
+
                     else -> cameraState.showRouteOverview(points)
                 }
             }
@@ -202,9 +198,11 @@ internal fun MapCameraEffect(
             is MapScreenState.RoutePreview -> {
                 // ルートが揃ったタイミングで下の LaunchedEffect がカメラをフィットさせる
             }
+
             is MapScreenState.Navigating -> {
                 cameraState.startGuidanceCamera(vehicleLocationState)
             }
+
             is MapScreenState.Arrived -> {
                 // TODO
             }
@@ -221,10 +219,9 @@ private const val GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS = 0
 private fun GuidanceState.routeOverviewKey(): String? = when (this) {
     is GuidanceState.Guiding -> route.id
     is GuidanceState.Rerouting -> previousRoute.id
-    GuidanceState.Arrived,
+    is GuidanceState.Arrived,
     is GuidanceState.Failed,
-    GuidanceState.Idle,
-    -> null
+    is GuidanceState.Idle -> null
 }
 
 private fun remainingRouteOverviewPoints(
