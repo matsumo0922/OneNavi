@@ -18,12 +18,14 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventId
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceLane
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceManeuver
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceRoute
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuideImageKey
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneConfidence
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneLayout
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneMark
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneSource
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.RouteAnchor
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacility
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepSignpost
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -127,6 +129,30 @@ class GuidancePresentationProjectorTest {
     }
 
     @Test
+    fun `主案内の方面看板画像 key はバナーに乗る`() {
+        val imageKey = GuideImageKey(major = 101, minor = 123_456)
+        val guidanceRoute = GuidanceRoute(
+            totalDistanceMeters = 400.0,
+            totalDurationSeconds = 300,
+            tollTotalYen = null,
+            events = listOf(
+                maneuverEvent(
+                    id = "event-3",
+                    guidancePointIndex = 3,
+                    geometryMeters = 300.0,
+                    type = ManeuverType.TURN,
+                    signpostImageKey = imageKey,
+                ),
+            ).toImmutableList(),
+        )
+        val context = buildContext()
+
+        val presentation = project(guidanceRoute = guidanceRoute, context = context)
+
+        assertEquals(imageKey, presentation.banner?.signpostImageKey)
+    }
+
+    @Test
     fun `主案内が無ければバナーは null`() {
         val guidanceRoute = GuidanceRoute(
             totalDistanceMeters = 400.0,
@@ -199,6 +225,7 @@ class GuidancePresentationProjectorTest {
         type: ManeuverType,
         modifier: ManeuverModifier = ManeuverModifier.STRAIGHT,
         lane: GuidanceLane? = null,
+        signpostImageKey: GuideImageKey? = null,
     ): GuidanceEvent = GuidanceEvent(
         id = GuidanceEventId(id),
         anchor = anchorAt(geometryMeters = geometryMeters, guidancePointIndex = guidancePointIndex),
@@ -208,8 +235,17 @@ class GuidancePresentationProjectorTest {
             intersectionName = null,
             exitNumber = null,
         ),
-        details = emptyDetails(facility = null).copy(lane = lane),
+        details = emptyDetails(facility = null).copy(
+            lane = lane,
+            signpost = signpostImageKey?.toSignpost(),
+        ),
         sourceRefs = persistentListOf(),
+    )
+
+    private fun GuideImageKey.toSignpost(): StepSignpost = StepSignpost(
+        primary = "東京方面",
+        secondary = null,
+        imageRef = this,
     )
 
     private fun facilityEvent(

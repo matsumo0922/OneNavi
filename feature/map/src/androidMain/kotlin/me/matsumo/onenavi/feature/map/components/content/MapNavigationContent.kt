@@ -16,6 +16,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationManeuverPanel
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationReroutingPanel
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
+import me.matsumo.onenavi.feature.map.state.NavigationGuideImage
 
 /**
  * ナビゲーション中の UI レイヤー。
@@ -26,6 +27,7 @@ import me.matsumo.onenavi.feature.map.state.MapUiEvent
 @Composable
 internal fun MapNavigationContent(
     guidanceState: GuidanceState,
+    navigationGuideImage: NavigationGuideImage?,
     hazeState: HazeState,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
@@ -66,6 +68,7 @@ internal fun MapNavigationContent(
                     banner = banner,
                     listItems = guiding.presentation.listItems,
                     progress = guiding.progress,
+                    guideImage = navigationGuideImage,
                     hazeState = hazeState,
                 )
             }

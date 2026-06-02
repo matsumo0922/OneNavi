@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.feature.map.state
 
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
@@ -9,7 +10,21 @@ import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuideImageKey
 
+/**
+ * 地図画面全体の UI 状態。
+ *
+ * @property query 検索欄の現在入力値。
+ * @property suggestions 検索サジェスト一覧。
+ * @property histories 検索履歴一覧。
+ * @property selectedResult 地点詳細で選択中の地点。
+ * @property routeWaypointEditResult waypoint 編集で返す選択地点。
+ * @property overlayState 地図上に重ねるオーバーレイ状態。
+ * @property topAppBarHeight 案内トップパネルの高さ px。
+ * @property bottomSheetPeekHeight BottomSheet の peek 高さ。
+ * @property navigationGuideImage 案内中バナーに表示する案内画像。無ければ null。
+ */
 @Stable
 data class MapUiState(
     val query: String? = null,
@@ -20,4 +35,17 @@ data class MapUiState(
     val overlayState: MapOverlayState = MapOverlayState.None,
     val topAppBarHeight: Int = 0,
     val bottomSheetPeekHeight: Dp = 0.dp,
+    val navigationGuideImage: NavigationGuideImage? = null,
+)
+
+/**
+ * 案内中バナーに表示する案内画像。
+ *
+ * @property key 画像参照 key。
+ * @property bitmap 表示用に decode 済みの bitmap。
+ */
+@Stable
+data class NavigationGuideImage(
+    val key: GuideImageKey,
+    val bitmap: ImageBitmap,
 )

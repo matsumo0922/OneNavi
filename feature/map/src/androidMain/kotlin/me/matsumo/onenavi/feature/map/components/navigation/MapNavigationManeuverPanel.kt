@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.feature.map.components.navigation
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -54,6 +56,7 @@ import me.matsumo.onenavi.core.resource.home_map_navigation_followup
 import me.matsumo.onenavi.core.resource.home_map_navigation_rerouting_title
 import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
 import me.matsumo.onenavi.core.ui.theme.RouteColors
+import me.matsumo.onenavi.feature.map.state.NavigationGuideImage
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.floor
 
@@ -62,6 +65,7 @@ internal fun MapNavigationManeuverPanel(
     banner: ManeuverBanner,
     listItems: ImmutableList<GuidanceListItem>,
     progress: GuidanceProgress,
+    guideImage: NavigationGuideImage?,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
@@ -77,8 +81,9 @@ internal fun MapNavigationManeuverPanel(
     val followupCallout = bannerFollowupCallout(banner.support)
     val hasLanes = laneCells != null
     val hasHint = followupCallout != null
+    val hasGuideImage = guideImage != null
     val topShape = when {
-        hasLanes || showPanel -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        hasGuideImage || hasLanes || showPanel -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
         hasHint -> RoundedCornerShape(
             topStart = 16.dp,
             topEnd = 16.dp,
@@ -120,6 +125,7 @@ internal fun MapNavigationManeuverPanel(
         } else {
             MapNavigationManeuverBottomSection(
                 modifier = Modifier.fillMaxWidth(),
+                guideImage = guideImage,
                 laneCells = laneCells,
                 followupCallout = followupCallout,
                 followupLabel = followupLabel,
@@ -307,6 +313,7 @@ private fun MapNavigationReroutingTopSection(
 
 @Composable
 private fun MapNavigationManeuverBottomSection(
+    guideImage: NavigationGuideImage?,
     laneCells: ImmutableList<LaneCell>?,
     followupCallout: ManeuverCallout?,
     followupLabel: String,
@@ -314,6 +321,20 @@ private fun MapNavigationManeuverBottomSection(
     modifier: Modifier = Modifier,
 ) {
     when {
+        guideImage != null -> {
+            val panelColors = RouteColors.maneuver(roadClass)
+            Surface(
+                modifier = modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
+                color = panelColors.container,
+            ) {
+                MapNavigationManeuverGuideImage(
+                    modifier = Modifier.fillMaxWidth(),
+                    guideImage = guideImage,
+                )
+            }
+        }
+
         laneCells != null -> {
             val panelColors = RouteColors.maneuver(roadClass)
             Surface(
@@ -353,6 +374,19 @@ private fun MapNavigationManeuverBottomSection(
             }
         }
     }
+}
+
+@Composable
+private fun MapNavigationManeuverGuideImage(
+    guideImage: NavigationGuideImage,
+    modifier: Modifier = Modifier,
+) {
+    Image(
+        modifier = modifier.fillMaxWidth(),
+        bitmap = guideImage.bitmap,
+        contentDescription = null,
+        contentScale = ContentScale.FillWidth,
+    )
 }
 
 @Composable

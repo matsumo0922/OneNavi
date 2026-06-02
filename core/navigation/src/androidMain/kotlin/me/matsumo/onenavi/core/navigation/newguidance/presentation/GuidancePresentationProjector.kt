@@ -123,6 +123,7 @@ internal class GuidancePresentationProjector {
         return ManeuverBanner(
             primary = primaryCallout,
             secondaryLabel = secondaryLabel,
+            signpostImageKey = selection.nextPrimaryEvent?.details?.signpost?.imageRef,
             roadClass = currentRoadClass,
             support = support,
             hasMoreEvents = hasMoreEvents,
