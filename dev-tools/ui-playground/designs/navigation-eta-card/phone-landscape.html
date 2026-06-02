@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      :root {
+        --maneuver: #0b3d91;
+        --eta-yellow: #b26a00;      /* 渋滞 通過合計 5〜15分（黄） */
+        --text: #202124;
+        --muted: #5f6368;
+        --pill: #dde6f1;
+        --icon: #3c4043;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        font-family: system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif;
+        color: var(--text); position: relative; overflow: hidden;
+        width: 915px; height: 412px; background: #e8eae5;
+      }
+      #map { position: absolute; inset: 0; display: block; }
+
+      .maneuver {
+        position: absolute; top: 12px; left: 12px; min-width: 230px;
+        display: flex; align-items: center; gap: 12px;
+        background: var(--maneuver); color: #fff; border-radius: 14px;
+        padding: 11px 16px 11px 12px; box-shadow: 0 5px 14px rgba(0, 0, 0, 0.28);
+      }
+      .maneuver .turn { width: 38px; height: 38px; flex: 0 0 auto; }
+      .maneuver .turn svg { width: 38px; height: 38px; }
+      .maneuver .dist { font-size: 26px; font-weight: 700; line-height: 1; }
+      .maneuver .dist span { font-size: 16px; margin-left: 3px; }
+      .maneuver .street { font-size: 15px; font-weight: 500; margin-top: 4px; opacity: 0.95; }
+
+      .fab {
+        position: absolute; right: 14px; bottom: 14px;
+        width: 48px; height: 48px; border-radius: 50%; background: #fff;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.28);
+      }
+      .fab svg { width: 24px; height: 24px; }
+
+      .eta-card {
+        position: absolute; left: 14px; bottom: 14px; width: 318px;
+        background: #fff; border-radius: 24px; padding: 14px 18px 12px;
+        box-shadow: 0 9px 24px rgba(0, 0, 0, 0.22);
+      }
+      .eta-min { font-size: 25px; font-weight: 700; line-height: 1; color: var(--eta-yellow); }
+      .eta-min span { font-size: 17px; font-weight: 700; }
+      .eta-sub { font-size: 16px; color: var(--muted); margin-top: 6px; }
+      .eta-actions { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+      .act { width: 46px; height: 46px; border-radius: 23px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+      .act.selected { background: var(--pill); width: 58px; }
+      .act svg { width: 24px; height: 24px; }
+      .spacer { flex: 1 1 auto; }
+    </style>
+  </head>
+  <body>
+    <canvas id="map"></canvas>
+
+    <div class="maneuver">
+      <div class="turn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 20 V11 a4 4 0 0 1 4 -4 h4" /><path d="M14 3 l4 4 l-4 4" />
+        </svg>
+      </div>
+      <div>
+        <div class="dist">1.2<span>km</span></div>
+        <div class="street">東大通り を右折</div>
+      </div>
+    </div>
+
+    <div class="fab" aria-label="再センタリング">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3.2" /><path d="M12 2v3 M12 19v3 M2 12h3 M19 12h3" />
+      </svg>
+    </div>
+
+    <div class="eta-card">
+      <div class="eta-min">22<span>分</span></div>
+      <div class="eta-sub">18 km · 0:48</div>
+      <div class="eta-actions">
+        <div class="act selected" aria-label="案内終了">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#202124" stroke-width="2.2" stroke-linecap="round"><path d="M6 6 L18 18 M18 6 L6 18"/></svg>
+        </div>
+        <div class="spacer"></div>
+        <div class="act" aria-label="別ルート">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 21 V13"/><path d="M12 13 C12 9 8 9 7 5"/><path d="M12 13 C12 9 16 9 17 5"/><path d="M5 7 L7 4 L9 7"/><path d="M15 7 L17 4 L19 7"/>
+          </svg>
+        </div>
+        <div class="spacer"></div>
+        <div class="act" aria-label="経由地を追加">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8 M8 12h8"/></svg>
+        </div>
+        <div class="spacer"></div>
+        <div class="act" aria-label="迂回ルート">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--icon)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6" cy="19" r="1.8"/><path d="M6 17 C6 11 18 13 18 8"/>
+            <path d="M18 9 C16.6 9 15.5 7.9 15.5 6.5 C15.5 5 18 2.5 18 2.5 C18 2.5 20.5 5 20.5 6.5 C20.5 7.9 19.4 9 18 9 Z" fill="var(--icon)" stroke="none"/>
+          </svg>
+        </div>
+        <div class="spacer"></div>
+        <div class="act" aria-label="その他">
+          <svg viewBox="0 0 24 24" fill="var(--icon)"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        const DESIGN_W = 915, DESIGN_H = 412;
+        const canvas = document.getElementById("map");
+        const cssW = window.innerWidth || DESIGN_W, cssH = window.innerHeight || DESIGN_H;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
+        canvas.style.width = cssW + "px"; canvas.style.height = cssH + "px";
+        const ctx = canvas.getContext("2d");
+        ctx.setTransform((dpr * cssW) / DESIGN_W, 0, 0, (dpr * cssH) / DESIGN_H, 0, 0);
+
+        let seed = 9182736;
+        const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+        const W = DESIGN_W, H = DESIGN_H;
+
+        ctx.fillStyle = "#e9eae4"; ctx.fillRect(0, 0, W, H);
+        const parks = [[120, 80, 110, 70], [760, 90, 95, 60], [620, 320, 130, 80], [330, 360, 90, 55]];
+        ctx.fillStyle = "#cfe8cf";
+        for (const [px, py, prx, pry] of parks) { ctx.beginPath(); ctx.ellipse(px, py, prx, pry, 0, 0, Math.PI * 2); ctx.fill(); }
+        const inPark = (x, y) => parks.some(([px, py, prx, pry]) => ((x - px) / prx) ** 2 + ((y - py) / pry) ** 2 < 1);
+        const shades = ["#dad9d3", "#d3d2cb", "#deddd7", "#d7d4cb", "#cecdc6"];
+        for (let gx = -10; gx < W + 20; gx += 16) {
+          for (let gy = -10; gy < H + 20; gy += 16) {
+            if (rnd() > 0.6) continue;
+            const bx = gx + rnd() * 3, by = gy + rnd() * 3; if (inPark(bx, by)) continue;
+            const bw = 7 + rnd() * 8, bh = 7 + rnd() * 8;
+            ctx.fillStyle = "#c6c5bd"; ctx.fillRect(bx + 1.2, by + 1.2, bw, bh);
+            ctx.fillStyle = shades[(rnd() * shades.length) | 0]; ctx.fillRect(bx, by, bw, bh);
+          }
+        }
+        ctx.strokeStyle = "#a9d3f0"; ctx.lineWidth = 24; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(-20, 320); ctx.bezierCurveTo(200, 280, 320, 360, 520, 330); ctx.bezierCurveTo(720, 300, 820, 360, 940, 330); ctx.stroke();
+
+        const drawRoads = (lines, width, color) => {
+          ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = "round"; ctx.lineJoin = "round";
+          for (const pts of lines) { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.stroke(); }
+        };
+        const minor = [];
+        for (let i = -1; i < 16; i++) { const x = i * 66 + 20; minor.push([[x + 16, -20], [x, H + 20]]); }
+        for (let i = -1; i < 8; i++) { const y = i * 64 + 28; minor.push([[-20, y], [W + 20, y - 16]]); }
+        drawRoads(minor, 7, "#f4f4ef");
+        drawRoads([[[-20, 150], [460, 132], [940, 150]], [[-20, 300], [460, 280], [940, 300]], [[500, -20], [540, 200], [620, 430]]], 14, "#ffffff");
+
+        // 案内ルート（一般道＝緑） + 渋滞オーバーレイ（黄 = SLOW）
+        const route = [[760, 360], [700, 320], [620, 300], [540, 296], [470, 270], [410, 220], [360, 170], [300, 130], [220, 96], [150, 70]];
+        const tracePath = () => {
+          ctx.beginPath(); ctx.moveTo(route[0][0], route[0][1]);
+          for (let i = 1; i < route.length - 1; i++) { const mx = (route[i][0] + route[i + 1][0]) / 2, my = (route[i][1] + route[i + 1][1]) / 2; ctx.quadraticCurveTo(route[i][0], route[i][1], mx, my); }
+          const last = route[route.length - 1]; ctx.lineTo(last[0], last[1]);
+        };
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 22; tracePath(); ctx.stroke();
+        ctx.strokeStyle = "#146c34"; ctx.lineWidth = 14; tracePath(); ctx.stroke();
+        ctx.strokeStyle = "#8bd24a"; ctx.lineWidth = 6; tracePath(); ctx.stroke();
+        // 渋滞区間（黄）オーバーレイ
+        ctx.strokeStyle = "#fb8c00"; ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(540, 296); ctx.quadraticCurveTo(470, 270, 410, 220); ctx.stroke();
+
+        const cx = 760, cy = 360;
+        ctx.fillStyle = "rgba(26,115,232,0.16)"; ctx.beginPath(); ctx.arc(cx, cy, 28, 0, Math.PI * 2); ctx.fill();
+        ctx.save(); ctx.translate(cx, cy); ctx.rotate(-0.5);
+        ctx.fillStyle = "#1a73e8"; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2.8; ctx.lineJoin = "round";
+        ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(13, 15); ctx.lineTo(0, 6); ctx.lineTo(-13, 15); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = "#5f6368"; ctx.font = "12px system-ui"; ctx.textAlign = "left";
+        for (const [t, lx, ly] of [["東大通り", 470, 250], ["桜木町", 300, 110], ["港南", 650, 220], ["旭区", 180, 200]]) ctx.fillText(t, lx, ly);
+      })();
+    </script>
+  </body>
+</html>
