@@ -69,7 +69,7 @@ internal fun MapNavigationEtaCard(
     onCloseClicked: () -> Unit,
     onAlternativesClicked: () -> Unit,
     onAddWaypointClicked: () -> Unit,
-    onDetourClicked: () -> Unit,
+    onRoutePreviewClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val meterLabel = stringResource(Res.string.common_unit_meter)
@@ -150,7 +150,7 @@ internal fun MapNavigationEtaCard(
                     onCloseClicked = onCloseClicked,
                     onAlternativesClicked = onAlternativesClicked,
                     onAddWaypointClicked = onAddWaypointClicked,
-                    onDetourClicked = onDetourClicked,
+                    onRoutePreviewClicked = onRoutePreviewClicked,
                 )
             }
 
@@ -170,7 +170,7 @@ private fun MapNavigationEtaActionRow(
     onCloseClicked: () -> Unit,
     onAlternativesClicked: () -> Unit,
     onAddWaypointClicked: () -> Unit,
-    onDetourClicked: () -> Unit,
+    onRoutePreviewClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -193,7 +193,7 @@ private fun MapNavigationEtaActionRow(
         MapNavigationEtaActionButton(
             icon = Icons.Default.Route,
             contentDescription = stringResource(Res.string.home_map_navigation_eta_detour),
-            onClick = onDetourClicked,
+            onClick = onRoutePreviewClicked,
         )
 
         MapNavigationEtaActionButton(

@@ -237,6 +237,8 @@ private class UiEventDelegate(
             is MapUiEvent.OnRouteIndexChanged -> handleRouteIndexChanged(event.index)
             is MapUiEvent.OnNavigationStart -> handleNavigationStart()
             is MapUiEvent.OnNavigationStop -> handleNavigationStop()
+            is MapUiEvent.OnNavigationRoutePreviewClicked -> handleNavigationRoutePreviewClicked()
+            is MapUiEvent.OnNavigationRoutePreviewDismissed -> handleNavigationRoutePreviewDismissed()
             is MapUiEvent.OnRoutePreviewDismissed -> handleRoutePreviewDismissed()
             is MapUiEvent.OnPlaceDetailsDismissed -> handlePlaceDetailsDismissed()
             is MapUiEvent.OnSwapWaypoints -> handleSwapWaypoints()
@@ -435,9 +437,22 @@ private class UiEventDelegate(
 
     private fun handleNavigationStop() {
         newGuidanceManager.stopGuidance()
+        handleNavigationRoutePreviewDismissed()
 
         if (screenStates.value.lastOrNull() is MapScreenState.Navigating) {
             popScreenState()
+        }
+    }
+
+    private fun handleNavigationRoutePreviewClicked() {
+        uiState.update {
+            it.copy(isNavigationRoutePreviewing = true)
+        }
+    }
+
+    private fun handleNavigationRoutePreviewDismissed() {
+        uiState.update {
+            it.copy(isNavigationRoutePreviewing = false)
         }
     }
 

@@ -531,6 +531,7 @@ internal class MapCameraState internal constructor() {
      * かけるだけだと終端の減速が知覚されにくいため、ズームレベルへ直接かける強めの減速
      * （[CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR]）を [flyCameraTo] に渡す。
      * 地図ビューのサイズが未確定の場合は単純補間（[animateCameraTo]）にフォールバックする。
+     * 呼び出し時点で自車追従や案内地点フォーカスが有効な場合は、それらを解除してから全体表示する。
      *
      * @param routePoints フィット対象の座標列（全候補ルートをまとめて渡してよい）
      * @param paddingPx 画面端とルートの間に確保する余白（px）
@@ -543,6 +544,15 @@ internal class MapCameraState internal constructor() {
     ) {
         val map = googleMap ?: return
         if (routePoints.isEmpty()) return
+
+        cameraAnimator.cancel()
+        map.stopAnimation()
+        gestureController.clear()
+        guidanceManeuverCameraFocus = null
+        handledGuidanceManeuverFocusIndex = null
+        isGuidanceCameraActive = false
+        applyCameraPadding()
+        cameraState = cameraState.copy(isFollowingMyLocation = false)
 
         val bounds = LatLngBounds.builder()
             .apply { for (point in routePoints) include(LatLng(point.latitude, point.longitude)) }

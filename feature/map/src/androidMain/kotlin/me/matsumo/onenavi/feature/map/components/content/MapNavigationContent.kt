@@ -129,7 +129,9 @@ internal fun MapNavigationContent(
                 onCloseClicked = ::cancelNavigation,
                 onAlternativesClicked = {},
                 onAddWaypointClicked = {},
-                onDetourClicked = {},
+                onRoutePreviewClicked = {
+                    onUiEvent(MapUiEvent.OnNavigationRoutePreviewClicked)
+                },
             )
         }
     }

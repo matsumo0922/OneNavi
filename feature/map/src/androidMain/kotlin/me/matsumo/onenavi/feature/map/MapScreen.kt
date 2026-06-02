@@ -218,6 +218,10 @@ fun MapScreen(modifier: Modifier = Modifier) {
                         .fillMaxSize(),
                     cameraState = cameraState,
                     vehicleLocationState = vehicleLocationState,
+                    isNavigating = isNavigating,
+                    onNavigationRoutePreviewDismissed = {
+                        viewModel.onUiEvent(MapUiEvent.OnNavigationRoutePreviewDismissed)
+                    },
                 )
             }
         }

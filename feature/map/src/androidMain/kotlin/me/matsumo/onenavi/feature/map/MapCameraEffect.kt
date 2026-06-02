@@ -8,13 +8,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiState
+import me.matsumo.onenavi.feature.map.state.RouteMeterIndex
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 
 /**
@@ -121,17 +124,44 @@ internal fun MapCameraEffect(
         )
     }
 
-    val routeOverviewPoints = remember(screenState, routePreviewState) {
+    val routeOverviewPoints = remember(
+        screenState,
+        routePreviewState,
+        uiState.isNavigationRoutePreviewing,
+    ) {
         val ready = routePreviewState as? RoutePreviewState.Ready
-        if (screenState is MapScreenState.RoutePreview && ready != null) {
-            ready.routes.flatMap { it.geometry }
-        } else {
-            null
+        when {
+            screenState is MapScreenState.RoutePreview && ready != null -> ready.routes.flatMap { it.geometry }
+            screenState is MapScreenState.Navigating && uiState.isNavigationRoutePreviewing -> when (guidanceState) {
+                is GuidanceState.Guiding -> remainingRouteOverviewPoints(
+                    route = guidanceState.route,
+                    progress = guidanceState.progress,
+                )
+                is GuidanceState.Rerouting -> remainingRouteOverviewPoints(
+                    route = guidanceState.previousRoute,
+                    progress = guidanceState.previousProgress,
+                )
+                GuidanceState.Arrived,
+                is GuidanceState.Failed,
+                GuidanceState.Idle,
+                -> null
+            }
+            else -> null
         }
+    }
+    val routeOverviewTopPaddingKey = if (screenState is MapScreenState.RoutePreview) {
+        uiState.topAppBarHeight
+    } else {
+        0
+    }
+    val routeOverviewBottomPaddingKey = if (screenState is MapScreenState.RoutePreview) {
+        uiState.bottomSheetPeekHeight
+    } else {
+        0.dp
     }
 
     // RoutePreview
-    LaunchedEffect(routeOverviewPoints, uiState.topAppBarHeight, uiState.bottomSheetPeekHeight) {
+    LaunchedEffect(routeOverviewPoints, routeOverviewTopPaddingKey, routeOverviewBottomPaddingKey) {
         routeOverviewPoints?.let { cameraState.showRouteOverview(it) }
     }
 
@@ -186,3 +216,15 @@ private const val GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS = 100
 
 /** 案内地点を通過済みと扱う残距離（m）。 */
 private const val GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS = 0
+
+private fun remainingRouteOverviewPoints(
+    route: RouteDetail,
+    progress: GuidanceProgress,
+): List<RoutePoint> {
+    val meterIndex = RouteMeterIndex.from(route.geometry) ?: return route.geometry
+    return meterIndex.pointsBetween(
+        startDistanceMeters = progress.currentCumulativeMeters,
+        endDistanceMeters = Double.MAX_VALUE,
+        fallbackBearingDegrees = progress.bearingDegrees,
+    )
+}

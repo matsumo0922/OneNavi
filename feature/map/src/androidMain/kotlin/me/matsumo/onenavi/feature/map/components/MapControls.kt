@@ -34,6 +34,8 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 internal fun MapControls(
     cameraState: MapCameraState,
     vehicleLocationState: VehicleLocationState?,
+    isNavigating: Boolean,
+    onNavigationRoutePreviewDismissed: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -58,7 +60,14 @@ internal fun MapControls(
 
             FloatingActionButton(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                onClick = { cameraState.followVehicleLocation(vehicleLocationState) },
+                onClick = {
+                    if (isNavigating) {
+                        onNavigationRoutePreviewDismissed()
+                        cameraState.startGuidanceCamera(vehicleLocationState)
+                    } else {
+                        cameraState.followVehicleLocation(vehicleLocationState)
+                    }
+                },
             ) {
                 Icon(
                     imageVector = if (cameraState.cameraState.isFollowingMyLocation) {

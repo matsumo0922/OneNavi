@@ -116,7 +116,7 @@
     <string name="home_map_navigation_eta_close">案内を終了</string>
     <string name="home_map_navigation_eta_alternatives">別のルート</string>
     <string name="home_map_navigation_eta_add_waypoint">経由地を追加</string>
-    <string name="home_map_navigation_eta_detour">迂回ルート</string>
+    <string name="home_map_navigation_eta_detour">ルートプレビュー</string>
     <string name="home_map_navigation_eta_more">その他の操作</string>
     <string name="home_map_navigation_cancel_dialog_title">ナビゲーションを終了しますか？</string>
     <string name="home_map_navigation_cancel_dialog_message">ナビゲーションをキャンセルして、ルートプレビューに戻ります。</string>

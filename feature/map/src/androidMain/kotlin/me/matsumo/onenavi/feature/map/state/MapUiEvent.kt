@@ -54,6 +54,12 @@ sealed interface MapUiEvent {
     /** ナビゲーションを停止し、ナビゲーション画面を閉じる。 */
     data object OnNavigationStop : MapUiEvent
 
+    /** ナビゲーション中にルート全体のプレビュー表示を要求する。 */
+    data object OnNavigationRoutePreviewClicked : MapUiEvent
+
+    /** ナビゲーション中のルート全体プレビュー表示を終了する。 */
+    data object OnNavigationRoutePreviewDismissed : MapUiEvent
+
     /** ルートプレビューを閉じて直前の画面へ戻る。 */
     data object OnRoutePreviewDismissed : MapUiEvent
 
