@@ -99,9 +99,18 @@ internal fun MapCameraEffect(
         }
     }
 
-    LaunchedEffect(uiState.bottomSheetPeekHeight, uiState.topAppBarHeight, screenState) {
+    LaunchedEffect(
+        uiState.bottomSheetPeekHeight,
+        uiState.topAppBarHeight,
+        uiState.navigationCardHeight,
+        screenState,
+    ) {
         val top = uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }
-        val bottom = with(density) { uiState.bottomSheetPeekHeight.toPx() }
+        val bottom = if (isGuidanceCameraActive) {
+            uiState.navigationCardHeight.toFloat()
+        } else {
+            with(density) { uiState.bottomSheetPeekHeight.toPx() }
+        }
         val horizontal = with(density) { 24.dp.toPx() }
 
         cameraState.updatePadding(

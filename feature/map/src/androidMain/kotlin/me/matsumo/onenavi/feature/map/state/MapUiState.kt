@@ -20,4 +20,5 @@ data class MapUiState(
     val overlayState: MapOverlayState = MapOverlayState.None,
     val topAppBarHeight: Int = 0,
     val bottomSheetPeekHeight: Dp = 0.dp,
+    val navigationCardHeight: Int = 0,
 )

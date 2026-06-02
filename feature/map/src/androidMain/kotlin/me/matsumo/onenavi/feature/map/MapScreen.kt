@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
@@ -71,8 +72,16 @@ fun MapScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    val density = LocalDensity.current
+    val isNavigating = screenState is MapScreenState.Navigating
+    val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
+
     val controlsBottomPadding by animateDpAsState(
-        targetValue = if (shouldShowSheet) uiState.bottomSheetPeekHeight else navigationBarHeightDp,
+        targetValue = when {
+            isNavigating -> navigationCardHeightDp.coerceAtLeast(navigationBarHeightDp)
+            shouldShowSheet -> uiState.bottomSheetPeekHeight
+            else -> navigationBarHeightDp
+        },
         label = "ControlsBottomPadding",
     )
 

@@ -113,6 +113,11 @@
     <string name="home_map_navigation_panel_facility_toll_gate_badge">料金所</string>
     <string name="home_map_navigation_panel_guidance_header">案内パネル</string>
     <string name="home_map_navigation_panel_guidance_header_description">残りの案内地点: %1$d</string>
+    <string name="home_map_navigation_eta_close">案内を終了</string>
+    <string name="home_map_navigation_eta_alternatives">別のルート</string>
+    <string name="home_map_navigation_eta_add_waypoint">経由地を追加</string>
+    <string name="home_map_navigation_eta_detour">迂回ルート</string>
+    <string name="home_map_navigation_eta_more">その他の操作</string>
     <string name="home_map_not_available_ios">この機能はiOSでは利用できません</string>
 
     <!-- Setting -->

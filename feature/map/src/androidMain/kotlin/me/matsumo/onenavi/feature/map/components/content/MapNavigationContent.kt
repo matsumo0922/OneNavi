@@ -2,17 +2,21 @@ package me.matsumo.onenavi.feature.map.components.content
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import dev.chrisbanes.haze.HazeState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
+import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationEtaCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationManeuverPanel
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationReroutingPanel
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
@@ -48,6 +52,12 @@ internal fun MapNavigationContent(
         }
     }
 
+    LaunchedEffect(guiding == null) {
+        if (guiding == null) {
+            onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(0))
+        }
+    }
+
     Box(
         modifier = modifier,
         contentAlignment = Alignment.TopCenter,
@@ -77,6 +87,26 @@ internal fun MapNavigationContent(
                     roadClass = rerouting.previousProgress.currentRoadClass,
                 )
             }
+        }
+
+        if (guiding != null) {
+            MapNavigationEtaCard(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .onGloballyPositioned { coordinates ->
+                        onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
+                    }
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                progress = guiding.progress,
+                congestionSegments = guiding.route.congestionSegments,
+                onCloseClicked = {},
+                onAlternativesClicked = {},
+                onAddWaypointClicked = {},
+                onDetourClicked = {},
+                onMoreClicked = {},
+            )
         }
     }
 }
