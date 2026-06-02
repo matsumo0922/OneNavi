@@ -66,11 +66,11 @@ internal class MapCameraState internal constructor() {
 
     /** 最後に受け取った自車位置の緯度。未取得の場合は初期緯度を返す。 */
     val myLocationLatitude: Double
-        get() = lastVehiclePose?.location?.latitude ?: DEFAULT_LATITUDE
+        get() = lastVehiclePose?.location?.latitude ?: MapCameraDefaults.DEFAULT_LATITUDE
 
     /** 最後に受け取った自車位置の経度。未取得の場合は初期経度を返す。 */
     val myLocationLongitude: Double
-        get() = lastVehiclePose?.location?.longitude ?: DEFAULT_LONGITUDE
+        get() = lastVehiclePose?.location?.longitude ?: MapCameraDefaults.DEFAULT_LONGITUDE
 
     /**
      * 操作対象の GoogleMap を接続し、カメラ移動 listener を登録する。
@@ -815,14 +815,14 @@ internal class MapCameraState internal constructor() {
             return centeredVehicleCameraPosition(
                 vehiclePose = vehiclePose,
                 current = current,
-                zoom = DEFAULT_CAMERA_ZOOM,
+                zoom = MapCameraDefaults.DEFAULT_ZOOM,
                 perspective = MapCameraPerspective.TILTED,
             )
         }
 
         return CameraPosition.Builder()
             .target(current.target)
-            .zoom(DEFAULT_CAMERA_ZOOM)
+            .zoom(MapCameraDefaults.DEFAULT_ZOOM)
             .bearing(current.bearing)
             .tilt(vehicleCameraPositionFactory.vehicleTiltDegrees(MapCameraPerspective.TILTED))
             .build()
@@ -1062,17 +1062,23 @@ private data class GuidanceManeuverCameraFocus(
  */
 @Stable
 internal data class MapCameraSnapshot(
-    val zoom: Float = DEFAULT_CAMERA_ZOOM,
+    val zoom: Float = MapCameraDefaults.DEFAULT_ZOOM,
     val bearing: Double = 0.0,
     val perspective: Int = MapCameraPerspective.TILTED,
     val isFollowingMyLocation: Boolean = false,
 )
 
-/** 初期カメラ位置の緯度。 */
-private const val DEFAULT_LATITUDE = 35.681236
+/**
+ * 地図カメラの初期表示値。
+ */
+internal object MapCameraDefaults {
 
-/** 初期カメラ位置の経度。 */
-private const val DEFAULT_LONGITUDE = 139.767125
+    /** 初期カメラ target の緯度。 */
+    const val DEFAULT_LATITUDE = 35.681236
 
-/** 初期カメラズーム。 */
-private const val DEFAULT_CAMERA_ZOOM = 17f
+    /** 初期カメラ target の経度。 */
+    const val DEFAULT_LONGITUDE = 139.767125
+
+    /** 初期カメラ zoom。 */
+    const val DEFAULT_ZOOM = 17f
+}
