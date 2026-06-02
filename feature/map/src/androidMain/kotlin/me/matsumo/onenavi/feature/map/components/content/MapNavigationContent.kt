@@ -5,8 +5,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -16,17 +23,23 @@ import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import dev.chrisbanes.haze.HazeState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
+import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.common_cancel
+import me.matsumo.onenavi.core.resource.common_ok
+import me.matsumo.onenavi.core.resource.home_map_navigation_cancel_dialog_message
+import me.matsumo.onenavi.core.resource.home_map_navigation_cancel_dialog_title
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationEtaCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationManeuverPanel
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationReroutingPanel
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.NavigationGuideImage
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * ナビゲーション中の UI レイヤー。
  *
- * 戻る操作は画面スタックの単純な pop ではなく、ナビゲーション停止イベントとして扱う。
- * これにより UI の戻る操作と案内停止の副作用を [MapUiEvent.OnNavigationStop] に集約する。
+ * 戻る操作は画面スタックの単純な pop ではなく、確認後のナビゲーション停止イベントとして扱う。
+ * これにより UI の停止操作と案内停止の副作用を [MapUiEvent.OnNavigationStop] に集約する。
  */
 @Composable
 internal fun MapNavigationContent(
@@ -37,6 +50,7 @@ internal fun MapNavigationContent(
     modifier: Modifier = Modifier,
 ) {
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
+    var showCancelDialog by remember { mutableStateOf(false) }
     val guiding = guidanceState as? GuidanceState.Guiding
     val rerouting = guidanceState as? GuidanceState.Rerouting
     val banner = guiding?.presentation?.banner
@@ -44,10 +58,14 @@ internal fun MapNavigationContent(
     val etaRoute = guiding?.route ?: rerouting?.previousRoute
     val etaProgress = guiding?.progress ?: rerouting?.previousProgress
 
+    fun cancelNavigation() {
+        onUiEvent(MapUiEvent.OnNavigationStop)
+    }
+
     NavigationEventHandler(
         state = navigationState,
     ) {
-        onUiEvent(MapUiEvent.OnNavigationStop)
+        showCancelDialog = true
     }
 
     LaunchedEffect(banner?.primary?.guidancePointIndex, shouldShowTopPanel) {
@@ -108,11 +126,55 @@ internal fun MapNavigationContent(
                 geometry = etaRoute.geometry,
                 roadClassSegments = etaRoute.roadClassSegments,
                 congestionSegments = etaRoute.congestionSegments,
-                onCloseClicked = {},
+                onCloseClicked = ::cancelNavigation,
                 onAlternativesClicked = {},
                 onAddWaypointClicked = {},
                 onDetourClicked = {},
             )
         }
     }
+
+    if (showCancelDialog) {
+        MapNavigationCancelDialog(
+            onConfirmed = {
+                showCancelDialog = false
+                cancelNavigation()
+            },
+            onDismissRequest = {
+                showCancelDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun MapNavigationCancelDialog(
+    onConfirmed: () -> Unit,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AlertDialog(
+        modifier = modifier,
+        onDismissRequest = onDismissRequest,
+        title = {
+            Text(text = stringResource(Res.string.home_map_navigation_cancel_dialog_title))
+        },
+        text = {
+            Text(text = stringResource(Res.string.home_map_navigation_cancel_dialog_message))
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirmed,
+            ) {
+                Text(text = stringResource(Res.string.common_ok))
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismissRequest,
+            ) {
+                Text(text = stringResource(Res.string.common_cancel))
+            }
+        },
+    )
 }
