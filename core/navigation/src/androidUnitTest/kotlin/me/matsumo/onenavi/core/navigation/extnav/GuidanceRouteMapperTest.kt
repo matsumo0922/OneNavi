@@ -13,6 +13,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementBlock
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
+import me.matsumo.drive.supporter.api.guidance.domain.GuideImageRef
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection
 import me.matsumo.drive.supporter.api.guidance.domain.LaneInfo
 import me.matsumo.drive.supporter.api.guidance.domain.LaneMarker
@@ -228,6 +229,37 @@ class GuidanceRouteMapperTest {
         // 料金はルート合計として route 側に持つ。各料金所地点には重複させない。
         assertNull(tollEvent.details.toll)
         assertEquals(320, guidanceRoute.tollTotalYen)
+    }
+
+    @Test
+    fun `看板画像は近傍 intersection より案内点自身の画像 ID を優先する`() {
+        val mapper = GuidanceRouteMapper()
+        val route = buildHighwayRoute()
+        val guidancePointImage = GuideImageRef(major = 201, minor = 222_222)
+        val intersectionImage = GuideImageRef(major = 201, minor = 111_111)
+        val routeGuidance = buildHighwayRouteGuidance()
+        val routeGuidanceWithImages = routeGuidance.copy(
+            guidancePoints = routeGuidance.guidancePoints
+                .mapIndexed { index, guidancePoint ->
+                    if (index == 0) {
+                        guidancePoint.copy(imageRefs = persistentListOf(guidancePointImage))
+                    } else {
+                        guidancePoint
+                    }
+                }
+                .toImmutableList(),
+            intersections = routeGuidance.intersections
+                .map { intersection -> intersection.copy(imageRefs = persistentListOf(intersectionImage)) }
+                .toImmutableList(),
+        )
+        val payload = ExtNavRoutePayload(id = route.id, routeGuidance = routeGuidanceWithImages)
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        val tollEvent = guidanceRoute.events.first { event ->
+            event.details.facility?.kind == FacilityKind.TOLL_GATE
+        }
+        assertEquals(guidancePointImage.minor, tollEvent.details.signpost?.imageRef?.minor)
     }
 
     @Test

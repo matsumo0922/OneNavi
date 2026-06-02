@@ -14,6 +14,7 @@ import me.matsumo.onenavi.core.navigation.RouteManager
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavAuthGateway
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavClientProvider
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuideImageGateway
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
@@ -140,6 +141,13 @@ val navigationModule: Module = module {
         )
     }
     single { ExtNavRouteRegistry() }
+    single {
+        ExtNavGuideImageGateway(
+            clientProvider = get(),
+            authGateway = get(),
+            routeRegistry = get(),
+        )
+    }
     single<RouteDataSource> {
         ExtNavRouteDataSource(
             clientProvider = get(),
