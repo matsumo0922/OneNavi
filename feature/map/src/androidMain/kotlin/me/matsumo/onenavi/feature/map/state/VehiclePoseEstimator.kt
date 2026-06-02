@@ -57,22 +57,30 @@ internal class VehiclePoseEstimator {
             previous = previousLatestSample,
             next = nextSample,
         )
-        val shouldResetProgress = isRouteChanged || hasProgressDiscontinuity || hasRouteProgressResumed
-        val shouldResetBearing = shouldResetBearingForRouteSession(
+        val hasDisplayRouteProgressJump = hasDisplayRouteProgressJump(next = nextSample)
+        val hasDisplayFreeLocationJump = hasDisplayFreeLocationJump(next = nextSample)
+        val shouldResetProgressByRouteState = isRouteChanged || hasProgressDiscontinuity || hasRouteProgressResumed
+        val shouldResetProgress = shouldResetProgressByRouteState || hasDisplayRouteProgressJump
+        val shouldResetSampleHistory = shouldResetProgress || hasDisplayFreeLocationJump
+        val shouldResetBearingByRouteSession = shouldResetBearingForRouteSession(
             previousRouteKey = previousRouteKey,
             nextRouteKey = routeKey,
             nextSample = nextSample,
-        ) || shouldResetBearingForRouteProgressReset(
+        )
+        val shouldResetBearingByProgressReset = shouldResetBearingForRouteProgressReset(
             hasProgressDiscontinuity = hasProgressDiscontinuity,
             nextSample = nextSample,
         )
+        val shouldResetBearingByDisplayJump = hasDisplayRouteProgressJump || hasDisplayFreeLocationJump
+        val shouldResetBearingByRoute = shouldResetBearingByRouteSession || shouldResetBearingByProgressReset
+        val shouldResetBearing = shouldResetBearingByRoute || shouldResetBearingByDisplayJump
 
         latestSampleIntervalSeconds = sampleIntervalSeconds(
             latest = nextSample,
             previous = previousLatestSample,
         ) ?: latestSampleIntervalSeconds
 
-        previousSample = if (shouldResetProgress) null else previousLatestSample
+        previousSample = if (shouldResetSampleHistory) null else previousLatestSample
         latestSample = nextSample
 
         if (shouldResetProgress || displayRouteProgressMeters == null) {
@@ -80,6 +88,9 @@ internal class VehiclePoseEstimator {
         }
         if (shouldResetBearing) {
             displayBearingDegrees = null
+        }
+        if (hasDisplayFreeLocationJump) {
+            displayFreeLocation = nextSample.state.location
         }
         if (nextSample.state.routeProgressMeters == null && displayFreeLocation == null) {
             displayFreeLocation = nextSample.state.location
@@ -205,6 +216,41 @@ internal class VehiclePoseEstimator {
         val nextProgressMeters = next.state.routeProgressMeters
 
         return previousProgressMeters == null && nextProgressMeters != null
+    }
+
+    /**
+     * 表示中の route 進捗から最新 tick まで大きく前進したかを返す。
+     *
+     * GPS 復帰や provider 切替で route projection が一気に進んだ場合は、古い表示進捗から補間すると
+     * route 上を不自然に滑るため、表示進捗を最新 tick へ即時 reset する。
+     *
+     * @param next 最新 tick
+     * @return 表示進捗を最新 tick へ即時 reset すべき場合 true
+     */
+    private fun hasDisplayRouteProgressJump(next: TimedVehicleLocation): Boolean {
+        val currentDisplayProgressMeters = displayRouteProgressMeters ?: return false
+        val nextProgressMeters = next.state.routeProgressMeters ?: return false
+        val forwardMeters = nextProgressMeters - currentDisplayProgressMeters
+
+        return forwardMeters > ROUTE_PROGRESS_SNAP_FORWARD_METERS
+    }
+
+    /**
+     * 表示中の自由位置から最新 tick まで大きく離れたかを返す。
+     *
+     * 入力 tick は [VehicleLocationStabilizer] や案内 tracker 側で既に採否判定済みなので、ここでは
+     * 採用済み位置への見た目の追従だけを判定する。小さな GPS 揺れや通常移動は従来どおり補間する。
+     *
+     * @param next 最新 tick
+     * @return 表示位置を最新 tick へ即時 reset すべき場合 true
+     */
+    private fun hasDisplayFreeLocationJump(next: TimedVehicleLocation): Boolean {
+        if (next.state.routeProgressMeters != null) return false
+
+        val currentDisplayLocation = displayFreeLocation ?: return false
+        val distanceMeters = MapGeodesy.haversineMeters(currentDisplayLocation, next.state.location)
+
+        return distanceMeters > FREE_LOCATION_SNAP_DISTANCE_METERS
     }
 
     /**
@@ -702,6 +748,12 @@ private fun elapsedSeconds(
 
 /** route 進捗がこの距離以上戻った場合に別セッション相当として reset する距離。 */
 private const val ROUTE_PROGRESS_RESET_BACKWARD_METERS = 100.0
+
+/** 表示中の route 進捗からこの距離を超えて前進した場合に補間せず即時反映する距離。 */
+private const val ROUTE_PROGRESS_SNAP_FORWARD_METERS = 200.0
+
+/** 表示中の自由位置からこの距離を超えて離れた場合に補間せず即時反映する距離。 */
+private const val FREE_LOCATION_SNAP_DISTANCE_METERS = 200.0
 
 /** route key 切替時に案内再開始とみなす始点付近の進捗距離。 */
 private const val ROUTE_SESSION_START_PROGRESS_METERS = 50.0
