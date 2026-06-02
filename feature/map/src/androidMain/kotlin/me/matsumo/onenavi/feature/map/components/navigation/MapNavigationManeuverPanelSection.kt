@@ -21,12 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,7 +37,6 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import dev.chrisbanes.haze.HazeState
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
@@ -64,14 +58,11 @@ import me.matsumo.onenavi.core.resource.home_map_navigation_panel_facility_jct
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_facility_pa
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_facility_sa
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_facility_toll_gate_badge
-import me.matsumo.onenavi.core.resource.home_map_navigation_panel_guidance_header
-import me.matsumo.onenavi.core.resource.home_map_navigation_panel_guidance_header_description
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_guidance_point
 import me.matsumo.onenavi.core.resource.home_map_route_origin_current_location
 import me.matsumo.onenavi.core.resource.ic_vehicle_puck
 import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
 import me.matsumo.onenavi.core.ui.theme.RouteColors
-import me.matsumo.onenavi.core.ui.theme.bold
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -91,101 +82,59 @@ internal fun MapNavigationManeuverPanelSection(
     onDismissPanelClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(16.dp)
     val screenHeight = LocalWindowInfo.current.containerDpSize.height
+    val roadClass = listItems.lastOrNull()?.roadClass ?: RoadClass.ORDINARY
+    val panelColors = RouteColors.accent(roadClass)
+    val shape = RoundedCornerShape(
+        topStart = 0.dp,
+        topEnd = 0.dp,
+        bottomStart = 16.dp,
+        bottomEnd = 16.dp,
+    )
 
     Surface(
         modifier = modifier
-            .zIndex(1f)
-            .height(screenHeight / 2f)
+            .height(screenHeight / 3f)
             .shadow(
                 elevation = 8.dp,
                 shape = shape,
             ),
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = panelColors.primary,
     ) {
-        Column(
+        LazyColumn(
             modifier = Modifier.fillMaxWidth(),
         ) {
-            MapNavigationGuidancePanelHeader(
-                modifier = Modifier.fillMaxWidth(),
-                onDismissPanelClicked = onDismissPanelClicked,
-            )
-
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                itemsIndexed(
-                    items = listItems,
-                    key = { _, item -> item.id },
-                ) { index, item ->
-                    MapNavigationGuidancePanelRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        item = item,
-                        meterLabel = meterLabel,
-                        kilometerLabel = kilometerLabel,
-                        dayLabel = dayLabel,
-                        hourLabel = hourLabel,
-                        minuteLabel = minuteLabel,
-                        timestampMillis = timestampMillis,
-                        isPrimary = index == listItems.lastIndex,
-                    )
-                }
-
-                item(key = "footer") {
-                    MapNavigationGuidancePanelFooter(
-                        modifier = Modifier.fillMaxWidth(),
-                        roadClass = listItems.last().roadClass,
-                        elapsedSeconds = elapsedSeconds,
-                        traveledMeters = traveledMeters,
-                        meterLabel = meterLabel,
-                        kilometerLabel = kilometerLabel,
-                        dayLabel = dayLabel,
-                        hourLabel = hourLabel,
-                        minuteLabel = minuteLabel,
-                    )
-                }
+            itemsIndexed(
+                items = listItems,
+                key = { _, item -> item.id },
+            ) { index, item ->
+                MapNavigationGuidancePanelRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    item = item,
+                    meterLabel = meterLabel,
+                    kilometerLabel = kilometerLabel,
+                    dayLabel = dayLabel,
+                    hourLabel = hourLabel,
+                    minuteLabel = minuteLabel,
+                    timestampMillis = timestampMillis,
+                    isPrimary = index == listItems.lastIndex,
+                )
             }
-        }
-    }
-}
 
-@Composable
-private fun MapNavigationGuidancePanelHeader(
-    onDismissPanelClicked: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier.padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = stringResource(Res.string.home_map_navigation_panel_guidance_header),
-                style = MaterialTheme.typography.titleMedium.bold(),
-            )
-
-            Text(
-                text = stringResource(Res.string.home_map_navigation_panel_guidance_header_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        IconButton(
-            onClick = onDismissPanelClicked,
-            colors = IconButtonDefaults.iconButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            ),
-        ) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = null,
-            )
+            item(key = "footer") {
+                MapNavigationGuidancePanelFooter(
+                    modifier = Modifier.fillMaxWidth(),
+                    roadClass = roadClass,
+                    elapsedSeconds = elapsedSeconds,
+                    traveledMeters = traveledMeters,
+                    meterLabel = meterLabel,
+                    kilometerLabel = kilometerLabel,
+                    dayLabel = dayLabel,
+                    hourLabel = hourLabel,
+                    minuteLabel = minuteLabel,
+                )
+            }
         }
     }
 }
@@ -243,14 +192,14 @@ private fun MapNavigationGuidancePanelFooter(
                     modifier = Modifier
                         .requiredHeight(20.dp)
                         .offset(y = 4.dp),
-                    color = panelColors.primary,
+                    color = panelColors.container,
                     thickness = 8.dp,
                 )
             }
 
             HorizontalDivider(
                 modifier = Modifier.weight(1f),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.2f),
+                color = panelColors.onPrimary.copy(0.2f),
             )
         }
 
@@ -272,7 +221,7 @@ private fun MapNavigationGuidancePanelFooter(
                     .padding(start = 36.dp)
                     .weight(1f),
                 text = stringResource(Res.string.home_map_route_origin_current_location),
-                color = MaterialTheme.colorScheme.onSurface,
+                color = panelColors.onPrimary,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -288,7 +237,7 @@ private fun MapNavigationGuidancePanelFooter(
             ) {
                 Text(
                     text = elapsedText,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = panelColors.onPrimary,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -296,7 +245,7 @@ private fun MapNavigationGuidancePanelFooter(
 
                 Text(
                     text = traveledText,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = panelColors.onPrimary,
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
                 )
@@ -367,7 +316,7 @@ private fun MapNavigationGuidancePanelRow(
                         .clip(CircleShape)
                         .border(
                             width = 4.dp,
-                            color = panelColors.primary,
+                            color = panelColors.container,
                             shape = CircleShape,
                         )
                         .background(MaterialTheme.colorScheme.surfaceContainer),
@@ -375,7 +324,7 @@ private fun MapNavigationGuidancePanelRow(
 
                 HorizontalDivider(
                     modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.2f),
+                    color = panelColors.onPrimary.copy(0.2f),
                 )
             }
 
@@ -394,7 +343,7 @@ private fun MapNavigationGuidancePanelRow(
                         modifier = Modifier
                             .requiredHeight(GuidancePanelRowMinHeight + 6.dp)
                             .offset(y = 1.dp),
-                        color = panelColors.primary,
+                        color = panelColors.container,
                         thickness = 8.dp,
                     )
                 }
@@ -402,7 +351,7 @@ private fun MapNavigationGuidancePanelRow(
                 MapNavigationGuidancePanelIcon(
                     modifier = Modifier.size(40.dp),
                     icon = item.icon,
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    tint = panelColors.onPrimary,
                 )
 
                 Column(
@@ -411,7 +360,7 @@ private fun MapNavigationGuidancePanelRow(
                 ) {
                     Text(
                         text = title,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = panelColors.onPrimary,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
@@ -421,8 +370,8 @@ private fun MapNavigationGuidancePanelRow(
                     if (detail != null) {
                         MapNavigationGuidancePanelDetail(
                             detail = detail,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            secondaryContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            contentColor = panelColors.onPrimary,
+                            secondaryContentColor = panelColors.onPrimary,
                         )
                     }
                 }
@@ -435,7 +384,7 @@ private fun MapNavigationGuidancePanelRow(
                     if (etaText != null) {
                         Text(
                             text = etaText,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = panelColors.onPrimary,
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
@@ -444,7 +393,7 @@ private fun MapNavigationGuidancePanelRow(
 
                     Text(
                         text = distanceText,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = panelColors.onPrimary,
                         style = MaterialTheme.typography.labelMedium,
                         maxLines = 1,
                     )

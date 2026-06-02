@@ -78,7 +78,7 @@ internal fun MapNavigationManeuverPanel(
     val hasLanes = laneCells != null
     val hasHint = followupCallout != null
     val topShape = when {
-        hasLanes -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        hasLanes || showPanel -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
         hasHint -> RoundedCornerShape(
             topStart = 16.dp,
             topEnd = 16.dp,
@@ -93,6 +93,16 @@ internal fun MapNavigationManeuverPanel(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
+        MapNavigationManeuverTopSection(
+            modifier = Modifier.fillMaxWidth(),
+            banner = banner,
+            meterLabel = meterLabel,
+            kilometerLabel = kilometerLabel,
+            showPanelItems = showPanel,
+            shape = topShape,
+            onShowPanelItemsClicked = { showPanel = !showPanel },
+        )
+
         if (banner.hasMoreEvents && showPanel) {
             MapNavigationManeuverPanelSection(
                 modifier = Modifier.fillMaxWidth(),
@@ -109,16 +119,6 @@ internal fun MapNavigationManeuverPanel(
                 onDismissPanelClicked = { showPanel = false },
             )
         } else {
-            MapNavigationManeuverTopSection(
-                modifier = Modifier.fillMaxWidth(),
-                banner = banner,
-                meterLabel = meterLabel,
-                kilometerLabel = kilometerLabel,
-                showPanelItems = showPanel,
-                shape = topShape,
-                onShowPanelItemsClicked = { showPanel = true },
-            )
-
             MapNavigationManeuverBottomSection(
                 modifier = Modifier.fillMaxWidth(),
                 laneCells = laneCells,
@@ -341,7 +341,7 @@ private fun MapNavigationManeuverBottomSection(
                     topStart = 0.dp,
                     topEnd = 0.dp,
                     bottomStart = 16.dp,
-                    bottomEnd = 12.dp,
+                    bottomEnd = 16.dp,
                 ),
                 color = panelColors.primary,
             ) {
