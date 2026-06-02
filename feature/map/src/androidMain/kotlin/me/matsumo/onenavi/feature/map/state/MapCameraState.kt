@@ -50,6 +50,10 @@ internal class MapCameraState internal constructor() {
     private val vehicleCameraPositionFactory = VehicleCameraPositionFactory()
     private val gestureController = MapCameraGestureController()
     private var mapViewWidthPx: Int = 0
+    private var mapViewHeightPx: Int = 0
+    private var topPaddingPx: Int = 0
+    private var bottomPaddingPx: Int = 0
+    private var isGuidanceCameraActive: Boolean = false
     private var density: Float = DEFAULT_DENSITY
     private var lastVehiclePose: VehiclePose? = null
     private var guidanceManeuverCameraFocus: GuidanceManeuverCameraFocus? = null
@@ -107,6 +111,7 @@ internal class MapCameraState internal constructor() {
      */
     fun updateViewportSize(widthPx: Int, heightPx: Int) {
         mapViewWidthPx = widthPx
+        mapViewHeightPx = heightPx
         vehicleCameraPositionFactory.updateViewportHeight(heightPx)
     }
 
@@ -126,6 +131,10 @@ internal class MapCameraState internal constructor() {
      */
     fun updatePadding(top: Int, bottom: Int, start: Int, end: Int) {
         googleMap?.setPadding(start, top, end, bottom)
+        topPaddingPx = top
+        bottomPaddingPx = bottom
+        vehicleCameraPositionFactory.updatePadding(topPx = top, bottomPx = bottom)
+        moveFollowCameraIfNeeded()
     }
 
     /**
@@ -137,6 +146,7 @@ internal class MapCameraState internal constructor() {
      * @param isActive 案内中カメラとして扱う場合 true
      */
     fun setGuidanceCameraActive(isActive: Boolean) {
+        isGuidanceCameraActive = isActive
         vehicleCameraPositionFactory.setGuidanceCameraActive(isActive)
     }
 
@@ -257,6 +267,7 @@ internal class MapCameraState internal constructor() {
         gestureController.clear()
         guidanceManeuverCameraFocus = null
         handledGuidanceManeuverFocusIndex = null
+        isGuidanceCameraActive = true
         vehicleCameraPositionFactory.setGuidanceCameraActive(true)
         cameraState = cameraState.copy(
             perspective = MapCameraPerspective.TILTED,
@@ -300,23 +311,70 @@ internal class MapCameraState internal constructor() {
      */
     fun updateVehiclePose(vehiclePose: VehiclePose) {
         lastVehiclePose = vehiclePose
+        moveFollowCameraIfNeeded()
+    }
 
-        if (cameraState.isFollowingMyLocation && !isCameraTransitionInProgress() && !gestureController.isGestureInProgress) {
-            val current = googleMap?.cameraPosition ?: return
-            val focus = guidanceManeuverCameraFocus
+    /**
+     * 追従中で明示的なカメラアニメーションが走っていない場合に、最新 pose（または案内地点
+     * フォーカス）へカメラ中心を即時追従させる。pose 更新時と padding 更新時の両方から呼ぶ。
+     */
+    private fun moveFollowCameraIfNeeded() {
+        val vehiclePose = lastVehiclePose ?: return
+        val isCameraBusy = isCameraTransitionInProgress() || gestureController.isGestureInProgress
+        if (!cameraState.isFollowingMyLocation || isCameraBusy) {
+            return
+        }
 
-            val cameraPosition = if (focus != null) {
-                guidanceManeuverFocusCameraPosition(current)
-            } else {
-                vehicleCameraPosition(
-                    vehiclePose = vehiclePose,
-                    current = current,
-                )
-            }
-
-            moveVehicleCamera(cameraPosition)
+        val current = googleMap?.cameraPosition ?: return
+        val focus = guidanceManeuverCameraFocus
+        when {
+            focus != null -> moveVehicleCamera(guidanceManeuverFocusCameraPosition(current))
+            isGuidanceCameraActive -> moveAnchoredVehicleCamera(vehiclePose, current)
+            else -> moveVehicleCamera(vehicleCameraPosition(vehiclePose = vehiclePose, current = current))
         }
     }
+
+    /**
+     * 案内中追従で、自車を「可視領域の下端から [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上」へ
+     * 正確に置く。
+     *
+     * まず自車を camera target 中心（padding を除いた可視領域の中心）へ置き、続いて screen 空間で
+     * 正確な [CameraUpdateFactory.scrollBy] で下端アンカーまで下げる。`scrollBy` は SDK が実カメラに
+     * 対して px 単位で適用するため、`moveCamera` 直後の stale projection や tilt の遠近に影響されない。
+     * アンカーは下端基準なので、上部パネル展開で上 padding が増えても自車位置は動かない。
+     *
+     * @param vehiclePose frame 時点の自車 pose
+     * @param current 現在のカメラ位置
+     */
+    private fun moveAnchoredVehicleCamera(vehiclePose: VehiclePose, current: CameraPosition) {
+        val map = googleMap ?: return
+
+        moveVehicleCamera(centeredVehicleCameraPosition(vehiclePose = vehiclePose, current = current))
+
+        val scrollPx = followAnchorScrollPx()
+        if (scrollPx != 0f) {
+            map.moveCamera(CameraUpdateFactory.scrollBy(0f, scrollPx))
+        }
+    }
+
+    /**
+     * 自車を可視領域の中心から下端アンカーへ移すための `scrollBy` の縦 px を返す。
+     *
+     * `scrollBy(0, +y)` はカメラを下げ画面上の自車を上へ動かすため、自車を下げるには負値を返す。
+     * 値は下端基準（[mapViewHeightPx] と下 padding 基準）なので上 padding に依存しない。
+     *
+     * @return scrollBy へ渡す縦 px。サイズ未確定時は 0
+     */
+    private fun followAnchorScrollPx(): Float {
+        if (mapViewHeightPx <= 0) return 0f
+
+        val paddedCenterY = (mapViewHeightPx + topPaddingPx - bottomPaddingPx) / 2f
+        val anchorY = mapViewHeightPx - bottomPaddingPx - anchorMarginPx()
+        return paddedCenterY - anchorY
+    }
+
+    /** 自車アンカーの下端マージン（px）。 */
+    private fun anchorMarginPx(): Int = (VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP * density).toInt()
 
     /**
      * 案内地点接近時の真上・拡大フォーカスを開始する。
@@ -678,6 +736,27 @@ internal class MapCameraState internal constructor() {
         zoom: Float = cameraState.zoom,
         perspective: Int = cameraState.perspective,
     ): CameraPosition = vehicleCameraPositionFactory.vehicleCameraPosition(
+        vehiclePose = vehiclePose,
+        current = current,
+        zoom = zoom,
+        perspective = perspective,
+    )
+
+    /**
+     * 自車を camera target 中心へ置く追従カメラ位置を作る。下端アンカーは `scrollBy` で別途与える。
+     *
+     * @param vehiclePose frame 時点の自車 pose
+     * @param current 現在のカメラ位置
+     * @param zoom 設定する zoom 値
+     * @param perspective 設定する camera perspective
+     * @return 自車を中心に置いたカメラ位置
+     */
+    private fun centeredVehicleCameraPosition(
+        vehiclePose: VehiclePose,
+        current: CameraPosition,
+        zoom: Float = cameraState.zoom,
+        perspective: Int = cameraState.perspective,
+    ): CameraPosition = vehicleCameraPositionFactory.centeredVehicleCameraPosition(
         vehiclePose = vehiclePose,
         current = current,
         zoom = zoom,
