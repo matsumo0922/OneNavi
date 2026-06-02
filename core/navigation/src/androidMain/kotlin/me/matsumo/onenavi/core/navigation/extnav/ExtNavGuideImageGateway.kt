@@ -20,11 +20,22 @@ private const val WEBP_CONTENT_TYPE: String = "image/webp"
  * ルート検索で得た [ExtNavRoutePayload] または semantic 層の [GuideImageKey] から、
  * UI がデコードできる WEBP bytes を取得する。
  */
-class ExtNavGuideImageGateway(
-    private val clientProvider: ExtNavClientProvider,
-    private val authGateway: ExtNavAuthGateway,
+class ExtNavGuideImageGateway internal constructor(
+    private val backend: ExtNavGuideImageGatewayBackend,
     private val routeRegistry: ExtNavRouteRegistry,
 ) {
+    constructor(
+        clientProvider: ExtNavClientProvider,
+        authGateway: ExtNavAuthGateway,
+        routeRegistry: ExtNavRouteRegistry,
+    ) : this(
+        backend = DefaultExtNavGuideImageGatewayBackend(
+            clientProvider = clientProvider,
+            authGateway = authGateway,
+        ),
+        routeRegistry = routeRegistry,
+    )
+
     /**
      * [routeId] に紐付くルート上の案内画像を一括プリロードする。
      */
@@ -58,15 +69,14 @@ class ExtNavGuideImageGateway(
         val requestIds = distinctKeys.toGuideImageRequestIds()
         if (requestIds.isEmpty()) return Result.success(persistentListOf())
 
-        authGateway.ensureSignedIn().getOrElse { cause ->
+        backend.ensureSignedIn().getOrElse { cause ->
             return Result.failure(cause)
         }
 
-        val client = clientProvider.get()
         val request = GuideImageRequest(
             ids = requestIds,
         )
-        return when (val result = client.image.fetch(request)) {
+        return when (val result = backend.fetch(request)) {
             is ApiResult.Success -> {
                 val keysByMinor = distinctKeys.groupBy { key -> key.minor }
                 val images = result.value
@@ -88,6 +98,32 @@ class ExtNavGuideImageGateway(
             }
             .distinct()
             .toImmutableList()
+}
+
+/**
+ * [ExtNavGuideImageGateway] が利用する認証済み案内画像取得 backend。
+ */
+internal interface ExtNavGuideImageGatewayBackend {
+    suspend fun ensureSignedIn(): Result<Unit>
+
+    suspend fun fetch(request: GuideImageRequest): ApiResult<ImmutableList<GuideImage>>
+}
+
+/**
+ * 外部ナビ API ライブラリの client provider / auth gateway を使う既定 backend。
+ */
+private class DefaultExtNavGuideImageGatewayBackend(
+    private val clientProvider: ExtNavClientProvider,
+    private val authGateway: ExtNavAuthGateway,
+) : ExtNavGuideImageGatewayBackend {
+
+    override suspend fun ensureSignedIn(): Result<Unit> =
+        authGateway.ensureSignedIn()
+
+    override suspend fun fetch(request: GuideImageRequest): ApiResult<ImmutableList<GuideImage>> {
+        val client = clientProvider.get()
+        return client.image.fetch(request)
+    }
 }
 
 internal fun List<GuideImageKey>.toGuideImageRequestIds(): ImmutableList<Int> =

@@ -254,6 +254,27 @@ class GuidanceRouteMapperTest {
     }
 
     @Test
+    fun `看板画像は案内点自身の画像 ID が空なら近傍 intersection の画像 ID を使う`() {
+        val mapper = GuidanceRouteMapper()
+        val route = buildHighwayRoute()
+        val intersectionImage = GuideImageRef(major = 101, minor = 111_111)
+        val routeGuidance = buildHighwayRouteGuidance()
+        val routeGuidanceWithImages = routeGuidance.withFirstGuidancePointAndIntersectionImages(
+            guidancePointImages = emptyList(),
+            intersectionImages = listOf(intersectionImage),
+        )
+        val payload = ExtNavRoutePayload(id = route.id, routeGuidance = routeGuidanceWithImages)
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        val tollEvent = guidanceRoute.events.first { event ->
+            event.details.facility?.kind == FacilityKind.TOLL_GATE
+        }
+        assertEquals(intersectionImage.major, tollEvent.details.signpost?.imageRef?.major)
+        assertEquals(intersectionImage.minor, tollEvent.details.signpost?.imageRef?.minor)
+    }
+
+    @Test
     fun `料金所画像は方面看板画像として採用しない`() {
         val mapper = GuidanceRouteMapper()
         val route = buildHighwayRoute()
