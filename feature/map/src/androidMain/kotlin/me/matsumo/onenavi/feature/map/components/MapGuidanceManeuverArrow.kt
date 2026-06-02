@@ -48,6 +48,30 @@ internal data class MapGuidanceManeuverArrowSpec(
 )
 
 /**
+ * 案内地点矢印の生成対象。
+ *
+ * @param maneuverOrder 表示対象 maneuver 内の順序
+ * @param maneuver 案内地点の presentation 値
+ * @param targetMeters route 始点から案内地点までの距離
+ */
+@Immutable
+private data class GuidanceArrowTarget(
+    val maneuverOrder: Int,
+    val maneuver: ManeuverCallout,
+    val targetMeters: Double,
+)
+
+/**
+ * 1 本の矢印として描画する案内地点のまとまり。
+ *
+ * @param targets 連結後の矢印が通過する案内地点
+ */
+@Immutable
+private data class GuidanceArrowTargetGroup(
+    val targets: ImmutableList<GuidanceArrowTarget>,
+)
+
+/**
  * 案内地点矢印の route window と道路種別を組み立てる。
  */
 internal object MapGuidanceManeuverArrowGeometry {
@@ -61,14 +85,16 @@ internal object MapGuidanceManeuverArrowGeometry {
         fallbackRoadClass: RoadClass,
     ): ImmutableList<MapGuidanceManeuverArrowSpec> {
         val meterIndex = routeMeterIndex ?: return persistentListOf()
-        val targetManeuvers = maneuvers.take(MAX_GUIDANCE_ARROW_COUNT)
+        val targetGroups = guidanceArrowTargets(
+            maneuvers = maneuvers,
+            routeMeterIndex = meterIndex,
+        ).toMergedGroups()
 
-        return targetManeuvers
-            .mapIndexedNotNull { maneuverOrder, maneuver ->
+        return targetGroups
+            .mapNotNull { targetGroup ->
                 spec(
                     routeId = routeId,
-                    maneuverOrder = maneuverOrder,
-                    maneuver = maneuver,
+                    targetGroup = targetGroup,
                     routeMeterIndex = meterIndex,
                     currentCumulativeMeters = currentCumulativeMeters,
                     roadClassSegments = roadClassSegments,
@@ -80,33 +106,154 @@ internal object MapGuidanceManeuverArrowGeometry {
 
     private fun spec(
         routeId: String,
-        maneuverOrder: Int,
-        maneuver: ManeuverCallout,
+        targetGroup: GuidanceArrowTargetGroup,
         routeMeterIndex: RouteMeterIndex,
         currentCumulativeMeters: Double,
         roadClassSegments: ImmutableList<RoadClassSegment>,
         fallbackRoadClass: RoadClass,
     ): MapGuidanceManeuverArrowSpec? {
-        val targetMeters = routeMeterIndex.coerceDistance(maneuver.geometryDistanceFromStartMeters)
-        val points = routeMeterIndex.pointsAroundTarget(
-            currentDistanceMeters = currentCumulativeMeters,
-            targetDistanceMeters = targetMeters,
-            approachMeters = GUIDANCE_ARROW_ROUTE_APPROACH_METERS,
-            exitMeters = GUIDANCE_ARROW_ROUTE_EXIT_METERS,
-            fallbackBearingDegrees = null,
+        val firstTarget = targetGroup.targets.first()
+        val points = guidanceArrowPoints(
+            targetGroup = targetGroup,
+            routeMeterIndex = routeMeterIndex,
+            currentCumulativeMeters = currentCumulativeMeters,
         )
         if (points.size < MIN_GUIDANCE_ARROW_POINT_COUNT) return null
 
         return MapGuidanceManeuverArrowSpec(
-            id = "guidance-arrow-$routeId-$maneuverOrder-${maneuver.guidancePointIndex}",
+            id = targetGroup.id(routeId = routeId),
             points = points.toImmutableList(),
             roadClass = roadClassAt(
                 routeMeterIndex = routeMeterIndex,
-                targetDistanceMeters = targetMeters,
+                targetDistanceMeters = firstTarget.targetMeters,
                 roadClassSegments = roadClassSegments,
                 fallbackRoadClass = fallbackRoadClass,
             ),
         )
+    }
+
+    private fun guidanceArrowTargets(
+        maneuvers: List<ManeuverCallout>,
+        routeMeterIndex: RouteMeterIndex,
+    ): List<GuidanceArrowTarget> {
+        val targetManeuvers = maneuvers.take(MAX_GUIDANCE_ARROW_COUNT)
+        val targets = targetManeuvers.mapIndexed { maneuverOrder, maneuver ->
+            GuidanceArrowTarget(
+                maneuverOrder = maneuverOrder,
+                maneuver = maneuver,
+                targetMeters = routeMeterIndex.coerceDistance(maneuver.geometryDistanceFromStartMeters),
+            )
+        }
+
+        return targets.sortedBy { target -> target.targetMeters }
+    }
+
+    private fun List<GuidanceArrowTarget>.toMergedGroups(): List<GuidanceArrowTargetGroup> {
+        if (isEmpty()) return emptyList()
+
+        val groups = mutableListOf<GuidanceArrowTargetGroup>()
+        var currentGroup = first().toTargetGroup()
+
+        for (targetIndex in 1 until size) {
+            val nextTarget = this[targetIndex]
+            if (currentGroup.shouldMerge(nextTarget)) {
+                currentGroup = currentGroup.merge(nextTarget)
+            } else {
+                groups += currentGroup
+                currentGroup = nextTarget.toTargetGroup()
+            }
+        }
+
+        groups += currentGroup
+        return groups
+    }
+
+    private fun GuidanceArrowTarget.toTargetGroup(): GuidanceArrowTargetGroup {
+        return GuidanceArrowTargetGroup(
+            targets = persistentListOf(this),
+        )
+    }
+
+    private fun GuidanceArrowTargetGroup.shouldMerge(target: GuidanceArrowTarget): Boolean {
+        val distanceBetweenTargets = target.targetMeters - targets.last().targetMeters
+
+        return distanceBetweenTargets < GUIDANCE_ARROW_ROUTE_LENGTH_METERS
+    }
+
+    private fun GuidanceArrowTargetGroup.merge(target: GuidanceArrowTarget): GuidanceArrowTargetGroup {
+        return copy(
+            targets = (targets + target).toImmutableList(),
+        )
+    }
+
+    private fun GuidanceArrowTargetGroup.id(routeId: String): String {
+        val firstTarget = targets.first()
+        if (targets.size == 1) {
+            return "guidance-arrow-$routeId-${firstTarget.maneuverOrder}-${firstTarget.maneuver.guidancePointIndex}"
+        }
+
+        val lastTarget = targets.last()
+        return "guidance-arrow-$routeId-${firstTarget.maneuverOrder}-${firstTarget.maneuver.guidancePointIndex}-${lastTarget.maneuver.guidancePointIndex}"
+    }
+
+    private fun guidanceArrowPoints(
+        targetGroup: GuidanceArrowTargetGroup,
+        routeMeterIndex: RouteMeterIndex,
+        currentCumulativeMeters: Double,
+    ): List<RoutePoint> {
+        val firstTarget = targetGroup.targets.first()
+        val lastTarget = targetGroup.targets.last()
+        val startMeters = guidanceArrowStartMeters(
+            routeMeterIndex = routeMeterIndex,
+            firstTargetMeters = firstTarget.targetMeters,
+            currentCumulativeMeters = currentCumulativeMeters,
+        )
+        val endMeters = routeMeterIndex.coerceDistance(lastTarget.targetMeters + GUIDANCE_ARROW_ROUTE_EXIT_METERS)
+        val boundaryMeters = buildList {
+            add(startMeters)
+            for (target in targetGroup.targets) {
+                add(target.targetMeters)
+            }
+            add(endMeters)
+        }
+
+        return pointsBetweenBoundaries(
+            boundaryMeters = boundaryMeters,
+            routeMeterIndex = routeMeterIndex,
+        )
+    }
+
+    private fun guidanceArrowStartMeters(
+        routeMeterIndex: RouteMeterIndex,
+        firstTargetMeters: Double,
+        currentCumulativeMeters: Double,
+    ): Double {
+        val approachStartMeters = routeMeterIndex.coerceDistance(firstTargetMeters - GUIDANCE_ARROW_ROUTE_APPROACH_METERS)
+        val currentStartMeters = routeMeterIndex.coerceDistance(currentCumulativeMeters)
+
+        return maxOf(approachStartMeters, currentStartMeters).coerceAtMost(firstTargetMeters)
+    }
+
+    private fun pointsBetweenBoundaries(
+        boundaryMeters: List<Double>,
+        routeMeterIndex: RouteMeterIndex,
+    ): List<RoutePoint> {
+        val routePoints = mutableListOf<RoutePoint>()
+
+        for (boundaryIndex in 0 until boundaryMeters.lastIndex) {
+            val segmentPoints = routeMeterIndex.pointsBetween(
+                startDistanceMeters = boundaryMeters[boundaryIndex],
+                endDistanceMeters = boundaryMeters[boundaryIndex + 1],
+                fallbackBearingDegrees = null,
+            )
+            if (routePoints.isEmpty()) {
+                routePoints += segmentPoints
+            } else {
+                routePoints += segmentPoints.drop(1)
+            }
+        }
+
+        return routePoints
     }
 
     private fun roadClassAt(
@@ -319,6 +466,10 @@ private const val GUIDANCE_ARROW_ROUTE_APPROACH_METERS = 60.0
 
 /** 案内地点通過後に矢印を伸ばす距離。 */
 private const val GUIDANCE_ARROW_ROUTE_EXIT_METERS = 60.0
+
+/** 近接する案内地点矢印を連結する距離しきい値。 */
+private const val GUIDANCE_ARROW_ROUTE_LENGTH_METERS =
+    GUIDANCE_ARROW_ROUTE_APPROACH_METERS + GUIDANCE_ARROW_ROUTE_EXIT_METERS
 
 /** 枠線色に使う道路種別を、案内地点直後の区間から判定するための先読み距離。 */
 private const val GUIDANCE_ARROW_ROAD_CLASS_LOOKAHEAD_METERS = 8.0
