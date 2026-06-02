@@ -112,7 +112,6 @@ internal fun MapNavigationContent(
                 onAlternativesClicked = {},
                 onAddWaypointClicked = {},
                 onDetourClicked = {},
-                onMoreClicked = {},
             )
         }
     }

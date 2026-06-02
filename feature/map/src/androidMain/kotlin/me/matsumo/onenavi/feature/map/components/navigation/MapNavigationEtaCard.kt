@@ -15,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -49,7 +48,6 @@ import me.matsumo.onenavi.core.resource.home_map_navigation_eta_add_waypoint
 import me.matsumo.onenavi.core.resource.home_map_navigation_eta_alternatives
 import me.matsumo.onenavi.core.resource.home_map_navigation_eta_close
 import me.matsumo.onenavi.core.resource.home_map_navigation_eta_detour
-import me.matsumo.onenavi.core.resource.home_map_navigation_eta_more
 import me.matsumo.onenavi.core.ui.navigation.RouteTrafficBar
 import me.matsumo.onenavi.feature.map.state.NavigationTrafficLevel
 import me.matsumo.onenavi.feature.map.state.calculateNavigationTrafficLevel
@@ -72,7 +70,6 @@ internal fun MapNavigationEtaCard(
     onAlternativesClicked: () -> Unit,
     onAddWaypointClicked: () -> Unit,
     onDetourClicked: () -> Unit,
-    onMoreClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val meterLabel = stringResource(Res.string.common_unit_meter)
@@ -123,46 +120,46 @@ internal fun MapNavigationEtaCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = durationText,
+                        color = etaColorOf(trafficLevel),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+
+                    Text(
+                        text = summaryText,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+
+                Spacer(
+                    modifier = Modifier.weight(1f),
+                )
+
+                MapNavigationEtaActionRow(
+                    onCloseClicked = onCloseClicked,
+                    onAlternativesClicked = onAlternativesClicked,
+                    onAddWaypointClicked = onAddWaypointClicked,
+                    onDetourClicked = onDetourClicked,
+                )
+            }
+
             RouteTrafficBar(
                 modifier = Modifier.fillMaxWidth(),
                 geometry = geometry,
                 currentCumulativeMeters = progress.currentCumulativeMeters,
                 roadClassSegments = roadClassSegments,
                 congestionSegments = congestionSegments,
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    text = durationText,
-                    color = etaColorOf(trafficLevel),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-
-                Spacer(
-                    modifier = Modifier.weight(1f),
-                )
-
-                Text(
-                    text = summaryText,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-            }
-
-            MapNavigationEtaActionRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                onCloseClicked = onCloseClicked,
-                onAlternativesClicked = onAlternativesClicked,
-                onAddWaypointClicked = onAddWaypointClicked,
-                onDetourClicked = onDetourClicked,
-                onMoreClicked = onMoreClicked,
             )
         }
     }
@@ -174,21 +171,13 @@ private fun MapNavigationEtaActionRow(
     onAlternativesClicked: () -> Unit,
     onAddWaypointClicked: () -> Unit,
     onDetourClicked: () -> Unit,
-    onMoreClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MapNavigationEtaActionButton(
-            icon = Icons.Default.Close,
-            contentDescription = stringResource(Res.string.home_map_navigation_eta_close),
-            onClick = onCloseClicked,
-            isHighlighted = true,
-        )
-
         MapNavigationEtaActionButton(
             icon = Icons.AutoMirrored.Filled.CallSplit,
             contentDescription = stringResource(Res.string.home_map_navigation_eta_alternatives),
@@ -208,9 +197,10 @@ private fun MapNavigationEtaActionRow(
         )
 
         MapNavigationEtaActionButton(
-            icon = Icons.Default.MoreHoriz,
-            contentDescription = stringResource(Res.string.home_map_navigation_eta_more),
-            onClick = onMoreClicked,
+            icon = Icons.Default.Close,
+            contentDescription = stringResource(Res.string.home_map_navigation_eta_close),
+            onClick = onCloseClicked,
+            isHighlighted = true,
         )
     }
 }
