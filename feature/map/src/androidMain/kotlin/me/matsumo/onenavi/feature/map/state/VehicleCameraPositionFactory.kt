@@ -64,23 +64,6 @@ internal class VehicleCameraPositionFactory {
         .build()
 
     /**
-     * 現在の中心・ズームを維持したまま、指定 perspective の tilt / bearing を反映したカメラ位置を作る。
-     *
-     * @param current 現在のカメラ位置
-     * @param perspective 切り替え後の camera perspective
-     * @return SDK に渡す camera position
-     */
-    fun compassCameraPosition(
-        current: CameraPosition,
-        perspective: Int,
-    ): CameraPosition = CameraPosition.Builder()
-        .target(current.target)
-        .zoom(current.zoom)
-        .bearing(compassBearingDegrees(current = current, perspective = perspective))
-        .tilt(vehicleTiltDegrees(perspective))
-        .build()
-
-    /**
      * follow 中 gesture 後に追従維持を許容する camera target の距離閾値を返す。
      *
      * @param latitude 判定地点の緯度
@@ -149,23 +132,6 @@ internal class VehicleCameraPositionFactory {
     ): Float = when (perspective) {
         MapCameraPerspective.TOP_DOWN_NORTH_UP -> 0f
         else -> vehiclePose.bearingDegrees ?: current.bearing
-    }
-
-    /**
-     * コンパス操作時のカメラ bearing を返す。
-     *
-     * TOP_DOWN_NORTH_UP では 0 度へ戻し、TILTED では現在の heading を維持する。
-     *
-     * @param current 現在のカメラ位置
-     * @param perspective 切り替え後の camera perspective
-     * @return 次に設定する camera bearing
-     */
-    private fun compassBearingDegrees(
-        current: CameraPosition,
-        perspective: Int,
-    ): Float = when (perspective) {
-        MapCameraPerspective.TOP_DOWN_NORTH_UP -> 0f
-        else -> current.bearing
     }
 
     /**
