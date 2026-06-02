@@ -178,4 +178,4 @@ internal class VehicleCameraPositionFactory {
  * 案内中追従時に自車（camera target）を下部カード上端から何 dp 上へ固定するか。
  * follow 専用 padding の算出（[MapCameraState]）で使う。
  */
-internal const val VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP = 16.0
+internal const val VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP = 32.0
