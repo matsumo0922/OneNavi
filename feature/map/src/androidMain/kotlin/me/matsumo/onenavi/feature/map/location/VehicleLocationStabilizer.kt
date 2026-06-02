@@ -2,7 +2,6 @@ package me.matsumo.onenavi.feature.map.location
 
 import me.matsumo.onenavi.feature.map.state.MapGeodesy
 import me.matsumo.onenavi.feature.map.state.MapTime
-import me.matsumo.onenavi.feature.map.state.VehicleLocationSource
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 import kotlin.math.max
 import kotlin.math.min
@@ -343,18 +342,10 @@ internal class VehicleLocationStabilizer(
     private fun stationarySpeedHoldMeters(
         previous: VehicleLocationState,
         candidate: VehicleLocationState,
-    ): Double {
-        val baseMeters = if (
-            previous.source == VehicleLocationSource.SDK_ROAD_SNAPPED ||
-            candidate.source == VehicleLocationSource.SDK_ROAD_SNAPPED
-        ) {
-            ROAD_SNAPPED_STATIONARY_HOLD_METERS
-        } else {
-            RAW_GPS_STATIONARY_HOLD_METERS
-        }
-
-        return max(baseMeters, stationaryNoiseMeters(previous, candidate))
-    }
+    ): Double = max(
+        RAW_GPS_STATIONARY_HOLD_METERS,
+        stationaryNoiseMeters(previous, candidate),
+    )
 
     /**
      * 2 tick の水平精度から、距離判定で許容する誤差幅を返す。
@@ -456,9 +447,6 @@ internal class VehicleLocationStabilizer(
 
         /** raw GPS が静止速度を示す場合に保持する最大距離。 */
         const val RAW_GPS_STATIONARY_HOLD_METERS = 35.0
-
-        /** road-snapped 位置が静止速度を示す場合に保持する最大距離。 */
-        const val ROAD_SNAPPED_STATIONARY_HOLD_METERS = 60.0
 
         /** 非案内中の自車位置として許容する上限速度。 */
         const val MAX_REASONABLE_FREE_DRIVE_SPEED_MPS = 75.0

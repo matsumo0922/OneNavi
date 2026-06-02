@@ -1,6 +1,5 @@
 package me.matsumo.onenavi.feature.map.state
 
-import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import me.matsumo.onenavi.core.model.RoutePoint
@@ -90,7 +89,7 @@ internal class VehicleCameraPositionFactory {
         perspective: Int,
     ): LatLng {
         val bearingDegrees = vehiclePose.bearingDegrees
-        if (!isGuidanceCameraActive || perspective != GoogleMap.CameraPerspective.TILTED || bearingDegrees == null) {
+        if (!isGuidanceCameraActive || perspective != MapCameraPerspective.TILTED || bearingDegrees == null) {
             return vehiclePose.location.toLatLng()
         }
 
@@ -180,7 +179,7 @@ internal class VehicleCameraPositionFactory {
      * @return 次に設定する camera tilt
      */
     fun vehicleTiltDegrees(perspective: Int): Float = when (perspective) {
-        GoogleMap.CameraPerspective.TILTED -> VEHICLE_TILTED_CAMERA_DEGREES
+        MapCameraPerspective.TILTED -> VEHICLE_TILTED_CAMERA_DEGREES
         else -> 0f
     }
 
@@ -197,7 +196,7 @@ internal class VehicleCameraPositionFactory {
         current: CameraPosition,
         perspective: Int,
     ): Float = when (perspective) {
-        GoogleMap.CameraPerspective.TOP_DOWN_NORTH_UP -> 0f
+        MapCameraPerspective.TOP_DOWN_NORTH_UP -> 0f
         else -> vehiclePose.bearingDegrees ?: current.bearing
     }
 
@@ -214,7 +213,7 @@ internal class VehicleCameraPositionFactory {
         current: CameraPosition,
         perspective: Int,
     ): Float = when (perspective) {
-        GoogleMap.CameraPerspective.TOP_DOWN_NORTH_UP -> 0f
+        MapCameraPerspective.TOP_DOWN_NORTH_UP -> 0f
         else -> current.bearing
     }
 

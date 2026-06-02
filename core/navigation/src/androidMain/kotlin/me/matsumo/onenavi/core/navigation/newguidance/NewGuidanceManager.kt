@@ -31,7 +31,7 @@ import me.matsumo.onenavi.core.repository.RouteRepository
 /**
  * Guidance 期 (案内中) のマネージャ。
  *
- * 地図描画・callout・音声案内はすべて自前で行い、Google Navigation SDK の Navigator は使わない。
+ * 地図描画・callout・音声案内はすべて自前で行う。
  * この manager は route payload を tracker に attach し、端末位置 tick を流して [GuidanceState] を更新する。
  * 音声案内は attach 時に [VoiceAnnouncementController] へ同じ payload / 距離変換 context を渡し、tracker snapshot を
  * 流して発話を駆動する。tracker が `OFF_ROUTE_CONFIRMED` を確定したら [ExtNavRerouteDetector] が
