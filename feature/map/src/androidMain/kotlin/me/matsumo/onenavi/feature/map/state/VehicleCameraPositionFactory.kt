@@ -338,7 +338,7 @@ internal class VehicleCameraPositionFactory {
 
 /**
  * 案内中追従時に自車を可視領域の下端から何 dp 上へ固定するか。
- * forward offset の算出（[VehicleCameraPositionFactory]）と projection 補正
- * （[MapCameraState]）の両方で同じ値を使う。
+ * forward offset の算出（[VehicleCameraPositionFactory]）と scroll 補正（[MapCameraState]）の
+ * 両方で同じ値を使う。
  */
 internal const val VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP = 16.0

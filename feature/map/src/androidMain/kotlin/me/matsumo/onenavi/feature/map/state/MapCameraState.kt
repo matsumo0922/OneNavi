@@ -335,11 +335,11 @@ internal class MapCameraState internal constructor() {
     }
 
     /**
-     * 案内中追従で、自車を「可視領域の下端から [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上」へ
+     * 案内中追従で、自車アイコン下端を「下部カード上端から [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上」へ
      * 正確に置く。
      *
      * まず自車を camera target 中心（padding を除いた可視領域の中心）へ置き、続いて screen 空間で
-     * 正確な [CameraUpdateFactory.scrollBy] で下端アンカーまで下げる。`scrollBy` は SDK が実カメラに
+     * 正確な [CameraUpdateFactory.scrollBy] で下端アンカーまで寄せる。`scrollBy` は SDK が実カメラに
      * 対して px 単位で適用するため、`moveCamera` 直後の stale projection や tilt の遠近に影響されない。
      * アンカーは下端基準なので、上部パネル展開で上 padding が増えても自車位置は動かない。
      *
@@ -368,13 +368,36 @@ internal class MapCameraState internal constructor() {
     private fun followAnchorScrollPx(): Float {
         if (mapViewHeightPx <= 0) return 0f
 
-        val paddedCenterY = (mapViewHeightPx + topPaddingPx - bottomPaddingPx) / 2f
-        val anchorY = mapViewHeightPx - bottomPaddingPx - anchorMarginPx()
-        return paddedCenterY - anchorY
+        val paddedCenterY = paddedRegionCenterY()
+        val vehicleAnchorY = anchoredVehicleMarkerCenterY()
+        return paddedCenterY - vehicleAnchorY
     }
 
-    /** 自車アンカーの下端マージン（px）。 */
-    private fun anchorMarginPx(): Int = (VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP * density).toInt()
+    /**
+     * padding を除いた可視領域の中心 y 座標（px）を返す。
+     *
+     * @return map view 左上を原点とした中心 y 座標
+     */
+    private fun paddedRegionCenterY(): Float = (mapViewHeightPx + topPaddingPx - bottomPaddingPx) / 2f
+
+    /**
+     * 自車 marker の中心を置く y 座標（px）を返す。
+     *
+     * 自車 marker は中心 anchor なので、アイコン下端をカード上端から指定間隔だけ上に置くには、
+     * marker 中心をアイコン半分だけさらに上へ移す。
+     *
+     * @return map view 左上を原点とした marker 中心 y 座標
+     */
+    private fun anchoredVehicleMarkerCenterY(): Float {
+        val bottomCardTopY = (mapViewHeightPx - bottomPaddingPx).toFloat()
+        return bottomCardTopY - anchorMarginPx() - vehiclePuckAnchorToBottomPx()
+    }
+
+    /** 自車アイコン下端と下部カード上端の間隔（px）。 */
+    private fun anchorMarginPx(): Float = (VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP * density).toFloat()
+
+    /** 自車 marker の中心 anchor からアイコン下端までの距離（px）。 */
+    private fun vehiclePuckAnchorToBottomPx(): Float = (VEHICLE_PUCK_ANCHOR_TO_BOTTOM_DP * density).toFloat()
 
     /**
      * 案内地点接近時の真上・拡大フォーカスを開始する。
@@ -1010,6 +1033,13 @@ internal class MapCameraState internal constructor() {
 
         /** 案内地点フォーカス中の zoom。 */
         private const val GUIDANCE_MANEUVER_FOCUS_ZOOM = 18f
+
+        /**
+         * 自車 marker の中心 anchor からアイコン下端までの距離（dp）。
+         *
+         * 自車アイコンは 64dp の marker を中心 anchor で表示するため、下端までは 32dp。
+         */
+        private const val VEHICLE_PUCK_ANCHOR_TO_BOTTOM_DP = 32.0
     }
 }
 
