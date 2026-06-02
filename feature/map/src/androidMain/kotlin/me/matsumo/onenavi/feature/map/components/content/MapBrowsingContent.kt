@@ -16,7 +16,9 @@ import me.matsumo.onenavi.feature.map.state.MapUiState
 internal fun MapBrowsingContent(
     cameraState: MapCameraState,
     uiState: MapUiState,
+    showSettingAction: Boolean,
     onUiEvent: (MapUiEvent) -> Unit,
+    onSettingClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -35,7 +37,9 @@ internal fun MapBrowsingContent(
             suggestions = uiState.suggestions,
             histories = uiState.histories,
             selectedResult = uiState.selectedResult,
+            showSettingAction = showSettingAction,
             onUiEvent = onUiEvent,
+            onSettingClicked = onSettingClicked,
         )
     }
 }

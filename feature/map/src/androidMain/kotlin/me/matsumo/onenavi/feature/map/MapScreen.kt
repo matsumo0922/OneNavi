@@ -32,7 +32,9 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.rememberHazeState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
+import me.matsumo.onenavi.core.ui.screen.Destination
 import me.matsumo.onenavi.core.ui.theme.LocalAppSetting
+import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
 import me.matsumo.onenavi.core.ui.theme.shouldUseDarkTheme
 import me.matsumo.onenavi.feature.map.components.MapControls
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapPlaceDetailSheet
@@ -76,6 +78,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
 
     val density = LocalDensity.current
     val appSetting = LocalAppSetting.current
+    val navBackStack = LocalNavBackStack.current
     val isMapDarkMode = shouldUseDarkTheme(appSetting.theme)
     val isNavigating = screenState is MapScreenState.Navigating
     val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
@@ -204,6 +207,9 @@ fun MapScreen(modifier: Modifier = Modifier) {
                     cameraState = cameraState,
                     hazeState = hazeState,
                     onUiEvent = viewModel::onUiEvent,
+                    onSettingClicked = {
+                        navBackStack.add(Destination.Setting.Root)
+                    },
                 )
 
                 MapControls(
@@ -235,6 +241,7 @@ private fun MapScreenContent(
     cameraState: MapCameraState,
     hazeState: HazeState,
     onUiEvent: (MapUiEvent) -> Unit,
+    onSettingClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when (screenState) {
@@ -246,7 +253,9 @@ private fun MapScreenContent(
                 modifier = modifier,
                 cameraState = cameraState,
                 uiState = uiState,
+                showSettingAction = screenState is MapScreenState.Browsing,
                 onUiEvent = onUiEvent,
+                onSettingClicked = onSettingClicked,
             )
         }
 

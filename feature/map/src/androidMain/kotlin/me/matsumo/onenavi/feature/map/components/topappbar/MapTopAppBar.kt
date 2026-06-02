@@ -2,6 +2,7 @@ package me.matsumo.onenavi.feature.map.components.topappbar
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AppBarWithSearch
 import androidx.compose.material3.ExpandedFullScreenSearchBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,6 +57,7 @@ import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_search_bar_placeholder
+import me.matsumo.onenavi.core.resource.setting_title
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import org.jetbrains.compose.resources.stringResource
@@ -67,7 +70,9 @@ internal fun MapTopAppBar(
     suggestions: ImmutableList<SearchSuggestionItem>,
     histories: ImmutableList<SearchHistory>,
     selectedResult: SearchResultItem?,
+    showSettingAction: Boolean,
     onUiEvent: (MapUiEvent) -> Unit,
+    onSettingClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -121,6 +126,10 @@ internal fun MapTopAppBar(
     Column(
         modifier = modifier,
     ) {
+        val isSearchBarCollapsed = searchBarState.currentValue == SearchBarValue.Collapsed
+        val isSearchBarTargetCollapsed = searchBarState.targetValue == SearchBarValue.Collapsed
+        val shouldShowSettingAction = showSettingAction && isSearchBarCollapsed && isSearchBarTargetCollapsed
+
         AppBarWithSearch(
             modifier = Modifier.fillMaxWidth(),
             state = searchBarState,
@@ -134,8 +143,10 @@ internal fun MapTopAppBar(
                     searchBarState = searchBarState,
                     textFieldState = textFieldState,
                     showSearchResult = showSearchResult,
+                    showSettingAction = shouldShowSettingAction,
                     onSearch = ::onSearchAction,
                     onBackClicked = ::onBackClicked,
+                    onSettingClicked = onSettingClicked,
                 )
             },
             shadowElevation = 4.dp,
@@ -153,8 +164,10 @@ internal fun MapTopAppBar(
                     searchBarState = searchBarState,
                     textFieldState = textFieldState,
                     showSearchResult = showSearchResult,
+                    showSettingAction = false,
                     onSearch = ::onSearchAction,
                     onBackClicked = ::onBackClicked,
+                    onSettingClicked = onSettingClicked,
                 )
             },
             colors = SearchBarDefaults.colors(MaterialTheme.colorScheme.surfaceContainerLow),
@@ -201,8 +214,10 @@ private fun HomeMapSearchInputField(
     searchBarState: SearchBarState,
     textFieldState: TextFieldState,
     showSearchResult: Boolean,
+    showSettingAction: Boolean,
     onSearch: (String) -> Unit,
     onBackClicked: () -> Unit,
+    onSettingClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -261,24 +276,58 @@ private fun HomeMapSearchInputField(
             }
         },
         trailingIcon = {
-            if (textFieldState.text.isNotEmpty()) {
-                IconButton(
-                    onClick = {
-                        textFieldState.clearText()
-
-                        if (searchBarState.currentValue == SearchBarValue.Collapsed) {
-                            onBackClicked.invoke()
-                        }
-                    },
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = null,
-                    )
-                }
-            }
+            HomeMapSearchTrailingIcon(
+                textFieldState = textFieldState,
+                searchBarState = searchBarState,
+                showSettingAction = showSettingAction,
+                onBackClicked = onBackClicked,
+                onSettingClicked = onSettingClicked,
+            )
         },
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeMapSearchTrailingIcon(
+    textFieldState: TextFieldState,
+    searchBarState: SearchBarState,
+    showSettingAction: Boolean,
+    onBackClicked: () -> Unit,
+    onSettingClicked: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+    ) {
+        if (textFieldState.text.isNotEmpty()) {
+            IconButton(
+                onClick = {
+                    textFieldState.clearText()
+
+                    if (searchBarState.currentValue == SearchBarValue.Collapsed) {
+                        onBackClicked.invoke()
+                    }
+                },
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = null,
+                )
+            }
+        }
+
+        if (showSettingAction) {
+            IconButton(
+                onClick = onSettingClicked,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = stringResource(Res.string.setting_title),
+                )
+            }
+        }
+    }
 }
 
 @Composable
