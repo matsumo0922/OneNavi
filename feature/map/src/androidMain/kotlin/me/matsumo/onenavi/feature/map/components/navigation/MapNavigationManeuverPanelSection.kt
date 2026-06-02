@@ -84,7 +84,7 @@ internal fun MapNavigationManeuverPanelSection(
 ) {
     val screenHeight = LocalWindowInfo.current.containerDpSize.height
     val roadClass = listItems.lastOrNull()?.roadClass ?: RoadClass.ORDINARY
-    val panelColors = RouteColors.accent(roadClass)
+    val panelColors = RouteColors.maneuver(roadClass)
     val shape = RoundedCornerShape(
         topStart = 0.dp,
         topEnd = 0.dp,
@@ -151,7 +151,8 @@ private fun MapNavigationGuidancePanelFooter(
     minuteLabel: String,
     modifier: Modifier = Modifier,
 ) {
-    val panelColors = RouteColors.accent(roadClass)
+    val panelColors = RouteColors.maneuver(roadClass)
+    val timelineColor = guidancePanelTimelineColor(roadClass)
     val elapsedText = remember(elapsedSeconds, dayLabel, hourLabel, minuteLabel) {
         formatDuration(
             totalSeconds = elapsedSeconds.toDouble(),
@@ -192,14 +193,14 @@ private fun MapNavigationGuidancePanelFooter(
                     modifier = Modifier
                         .requiredHeight(20.dp)
                         .offset(y = 4.dp),
-                    color = panelColors.container,
+                    color = timelineColor,
                     thickness = 8.dp,
                 )
             }
 
             HorizontalDivider(
                 modifier = Modifier.weight(1f),
-                color = panelColors.onPrimary.copy(0.2f),
+                color = panelColors.onPrimary,
             )
         }
 
@@ -284,7 +285,13 @@ private fun MapNavigationGuidancePanelRow(
     }
     val title = item.panelTitle()
     val detail = item.detail
-    val panelColors = RouteColors.accent(item.roadClass)
+    val panelColors = RouteColors.maneuver(item.roadClass)
+    val timelineColor = guidancePanelTimelineColor(item.roadClass)
+    val primaryBackgroundColor = if (isPrimary) {
+        guidancePanelPrimaryBackgroundColor(item.roadClass)
+    } else {
+        Color.Transparent
+    }
 
     Box(
         modifier = modifier.heightIn(min = GuidancePanelRowMinHeight),
@@ -294,7 +301,7 @@ private fun MapNavigationGuidancePanelRow(
                 .fillMaxWidth()
                 .height(GuidancePanelRowMinHeight + 16.dp)
                 .offset(y = 8.dp)
-                .background(if (isPrimary) panelColors.container.copy(0.2f) else Color.Transparent),
+                .background(primaryBackgroundColor),
         )
 
         Column(
@@ -316,7 +323,7 @@ private fun MapNavigationGuidancePanelRow(
                         .clip(CircleShape)
                         .border(
                             width = 4.dp,
-                            color = panelColors.container,
+                            color = timelineColor,
                             shape = CircleShape,
                         )
                         .background(MaterialTheme.colorScheme.surfaceContainer),
@@ -324,7 +331,7 @@ private fun MapNavigationGuidancePanelRow(
 
                 HorizontalDivider(
                     modifier = Modifier.weight(1f),
-                    color = panelColors.onPrimary.copy(0.2f),
+                    color = panelColors.onPrimary,
                 )
             }
 
@@ -343,7 +350,7 @@ private fun MapNavigationGuidancePanelRow(
                         modifier = Modifier
                             .requiredHeight(GuidancePanelRowMinHeight + 6.dp)
                             .offset(y = 1.dp),
-                        color = panelColors.container,
+                        color = timelineColor,
                         thickness = 8.dp,
                     )
                 }
@@ -580,7 +587,17 @@ private fun FacilityKind.badgeLabel() = when (this) {
     FacilityKind.TOLL_GATE -> Res.string.home_map_navigation_panel_facility_toll_gate_badge
 }
 
+private fun guidancePanelTimelineColor(roadClass: RoadClass): Color =
+    RouteColors.accent(roadClass).container
+
+private fun guidancePanelPrimaryBackgroundColor(roadClass: RoadClass): Color =
+    RouteColors.accent(roadClass).container.copy(alpha = GUIDANCE_PANEL_PRIMARY_BACKGROUND_ALPHA)
+
 private val GuidancePanelRowMinHeight = 60.dp
 private val GuidancePanelSubtitleLaneIconSize = 22.dp
 private val GuidancePanelSubtitleLaneSpacing = 6.dp
+
+/** 最新案内行の背景に使う道路種別色の透明度。 */
+private const val GUIDANCE_PANEL_PRIMARY_BACKGROUND_ALPHA = 0.24f
+
 private const val MILLIS_PER_SECOND: Double = 1_000.0

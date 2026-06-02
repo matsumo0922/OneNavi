@@ -162,11 +162,11 @@ internal fun MapGuidanceManeuverArrowEffect(
         )
     }
     val highwayBorderHeadIcon = rememberGuidanceManeuverArrowHeadIcon(
-        color = RouteColors.polyline(RoadClass.HIGHWAY).border,
+        color = RouteColors.maneuver(RoadClass.HIGHWAY).primary,
         insetPx = 0f,
     )
     val ordinaryBorderHeadIcon = rememberGuidanceManeuverArrowHeadIcon(
-        color = RouteColors.polyline(RoadClass.ORDINARY).border,
+        color = RouteColors.maneuver(RoadClass.ORDINARY).primary,
         insetPx = 0f,
     )
     val bodyHeadIcon = rememberGuidanceManeuverArrowHeadIcon(
@@ -178,7 +178,7 @@ internal fun MapGuidanceManeuverArrowEffect(
         val polylines = mutableListOf<Polyline>()
 
         for ((specIndex, spec) in specs.withIndex()) {
-            val borderColor = RouteColors.polyline(spec.roadClass).border
+            val borderColor = RouteColors.maneuver(spec.roadClass).primary
             val borderHeadIcon = headIconFor(
                 roadClass = spec.roadClass,
                 highwayHeadIcon = highwayBorderHeadIcon,

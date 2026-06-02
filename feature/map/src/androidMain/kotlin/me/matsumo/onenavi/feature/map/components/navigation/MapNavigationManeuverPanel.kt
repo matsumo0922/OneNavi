@@ -190,7 +190,7 @@ private fun MapNavigationManeuverTopSection(
             kilometerLabel = kilometerLabel,
         )
     }
-    val panelColors = RouteColors.accent(banner.roadClass)
+    val panelColors = RouteColors.maneuver(banner.roadClass)
     val contentColor = panelColors.onPrimary
 
     Surface(
@@ -257,7 +257,7 @@ private fun MapNavigationReroutingTopSection(
     shape: Shape,
     modifier: Modifier = Modifier,
 ) {
-    val panelColors = RouteColors.accent(roadClass)
+    val panelColors = RouteColors.maneuver(roadClass)
     val contentColor = panelColors.onPrimary
 
     Surface(
@@ -316,25 +316,25 @@ private fun MapNavigationManeuverBottomSection(
 ) {
     when {
         laneCells != null -> {
-            val panelColors = RouteColors.accent(roadClass)
+            val panelColors = RouteColors.maneuver(roadClass)
             Surface(
                 modifier = modifier,
                 shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
-                color = panelColors.primary,
+                color = panelColors.container,
             ) {
                 MapNavigationManeuverLaneRow(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     lanes = laneCells,
-                    activeTint = panelColors.onPrimary,
-                    inactiveTint = panelColors.onPrimary.copy(alpha = SecondaryContentAlpha),
+                    activeTint = panelColors.onContainer,
+                    inactiveTint = panelColors.onContainer.copy(alpha = SecondaryContentAlpha),
                 )
             }
         }
 
         followupCallout != null -> {
-            val panelColors = RouteColors.accent(roadClass)
+            val panelColors = RouteColors.maneuver(roadClass)
             Surface(
                 modifier = modifier.wrapContentWidth(Alignment.Start),
                 shape = RoundedCornerShape(
@@ -343,13 +343,13 @@ private fun MapNavigationManeuverBottomSection(
                     bottomStart = 16.dp,
                     bottomEnd = 16.dp,
                 ),
-                color = panelColors.primary,
+                color = panelColors.container,
             ) {
                 MapNavigationManeuverFollowupHint(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                     maneuver = followupCallout,
                     label = followupLabel,
-                    contentColor = panelColors.onPrimary,
+                    contentColor = panelColors.onContainer,
                 )
             }
         }

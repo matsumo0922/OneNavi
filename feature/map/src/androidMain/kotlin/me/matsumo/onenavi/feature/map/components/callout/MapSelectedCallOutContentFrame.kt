@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import me.matsumo.onenavi.core.ui.theme.RouteColors
 
 /**
  * 選択中 route CallOut と同じ青い内側 frame を描画する。
@@ -27,7 +28,8 @@ internal fun MapSelectedCallOutContentFrame(
     modifier: Modifier = Modifier,
     content: @Composable (contentColor: Color) -> Unit,
 ) {
-    val contentColor = if (isSelected) Color.White else Color.Black
+    val callOutColors = RouteColors.callOut
+    val contentColor = if (isSelected) callOutColors.onSelectedContainer else callOutColors.unselectedContent
 
     MapCallOut(
         modifier = modifier,
@@ -40,7 +42,7 @@ internal fun MapSelectedCallOutContentFrame(
             modifier = Modifier
                 .padding(2.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(if (isSelected) SelectedCallOutColor else Color.Transparent)
+                .background(if (isSelected) callOutColors.selectedContainer else Color.Transparent)
                 .padding(8.dp, 4.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -48,5 +50,3 @@ internal fun MapSelectedCallOutContentFrame(
         }
     }
 }
-
-private val SelectedCallOutColor = Color(0xFF1A73E8)
