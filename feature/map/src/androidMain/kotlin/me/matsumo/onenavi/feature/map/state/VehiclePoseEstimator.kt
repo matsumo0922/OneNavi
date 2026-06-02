@@ -90,9 +90,9 @@ internal class VehiclePoseEstimator {
             displayBearingDegrees = null
         }
         if (hasDisplayFreeLocationJump) {
+            // 大きな自由位置 jump は最新 tick を次 frame の補間開始点にする。
             displayFreeLocation = nextSample.state.location
-        }
-        if (nextSample.state.routeProgressMeters == null && displayFreeLocation == null) {
+        } else if (nextSample.state.routeProgressMeters == null && displayFreeLocation == null) {
             displayFreeLocation = nextSample.state.location
         } else if (nextSample.state.routeProgressMeters != null) {
             displayFreeLocation = null

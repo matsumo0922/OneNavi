@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 class VehiclePoseEstimatorTest {
 
     @Test
-    fun 自由位置の小さな移動は補間する() {
+    fun 自由位置の小さな移動は即時反映しない() {
         val estimator = VehiclePoseEstimator()
         val nextLocation = MapGeodesy.destinationPoint(
             origin = START_LOCATION,
@@ -20,7 +20,7 @@ class VehiclePoseEstimatorTest {
             distanceMeters = SMALL_MOVE_METERS,
         )
 
-        estimator.updateAndEstimateBeforeNextSample()
+        estimator.updateAndEstimateAtNextSampleTime()
         estimator.updateSample(
             sample = vehicleLocationState(
                 location = nextLocation,
@@ -33,10 +33,15 @@ class VehiclePoseEstimatorTest {
 
         val actual = assertNotNull(estimator.estimate(nowElapsedRealtimeNanos = ONE_SECOND_NANOS))
 
+        assertDistanceLessThan(
+            expectedLocation = START_LOCATION,
+            actualLocation = actual.location,
+            thresholdMeters = SNAP_TOLERANCE_METERS,
+        )
         assertDistanceGreaterThan(
             expectedLocation = nextLocation,
             actualLocation = actual.location,
-            thresholdMeters = SMALL_MOVE_REMAINING_DISTANCE_METERS,
+            thresholdMeters = SNAP_TOLERANCE_METERS,
         )
     }
 
@@ -49,7 +54,7 @@ class VehiclePoseEstimatorTest {
             distanceMeters = LARGE_MOVE_METERS,
         )
 
-        estimator.updateAndEstimateBeforeNextSample()
+        estimator.updateAndEstimateAtNextSampleTime()
         estimator.updateSample(
             sample = vehicleLocationState(
                 location = nextLocation,
@@ -97,7 +102,7 @@ class VehiclePoseEstimatorTest {
             nowElapsedRealtimeNanos = START_NANOS,
         )
         estimator.estimate(nowElapsedRealtimeNanos = START_NANOS)
-        estimator.estimate(nowElapsedRealtimeNanos = BEFORE_NEXT_SAMPLE_NANOS)
+        estimator.estimate(nowElapsedRealtimeNanos = ONE_SECOND_NANOS)
         estimator.updateSample(
             sample = vehicleLocationState(
                 location = nextLocation,
@@ -118,7 +123,7 @@ class VehiclePoseEstimatorTest {
         )
     }
 
-    private fun VehiclePoseEstimator.updateAndEstimateBeforeNextSample() {
+    private fun VehiclePoseEstimator.updateAndEstimateAtNextSampleTime() {
         updateSample(
             sample = vehicleLocationState(
                 location = START_LOCATION,
@@ -129,7 +134,7 @@ class VehiclePoseEstimatorTest {
             nowElapsedRealtimeNanos = START_NANOS,
         )
         estimate(nowElapsedRealtimeNanos = START_NANOS)
-        estimate(nowElapsedRealtimeNanos = BEFORE_NEXT_SAMPLE_NANOS)
+        estimate(nowElapsedRealtimeNanos = ONE_SECOND_NANOS)
     }
 
     private fun vehicleLocationState(
@@ -190,9 +195,6 @@ class VehiclePoseEstimatorTest {
         /** 1 秒後の monotonic clock 時刻。 */
         const val ONE_SECOND_NANOS = 1_000_000_000L
 
-        /** 次 tick 直前に 1 frame 分だけ残した描画時刻。 */
-        const val BEFORE_NEXT_SAMPLE_NANOS = 984_000_000L
-
         /** ns から ms へ変換する係数。 */
         const val NANOS_PER_MILLISECOND = 1_000_000L
 
@@ -204,9 +206,6 @@ class VehiclePoseEstimatorTest {
 
         /** 補間対象として扱う小さな移動距離。 */
         const val SMALL_MOVE_METERS = 50.0
-
-        /** 小さな移動が即時反映されていないことを見る残距離。 */
-        const val SMALL_MOVE_REMAINING_DISTANCE_METERS = 30.0
 
         /** 即時反映対象として扱う大きな移動距離。 */
         const val LARGE_MOVE_METERS = 500.0
