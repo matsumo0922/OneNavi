@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -321,20 +322,6 @@ private fun MapNavigationManeuverBottomSection(
     modifier: Modifier = Modifier,
 ) {
     when {
-        guideImage != null -> {
-            val panelColors = RouteColors.maneuver(roadClass)
-            Surface(
-                modifier = modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
-                color = panelColors.container,
-            ) {
-                MapNavigationManeuverGuideImage(
-                    modifier = Modifier.fillMaxWidth(),
-                    guideImage = guideImage,
-                )
-            }
-        }
-
         laneCells != null -> {
             val panelColors = RouteColors.maneuver(roadClass)
             Surface(
@@ -349,6 +336,22 @@ private fun MapNavigationManeuverBottomSection(
                     lanes = laneCells,
                     activeTint = panelColors.onContainer,
                     inactiveTint = panelColors.onContainer.copy(alpha = SecondaryContentAlpha),
+                )
+            }
+        }
+
+        guideImage != null -> {
+            val panelColors = RouteColors.maneuver(roadClass)
+            Surface(
+                modifier = modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
+                color = panelColors.container,
+            ) {
+                MapNavigationManeuverGuideImage(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = ManeuverGuideImageMaxHeight),
+                    guideImage = guideImage,
                 )
             }
         }
@@ -382,7 +385,7 @@ private fun MapNavigationManeuverGuideImage(
     modifier: Modifier = Modifier,
 ) {
     Image(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier,
         bitmap = guideImage.bitmap,
         contentDescription = null,
         contentScale = ContentScale.FillWidth,
@@ -466,3 +469,6 @@ private fun formatGuidanceDistance(
 
 private val ManeuverLaneIconSize = 36.dp
 private val ManeuverLaneIconSpacing = 12.dp
+
+/** 案内画像がバナー下段で占有できる最大高さ。 */
+private val ManeuverGuideImageMaxHeight = 180.dp

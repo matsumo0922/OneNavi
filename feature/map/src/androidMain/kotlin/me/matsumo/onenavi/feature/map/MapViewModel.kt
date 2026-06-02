@@ -1,7 +1,5 @@
 package me.matsumo.onenavi.feature.map
 
-import android.graphics.BitmapFactory
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -32,7 +30,6 @@ import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
-import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuideImage
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuideImageGateway
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
@@ -41,12 +38,14 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuideImageKey
 import me.matsumo.onenavi.core.repository.SearchRepository
 import me.matsumo.onenavi.feature.map.location.VehicleLocationDataSource
+import me.matsumo.onenavi.feature.map.state.ExtNavNavigationGuideImageLoader
 import me.matsumo.onenavi.feature.map.state.GuidanceVehicleLocationSelector
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.NavigationGuideImage
+import me.matsumo.onenavi.feature.map.state.NavigationGuideImageController
 import me.matsumo.onenavi.feature.map.state.RoutePreviewTopBarMode
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 import java.util.*
@@ -56,7 +55,7 @@ class MapViewModel(
     private val searchRepository: SearchRepository,
     private val newRouteManager: NewRouteManager,
     private val newGuidanceManager: NewGuidanceManager,
-    private val guideImageGateway: ExtNavGuideImageGateway,
+    guideImageGateway: ExtNavGuideImageGateway,
     vehicleLocationDataSource: VehicleLocationDataSource,
 ) : ViewModel() {
 
@@ -121,8 +120,11 @@ class MapViewModel(
         popScreenState = ::popScreenState,
         replaceCurrentScreenState = ::replaceCurrentScreenState,
     )
-    private val guideImageCache = mutableMapOf<GuideImageKey, NavigationGuideImage?>()
-    private var guideImageJob: Job? = null
+    private val guideImageController = NavigationGuideImageController(
+        loader = ExtNavNavigationGuideImageLoader(guideImageGateway),
+        scope = viewModelScope,
+        imageChanged = ::setNavigationGuideImage,
+    )
 
     init {
         observeNavigationGuideImageKey()
@@ -162,6 +164,7 @@ class MapViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        guideImageController.clear()
         newGuidanceManager.release()
     }
 
@@ -169,54 +172,8 @@ class MapViewModel(
         newGuidanceState
             .map { guidanceState -> guidanceState.currentGuideImageKeyOrNull() }
             .distinctUntilChanged()
-            .onEach { guideImageKey -> handleGuideImageKeyChanged(guideImageKey) }
+            .onEach { guideImageKey -> guideImageController.onGuideImageKeyChanged(guideImageKey) }
             .launchIn(viewModelScope)
-    }
-
-    private fun handleGuideImageKeyChanged(guideImageKey: GuideImageKey?) {
-        guideImageJob?.cancel()
-        if (guideImageKey == null) {
-            setNavigationGuideImage(null)
-            return
-        }
-
-        if (guideImageCache.containsKey(guideImageKey)) {
-            setNavigationGuideImage(guideImageCache[guideImageKey])
-            return
-        }
-
-        setNavigationGuideImage(null)
-        guideImageJob = viewModelScope.launch {
-            fetchNavigationGuideImage(guideImageKey)
-        }
-    }
-
-    private suspend fun fetchNavigationGuideImage(guideImageKey: GuideImageKey) {
-        guideImageGateway.fetch(guideImageKey)
-            .onSuccess { guideImage -> handleGuideImageFetched(guideImageKey, guideImage) }
-            .onFailure { error -> handleGuideImageFetchFailure(guideImageKey, error) }
-    }
-
-    private fun handleGuideImageFetched(
-        guideImageKey: GuideImageKey,
-        guideImage: ExtNavGuideImage,
-    ) {
-        val navigationGuideImage = guideImage.toNavigationGuideImageOrNull()
-        guideImageCache[guideImageKey] = navigationGuideImage
-        if (newGuidanceState.value.currentGuideImageKeyOrNull() == guideImageKey) {
-            setNavigationGuideImage(navigationGuideImage)
-        }
-    }
-
-    private fun handleGuideImageFetchFailure(
-        guideImageKey: GuideImageKey,
-        error: Throwable,
-    ) {
-        Napier.w(tag = MAP_VIEW_MODEL_TAG, throwable = error) { "Failed to fetch guide image. key=$guideImageKey" }
-        guideImageCache[guideImageKey] = null
-        if (newGuidanceState.value.currentGuideImageKeyOrNull() == guideImageKey) {
-            setNavigationGuideImage(null)
-        }
     }
 
     private fun setNavigationGuideImage(navigationGuideImage: NavigationGuideImage?) {
@@ -229,19 +186,6 @@ class MapViewModel(
         val guiding = this as? GuidanceState.Guiding ?: return null
         return guiding.presentation.banner?.signpostImageKey
     }
-
-    private fun ExtNavGuideImage.toNavigationGuideImageOrNull(): NavigationGuideImage? {
-        if (isMissing) return null
-        val bitmap = decodeGuideImageBitmap(bytes) ?: return null
-        return NavigationGuideImage(
-            key = key,
-            bitmap = bitmap,
-        )
-    }
-
-    private fun decodeGuideImageBitmap(bytes: ByteArray) = runCatching {
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-    }.getOrNull()
 }
 
 private class UiEventDelegate(
@@ -606,9 +550,6 @@ private class UiEventDelegate(
 }
 
 private const val MAP_POINT_ID_PREFIX = "map-point:"
-
-/** [MapViewModel] のログ tag。 */
-private const val MAP_VIEW_MODEL_TAG = "MapViewModel"
 
 /** 自車位置 stream の一時的な unsubscribe を許容する猶予時間（ms）。 */
 private const val VEHICLE_LOCATION_SUBSCRIPTION_STOP_TIMEOUT_MILLIS = 5_000L
