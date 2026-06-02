@@ -11,6 +11,14 @@ enum class RoadClass {
 
     /** 一般道。 */
     ORDINARY,
+    ;
+
+    fun reverse(): RoadClass {
+        return when (this) {
+            HIGHWAY -> ORDINARY
+            ORDINARY -> HIGHWAY
+        }
+    }
 }
 
 /**

@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.Interaction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +20,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -27,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +44,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.common.formatYen
@@ -65,6 +72,7 @@ import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
 import me.matsumo.onenavi.core.ui.theme.RouteColors
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Duration.Companion.seconds
 
 @Suppress("UnusedParameter")
 @Composable
@@ -84,11 +92,18 @@ internal fun MapNavigationManeuverPanelSection(
     val screenHeight = LocalWindowInfo.current.containerDpSize.height
     val roadClass = listItems.lastOrNull()?.roadClass ?: RoadClass.ORDINARY
     val panelColors = RouteColors.maneuver(roadClass)
+    val bottomIndex = listItems.size
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = bottomIndex)
     val shape = RoundedCornerShape(
         topStart = 0.dp,
         topEnd = 0.dp,
         bottomStart = 16.dp,
         bottomEnd = 16.dp,
+    )
+
+    MapNavigationGuidancePanelAutoScroll(
+        listState = listState,
+        bottomIndex = bottomIndex,
     )
 
     Surface(
@@ -99,10 +114,11 @@ internal fun MapNavigationManeuverPanelSection(
                 shape = shape,
             ),
         shape = shape,
-        color = panelColors.primary,
+        color = panelColors.container,
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
+            state = listState,
         ) {
             itemsIndexed(
                 items = listItems,
@@ -136,6 +152,57 @@ internal fun MapNavigationManeuverPanelSection(
             }
         }
     }
+}
+
+/**
+ * 案内パネルの自動スクロール制御。
+ *
+ * - 初期表示、もしくは案内地点を通過して件数が変化したら即座に最下部（自車位置）へ寄せる
+ * - ユーザーが手動でスクロールした場合は、操作が止まって一定時間が経過したら最下部へ戻す
+ */
+@Composable
+private fun MapNavigationGuidancePanelAutoScroll(
+    listState: LazyListState,
+    bottomIndex: Int,
+) {
+    LaunchedEffect(bottomIndex) {
+        listState.scrollToItem(bottomIndex)
+    }
+
+    LaunchedEffect(listState, bottomIndex) {
+        listState.interactionSource.interactions.collectLatest { interaction ->
+            listState.scheduleReturnOnDragFinished(
+                interaction = interaction,
+                bottomIndex = bottomIndex,
+            )
+        }
+    }
+}
+
+/**
+ * ユーザーのドラッグが終了したら、一定時間後に最下部（自車位置）へアニメーションで戻す。
+ * プログラムによるスクロールは [interactionSource] に流れないため、戻し中に自己キャンセルされない。
+ * ドラッグ再開時は [collectLatest] が本処理を取り消すため、待機タイマーがリセットされる。
+ */
+private suspend fun LazyListState.scheduleReturnOnDragFinished(
+    interaction: Interaction,
+    bottomIndex: Int,
+) {
+    val isDragFinished = interaction is DragInteraction.Stop || interaction is DragInteraction.Cancel
+    if (!isDragFinished) {
+        return
+    }
+
+    delay(AutoScrollBackDelay)
+    if (!isBottomReached(bottomIndex)) {
+        animateScrollToItem(bottomIndex)
+    }
+}
+
+/** フッター（自車位置）が表示範囲内にあれば true。 */
+private fun LazyListState.isBottomReached(bottomIndex: Int): Boolean {
+    val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return true
+    return lastVisibleIndex >= bottomIndex
 }
 
 @Composable
@@ -587,7 +654,7 @@ private fun FacilityKind.badgeLabel() = when (this) {
 }
 
 private fun guidancePanelTimelineColor(roadClass: RoadClass): Color =
-    RouteColors.accent(roadClass).container
+    RouteColors.polyline(roadClass.reverse()).body
 
 private fun guidancePanelPrimaryBackgroundColor(roadClass: RoadClass): Color =
     RouteColors.accent(roadClass).container.copy(alpha = GUIDANCE_PANEL_PRIMARY_BACKGROUND_ALPHA)
@@ -598,5 +665,8 @@ private val GuidancePanelSubtitleLaneSpacing = 6.dp
 
 /** 最新案内行の背景に使う道路種別色の透明度。 */
 private const val GUIDANCE_PANEL_PRIMARY_BACKGROUND_ALPHA = 0.24f
+
+/** 手動スクロール後に自動で最下部へ戻すまでの待機時間。 */
+private val AutoScrollBackDelay = 5.seconds
 
 private const val MILLIS_PER_SECOND: Double = 1_000.0
