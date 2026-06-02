@@ -1,0 +1,4 @@
+{
+  "title": "Route colors / Maneuver",
+  "description": "Polyline と CallOut の既存色から Maneuver 専用の濃色を分離するための比較モック。高速道路は濃緑、一般道は濃青で表示する。"
+}
