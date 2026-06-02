@@ -32,6 +32,8 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.rememberHazeState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
+import me.matsumo.onenavi.core.ui.theme.LocalAppSetting
+import me.matsumo.onenavi.core.ui.theme.shouldUseDarkTheme
 import me.matsumo.onenavi.feature.map.components.MapControls
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapPlaceDetailSheet
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapRoutePreviewSheet
@@ -73,6 +75,8 @@ fun MapScreen(modifier: Modifier = Modifier) {
     }
 
     val density = LocalDensity.current
+    val appSetting = LocalAppSetting.current
+    val isMapDarkMode = shouldUseDarkTheme(appSetting.theme)
     val isNavigating = screenState is MapScreenState.Navigating
     val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
 
@@ -153,6 +157,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                     googleMap = googleMap,
                     cameraState = cameraState,
                     hazeState = hazeState,
+                    isDarkMode = isMapDarkMode,
                     onMapUpdate = { googleMap = it },
                     onPointOfInterestClicked = { pointOfInterest ->
                         viewModel.onUiEvent(
