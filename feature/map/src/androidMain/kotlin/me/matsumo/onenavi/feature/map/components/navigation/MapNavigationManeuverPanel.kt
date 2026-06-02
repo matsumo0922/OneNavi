@@ -116,7 +116,6 @@ internal fun MapNavigationManeuverPanel(
                 timestampMillis = progress.locationTimestampMillis,
                 elapsedSeconds = progress.elapsedSeconds,
                 traveledMeters = progress.traveledMeters,
-                onDismissPanelClicked = { showPanel = false },
             )
         } else {
             MapNavigationManeuverBottomSection(

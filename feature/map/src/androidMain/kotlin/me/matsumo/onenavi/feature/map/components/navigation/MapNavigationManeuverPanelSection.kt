@@ -79,7 +79,6 @@ internal fun MapNavigationManeuverPanelSection(
     timestampMillis: Long,
     elapsedSeconds: Int,
     traveledMeters: Int,
-    onDismissPanelClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val screenHeight = LocalWindowInfo.current.containerDpSize.height
