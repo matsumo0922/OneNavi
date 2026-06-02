@@ -235,22 +235,12 @@ class GuidanceRouteMapperTest {
     fun `看板画像は近傍 intersection より案内点自身の画像 ID を優先する`() {
         val mapper = GuidanceRouteMapper()
         val route = buildHighwayRoute()
-        val guidancePointImage = GuideImageRef(major = 201, minor = 222_222)
-        val intersectionImage = GuideImageRef(major = 201, minor = 111_111)
+        val guidancePointImage = GuideImageRef(major = 5, minor = 222_222)
+        val intersectionImage = GuideImageRef(major = 101, minor = 111_111)
         val routeGuidance = buildHighwayRouteGuidance()
-        val routeGuidanceWithImages = routeGuidance.copy(
-            guidancePoints = routeGuidance.guidancePoints
-                .mapIndexed { index, guidancePoint ->
-                    if (index == 0) {
-                        guidancePoint.copy(imageRefs = persistentListOf(guidancePointImage))
-                    } else {
-                        guidancePoint
-                    }
-                }
-                .toImmutableList(),
-            intersections = routeGuidance.intersections
-                .map { intersection -> intersection.copy(imageRefs = persistentListOf(intersectionImage)) }
-                .toImmutableList(),
+        val routeGuidanceWithImages = routeGuidance.withFirstGuidancePointAndIntersectionImages(
+            guidancePointImages = listOf(guidancePointImage),
+            intersectionImages = listOf(intersectionImage),
         )
         val payload = ExtNavRoutePayload(id = route.id, routeGuidance = routeGuidanceWithImages)
 
@@ -259,7 +249,28 @@ class GuidanceRouteMapperTest {
         val tollEvent = guidanceRoute.events.first { event ->
             event.details.facility?.kind == FacilityKind.TOLL_GATE
         }
+        assertEquals(guidancePointImage.major, tollEvent.details.signpost?.imageRef?.major)
         assertEquals(guidancePointImage.minor, tollEvent.details.signpost?.imageRef?.minor)
+    }
+
+    @Test
+    fun `料金所画像は方面看板画像として採用しない`() {
+        val mapper = GuidanceRouteMapper()
+        val route = buildHighwayRoute()
+        val tollGateImage = GuideImageRef(major = 201, minor = 222_222)
+        val routeGuidance = buildHighwayRouteGuidance()
+        val routeGuidanceWithImages = routeGuidance.withFirstGuidancePointAndIntersectionImages(
+            guidancePointImages = listOf(tollGateImage),
+            intersectionImages = listOf(tollGateImage),
+        )
+        val payload = ExtNavRoutePayload(id = route.id, routeGuidance = routeGuidanceWithImages)
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        val tollEvent = guidanceRoute.events.first { event ->
+            event.details.facility?.kind == FacilityKind.TOLL_GATE
+        }
+        assertNull(tollEvent.details.signpost?.imageRef)
     }
 
     @Test
@@ -520,6 +531,28 @@ class GuidanceRouteMapperTest {
         imageIds = persistentListOf(),
         polyline = persistentListOf(),
     )
+
+    private fun RouteGuidance.withFirstGuidancePointAndIntersectionImages(
+        guidancePointImages: List<GuideImageRef>,
+        intersectionImages: List<GuideImageRef>,
+    ): RouteGuidance = copy(
+        guidancePoints = guidancePoints
+            .mapIndexed { index, guidancePoint ->
+                guidancePoint.withImageRefsIfFirst(index, guidancePointImages)
+            }
+            .toImmutableList(),
+        intersections = intersections
+            .map { intersection -> intersection.copy(imageRefs = intersectionImages.toImmutableList()) }
+            .toImmutableList(),
+    )
+
+    private fun GuidancePoint.withImageRefsIfFirst(
+        index: Int,
+        imageRefs: List<GuideImageRef>,
+    ): GuidancePoint {
+        if (index != 0) return this
+        return copy(imageRefs = imageRefs.toImmutableList())
+    }
 
     private fun buildFacilityGuidancePoint(
         index: Int,

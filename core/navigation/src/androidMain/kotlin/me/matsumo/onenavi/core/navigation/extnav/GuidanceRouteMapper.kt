@@ -33,6 +33,7 @@ import kotlin.math.roundToInt
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind as ExtNavGuidanceFacilityKind
 import me.matsumo.drive.supporter.api.guidance.domain.GuidancePoint as ExtNavGuidancePoint
 import me.matsumo.drive.supporter.api.guidance.domain.GuideImageRef as ExtNavGuideImageRef
+import me.matsumo.drive.supporter.api.guidance.domain.GuideImageType as ExtNavGuideImageType
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection as ExtNavIntersection
 import me.matsumo.drive.supporter.api.guidance.domain.LaneInfo as ExtNavLaneInfo
 
@@ -472,7 +473,7 @@ internal class GuidanceRouteMapper {
     /**
      * 近傍 intersection の方面看板から [StepSignpost] を作る。
      *
-     * 画像は案内イベント自身の ID を優先し、無ければ近傍 intersection の ID にフォールバックする。
+     * 画像は案内イベント自身の看板系 ID を優先し、無ければ近傍 intersection の ID にフォールバックする。
      */
     private fun buildSignpost(
         nearestIntersection: IntersectionAnchor?,
@@ -481,7 +482,8 @@ internal class GuidanceRouteMapper {
         val intersection = nearestIntersection?.intersection ?: return null
         val primary = intersection.directionSignA.trim().takeIf { text -> text.isNotEmpty() } ?: return null
         val secondary = intersection.directionSignB.trim().takeIf { text -> text.isNotEmpty() }
-        val firstImage = preferredImageRefs.firstOrNull() ?: intersection.imageRefs.firstOrNull()
+        val firstImage = preferredImageRefs.firstSignpostImageOrNull()
+            ?: intersection.imageRefs.firstSignpostImageOrNull()
         val imageRef = firstImage?.let { image ->
             GuideImageKey(
                 major = image.major,
@@ -493,6 +495,20 @@ internal class GuidanceRouteMapper {
             secondary = secondary,
             imageRef = imageRef,
         )
+    }
+
+    private fun List<ExtNavGuideImageRef>.firstSignpostImageOrNull(): ExtNavGuideImageRef? =
+        firstOrNull { imageRef -> imageRef.type.isStepSignpostType() }
+
+    private fun ExtNavGuideImageType.isStepSignpostType(): Boolean = when (this) {
+        ExtNavGuideImageType.IntersectionSignboard,
+        ExtNavGuideImageType.HighwayJunction3D,
+        -> true
+
+        ExtNavGuideImageType.TollGate,
+        ExtNavGuideImageType.SaPaSignboard,
+        ExtNavGuideImageType.Other,
+        -> false
     }
 
     /** 近傍 intersection の道路名から [StepRoadName] を作る。名前が無ければ null。 */

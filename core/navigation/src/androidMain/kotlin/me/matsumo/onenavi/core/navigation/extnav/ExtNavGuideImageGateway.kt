@@ -11,6 +11,9 @@ import me.matsumo.drive.supporter.api.image.domain.GuideImage
 import me.matsumo.drive.supporter.api.image.domain.GuideImageRequest
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuideImageKey
 
+/** 案内画像 API から取得する既定フォーマットの MIME type。 */
+private const val WEBP_CONTENT_TYPE: String = "image/webp"
+
 /**
  * 外部ナビ API ライブラリ由来の案内画像を取得する窓口。
  *
@@ -51,8 +54,9 @@ class ExtNavGuideImageGateway(
      * 指定された案内画像キー群をまとめて取得する。
      */
     suspend fun fetchAll(keys: List<GuideImageKey>): Result<ImmutableList<ExtNavGuideImage>> {
-        val distinctKeys = keys.distinctBy { key -> key.minor }
-        if (distinctKeys.isEmpty()) return Result.success(persistentListOf())
+        val distinctKeys = keys.distinct()
+        val requestIds = distinctKeys.toGuideImageRequestIds()
+        if (requestIds.isEmpty()) return Result.success(persistentListOf())
 
         authGateway.ensureSignedIn().getOrElse { cause ->
             return Result.failure(cause)
@@ -60,13 +64,13 @@ class ExtNavGuideImageGateway(
 
         val client = clientProvider.get()
         val request = GuideImageRequest(
-            ids = distinctKeys.map { key -> key.minor }.toImmutableList(),
+            ids = requestIds,
         )
         return when (val result = client.image.fetch(request)) {
             is ApiResult.Success -> {
-                val keysByMinor = distinctKeys.associateBy { key -> key.minor }
+                val keysByMinor = distinctKeys.groupBy { key -> key.minor }
                 val images = result.value
-                    .mapNotNull { image -> image.toExtNavGuideImage(keysByMinor) }
+                    .flatMap { image -> image.toExtNavGuideImages(keysByMinor) }
                     .toImmutableList()
                 Result.success(images)
             }
@@ -84,22 +88,24 @@ class ExtNavGuideImageGateway(
             }
             .distinct()
             .toImmutableList()
+}
 
-    private fun GuideImage.toExtNavGuideImage(
-        keysByMinor: Map<Int, GuideImageKey>,
-    ): ExtNavGuideImage? {
-        val key = keysByMinor[id] ?: return null
-        return ExtNavGuideImage(
+internal fun List<GuideImageKey>.toGuideImageRequestIds(): ImmutableList<Int> =
+    map { key -> key.minor }
+        .distinct()
+        .toImmutableList()
+
+internal fun GuideImage.toExtNavGuideImages(
+    keysByMinor: Map<Int, List<GuideImageKey>>,
+): List<ExtNavGuideImage> {
+    val matchingKeys = keysByMinor[id] ?: return emptyList()
+    return matchingKeys.map { key ->
+        ExtNavGuideImage(
             key = key,
             bytes = bytes,
             contentType = WEBP_CONTENT_TYPE,
             isMissing = isMissing,
         )
-    }
-
-    private companion object {
-        /** 案内画像 API から取得する既定フォーマットの MIME type。 */
-        private const val WEBP_CONTENT_TYPE: String = "image/webp"
     }
 }
 
