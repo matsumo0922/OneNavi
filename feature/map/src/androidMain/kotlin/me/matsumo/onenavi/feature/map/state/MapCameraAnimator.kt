@@ -246,6 +246,43 @@ internal class MapCameraAnimator(
     }
 
     /**
+     * follow 中の perspective 切り替えを、位置の pan 補間をせず減衰した進捗だけで駆動する。
+     *
+     * 各 frame で easing 後の進捗 [0,1] を [onFrame] へ渡す。呼び出し側が最新の自車位置に target を固定し、
+     * tilt / bearing だけを進捗で補間することで、切り替え中に自車が走行で前進しても camera target が
+     * ずれない。[flyTo] の位置 pan のような開始位置への張り付き / 終了時の瞬間移動が発生しない。
+     *
+     * @param durationMs アニメーション時間（ms）
+     * @param onFrame frame ごとの進捗反映処理
+     * @param onStarted animation 開始時 callback
+     * @param onFinished animation 終了時 callback
+     */
+    fun animatePerspective(
+        durationMs: Long,
+        onFrame: (Float) -> Unit,
+        onStarted: () -> Unit = {},
+        onFinished: () -> Unit = {},
+    ) {
+        mapProvider() ?: return
+        val easing = DecelerateInterpolator(CAMERA_DECELERATE_FACTOR)
+
+        cancel()
+        onStarted()
+
+        animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = durationMs
+            interpolator = LinearInterpolator()
+
+            addUpdateListener { animation ->
+                val fraction = easing.getInterpolation(animation.animatedValue as Float)
+                onFrame(fraction)
+            }
+            doOnEnd { finishAnimation(this, onFinished) }
+            start()
+        }
+    }
+
+    /**
      * GoogleMap のカメラ位置を van Wijk–Nuij 経路用のズーム 0 ワールドピクセル座標へ変換する。
      *
      * @param viewportWidthDp viewport 幅（dp）
