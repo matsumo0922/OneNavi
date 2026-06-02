@@ -170,22 +170,17 @@ internal class MapCameraState internal constructor() {
     }
 
     /**
-     * 適用する上 padding（px）を返す。
-     *
-     * 案内中追従では `padded中心 = カード上端 - margin` となる上 padding を返す。導出は
-     * `padded中心 = (H + top - bottom) / 2 = H - bottom - margin` を top について解いて
-     * `top = H - bottom - 2*margin`。それ以外は実 top padding を返す。
+     * 適用する上 padding（px）を返す。算出は [GuidanceCameraPadding] に委譲する。
      *
      * @return GoogleMap へ渡す上 padding（px）
      */
-    private fun resolveTopPaddingPx(): Int {
-        if (!isGuidanceCameraActive || mapViewHeightPx <= 0) {
-            return rawTopPaddingPx
-        }
-
-        val marginPx = (VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP * density).toInt()
-        return (mapViewHeightPx - rawBottomPaddingPx - 2 * marginPx).coerceAtLeast(0)
-    }
+    private fun resolveTopPaddingPx(): Int = GuidanceCameraPadding.resolveTopPaddingPx(
+        isGuidanceFollowActive = isGuidanceCameraActive,
+        mapViewHeightPx = mapViewHeightPx,
+        rawTopPaddingPx = rawTopPaddingPx,
+        rawBottomPaddingPx = rawBottomPaddingPx,
+        density = density,
+    )
 
     /**
      * 案内地点フォーカスの対象 GP を更新する。
