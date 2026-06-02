@@ -3,9 +3,12 @@ package me.matsumo.onenavi.feature.map.components
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -17,6 +20,10 @@ import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
+import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.ic_origin_dot
+import me.matsumo.onenavi.feature.map.components.callout.rememberMapComposeBitmapDescriptor
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 internal fun MapMarker(
@@ -58,6 +65,43 @@ internal fun MapNumberedMarker(
                 .zIndex(zIndex),
         )
         onDispose { marker?.remove() }
+    }
+}
+
+@Composable
+internal fun MapOriginMarker(
+    googleMap: GoogleMap,
+    latitude: Double,
+    longitude: Double,
+    zIndex: Float = DEFAULT_MARKER_Z_INDEX,
+) {
+    val icon = rememberOriginMarkerIcon()
+
+    DisposableEffect(googleMap, latitude, longitude, zIndex, icon) {
+        val marker = googleMap.addMarker(
+            MarkerOptions()
+                .position(LatLng(latitude, longitude))
+                .anchor(0.5f, 0.5f)
+                .icon(icon)
+                .zIndex(zIndex),
+        )
+        onDispose { marker?.remove() }
+    }
+}
+
+/**
+ * 出発地 dot の vector drawable を GoogleMap marker 用の bitmap descriptor に変換する。
+ *
+ * @return 出発地 marker に設定する bitmap descriptor
+ */
+@Composable
+private fun rememberOriginMarkerIcon(): BitmapDescriptor {
+    return rememberMapComposeBitmapDescriptor("origin-dot") {
+        Image(
+            modifier = Modifier.size(OriginMarkerSize),
+            painter = painterResource(Res.drawable.ic_origin_dot),
+            contentDescription = null,
+        )
     }
 }
 
@@ -133,6 +177,10 @@ private fun createNumberedMarkerIcon(
 }
 
 private const val DEFAULT_MARKER_Z_INDEX = 10_000f
+
+/** 出発地 dot marker の表示サイズ（vector の余白を含む全体）。 */
+private val OriginMarkerSize = 36.dp
+
 private val NumberedMarkerBitmapSize = 44.dp
 private val NumberedMarkerCircleRadius = 16.dp
 private val NumberedMarkerBorderWidth = 2.dp

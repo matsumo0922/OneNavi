@@ -11,6 +11,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapGuidanceManeuverArrowEffect
 import me.matsumo.onenavi.feature.map.components.MapMarker
 import me.matsumo.onenavi.feature.map.components.MapNumberedMarker
+import me.matsumo.onenavi.feature.map.components.MapOriginMarker
 import me.matsumo.onenavi.feature.map.components.MapPolyline
 import me.matsumo.onenavi.feature.map.components.MapPolylineStyle
 import me.matsumo.onenavi.feature.map.components.MapVehiclePoseEffect
@@ -168,11 +169,23 @@ private fun RoutePreviewEffect(
     onRouteSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val originWaypoint = screenState.waypoints.firstOrNull()
+
+    if (originWaypoint != null) {
+        MapOriginMarker(
+            googleMap = googleMap,
+            latitude = originWaypoint.latitude,
+            longitude = originWaypoint.longitude,
+            zIndex = ORIGIN_MARKER_Z_INDEX,
+        )
+    }
+
     for (waypoint in screenState.waypoints.drop(1)) {
         MapMarker(
             googleMap = googleMap,
             latitude = waypoint.latitude,
             longitude = waypoint.longitude,
+            zIndex = DESTINATION_MARKER_Z_INDEX,
         )
     }
 
@@ -219,6 +232,20 @@ private fun NavigationEffect(
         googleMap = googleMap,
         route = guidanceRoute.route,
         isSelected = true,
+    )
+
+    MapOriginMarker(
+        googleMap = googleMap,
+        latitude = guidanceRoute.route.origin.latitude,
+        longitude = guidanceRoute.route.origin.longitude,
+        zIndex = ORIGIN_MARKER_Z_INDEX,
+    )
+
+    MapMarker(
+        googleMap = googleMap,
+        latitude = guidanceRoute.route.destination.latitude,
+        longitude = guidanceRoute.route.destination.longitude,
+        zIndex = DESTINATION_MARKER_Z_INDEX,
     )
 
     if (guidanceState is GuidanceState.Guiding) {
@@ -281,6 +308,12 @@ private fun GuidanceState.routeForMapOverlay(): GuidanceOverlayRoute? = when (th
     GuidanceState.Idle,
     -> null
 }
+
+/** 出発地 marker の zIndex。 */
+private const val ORIGIN_MARKER_Z_INDEX = 10_500f
+
+/** 目的地 marker の zIndex。 */
+private const val DESTINATION_MARKER_Z_INDEX = 10_500f
 
 /** 検索結果 marker の zIndex 起点。 */
 private const val SEARCH_RESULT_MARKER_Z_INDEX = 11_000f
