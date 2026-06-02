@@ -117,18 +117,26 @@ internal fun MapNavigationEtaCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                text = durationText,
-                color = etaColorOf(trafficLevel),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = durationText,
+                    color = etaColorOf(trafficLevel),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
 
-            Text(
-                text = summaryText,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyLarge,
-            )
+                Text(
+                    text = summaryText,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+
+            // TODO: 横線上でルート沿いの渋滞を表示
 
             MapNavigationEtaActionRow(
                 modifier = Modifier
