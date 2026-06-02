@@ -77,4 +77,7 @@ sealed interface MapUiEvent {
 
     data class OnTopAppBarHeightChanged(val height: Int) : MapUiEvent
     data class OnBottomSheetPeekHeightChanged(val height: Dp) : MapUiEvent
+
+    /** ナビゲーション下部 ETA カードの高さ（px）が変化した。カメラパディングに反映する。 */
+    data class OnNavigationCardHeightChanged(val height: Int) : MapUiEvent
 }

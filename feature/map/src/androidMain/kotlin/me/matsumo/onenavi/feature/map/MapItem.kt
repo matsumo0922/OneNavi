@@ -21,6 +21,7 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.GoogleMapOptions
 import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MapColorScheme
 import com.google.android.gms.maps.model.PointOfInterest
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -31,12 +32,14 @@ internal fun MapItem(
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
     hazeState: HazeState,
+    isDarkMode: Boolean,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val mapView = rememberMapViewWithLifecycle()
+    val mapView = rememberMapViewWithLifecycle(isDarkMode = isDarkMode)
+
     MapViewLifecycleEffect(
         mapView = mapView,
         onClear = { onMapUpdate(null) },
@@ -45,6 +48,7 @@ internal fun MapItem(
     googleMap?.let {
         GoogleMapEffect(
             googleMap = it,
+            isDarkMode = isDarkMode,
             onPointOfInterestClicked = onPointOfInterestClicked,
             onMapLongClicked = onMapLongClicked,
         )
@@ -77,12 +81,14 @@ internal fun MapItem(
 }
 
 @Composable
-private fun rememberMapViewWithLifecycle(): MapView {
+private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
     val context = LocalContext.current
+    val mapColorScheme = isDarkMode.toMapColorScheme()
 
     return remember(context) {
         val mapOptions = GoogleMapOptions()
             .mapType(GoogleMap.MAP_TYPE_NORMAL)
+            .mapColorScheme(mapColorScheme)
             .liteMode(false)
             .tiltGesturesEnabled(true)
             .rotateGesturesEnabled(true)
@@ -100,6 +106,7 @@ private fun rememberMapViewWithLifecycle(): MapView {
 @Composable
 private fun GoogleMapEffect(
     googleMap: GoogleMap,
+    isDarkMode: Boolean,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
 ) {
@@ -120,6 +127,13 @@ private fun GoogleMapEffect(
         }
     }
 
+    LaunchedEffect(
+        key1 = googleMap,
+        key2 = isDarkMode,
+    ) {
+        googleMap.setMapColorScheme(isDarkMode.toMapColorScheme())
+    }
+
     DisposableEffect(googleMap) {
         googleMap.setOnPoiClickListener { pointOfInterest ->
             currentOnPointOfInterestClicked(pointOfInterest)
@@ -133,6 +147,10 @@ private fun GoogleMapEffect(
             googleMap.setOnMapLongClickListener(null)
         }
     }
+}
+
+private fun Boolean.toMapColorScheme(): Int {
+    return if (this) MapColorScheme.DARK else MapColorScheme.LIGHT
 }
 
 @Composable

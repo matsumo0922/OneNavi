@@ -24,6 +24,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuideImageKey
  * @property topAppBarHeight 案内トップパネルの高さ px。
  * @property bottomSheetPeekHeight BottomSheet の peek 高さ。
  * @property navigationGuideImage 案内中バナーに表示する案内画像。無ければ null。
+ * @property navigationCardHeight ナビゲーション下部 ETA カードの高さ px。
  */
 @Stable
 data class MapUiState(
@@ -36,6 +37,7 @@ data class MapUiState(
     val topAppBarHeight: Int = 0,
     val bottomSheetPeekHeight: Dp = 0.dp,
     val navigationGuideImage: NavigationGuideImage? = null,
+    val navigationCardHeight: Int = 0,
 )
 
 /**

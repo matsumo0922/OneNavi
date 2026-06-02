@@ -242,6 +242,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnWaypointEditResultConsumed -> handleWaypointEditResultConsumed()
             is MapUiEvent.OnTopAppBarHeightChanged -> handleTopAppBarHeightChanged(event.height)
             is MapUiEvent.OnBottomSheetPeekHeightChanged -> handleBottomSheetPeekHeightChanged(event.height)
+            is MapUiEvent.OnNavigationCardHeightChanged -> handleNavigationCardHeightChanged(event.height)
         }
     }
 
@@ -504,6 +505,10 @@ private class UiEventDelegate(
 
     private fun handleBottomSheetPeekHeightChanged(height: Dp) {
         uiState.value = uiState.value.copy(bottomSheetPeekHeight = height)
+    }
+
+    private fun handleNavigationCardHeightChanged(height: Int) {
+        uiState.value = uiState.value.copy(navigationCardHeight = height)
     }
 
     private fun performSearchSuggestions(query: String?) {
