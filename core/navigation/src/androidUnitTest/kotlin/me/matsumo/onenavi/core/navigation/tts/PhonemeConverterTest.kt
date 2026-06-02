@@ -45,6 +45,36 @@ class PhonemeConverterTest {
     }
 
     @Test
+    fun `google cloud ssml removes latin letters from converted yomigana body`() {
+        val ssml = "<phoneme alphabet=\"x-toshiba-ruby\" ph=\"みさとじゃんくしょん\">三郷ＪＣＴ</phoneme>"
+        val converted = PhonemeConverter.toGoogleCloudSsml(ssml)
+        assertEquals(
+            "<speak><phoneme alphabet=\"yomigana\" ph=\"みさとじゃんくしょん\">三郷</phoneme></speak>",
+            converted,
+        )
+    }
+
+    @Test
+    fun `google cloud ssml removes latin letters from existing yomigana body`() {
+        val ssml = "<speak><phoneme alphabet=\"yomigana\" ph=\"びじょぎじゃんくしょん\">美女木JCT</phoneme></speak>"
+        val converted = PhonemeConverter.toGoogleCloudSsml(ssml)
+        assertEquals(
+            "<speak><phoneme alphabet=\"yomigana\" ph=\"びじょぎじゃんくしょん\">美女木</phoneme></speak>",
+            converted,
+        )
+    }
+
+    @Test
+    fun `google cloud ssml removes latin letters outside suffix position`() {
+        val ssml = "<speak><phoneme alphabet=\"yomigana\" ph=\"みさとじゃんくしょんまえ\">三郷JCT前</phoneme></speak>"
+        val converted = PhonemeConverter.toGoogleCloudSsml(ssml)
+        assertEquals(
+            "<speak><phoneme alphabet=\"yomigana\" ph=\"みさとじゃんくしょんまえ\">三郷前</phoneme></speak>",
+            converted,
+        )
+    }
+
+    @Test
     fun `google cloud ssml preserves existing speak wrapper`() {
         val ssml = "<speak>直進方向、<phoneme alphabet=\"x-toshiba-ruby\" ph=\"しゅとこう\">首都高</phoneme>方面です。</speak>"
         val converted = PhonemeConverter.toGoogleCloudSsml(ssml)

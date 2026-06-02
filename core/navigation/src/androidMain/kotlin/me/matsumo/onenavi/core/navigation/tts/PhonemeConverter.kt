@@ -21,6 +21,14 @@ object PhonemeConverter {
         "<phoneme\\s+alphabet=\"x-toshiba-ruby\"\\s+ph=\"([^\"]*)\">(.*?)</phoneme>",
     )
 
+    /** Google Cloud TTS 向け yomigana phoneme。group1 = 読み仮名 (`ph`)、group2 = 本文 (表記)。 */
+    private val YOMIGANA_PHONEME = Regex(
+        "<phoneme\\s+alphabet=\"yomigana\"\\s+ph=\"([^\"]*)\">(.*?)</phoneme>",
+    )
+
+    /** Google Cloud TTS が発話指定より本文側の英字へ寄るため、phoneme 本文から外す英字。 */
+    private val LATIN_LETTER = Regex("[A-Za-zＡ-Ｚａ-ｚ]")
+
     /** 任意の XML/SSML タグ。プレーンテキスト化で残ったタグを除去するのに使う。 */
     private val ANY_TAG = Regex("<[^>]+>")
 
@@ -52,7 +60,8 @@ object PhonemeConverter {
      */
     fun toGoogleCloudSsml(ssml: String): String {
         val withYomigana = TOSHIBA_RUBY_PHONEME.replace(ssml, ::toYomiganaPhoneme)
-        return wrapInSpeak(withYomigana)
+        val withSanitizedYomigana = YOMIGANA_PHONEME.replace(withYomigana, ::toSanitizedYomiganaPhoneme)
+        return wrapInSpeak(withSanitizedYomigana)
     }
 
     /** toshiba-ruby phoneme を読み仮名 (空なら本文) に変換する。 */
@@ -85,8 +94,23 @@ object PhonemeConverter {
     /** 単一の `<phoneme alphabet="yomigana">` を組み立てる。読みが空なら本文をそのまま返す。 */
     private fun yomiganaTag(reading: String, body: String): String {
         if (reading.isEmpty()) return body
-        return "<phoneme alphabet=\"yomigana\" ph=\"$reading\">$body</phoneme>"
+
+        val sanitizedBody = body.withoutLatinLetters()
+        val tag = "alphabet=\"yomigana\" ph=\"$reading\""
+
+        return "<phoneme $tag>$sanitizedBody</phoneme>"
     }
+
+    /** 既に yomigana 化済みの phoneme にも、TTS 向け本文の英字削除を適用する。 */
+    private fun toSanitizedYomiganaPhoneme(match: MatchResult): String {
+        val reading = match.groupValues[1]
+        val body = match.groupValues[2]
+
+        return yomiganaTag(reading = reading, body = body)
+    }
+
+    /** `三郷JCT` のような表記では発話指定より英字の読みが勝つため、本文側から英字だけ除く。 */
+    private fun String.withoutLatinLetters(): String = LATIN_LETTER.replace(this, "")
 
     /** `<speak>` で囲む。既に先頭末尾が `<speak>` / `</speak>` なら何もしない。 */
     private fun wrapInSpeak(ssml: String): String {
