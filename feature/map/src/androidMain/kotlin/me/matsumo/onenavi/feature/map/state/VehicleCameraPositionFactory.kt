@@ -12,10 +12,7 @@ import kotlin.math.pow
 internal class VehicleCameraPositionFactory {
 
     private var viewportHeightPx: Int = 0
-    private var topPaddingPx: Int = 0
-    private var bottomPaddingPx: Int = 0
     private var density: Float = DEFAULT_DENSITY
-    private var isGuidanceCameraActive: Boolean = false
 
     /**
      * 地図ビューの高さを更新する。
@@ -24,20 +21,6 @@ internal class VehicleCameraPositionFactory {
      */
     fun updateViewportHeight(heightPx: Int) {
         viewportHeightPx = heightPx
-    }
-
-    /**
-     * 地図の描画 padding を更新する。
-     *
-     * 自車アンカーは「padding を除いた可視領域の下端から一定 dp 上」で決めるため、
-     * 上下 padding を保持しておく。
-     *
-     * @param topPx 上端 padding（px）
-     * @param bottomPx 下端 padding（px）
-     */
-    fun updatePadding(topPx: Int, bottomPx: Int) {
-        topPaddingPx = topPx
-        bottomPaddingPx = bottomPx
     }
 
     /**
@@ -50,55 +33,11 @@ internal class VehicleCameraPositionFactory {
     }
 
     /**
-     * 案内中カメラとして扱うかを更新する。
-     *
-     * @param isActive 案内中カメラとして扱う場合 true
-     */
-    fun setGuidanceCameraActive(isActive: Boolean) {
-        isGuidanceCameraActive = isActive
-    }
-
-    /**
-     * 自車追従用のカメラ位置を作る。
-     *
-     * @param vehiclePose frame 時点の自車 pose
-     * @param current 現在のカメラ位置
-     * @param zoom 設定する zoom 値
-     * @param perspective 設定する camera perspective
-     * @return perspective と zoom を反映したカメラ位置
-     */
-    fun vehicleCameraPosition(
-        vehiclePose: VehiclePose,
-        current: CameraPosition,
-        zoom: Float,
-        perspective: Int,
-    ): CameraPosition {
-        val cameraBearingDegrees = vehicleBearingDegrees(
-            vehiclePose = vehiclePose,
-            current = current,
-            perspective = perspective,
-        )
-
-        return CameraPosition.Builder()
-            .target(
-                vehicleCameraTarget(
-                    vehiclePose = vehiclePose,
-                    zoom = zoom,
-                    perspective = perspective,
-                    cameraBearingDegrees = cameraBearingDegrees,
-                ),
-            )
-            .zoom(zoom)
-            .bearing(cameraBearingDegrees)
-            .tilt(vehicleTiltDegrees(perspective))
-            .build()
-    }
-
-    /**
      * 自車を camera target 中心（= padding を除いた可視領域の中心）へ置くカメラ位置を作る。
      *
-     * 下端アンカーは呼び出し側が `scrollBy` で screen 空間で正確に与えるため、ここでは forward
-     * offset を付けない素の中心追従位置を返す。
+     * 自車を画面下部へ寄せる下端アンカーは、呼び出し側が GoogleMap の描画 padding で与える
+     * （camera target が padded 領域の中心に来る性質を使う）。ここでは target を自車に置いた
+     * 素の追従位置を返す。
      *
      * @param vehiclePose frame 時点の自車 pose
      * @param current 現在のカメラ位置
@@ -123,64 +62,6 @@ internal class VehicleCameraPositionFactory {
         )
         .tilt(vehicleTiltDegrees(perspective))
         .build()
-
-    /**
-     * 自車を可視領域の下端付近へ固定するため、案内中追従時は camera bearing 方向（画面上方向）の
-     * 少し先を camera target にする。
-     *
-     * camera target は GoogleMap が padding を除いた可視領域の中心へ置くので、その中心から
-     * 「下端の [ANCHOR_MARGIN_FROM_BOTTOM_DP] 上」までの差分だけ target を前方へずらすと、
-     * 自車が画面下部の一定位置へ来る。アンカーは下端基準なので、上部パネル展開で上 padding が
-     * 増えても自車位置は動かない。
-     *
-     * @param vehiclePose frame 時点の自車 pose
-     * @param zoom camera target 算出に使う zoom 値
-     * @param perspective target 算出に使う camera perspective
-     * @param cameraBearingDegrees 適用する camera bearing（target を前方へずらす方向）
-     * @return GoogleMap に渡す camera target
-     */
-    fun vehicleCameraTarget(
-        vehiclePose: VehiclePose,
-        zoom: Float,
-        perspective: Int,
-        cameraBearingDegrees: Float,
-    ): LatLng {
-        val isFollowPerspective = perspective == MapCameraPerspective.TILTED ||
-            perspective == MapCameraPerspective.TOP_DOWN_NORTH_UP
-        val isAnchored = isGuidanceCameraActive && isFollowPerspective
-        if (!isAnchored) {
-            return vehiclePose.location.toLatLng()
-        }
-
-        val visibleHeightDp = visibleViewportHeightDp()
-        val forwardOffsetDp = (visibleHeightDp / 2.0 - VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP).coerceAtLeast(0.0)
-        if (forwardOffsetDp <= 0.0) {
-            return vehiclePose.location.toLatLng()
-        }
-
-        val forwardMeters = forwardOffsetDp *
-            metersPerDp(latitude = vehiclePose.location.latitude, zoom = zoom)
-
-        return MapGeodesy.destinationLatLng(
-            origin = vehiclePose.location,
-            bearingDegrees = cameraBearingDegrees,
-            distanceMeters = forwardMeters,
-        )
-    }
-
-    /**
-     * padding を除いた可視領域の高さ（dp）を返す。算出できない場合は 0。
-     *
-     * @return 可視領域の高さ（dp）
-     */
-    private fun visibleViewportHeightDp(): Double {
-        val visibleHeightPx = viewportHeightPx - topPaddingPx - bottomPaddingPx
-        if (visibleHeightPx <= 0) {
-            return 0.0
-        }
-
-        return visibleHeightPx.toDouble() / density
-    }
 
     /**
      * 現在の中心・ズームを維持したまま、指定 perspective の tilt / bearing を反映したカメラ位置を作る。
@@ -216,35 +97,26 @@ internal class VehicleCameraPositionFactory {
     }
 
     /**
-     * camera target が自車追従時の target から離れているかを返す。
+     * camera target が自車から離れているかを返す。
+     *
+     * 追従中の camera target は自車そのものに置く設計（下端アンカーは描画 padding で与える）なので、
+     * camera target と自車位置の距離を viewport 比の閾値と比べる。
      *
      * @param cameraPosition 判定対象の camera position
      * @param vehiclePose frame 時点の自車 pose
-     * @param perspective camera target 算出に使う perspective
      * @return 追従解除相当まで離れている場合 true
      */
     fun isCameraTargetAwayFromVehicle(
         cameraPosition: CameraPosition,
         vehiclePose: VehiclePose,
-        perspective: Int,
     ): Boolean {
-        val cameraBearingDegrees = vehicleBearingDegrees(
-            vehiclePose = vehiclePose,
-            current = cameraPosition,
-            perspective = perspective,
-        )
-        val expectedTarget = vehicleCameraTarget(
-            vehiclePose = vehiclePose,
-            zoom = cameraPosition.zoom,
-            perspective = perspective,
-            cameraBearingDegrees = cameraBearingDegrees,
-        )
+        val vehicleTarget = vehiclePose.location.toLatLng()
         val distanceMeters = MapGeodesy.haversineMeters(
-            from = expectedTarget,
+            from = vehicleTarget,
             to = cameraPosition.target,
         )
         val toleranceMeters = followGestureTargetToleranceMeters(
-            latitude = expectedTarget.latitude,
+            latitude = vehicleTarget.latitude,
             zoom = cameraPosition.zoom,
         )
 
@@ -337,8 +209,7 @@ internal class VehicleCameraPositionFactory {
 }
 
 /**
- * 案内中追従時に自車を可視領域の下端から何 dp 上へ固定するか。
- * forward offset の算出（[VehicleCameraPositionFactory]）と scroll 補正（[MapCameraState]）の
- * 両方で同じ値を使う。
+ * 案内中追従時に自車（camera target）を下部カード上端から何 dp 上へ固定するか。
+ * follow 専用 padding の算出（[MapCameraState]）で使う。
  */
 internal const val VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP = 16.0

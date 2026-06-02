@@ -51,8 +51,10 @@ internal class MapCameraState internal constructor() {
     private val gestureController = MapCameraGestureController()
     private var mapViewWidthPx: Int = 0
     private var mapViewHeightPx: Int = 0
-    private var topPaddingPx: Int = 0
-    private var bottomPaddingPx: Int = 0
+    private var rawTopPaddingPx: Int = 0
+    private var rawBottomPaddingPx: Int = 0
+    private var startPaddingPx: Int = 0
+    private var endPaddingPx: Int = 0
     private var isGuidanceCameraActive: Boolean = false
     private var density: Float = DEFAULT_DENSITY
     private var lastVehiclePose: VehiclePose? = null
@@ -130,24 +132,59 @@ internal class MapCameraState internal constructor() {
      * @param end 右端 padding（px）
      */
     fun updatePadding(top: Int, bottom: Int, start: Int, end: Int) {
-        googleMap?.setPadding(start, top, end, bottom)
-        topPaddingPx = top
-        bottomPaddingPx = bottom
-        vehicleCameraPositionFactory.updatePadding(topPx = top, bottomPx = bottom)
+        rawTopPaddingPx = top
+        rawBottomPaddingPx = bottom
+        startPaddingPx = start
+        endPaddingPx = end
+        applyCameraPadding()
         moveFollowCameraIfNeeded()
     }
 
     /**
      * 案内中カメラとして扱うかを更新する。
      *
-     * 案内中だけ 3D 追従時の自車表示位置を画面手前側へ寄せる。通常時は padding を考慮した
-     * GoogleMap の camera target 中心に自車位置を置く。
+     * 案内中は自車を「下部カード上端から [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上」へ固定するため、
+     * follow 専用の下端基準 padding を使う（[applyCameraPadding]）。それ以外は実際の obstruction
+     * padding をそのまま使い、自車を可視領域の中心へ置く。モードが変わるたびに padding を再適用する。
      *
      * @param isActive 案内中カメラとして扱う場合 true
      */
     fun setGuidanceCameraActive(isActive: Boolean) {
         isGuidanceCameraActive = isActive
-        vehicleCameraPositionFactory.setGuidanceCameraActive(isActive)
+        applyCameraPadding()
+        moveFollowCameraIfNeeded()
+    }
+
+    /**
+     * 現在のモードに応じた描画 padding を GoogleMap へ適用する。
+     *
+     * 案内中追従では、自車（camera target）を下部カード上端から
+     * [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上へ置きたい。GoogleMap は camera target を
+     * 「padding を除いた可視領域の中心」に置くので、その中心がアンカー位置に一致するよう上 padding を
+     * 算出する。アンカーは下端基準なので、上部マニューバパネルの展開で実 top padding が変わっても
+     * 自車位置は動かない（tilt も SDK が padded-center 不変則で正しく扱う）。案内中以外は実 padding を使う。
+     */
+    private fun applyCameraPadding() {
+        val map = googleMap ?: return
+        map.setPadding(startPaddingPx, resolveTopPaddingPx(), endPaddingPx, rawBottomPaddingPx)
+    }
+
+    /**
+     * 適用する上 padding（px）を返す。
+     *
+     * 案内中追従では `padded中心 = カード上端 - margin` となる上 padding を返す。導出は
+     * `padded中心 = (H + top - bottom) / 2 = H - bottom - margin` を top について解いて
+     * `top = H - bottom - 2*margin`。それ以外は実 top padding を返す。
+     *
+     * @return GoogleMap へ渡す上 padding（px）
+     */
+    private fun resolveTopPaddingPx(): Int {
+        if (!isGuidanceCameraActive || mapViewHeightPx <= 0) {
+            return rawTopPaddingPx
+        }
+
+        val marginPx = (VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP * density).toInt()
+        return (mapViewHeightPx - rawBottomPaddingPx - 2 * marginPx).coerceAtLeast(0)
     }
 
     /**
@@ -268,7 +305,7 @@ internal class MapCameraState internal constructor() {
         guidanceManeuverCameraFocus = null
         handledGuidanceManeuverFocusIndex = null
         isGuidanceCameraActive = true
-        vehicleCameraPositionFactory.setGuidanceCameraActive(true)
+        applyCameraPadding()
         cameraState = cameraState.copy(
             perspective = MapCameraPerspective.TILTED,
             isFollowingMyLocation = true,
@@ -327,77 +364,14 @@ internal class MapCameraState internal constructor() {
 
         val current = googleMap?.cameraPosition ?: return
         val focus = guidanceManeuverCameraFocus
-        when {
-            focus != null -> moveVehicleCamera(guidanceManeuverFocusCameraPosition(current))
-            isGuidanceCameraActive -> moveAnchoredVehicleCamera(vehiclePose, current)
-            else -> moveVehicleCamera(vehicleCameraPosition(vehiclePose = vehiclePose, current = current))
+        val followCameraPosition = if (focus != null) {
+            guidanceManeuverFocusCameraPosition(current)
+        } else {
+            centeredVehicleCameraPosition(vehiclePose = vehiclePose, current = current)
         }
+
+        moveVehicleCamera(followCameraPosition)
     }
-
-    /**
-     * 案内中追従で、自車アイコン下端を「下部カード上端から [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上」へ
-     * 正確に置く。
-     *
-     * まず自車を camera target 中心（padding を除いた可視領域の中心）へ置き、続いて screen 空間で
-     * 正確な [CameraUpdateFactory.scrollBy] で下端アンカーまで寄せる。`scrollBy` は SDK が実カメラに
-     * 対して px 単位で適用するため、`moveCamera` 直後の stale projection や tilt の遠近に影響されない。
-     * アンカーは下端基準なので、上部パネル展開で上 padding が増えても自車位置は動かない。
-     *
-     * @param vehiclePose frame 時点の自車 pose
-     * @param current 現在のカメラ位置
-     */
-    private fun moveAnchoredVehicleCamera(vehiclePose: VehiclePose, current: CameraPosition) {
-        val map = googleMap ?: return
-
-        moveVehicleCamera(centeredVehicleCameraPosition(vehiclePose = vehiclePose, current = current))
-
-        val scrollPx = followAnchorScrollPx()
-        if (scrollPx != 0f) {
-            map.moveCamera(CameraUpdateFactory.scrollBy(0f, scrollPx))
-        }
-    }
-
-    /**
-     * 自車を可視領域の中心から下端アンカーへ移すための `scrollBy` の縦 px を返す。
-     *
-     * `scrollBy(0, +y)` はカメラを下げ画面上の自車を上へ動かすため、自車を下げるには負値を返す。
-     * 値は下端基準（[mapViewHeightPx] と下 padding 基準）なので上 padding に依存しない。
-     *
-     * @return scrollBy へ渡す縦 px。サイズ未確定時は 0
-     */
-    private fun followAnchorScrollPx(): Float {
-        if (mapViewHeightPx <= 0) return 0f
-
-        val paddedCenterY = paddedRegionCenterY()
-        val vehicleAnchorY = anchoredVehicleMarkerCenterY()
-        return paddedCenterY - vehicleAnchorY
-    }
-
-    /**
-     * padding を除いた可視領域の中心 y 座標（px）を返す。
-     *
-     * @return map view 左上を原点とした中心 y 座標
-     */
-    private fun paddedRegionCenterY(): Float = (mapViewHeightPx + topPaddingPx - bottomPaddingPx) / 2f
-
-    /**
-     * 自車 marker の中心を置く y 座標（px）を返す。
-     *
-     * 自車 marker は中心 anchor なので、アイコン下端をカード上端から指定間隔だけ上に置くには、
-     * marker 中心をアイコン半分だけさらに上へ移す。
-     *
-     * @return map view 左上を原点とした marker 中心 y 座標
-     */
-    private fun anchoredVehicleMarkerCenterY(): Float {
-        val bottomCardTopY = (mapViewHeightPx - bottomPaddingPx).toFloat()
-        return bottomCardTopY - anchorMarginPx() - vehiclePuckAnchorToBottomPx()
-    }
-
-    /** 自車アイコン下端と下部カード上端の間隔（px）。 */
-    private fun anchorMarginPx(): Float = (VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP * density).toFloat()
-
-    /** 自車 marker の中心 anchor からアイコン下端までの距離（px）。 */
-    private fun vehiclePuckAnchorToBottomPx(): Float = (VEHICLE_PUCK_ANCHOR_TO_BOTTOM_DP * density).toFloat()
 
     /**
      * 案内地点接近時の真上・拡大フォーカスを開始する。
@@ -662,7 +636,7 @@ internal class MapCameraState internal constructor() {
                         .tilt(current.tilt)
                         .build()
                 } else {
-                    vehicleCameraPosition(
+                    centeredVehicleCameraPosition(
                         vehiclePose = vehiclePose,
                         current = current,
                         zoom = zoom,
@@ -699,7 +673,7 @@ internal class MapCameraState internal constructor() {
                 perspective = perspective,
             )
         } else {
-            vehicleCameraPosition(
+            centeredVehicleCameraPosition(
                 vehiclePose = vehiclePose,
                 current = current,
                 perspective = perspective,
@@ -738,35 +712,14 @@ internal class MapCameraState internal constructor() {
         val current = googleMap?.cameraPosition ?: return
 
         flyCameraTo(
-            target = vehicleCameraPosition(vehiclePose = vehiclePose, current = current),
+            target = centeredVehicleCameraPosition(vehiclePose = vehiclePose, current = current),
             keepFollowingMyLocation = true,
             moveCamera = { _, cameraPosition -> moveVehicleCamera(cameraPosition) },
         )
     }
 
     /**
-     * 自車追従用のカメラ位置を作る。
-     *
-     * @param vehiclePose frame 時点の自車 pose
-     * @param current 現在のカメラ位置
-     * @param zoom 設定する zoom 値
-     * @param perspective 設定する camera perspective
-     * @return perspective と zoom を反映したカメラ位置
-     */
-    private fun vehicleCameraPosition(
-        vehiclePose: VehiclePose,
-        current: CameraPosition,
-        zoom: Float = cameraState.zoom,
-        perspective: Int = cameraState.perspective,
-    ): CameraPosition = vehicleCameraPositionFactory.vehicleCameraPosition(
-        vehiclePose = vehiclePose,
-        current = current,
-        zoom = zoom,
-        perspective = perspective,
-    )
-
-    /**
-     * 自車を camera target 中心へ置く追従カメラ位置を作る。下端アンカーは `scrollBy` で別途与える。
+     * 自車を camera target 中心へ置く追従カメラ位置を作る。下端アンカーは projection で別途与える。
      *
      * @param vehiclePose frame 時点の自車 pose
      * @param current 現在のカメラ位置
@@ -798,7 +751,7 @@ internal class MapCameraState internal constructor() {
         current: CameraPosition,
     ): CameraPosition {
         if (vehiclePose != null) {
-            return vehicleCameraPosition(
+            return centeredVehicleCameraPosition(
                 vehiclePose = vehiclePose,
                 current = current,
                 zoom = DEFAULT_CAMERA_ZOOM,
@@ -850,7 +803,7 @@ internal class MapCameraState internal constructor() {
         val vehiclePose = lastVehiclePose
 
         if (focus.restoreFollowingMyLocation && vehiclePose != null) {
-            return vehicleCameraPosition(
+            return centeredVehicleCameraPosition(
                 vehiclePose = vehiclePose,
                 current = current,
                 zoom = focus.restoreZoom,
@@ -898,7 +851,6 @@ internal class MapCameraState internal constructor() {
         return vehicleCameraPositionFactory.isCameraTargetAwayFromVehicle(
             cameraPosition = cameraPosition,
             vehiclePose = vehiclePose,
-            perspective = cameraState.perspective,
         )
     }
 
@@ -1033,13 +985,6 @@ internal class MapCameraState internal constructor() {
 
         /** 案内地点フォーカス中の zoom。 */
         private const val GUIDANCE_MANEUVER_FOCUS_ZOOM = 18f
-
-        /**
-         * 自車 marker の中心 anchor からアイコン下端までの距離（dp）。
-         *
-         * 自車アイコンは 64dp の marker を中心 anchor で表示するため、下端までは 32dp。
-         */
-        private const val VEHICLE_PUCK_ANCHOR_TO_BOTTOM_DP = 32.0
     }
 }
 
