@@ -20,11 +20,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.GoogleMapOptions
 import com.google.android.gms.maps.MapView
+import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapColorScheme
 import com.google.android.gms.maps.model.PointOfInterest
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import me.matsumo.onenavi.feature.map.state.MapCameraDefaults
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 
 @Composable
@@ -89,6 +91,7 @@ private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
         val mapOptions = GoogleMapOptions()
             .mapType(GoogleMap.MAP_TYPE_NORMAL)
             .mapColorScheme(mapColorScheme)
+            .camera(defaultCameraPosition())
             .liteMode(false)
             .tiltGesturesEnabled(true)
             .rotateGesturesEnabled(true)
@@ -101,6 +104,21 @@ private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
         }
     }
 }
+
+/**
+ * MapView 生成時に GoogleMap へ渡す初期カメラ位置を作る。
+ *
+ * @return GoogleMap の初期 [CameraPosition]
+ */
+private fun defaultCameraPosition(): CameraPosition = CameraPosition.Builder()
+    .target(
+        LatLng(
+            MapCameraDefaults.DEFAULT_LATITUDE,
+            MapCameraDefaults.DEFAULT_LONGITUDE,
+        ),
+    )
+    .zoom(MapCameraDefaults.DEFAULT_ZOOM)
+    .build()
 
 @SuppressLint("MissingPermission")
 @Composable

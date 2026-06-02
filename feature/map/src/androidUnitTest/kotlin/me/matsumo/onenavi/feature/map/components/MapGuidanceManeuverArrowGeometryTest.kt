@@ -27,8 +27,65 @@ class MapGuidanceManeuverArrowGeometryTest {
             routeId = "route",
             maneuvers = listOf(
                 maneuver(distanceMeters = 100.0, guidancePointIndex = 1),
-                maneuver(distanceMeters = 150.0, guidancePointIndex = 2),
-                maneuver(distanceMeters = 200.0, guidancePointIndex = 3),
+                maneuver(distanceMeters = 230.0, guidancePointIndex = 2),
+                maneuver(distanceMeters = 240.0, guidancePointIndex = 3),
+            ),
+            routeMeterIndex = routeMeterIndex,
+            currentCumulativeMeters = 0.0,
+            roadClassSegments = persistentListOf(),
+            fallbackRoadClass = RoadClass.ORDINARY,
+        )
+
+        assertEquals(2, specs.size)
+        assertEquals("guidance-arrow-route-0-1", specs[0].id)
+        assertEquals("guidance-arrow-route-1-2", specs[1].id)
+    }
+
+    @Test
+    fun 案内地点間隔が矢印長未満の場合は1本に連結する() {
+        val routeMeterIndex = requireNotNull(RouteMeterIndex.from(routePoints()))
+        val specs = MapGuidanceManeuverArrowGeometry.specs(
+            routeId = "route",
+            maneuvers = listOf(
+                maneuver(distanceMeters = 100.0, guidancePointIndex = 1),
+                maneuver(distanceMeters = 210.0, guidancePointIndex = 2),
+            ),
+            routeMeterIndex = routeMeterIndex,
+            currentCumulativeMeters = 0.0,
+            roadClassSegments = persistentListOf(),
+            fallbackRoadClass = RoadClass.ORDINARY,
+        )
+        val points = specs.single().points
+
+        assertEquals("guidance-arrow-route-0-1-2", specs.single().id)
+        assertApproximatelyEquals(
+            expectedDistanceMeters = 40.0,
+            actualDistanceMeters = distanceFromOrigin(points.first()),
+        )
+        assertTrue(
+            points.any { point ->
+                abs(distanceFromOrigin(point) - 100.0) < DISTANCE_TOLERANCE_METERS
+            },
+        )
+        assertTrue(
+            points.any { point ->
+                abs(distanceFromOrigin(point) - 210.0) < DISTANCE_TOLERANCE_METERS
+            },
+        )
+        assertApproximatelyEquals(
+            expectedDistanceMeters = 270.0,
+            actualDistanceMeters = distanceFromOrigin(points.last()),
+        )
+    }
+
+    @Test
+    fun 案内地点間隔が矢印長以上の場合は分離する() {
+        val routeMeterIndex = requireNotNull(RouteMeterIndex.from(routePoints()))
+        val specs = MapGuidanceManeuverArrowGeometry.specs(
+            routeId = "route",
+            maneuvers = listOf(
+                maneuver(distanceMeters = 100.0, guidancePointIndex = 1),
+                maneuver(distanceMeters = 220.0, guidancePointIndex = 2),
             ),
             routeMeterIndex = routeMeterIndex,
             currentCumulativeMeters = 0.0,
@@ -179,6 +236,8 @@ class MapGuidanceManeuverArrowGeometryTest {
             150.0,
             200.0,
             250.0,
+            300.0,
+            350.0,
         )
     }
 }

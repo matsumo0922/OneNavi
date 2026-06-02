@@ -50,6 +50,12 @@ internal class MapCameraState internal constructor() {
     private val vehicleCameraPositionFactory = VehicleCameraPositionFactory()
     private val gestureController = MapCameraGestureController()
     private var mapViewWidthPx: Int = 0
+    private var mapViewHeightPx: Int = 0
+    private var rawTopPaddingPx: Int = 0
+    private var rawBottomPaddingPx: Int = 0
+    private var startPaddingPx: Int = 0
+    private var endPaddingPx: Int = 0
+    private var isGuidanceCameraActive: Boolean = false
     private var density: Float = DEFAULT_DENSITY
     private var lastVehiclePose: VehiclePose? = null
     private var guidanceManeuverCameraFocus: GuidanceManeuverCameraFocus? = null
@@ -60,11 +66,11 @@ internal class MapCameraState internal constructor() {
 
     /** 最後に受け取った自車位置の緯度。未取得の場合は初期緯度を返す。 */
     val myLocationLatitude: Double
-        get() = lastVehiclePose?.location?.latitude ?: DEFAULT_LATITUDE
+        get() = lastVehiclePose?.location?.latitude ?: MapCameraDefaults.DEFAULT_LATITUDE
 
     /** 最後に受け取った自車位置の経度。未取得の場合は初期経度を返す。 */
     val myLocationLongitude: Double
-        get() = lastVehiclePose?.location?.longitude ?: DEFAULT_LONGITUDE
+        get() = lastVehiclePose?.location?.longitude ?: MapCameraDefaults.DEFAULT_LONGITUDE
 
     /**
      * 操作対象の GoogleMap を接続し、カメラ移動 listener を登録する。
@@ -107,6 +113,7 @@ internal class MapCameraState internal constructor() {
      */
     fun updateViewportSize(widthPx: Int, heightPx: Int) {
         mapViewWidthPx = widthPx
+        mapViewHeightPx = heightPx
         vehicleCameraPositionFactory.updateViewportHeight(heightPx)
     }
 
@@ -125,20 +132,55 @@ internal class MapCameraState internal constructor() {
      * @param end 右端 padding（px）
      */
     fun updatePadding(top: Int, bottom: Int, start: Int, end: Int) {
-        googleMap?.setPadding(start, top, end, bottom)
+        rawTopPaddingPx = top
+        rawBottomPaddingPx = bottom
+        startPaddingPx = start
+        endPaddingPx = end
+        applyCameraPadding()
+        moveFollowCameraIfNeeded()
     }
 
     /**
      * 案内中カメラとして扱うかを更新する。
      *
-     * 案内中だけ 3D 追従時の自車表示位置を画面手前側へ寄せる。通常時は padding を考慮した
-     * GoogleMap の camera target 中心に自車位置を置く。
+     * 案内中は自車を「下部カード上端から [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上」へ固定するため、
+     * follow 専用の下端基準 padding を使う（[applyCameraPadding]）。それ以外は実際の obstruction
+     * padding をそのまま使い、自車を可視領域の中心へ置く。モードが変わるたびに padding を再適用する。
      *
      * @param isActive 案内中カメラとして扱う場合 true
      */
     fun setGuidanceCameraActive(isActive: Boolean) {
-        vehicleCameraPositionFactory.setGuidanceCameraActive(isActive)
+        isGuidanceCameraActive = isActive
+        applyCameraPadding()
+        moveFollowCameraIfNeeded()
     }
+
+    /**
+     * 現在のモードに応じた描画 padding を GoogleMap へ適用する。
+     *
+     * 案内中追従では、自車（camera target）を下部カード上端から
+     * [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上へ置きたい。GoogleMap は camera target を
+     * 「padding を除いた可視領域の中心」に置くので、その中心がアンカー位置に一致するよう上 padding を
+     * 算出する。アンカーは下端基準なので、上部マニューバパネルの展開で実 top padding が変わっても
+     * 自車位置は動かない（tilt も SDK が padded-center 不変則で正しく扱う）。案内中以外は実 padding を使う。
+     */
+    private fun applyCameraPadding() {
+        val map = googleMap ?: return
+        map.setPadding(startPaddingPx, resolveTopPaddingPx(), endPaddingPx, rawBottomPaddingPx)
+    }
+
+    /**
+     * 適用する上 padding（px）を返す。算出は [GuidanceCameraPadding] に委譲する。
+     *
+     * @return GoogleMap へ渡す上 padding（px）
+     */
+    private fun resolveTopPaddingPx(): Int = GuidanceCameraPadding.resolveTopPaddingPx(
+        isGuidanceFollowActive = isGuidanceCameraActive,
+        mapViewHeightPx = mapViewHeightPx,
+        rawTopPaddingPx = rawTopPaddingPx,
+        rawBottomPaddingPx = rawBottomPaddingPx,
+        density = density,
+    )
 
     /**
      * 案内地点フォーカスの対象 GP を更新する。
@@ -257,7 +299,8 @@ internal class MapCameraState internal constructor() {
         gestureController.clear()
         guidanceManeuverCameraFocus = null
         handledGuidanceManeuverFocusIndex = null
-        vehicleCameraPositionFactory.setGuidanceCameraActive(true)
+        isGuidanceCameraActive = true
+        applyCameraPadding()
         cameraState = cameraState.copy(
             perspective = MapCameraPerspective.TILTED,
             isFollowingMyLocation = true,
@@ -300,22 +343,29 @@ internal class MapCameraState internal constructor() {
      */
     fun updateVehiclePose(vehiclePose: VehiclePose) {
         lastVehiclePose = vehiclePose
+        moveFollowCameraIfNeeded()
+    }
 
-        if (cameraState.isFollowingMyLocation && !isCameraTransitionInProgress() && !gestureController.isGestureInProgress) {
-            val current = googleMap?.cameraPosition ?: return
-            val focus = guidanceManeuverCameraFocus
-
-            val cameraPosition = if (focus != null) {
-                guidanceManeuverFocusCameraPosition(current)
-            } else {
-                vehicleCameraPosition(
-                    vehiclePose = vehiclePose,
-                    current = current,
-                )
-            }
-
-            moveVehicleCamera(cameraPosition)
+    /**
+     * 追従中で明示的なカメラアニメーションが走っていない場合に、最新 pose（または案内地点
+     * フォーカス）へカメラ中心を即時追従させる。pose 更新時と padding 更新時の両方から呼ぶ。
+     */
+    private fun moveFollowCameraIfNeeded() {
+        val vehiclePose = lastVehiclePose ?: return
+        val isCameraBusy = isCameraTransitionInProgress() || gestureController.isGestureInProgress
+        if (!cameraState.isFollowingMyLocation || isCameraBusy) {
+            return
         }
+
+        val current = googleMap?.cameraPosition ?: return
+        val focus = guidanceManeuverCameraFocus
+        val followCameraPosition = if (focus != null) {
+            guidanceManeuverFocusCameraPosition(current)
+        } else {
+            centeredVehicleCameraPosition(vehiclePose = vehiclePose, current = current)
+        }
+
+        moveVehicleCamera(followCameraPosition)
     }
 
     /**
@@ -581,7 +631,7 @@ internal class MapCameraState internal constructor() {
                         .tilt(current.tilt)
                         .build()
                 } else {
-                    vehicleCameraPosition(
+                    centeredVehicleCameraPosition(
                         vehiclePose = vehiclePose,
                         current = current,
                         zoom = zoom,
@@ -604,26 +654,22 @@ internal class MapCameraState internal constructor() {
     private fun isCameraTransitionInProgress(): Boolean = cameraAnimator.isRunning
 
     /**
-     * コンパス button の perspective 変更を fly-to と同じ減衰補間で実行する。
+     * コンパス button の perspective 変更を減衰補間でアニメーションする。
+     *
+     * camera target は毎 frame の最新自車位置に固定し（位置の pan 補間をしない）、tilt と bearing だけを
+     * 開始値から目標値へ補間する。位置を補間する [flyCameraTo] では、アニメ開始時の自車位置から終点へ
+     * pan する経路の途中ではカメラが旧位置に留まり、走行で前進した自車（puck）が前方へずれる。この
+     * ずれは tilt が大きいほど foreshortening で画面上に拡大されるため、開始時に tilt が高い 3D→2D で
+     * 特に自車が中央へ跳ねて見えた。位置を毎 frame 固定することでこれを解消する。
      *
      * @param perspective 切り替え後の [MapCameraPerspective]
      */
     private fun animateCompassPerspective(perspective: Int) {
         val map = googleMap ?: return
-        val current = map.cameraPosition
-        val vehiclePose = lastVehiclePose
-        val target = if (vehiclePose == null) {
-            compassCameraPosition(
-                current = current,
-                perspective = perspective,
-            )
-        } else {
-            vehicleCameraPosition(
-                vehiclePose = vehiclePose,
-                current = current,
-                perspective = perspective,
-            )
-        }
+        val start = map.cameraPosition
+        val startTilt = start.tilt
+        val startBearing = start.bearing
+        val targetTilt = vehicleCameraPositionFactory.vehicleTiltDegrees(perspective)
 
         cameraAnimator.cancel()
         gestureController.clear()
@@ -633,11 +679,20 @@ internal class MapCameraState internal constructor() {
             isFollowingMyLocation = true,
         )
 
-        flyCameraTo(
-            target = target,
+        cameraAnimator.animatePerspective(
             durationMs = COMPASS_PERSPECTIVE_ANIMATION_DURATION_MS,
-            keepFollowingMyLocation = true,
-            moveCamera = { _, cameraPosition -> moveVehicleCamera(cameraPosition) },
+            onFrame = { fraction ->
+                moveVehicleCamera(
+                    compassPerspectiveFrameCameraPosition(
+                        map = map,
+                        perspective = perspective,
+                        startTilt = startTilt,
+                        startBearing = startBearing,
+                        targetTilt = targetTilt,
+                        fraction = fraction,
+                    ),
+                )
+            },
             onFinished = {
                 updateCameraPosition(map.cameraPosition)
                 cameraState = cameraState.copy(
@@ -649,6 +704,67 @@ internal class MapCameraState internal constructor() {
     }
 
     /**
+     * コンパス perspective 切り替えアニメーションの frame ごとのカメラ位置を作る。
+     *
+     * 位置は最新の自車位置に固定し、tilt と bearing だけを開始値から目標値へ [fraction] で補間する。
+     * 目標 bearing は 2D north-up では 0、3D heading-up では最新の自車進行方向（未取得なら現在の
+     * bearing）。自車 pose が無い場合は現在の camera target を保つ。
+     *
+     * @param map 対象の GoogleMap
+     * @param perspective 切り替え後の [MapCameraPerspective]
+     * @param startTilt 補間開始時の tilt
+     * @param startBearing 補間開始時の bearing
+     * @param targetTilt 補間目標の tilt
+     * @param fraction 減衰補間後の進捗（0..1）
+     * @return frame に適用するカメラ位置
+     */
+    private fun compassPerspectiveFrameCameraPosition(
+        map: GoogleMap,
+        perspective: Int,
+        startTilt: Float,
+        startBearing: Float,
+        targetTilt: Float,
+        fraction: Float,
+    ): CameraPosition {
+        val current = map.cameraPosition
+        val vehiclePose = lastVehiclePose
+        val targetBearing = compassPerspectiveTargetBearing(
+            perspective = perspective,
+            vehiclePose = vehiclePose,
+            current = current,
+        )
+        val center = vehiclePose?.let { pose ->
+            LatLng(pose.location.latitude, pose.location.longitude)
+        } ?: current.target
+
+        return CameraPosition.Builder()
+            .target(center)
+            .zoom(cameraState.zoom)
+            .bearing(MapInterpolation.lerpAngleDegrees(startBearing, targetBearing, fraction))
+            .tilt(MapInterpolation.lerp(startTilt, targetTilt, fraction))
+            .build()
+    }
+
+    /**
+     * コンパス perspective 切り替えの目標 bearing を返す。
+     *
+     * 2D north-up では 0 度、3D heading-up では最新の自車進行方向（未取得なら現在の bearing）。
+     *
+     * @param perspective 切り替え後の [MapCameraPerspective]
+     * @param vehiclePose 最新の自車 pose
+     * @param current 現在のカメラ位置
+     * @return 補間目標の bearing
+     */
+    private fun compassPerspectiveTargetBearing(
+        perspective: Int,
+        vehiclePose: VehiclePose?,
+        current: CameraPosition,
+    ): Float = when (perspective) {
+        MapCameraPerspective.TOP_DOWN_NORTH_UP -> 0f
+        else -> vehiclePose?.bearingDegrees ?: current.bearing
+    }
+
+    /**
      * 追従開始時の自車位置へ既存の fly-to 経路で寄せる。
      *
      * @param vehiclePose 寄せ先の自車 pose
@@ -657,27 +773,27 @@ internal class MapCameraState internal constructor() {
         val current = googleMap?.cameraPosition ?: return
 
         flyCameraTo(
-            target = vehicleCameraPosition(vehiclePose = vehiclePose, current = current),
+            target = centeredVehicleCameraPosition(vehiclePose = vehiclePose, current = current),
             keepFollowingMyLocation = true,
             moveCamera = { _, cameraPosition -> moveVehicleCamera(cameraPosition) },
         )
     }
 
     /**
-     * 自車追従用のカメラ位置を作る。
+     * 自車を camera target 中心へ置く追従カメラ位置を作る。下端アンカーは projection で別途与える。
      *
      * @param vehiclePose frame 時点の自車 pose
      * @param current 現在のカメラ位置
      * @param zoom 設定する zoom 値
      * @param perspective 設定する camera perspective
-     * @return perspective と zoom を反映したカメラ位置
+     * @return 自車を中心に置いたカメラ位置
      */
-    private fun vehicleCameraPosition(
+    private fun centeredVehicleCameraPosition(
         vehiclePose: VehiclePose,
         current: CameraPosition,
         zoom: Float = cameraState.zoom,
         perspective: Int = cameraState.perspective,
-    ): CameraPosition = vehicleCameraPositionFactory.vehicleCameraPosition(
+    ): CameraPosition = vehicleCameraPositionFactory.centeredVehicleCameraPosition(
         vehiclePose = vehiclePose,
         current = current,
         zoom = zoom,
@@ -696,17 +812,17 @@ internal class MapCameraState internal constructor() {
         current: CameraPosition,
     ): CameraPosition {
         if (vehiclePose != null) {
-            return vehicleCameraPosition(
+            return centeredVehicleCameraPosition(
                 vehiclePose = vehiclePose,
                 current = current,
-                zoom = DEFAULT_CAMERA_ZOOM,
+                zoom = MapCameraDefaults.DEFAULT_ZOOM,
                 perspective = MapCameraPerspective.TILTED,
             )
         }
 
         return CameraPosition.Builder()
             .target(current.target)
-            .zoom(DEFAULT_CAMERA_ZOOM)
+            .zoom(MapCameraDefaults.DEFAULT_ZOOM)
             .bearing(current.bearing)
             .tilt(vehicleCameraPositionFactory.vehicleTiltDegrees(MapCameraPerspective.TILTED))
             .build()
@@ -748,7 +864,7 @@ internal class MapCameraState internal constructor() {
         val vehiclePose = lastVehiclePose
 
         if (focus.restoreFollowingMyLocation && vehiclePose != null) {
-            return vehicleCameraPosition(
+            return centeredVehicleCameraPosition(
                 vehiclePose = vehiclePose,
                 current = current,
                 zoom = focus.restoreZoom,
@@ -758,21 +874,6 @@ internal class MapCameraState internal constructor() {
 
         return focus.restoreCameraPosition
     }
-
-    /**
-     * 現在の中心・ズームを維持したまま、指定 perspective の tilt / bearing を反映したカメラ位置を作る。
-     *
-     * @param current 現在のカメラ位置
-     * @param perspective 切り替え後の camera perspective
-     * @return SDK に渡す camera position
-     */
-    private fun compassCameraPosition(
-        current: CameraPosition,
-        perspective: Int,
-    ): CameraPosition = vehicleCameraPositionFactory.compassCameraPosition(
-        current = current,
-        perspective = perspective,
-    )
 
     /**
      * 自車追従用のカメラ移動を即時反映する。
@@ -796,7 +897,6 @@ internal class MapCameraState internal constructor() {
         return vehicleCameraPositionFactory.isCameraTargetAwayFromVehicle(
             cameraPosition = cameraPosition,
             vehiclePose = vehiclePose,
-            perspective = cameraState.perspective,
         )
     }
 
@@ -962,17 +1062,23 @@ private data class GuidanceManeuverCameraFocus(
  */
 @Stable
 internal data class MapCameraSnapshot(
-    val zoom: Float = DEFAULT_CAMERA_ZOOM,
+    val zoom: Float = MapCameraDefaults.DEFAULT_ZOOM,
     val bearing: Double = 0.0,
     val perspective: Int = MapCameraPerspective.TILTED,
     val isFollowingMyLocation: Boolean = false,
 )
 
-/** 初期カメラ位置の緯度。 */
-private const val DEFAULT_LATITUDE = 35.681236
+/**
+ * 地図カメラの初期表示値。
+ */
+internal object MapCameraDefaults {
 
-/** 初期カメラ位置の経度。 */
-private const val DEFAULT_LONGITUDE = 139.767125
+    /** 初期カメラ target の緯度。 */
+    const val DEFAULT_LATITUDE = 35.681236
 
-/** 初期カメラズーム。 */
-private const val DEFAULT_CAMERA_ZOOM = 17f
+    /** 初期カメラ target の経度。 */
+    const val DEFAULT_LONGITUDE = 139.767125
+
+    /** 初期カメラ zoom。 */
+    const val DEFAULT_ZOOM = 17f
+}
