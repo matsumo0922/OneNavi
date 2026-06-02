@@ -32,6 +32,8 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.ManeuverCallout
 import me.matsumo.onenavi.core.ui.theme.RouteColors
 import me.matsumo.onenavi.feature.map.state.RouteMeterIndex
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /**
  * 案内地点前後に描画する route 上の矢印。
@@ -277,11 +279,17 @@ internal object MapGuidanceManeuverArrowGeometry {
 
 /**
  * 案内地点前後の polyline 上に、白背景と道路種別色の枠線を持つ矢印を描画する。
+ *
+ * @param googleMap overlay 描画先の GoogleMap
+ * @param guidanceState 案内中 state
+ * @param cameraZoom 現在の GoogleMap zoom
+ * @param modifier 空の Compose node に適用する modifier
  */
 @Composable
 internal fun MapGuidanceManeuverArrowEffect(
     googleMap: GoogleMap,
     guidanceState: GuidanceState.Guiding,
+    cameraZoom: Float,
     modifier: Modifier = Modifier,
 ) {
     val maneuvers = listOfNotNull(
@@ -308,17 +316,21 @@ internal fun MapGuidanceManeuverArrowEffect(
             fallbackRoadClass = guidanceState.progress.currentRoadClass,
         )
     }
+    val headScale = guidanceArrowHeadScaleForZoom(cameraZoom)
     val highwayBorderHeadIcon = rememberGuidanceManeuverArrowHeadIcon(
         color = RouteColors.maneuver(RoadClass.HIGHWAY).primary,
         insetPx = 0f,
+        headScale = headScale,
     )
     val ordinaryBorderHeadIcon = rememberGuidanceManeuverArrowHeadIcon(
         color = RouteColors.maneuver(RoadClass.ORDINARY).primary,
         insetPx = 0f,
+        headScale = headScale,
     )
     val bodyHeadIcon = rememberGuidanceManeuverArrowHeadIcon(
         color = Color.White,
-        insetPx = guidanceArrowHeadInsetPx(),
+        insetPx = guidanceArrowHeadInsetPx(headScale = headScale),
+        headScale = headScale,
     )
 
     DisposableEffect(googleMap, specs, highwayBorderHeadIcon, ordinaryBorderHeadIcon, bodyHeadIcon) {
@@ -370,14 +382,16 @@ internal fun MapGuidanceManeuverArrowEffect(
 private fun rememberGuidanceManeuverArrowHeadIcon(
     color: Color,
     insetPx: Float,
+    headScale: Float,
 ): BitmapDescriptor {
     val colorArgb = color.toArgb()
 
-    return remember(colorArgb, insetPx) {
+    return remember(colorArgb, insetPx, headScale) {
         BitmapDescriptorFactory.fromBitmap(
             createGuidanceManeuverArrowHeadBitmap(
                 colorArgb = colorArgb,
                 insetPx = insetPx,
+                headScale = headScale,
             ),
         )
     }
@@ -386,11 +400,12 @@ private fun rememberGuidanceManeuverArrowHeadIcon(
 private fun createGuidanceManeuverArrowHeadBitmap(
     colorArgb: Int,
     insetPx: Float,
+    headScale: Float,
 ): Bitmap {
-    val headWidthPx = (GUIDANCE_ARROW_BORDER_WIDTH_PX * GUIDANCE_ARROW_HEAD_WIDTH_RATIO)
+    val headWidthPx = (GUIDANCE_ARROW_BORDER_WIDTH_PX * GUIDANCE_ARROW_HEAD_WIDTH_RATIO * headScale)
         .toInt()
         .coerceAtLeast(MIN_GUIDANCE_ARROW_HEAD_SIZE_PX)
-    val headHeightPx = (GUIDANCE_ARROW_BORDER_WIDTH_PX * GUIDANCE_ARROW_HEAD_HEIGHT_RATIO)
+    val headHeightPx = (GUIDANCE_ARROW_BORDER_WIDTH_PX * GUIDANCE_ARROW_HEAD_HEIGHT_RATIO * headScale)
         .toInt()
         .coerceAtLeast(MIN_GUIDANCE_ARROW_HEAD_SIZE_PX)
     val bitmap = createBitmap(
@@ -448,8 +463,26 @@ private fun ImmutableList<RoutePoint>.toLatLngPoints(): List<LatLng> {
     }
 }
 
-private fun guidanceArrowHeadInsetPx(): Float {
-    return (GUIDANCE_ARROW_BORDER_WIDTH_PX - GUIDANCE_ARROW_BODY_WIDTH_PX) / 2f
+/**
+ * route overview のような低 zoom で案内地点矢印のヘッドが過大表示されないようにする倍率を返す。
+ *
+ * @param zoom 現在の GoogleMap zoom
+ * @return ヘッド bitmap に適用する倍率
+ */
+internal fun guidanceArrowHeadScaleForZoom(zoom: Float): Float {
+    val zoomStepCount = (zoom * GUIDANCE_ARROW_HEAD_ZOOM_QUANTIZATION_STEPS).roundToInt()
+    val quantizedZoom = zoomStepCount.toFloat() / GUIDANCE_ARROW_HEAD_ZOOM_QUANTIZATION_STEPS
+    val zoomDelta = quantizedZoom - GUIDANCE_ARROW_HEAD_REFERENCE_ZOOM
+    val scale = 2.0.pow((zoomDelta / GUIDANCE_ARROW_HEAD_ZOOM_SCALE_STEP).toDouble()).toFloat()
+
+    return scale.coerceIn(
+        minimumValue = GUIDANCE_ARROW_HEAD_MIN_SCALE,
+        maximumValue = GUIDANCE_ARROW_HEAD_MAX_SCALE,
+    )
+}
+
+private fun guidanceArrowHeadInsetPx(headScale: Float): Float {
+    return (GUIDANCE_ARROW_BORDER_WIDTH_PX - GUIDANCE_ARROW_BODY_WIDTH_PX) / 2f * headScale
 }
 
 /** 地図上に同時表示する案内地点矢印の最大数。CallOut と同じく次 / その次までにする。 */
@@ -494,3 +527,18 @@ private const val GUIDANCE_ARROW_HEAD_WIDTH_RATIO = 2.0f
 
 /** polyline 幅に対する矢印ヘッド bitmap の高さ倍率。 */
 private const val GUIDANCE_ARROW_HEAD_HEIGHT_RATIO = 2.0f
+
+/** ヘッドを等倍表示する基準 zoom。 */
+private const val GUIDANCE_ARROW_HEAD_REFERENCE_ZOOM = 17f
+
+/** 何 zoom ごとにヘッドサイズを 2 倍 / 0.5 倍させるか。 */
+private const val GUIDANCE_ARROW_HEAD_ZOOM_SCALE_STEP = 2f
+
+/** camera move 中の overlay 再作成頻度を抑える zoom 丸め単位。 */
+private const val GUIDANCE_ARROW_HEAD_ZOOM_QUANTIZATION_STEPS = 4f
+
+/** ズームアウト時のヘッド最小倍率。body 線幅との接続を保つため 0.5 倍までにする。 */
+private const val GUIDANCE_ARROW_HEAD_MIN_SCALE = 0.5f
+
+/** ズームイン時のヘッド最大倍率。通常案内時の見た目を上限にする。 */
+private const val GUIDANCE_ARROW_HEAD_MAX_SCALE = 1f

@@ -81,6 +81,7 @@ internal fun MapEffect(
                 modifier = modifier,
                 guidanceState = guidanceState,
                 googleMap = googleMap,
+                cameraZoom = cameraState.cameraState.zoom,
                 topAppBarHeightPx = topAppBarHeightPx,
                 bottomSheetPeekHeight = bottomSheetPeekHeight,
             )
@@ -214,6 +215,7 @@ private fun RoutePreviewEffect(
  *
  * @param guidanceState Guidance 期の案内状態
  * @param googleMap overlay 描画先の GoogleMap
+ * @param cameraZoom 現在の GoogleMap zoom
  * @param topAppBarHeightPx callout が避ける上部バー高さ
  * @param bottomSheetPeekHeight callout が避ける bottom sheet 高さ
  * @param modifier callout overlay 用 modifier
@@ -222,6 +224,7 @@ private fun RoutePreviewEffect(
 private fun NavigationEffect(
     guidanceState: GuidanceState,
     googleMap: GoogleMap,
+    cameraZoom: Float,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
     modifier: Modifier = Modifier,
@@ -252,6 +255,7 @@ private fun NavigationEffect(
         MapGuidanceManeuverArrowEffect(
             googleMap = googleMap,
             guidanceState = guidanceState,
+            cameraZoom = cameraZoom,
         )
 
         MapGuidanceManeuverCallOutMarkerEffect(

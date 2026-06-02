@@ -168,6 +168,27 @@ class MapGuidanceManeuverArrowGeometryTest {
         assertEquals(RoadClass.HIGHWAY, specs.single().roadClass)
     }
 
+    @Test
+    fun 矢印ヘッド倍率は基準ズームで等倍になる() {
+        val scale = guidanceArrowHeadScaleForZoom(zoom = 17f)
+
+        assertEquals(1f, scale)
+    }
+
+    @Test
+    fun 矢印ヘッド倍率は低ズームで縮小される() {
+        val scale = guidanceArrowHeadScaleForZoom(zoom = 16f)
+
+        assertTrue(scale < 1f)
+    }
+
+    @Test
+    fun 矢印ヘッド倍率は低ズームでも下限を下回らない() {
+        val scale = guidanceArrowHeadScaleForZoom(zoom = 12f)
+
+        assertEquals(0.5f, scale)
+    }
+
     private fun routePoints() = ROUTE_POINT_DISTANCES_METERS
         .map(::routePointAt)
         .toImmutableList()
