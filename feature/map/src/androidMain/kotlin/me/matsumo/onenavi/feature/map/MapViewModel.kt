@@ -30,17 +30,23 @@ import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuideImageGateway
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuideImageKey
 import me.matsumo.onenavi.core.repository.SearchRepository
 import me.matsumo.onenavi.feature.map.location.VehicleLocationDataSource
+import me.matsumo.onenavi.feature.map.state.ExtNavNavigationGuideImageLoader
 import me.matsumo.onenavi.feature.map.state.GuidanceVehicleLocationSelector
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
+import me.matsumo.onenavi.feature.map.state.NAVIGATION_GUIDE_IMAGE_VISIBILITY_METERS
+import me.matsumo.onenavi.feature.map.state.NavigationGuideImage
+import me.matsumo.onenavi.feature.map.state.NavigationGuideImageController
 import me.matsumo.onenavi.feature.map.state.RoutePreviewTopBarMode
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 import java.util.*
@@ -50,6 +56,7 @@ class MapViewModel(
     private val searchRepository: SearchRepository,
     private val newRouteManager: NewRouteManager,
     private val newGuidanceManager: NewGuidanceManager,
+    guideImageGateway: ExtNavGuideImageGateway,
     vehicleLocationDataSource: VehicleLocationDataSource,
 ) : ViewModel() {
 
@@ -114,6 +121,15 @@ class MapViewModel(
         popScreenState = ::popScreenState,
         replaceCurrentScreenState = ::replaceCurrentScreenState,
     )
+    private val guideImageController = NavigationGuideImageController(
+        loader = ExtNavNavigationGuideImageLoader(guideImageGateway),
+        scope = viewModelScope,
+        imageChanged = ::setNavigationGuideImage,
+    )
+
+    init {
+        observeNavigationGuideImageKey()
+    }
 
     fun onUiEvent(event: MapUiEvent) = uiEventDelegate.onUiEvent(event)
 
@@ -149,7 +165,30 @@ class MapViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        guideImageController.clear()
         newGuidanceManager.release()
+    }
+
+    private fun observeNavigationGuideImageKey() {
+        newGuidanceState
+            .map { guidanceState -> guidanceState.currentGuideImageKeyOrNull() }
+            .distinctUntilChanged()
+            .onEach { guideImageKey -> guideImageController.onGuideImageKeyChanged(guideImageKey) }
+            .launchIn(viewModelScope)
+    }
+
+    private fun setNavigationGuideImage(navigationGuideImage: NavigationGuideImage?) {
+        _uiState.update { uiState ->
+            uiState.copy(navigationGuideImage = navigationGuideImage)
+        }
+    }
+
+    private fun GuidanceState.currentGuideImageKeyOrNull(): GuideImageKey? {
+        val guiding = this as? GuidanceState.Guiding ?: return null
+        val banner = guiding.presentation.banner ?: return null
+        val isGuideImageVisible = banner.primary.distanceToManeuverMeters <= NAVIGATION_GUIDE_IMAGE_VISIBILITY_METERS
+        if (!isGuideImageVisible) return null
+        return banner.signpostImageKey
     }
 }
 

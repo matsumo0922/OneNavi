@@ -18,12 +18,14 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventId
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceLane
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceManeuver
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceRoute
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuideImageKey
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneConfidence
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneLayout
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneMark
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneSource
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.RouteAnchor
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacility
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepSignpost
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -124,6 +126,92 @@ class GuidancePresentationProjectorTest {
         val visualLanes = assertIs<LanePresentation.VisualLanes>(support.lane)
         val recommendedLane = visualLanes.lanes.first { lane -> lane.isActive }
         assertEquals(ManeuverModifier.RIGHT, recommendedLane.recommendedDirection)
+        assertEquals(ManeuverType.ARRIVE, presentation.banner?.followup?.type)
+    }
+
+    @Test
+    fun `3km 以内の主案内に紐付くレーンはバナー下段に乗る`() {
+        val guidanceRoute = GuidanceRoute(
+            totalDistanceMeters = 1_400.0,
+            totalDurationSeconds = 600,
+            tollTotalYen = null,
+            events = listOf(
+                maneuverEvent(
+                    id = "event-3",
+                    guidancePointIndex = 3,
+                    geometryMeters = 1_200.0,
+                    type = ManeuverType.TURN,
+                    modifier = ManeuverModifier.RIGHT,
+                    lane = markerLane(),
+                ),
+                maneuverEvent(
+                    id = "event-5",
+                    guidancePointIndex = 5,
+                    geometryMeters = 1_400.0,
+                    type = ManeuverType.ARRIVE,
+                ),
+            ).toImmutableList(),
+        )
+        val context = buildContext()
+
+        val presentation = project(guidanceRoute = guidanceRoute, context = context)
+
+        assertIs<BannerSupport.Lanes>(presentation.banner?.support)
+    }
+
+    @Test
+    fun `3km より遠い主案内に紐付くレーンはバナー下段に乗らない`() {
+        val guidanceRoute = GuidanceRoute(
+            totalDistanceMeters = 3_600.0,
+            totalDurationSeconds = 600,
+            tollTotalYen = null,
+            events = listOf(
+                maneuverEvent(
+                    id = "event-3",
+                    guidancePointIndex = 3,
+                    geometryMeters = 3_200.0,
+                    type = ManeuverType.TURN,
+                    modifier = ManeuverModifier.RIGHT,
+                    lane = markerLane(),
+                ),
+                maneuverEvent(
+                    id = "event-5",
+                    guidancePointIndex = 5,
+                    geometryMeters = 3_600.0,
+                    type = ManeuverType.ARRIVE,
+                ),
+            ).toImmutableList(),
+        )
+        val context = buildContext()
+
+        val presentation = project(guidanceRoute = guidanceRoute, context = context)
+
+        val support = assertIs<BannerSupport.Followup>(presentation.banner?.support)
+        assertEquals(ManeuverType.ARRIVE, support.maneuver.type)
+    }
+
+    @Test
+    fun `主案内の方面看板画像 key はバナーに乗る`() {
+        val imageKey = GuideImageKey(major = 101, minor = 123_456)
+        val guidanceRoute = GuidanceRoute(
+            totalDistanceMeters = 400.0,
+            totalDurationSeconds = 300,
+            tollTotalYen = null,
+            events = listOf(
+                maneuverEvent(
+                    id = "event-3",
+                    guidancePointIndex = 3,
+                    geometryMeters = 300.0,
+                    type = ManeuverType.TURN,
+                    signpostImageKey = imageKey,
+                ),
+            ).toImmutableList(),
+        )
+        val context = buildContext()
+
+        val presentation = project(guidanceRoute = guidanceRoute, context = context)
+
+        assertEquals(imageKey, presentation.banner?.signpostImageKey)
     }
 
     @Test
@@ -199,6 +287,7 @@ class GuidancePresentationProjectorTest {
         type: ManeuverType,
         modifier: ManeuverModifier = ManeuverModifier.STRAIGHT,
         lane: GuidanceLane? = null,
+        signpostImageKey: GuideImageKey? = null,
     ): GuidanceEvent = GuidanceEvent(
         id = GuidanceEventId(id),
         anchor = anchorAt(geometryMeters = geometryMeters, guidancePointIndex = guidancePointIndex),
@@ -208,8 +297,17 @@ class GuidancePresentationProjectorTest {
             intersectionName = null,
             exitNumber = null,
         ),
-        details = emptyDetails(facility = null).copy(lane = lane),
+        details = emptyDetails(facility = null).copy(
+            lane = lane,
+            signpost = signpostImageKey?.toSignpost(),
+        ),
         sourceRefs = persistentListOf(),
+    )
+
+    private fun GuideImageKey.toSignpost(): StepSignpost = StepSignpost(
+        primary = "東京方面",
+        secondary = null,
+        imageRef = this,
     )
 
     private fun facilityEvent(

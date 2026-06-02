@@ -272,6 +272,7 @@ private fun MapScreenContent(
             MapNavigationContent(
                 modifier = modifier,
                 guidanceState = guidanceState,
+                navigationGuideImage = uiState.navigationGuideImage,
                 hazeState = hazeState,
                 onUiEvent = onUiEvent,
             )

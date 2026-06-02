@@ -46,10 +46,14 @@ internal class GuidancePresentationProjector {
         currentRoadName: String?,
         timestampMillis: Long,
     ): GuidancePresentation {
-        val nextManeuver =
-            calloutOrNull(event = selection.nextPrimaryEvent, currentCumulativeMeters = currentCumulativeMeters)
-        val followupManeuver =
-            calloutOrNull(event = selection.followupPrimaryEvent, currentCumulativeMeters = currentCumulativeMeters)
+        val nextManeuver = calloutOrNull(
+            event = selection.nextPrimaryEvent,
+            currentCumulativeMeters = currentCumulativeMeters,
+        )
+        val followupManeuver = calloutOrNull(
+            event = selection.followupPrimaryEvent,
+            currentCumulativeMeters = currentCumulativeMeters,
+        )
         val listItems = listItems(
             guidanceRoute = guidanceRoute,
             selection = selection,
@@ -86,12 +90,16 @@ internal class GuidancePresentationProjector {
     ): ManeuverCallout? {
         val targetEvent = event ?: return null
         val primary = targetEvent.primary ?: return null
+
         return ManeuverCallout(
             type = primary.type,
             modifier = primary.modifier,
             location = targetEvent.anchor.location,
             geometryDistanceFromStartMeters = targetEvent.anchor.geometryDistanceFromStartMeters,
-            distanceToManeuverMeters = distanceToMeters(event = targetEvent, currentCumulativeMeters = currentCumulativeMeters),
+            distanceToManeuverMeters = distanceToMeters(
+                event = targetEvent,
+                currentCumulativeMeters = currentCumulativeMeters,
+            ),
             intersectionName = primary.intersectionName,
             exitNumber = primary.exitNumber,
             guidancePointIndex = targetEvent.anchor.sourceGuidancePointIndex ?: ManeuverCallout.NO_GUIDANCE_POINT_INDEX,
@@ -113,7 +121,10 @@ internal class GuidancePresentationProjector {
         hasMoreEvents: Boolean,
     ): ManeuverBanner? {
         val primaryCallout = primary ?: return null
-        val secondaryLabel = secondaryLabel(event = selection.nextPrimaryEvent, currentRoadName = currentRoadName)
+        val secondaryLabel = secondaryLabel(
+            event = selection.nextPrimaryEvent,
+            currentRoadName = currentRoadName,
+        )
         val support = bannerSupport(
             followupManeuver = followupManeuver,
             primaryEvent = selection.nextPrimaryEvent,
@@ -123,7 +134,9 @@ internal class GuidancePresentationProjector {
         return ManeuverBanner(
             primary = primaryCallout,
             secondaryLabel = secondaryLabel,
+            signpostImageKey = selection.nextPrimaryEvent?.details?.signpost?.imageRef,
             roadClass = currentRoadClass,
+            followup = followupManeuver,
             support = support,
             hasMoreEvents = hasMoreEvents,
         )
@@ -177,7 +190,7 @@ internal class GuidancePresentationProjector {
     }
 
     /**
-     * 次の主案内イベントがレーンを持ち、可視距離内に迫っていればバナー下段のレーン補助を作る。
+     * 次の主案内イベントがレーンを持ち、案内地点が近ければバナー下段のレーン補助を作る。
      *
      * 上段の案内地点と下段のレーン案内がずれると誤誘導になるため、バナーでは
      * [GuidanceSelection.nextPrimaryEvent] に付随するレーンだけを表示する。主案内を持たない
@@ -196,10 +209,11 @@ internal class GuidancePresentationProjector {
         val lane = event.details.lane ?: return null
         val geometryMeters = event.anchor.geometryDistanceFromStartMeters
         val distanceMeters = geometryMeters - currentCumulativeMeters
-        if (distanceMeters !in 0.0..LANE_GUIDANCE_VISIBILITY_METRES) return null
+        if (distanceMeters !in 0.0..BANNER_LANE_VISIBILITY_METRES) return null
 
         val recommendedDirection = primary.modifier
         val lanePresentation = laneFactory.create(lane = lane, recommendedDirection = recommendedDirection) ?: return null
+
         return BannerSupport.Lanes(lane = lanePresentation)
     }
 
@@ -228,6 +242,7 @@ internal class GuidancePresentationProjector {
     ): ImmutableList<GuidanceListItem> {
         val orderedEvents = selection.eventsAfterCurrent.sortedByDescending { event -> event.anchor.geometryDistanceFromStartMeters }
         val items = mutableListOf<GuidanceListItem>()
+
         for (event in orderedEvents) {
             val item = listItemOrNull(
                 event = event,
@@ -236,8 +251,10 @@ internal class GuidancePresentationProjector {
                 currentCumulativeMeters = currentCumulativeMeters,
                 timestampMillis = timestampMillis,
             ) ?: continue
+
             items += item
         }
+
         return items.toImmutableList()
     }
 
@@ -252,6 +269,7 @@ internal class GuidancePresentationProjector {
         timestampMillis: Long,
     ): GuidanceListItem? {
         val primary = event.primary
+
         if (primary != null && primary.type == ManeuverType.ARRIVE) return null
         if (primary != null) {
             return maneuverListItem(
@@ -263,7 +281,9 @@ internal class GuidancePresentationProjector {
                 timestampMillis = timestampMillis,
             )
         }
+
         if (event.details.facility == null) return null
+
         return facilityListItem(
             event = event,
             guidanceRoute = guidanceRoute,
@@ -284,13 +304,29 @@ internal class GuidancePresentationProjector {
     ): GuidanceListItem {
         val geometryMeters = event.anchor.geometryDistanceFromStartMeters
         val guidancePointIndex = event.anchor.sourceGuidancePointIndex ?: ManeuverCallout.NO_GUIDANCE_POINT_INDEX
+
         return GuidanceListItem(
             id = "maneuver-$guidancePointIndex",
-            icon = GuidanceListIcon.Maneuver(type = primary.type, modifier = primary.modifier),
+            icon = GuidanceListIcon.Maneuver(
+                type = primary.type,
+                modifier = primary.modifier,
+            ),
             title = maneuverTitle(primary),
-            detail = detail(event = event, guidanceRoute = guidanceRoute, context = context),
-            distanceMeters = distanceToMeters(event = event, currentCumulativeMeters = currentCumulativeMeters),
-            etaEpochMillis = etaEpochMillis(context = context, currentCumulativeMeters = currentCumulativeMeters, targetMeters = geometryMeters, timestampMillis = timestampMillis),
+            detail = detail(
+                event = event,
+                guidanceRoute = guidanceRoute,
+                context = context,
+            ),
+            distanceMeters = distanceToMeters(
+                event = event,
+                currentCumulativeMeters = currentCumulativeMeters,
+            ),
+            etaEpochMillis = etaEpochMillis(
+                context = context,
+                currentCumulativeMeters = currentCumulativeMeters,
+                targetMeters = geometryMeters,
+                timestampMillis = timestampMillis,
+            ),
             roadClass = context.roadClassAt(geometryMeters),
         )
     }
@@ -309,9 +345,21 @@ internal class GuidancePresentationProjector {
             id = event.id.value,
             icon = GuidanceListIcon.FacilityBadge(kind = requireNotNull(facility).kind),
             title = facility.name.takeIf { name -> name.isNotBlank() },
-            detail = detail(event = event, guidanceRoute = guidanceRoute, context = context),
-            distanceMeters = distanceToMeters(event = event, currentCumulativeMeters = currentCumulativeMeters),
-            etaEpochMillis = etaEpochMillis(context = context, currentCumulativeMeters = currentCumulativeMeters, targetMeters = geometryMeters, timestampMillis = timestampMillis),
+            detail = detail(
+                event = event,
+                guidanceRoute = guidanceRoute,
+                context = context,
+            ),
+            distanceMeters = distanceToMeters(
+                event = event,
+                currentCumulativeMeters = currentCumulativeMeters,
+            ),
+            etaEpochMillis = etaEpochMillis(
+                context = context,
+                currentCumulativeMeters = currentCumulativeMeters,
+                targetMeters = geometryMeters,
+                timestampMillis = timestampMillis,
+            ),
             roadClass = context.roadClassAt(geometryMeters),
         )
     }
@@ -338,7 +386,7 @@ internal class GuidancePresentationProjector {
     }
 
     /**
-     * フルリスト行のレーンを構築する。バナーと違い距離ゲートは掛けず、行が示す地点のレーンを出す。
+     * フルリスト行のレーンを構築する。行が示す地点のレーンを出す。
      *
      * @param event 対象イベント
      * @param context レーン矢印の向きを解決する geometry コンテキスト
@@ -350,6 +398,7 @@ internal class GuidancePresentationProjector {
     ): LanePresentation? {
         val lane = event.details.lane ?: return null
         val recommendedDirection = context.maneuverModifierAt(event.anchor.geometryDistanceFromStartMeters)
+
         return laneFactory.create(lane = lane, recommendedDirection = recommendedDirection)
     }
 
@@ -376,12 +425,13 @@ internal class GuidancePresentationProjector {
 
         val distanceToTarget = (targetMeters - currentCumulativeMeters).coerceAtLeast(0.0)
         val secondsToTarget = context.route.durationSeconds * (distanceToTarget / context.totalGeometryMetres)
+
         return timestampMillis + secondsToTarget.roundToInt().toLong() * MILLIS_PER_SECOND
     }
 
     private companion object {
-        /** バナー下段でレーンを表示し始める手前距離。 */
-        private const val LANE_GUIDANCE_VISIBILITY_METRES: Double = 800.0
+        /** バナー下段でレーンを表示し始める案内地点までの距離。 */
+        private const val BANNER_LANE_VISIBILITY_METRES: Double = 3_000.0
 
         /** 秒からミリ秒へ変換する係数。 */
         private const val MILLIS_PER_SECOND: Long = 1_000L
