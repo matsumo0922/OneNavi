@@ -4,7 +4,7 @@ import androidx.compose.runtime.Immutable
 
 /**
  * ナビゲーション中の UI 表示に必要な全情報を集約したデータクラス。
- * GuidanceSessionManager が Observer 群から収集し、StateFlow で公開する。
+ * 案内状態の集約層が StateFlow で公開する。
  *
  * @param currentManeuver 現在の（次に到達する）マニューバ情報。null は初期化中。
  * @param nextManeuver その次のマニューバ情報。null の場合は非表示。

@@ -42,7 +42,6 @@ androidxSqlite = "2.5.1"
 
 # Google
 googlePlaces = "5.1.1"
-googleNavigation = "7.6.1"
 playServicesMaps = "19.2.0"
 playReview = "2.0.2"
 playUpdate = "2.1.0"
@@ -174,7 +173,6 @@ firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 
 # Google
 google-places = { module = "com.google.android.libraries.places:places", version.ref = "googlePlaces" }
-google-navigation = { module = "com.google.android.libraries.navigation:navigation", version.ref = "googleNavigation" }
 play-services-maps = { module = "com.google.android.gms:play-services-maps", version.ref = "playServicesMaps" }
 play-services-location = { module = "com.google.android.gms:play-services-location", version = "21.3.0" }
 play-review = { module = "com.google.android.play:review-ktx", version.ref = "playReview" }
