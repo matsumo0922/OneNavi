@@ -385,7 +385,7 @@ private fun MapNavigationManeuverGuideImage(
     modifier: Modifier = Modifier,
 ) {
     Image(
-        modifier = modifier,
+        modifier = modifier.padding(horizontal = 24.dp),
         bitmap = guideImage.bitmap,
         contentDescription = null,
         contentScale = ContentScale.FillWidth,
@@ -471,4 +471,4 @@ private val ManeuverLaneIconSize = 36.dp
 private val ManeuverLaneIconSpacing = 12.dp
 
 /** 案内画像がバナー下段で占有できる最大高さ。 */
-private val ManeuverGuideImageMaxHeight = 180.dp
+private val ManeuverGuideImageMaxHeight = 240.dp

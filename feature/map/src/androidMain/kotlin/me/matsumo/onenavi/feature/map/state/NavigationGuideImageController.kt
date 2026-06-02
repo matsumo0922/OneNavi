@@ -19,17 +19,12 @@ internal class NavigationGuideImageController(
     private val imageChanged: (NavigationGuideImage?) -> Unit,
     private val maxCacheSize: Int = NAVIGATION_GUIDE_IMAGE_CACHE_MAX_SIZE,
 ) {
-    private val cache = object : LinkedHashMap<GuideImageKey, NavigationGuideImage?>(
-        maxCacheSize,
-        NAVIGATION_GUIDE_IMAGE_CACHE_LOAD_FACTOR,
-        true,
-    ) {
-        override fun removeEldestEntry(
-            eldestEntry: MutableMap.MutableEntry<GuideImageKey, NavigationGuideImage?>,
-        ): Boolean {
+    private val cache = object : LinkedHashMap<GuideImageKey, NavigationGuideImage?>(maxCacheSize, NAVIGATION_GUIDE_IMAGE_CACHE_LOAD_FACTOR, true) {
+        override fun removeEldestEntry(eldestEntry: MutableMap.MutableEntry<GuideImageKey, NavigationGuideImage?>): Boolean {
             return size > maxCacheSize
         }
     }
+
     private var currentKey: GuideImageKey? = null
     private var fetchJob: Job? = null
 
