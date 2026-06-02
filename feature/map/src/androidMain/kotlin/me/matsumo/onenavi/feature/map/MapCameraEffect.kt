@@ -128,6 +128,7 @@ internal fun MapCameraEffect(
         screenState,
         routePreviewState,
         uiState.isNavigationRoutePreviewing,
+        guidanceState.routeOverviewKey(),
     ) {
         val ready = routePreviewState as? RoutePreviewState.Ready
         when {
@@ -216,6 +217,15 @@ private const val GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS = 100
 
 /** 案内地点を通過済みと扱う残距離（m）。 */
 private const val GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS = 0
+
+private fun GuidanceState.routeOverviewKey(): String? = when (this) {
+    is GuidanceState.Guiding -> route.id
+    is GuidanceState.Rerouting -> previousRoute.id
+    GuidanceState.Arrived,
+    is GuidanceState.Failed,
+    GuidanceState.Idle,
+    -> null
+}
 
 private fun remainingRouteOverviewPoints(
     route: RouteDetail,
