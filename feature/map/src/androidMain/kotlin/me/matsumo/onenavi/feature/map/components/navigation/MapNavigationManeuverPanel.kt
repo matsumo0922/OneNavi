@@ -57,6 +57,7 @@ import me.matsumo.onenavi.core.resource.home_map_navigation_followup
 import me.matsumo.onenavi.core.resource.home_map_navigation_rerouting_title
 import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
 import me.matsumo.onenavi.core.ui.theme.RouteColors
+import me.matsumo.onenavi.feature.map.state.NAVIGATION_GUIDE_IMAGE_VISIBILITY_METERS
 import me.matsumo.onenavi.feature.map.state.NavigationGuideImage
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.floor
@@ -79,12 +80,24 @@ internal fun MapNavigationManeuverPanel(
     var showPanel by rememberSaveable { mutableStateOf(false) }
 
     val laneCells = bannerLaneCells(banner.support)
-    val followupCallout = bannerFollowupCallout(banner.support)
+    val followupCallout = banner.followup ?: bannerFollowupCallout(banner.support)
+    val hasGuideImageKey = banner.signpostImageKey != null
+    val isGuideImageInVisibleRange = banner.primary.distanceToManeuverMeters <= NAVIGATION_GUIDE_IMAGE_VISIBILITY_METERS
+    val visibleGuideImage = guideImage.takeIf { isGuideImageInVisibleRange }
+    val shouldPreferFollowupHint = hasGuideImageKey && !isGuideImageInVisibleRange
     val hasLanes = laneCells != null
+    val hasPrioritizedHint = shouldPreferFollowupHint && followupCallout != null
     val hasHint = followupCallout != null
-    val hasGuideImage = guideImage != null
+    val hasGuideImage = visibleGuideImage != null
     val topShape = when {
-        hasGuideImage || hasLanes || showPanel -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        hasGuideImage || showPanel -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        hasPrioritizedHint -> RoundedCornerShape(
+            topStart = 16.dp,
+            topEnd = 16.dp,
+            bottomStart = 0.dp,
+            bottomEnd = 16.dp,
+        )
+        hasLanes -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
         hasHint -> RoundedCornerShape(
             topStart = 16.dp,
             topEnd = 16.dp,
@@ -126,7 +139,8 @@ internal fun MapNavigationManeuverPanel(
         } else {
             MapNavigationManeuverBottomSection(
                 modifier = Modifier.fillMaxWidth(),
-                guideImage = guideImage,
+                guideImage = visibleGuideImage,
+                shouldPreferFollowupHint = shouldPreferFollowupHint,
                 laneCells = laneCells,
                 followupCallout = followupCallout,
                 followupLabel = followupLabel,
@@ -315,6 +329,7 @@ private fun MapNavigationReroutingTopSection(
 @Composable
 private fun MapNavigationManeuverBottomSection(
     guideImage: NavigationGuideImage?,
+    shouldPreferFollowupHint: Boolean,
     laneCells: ImmutableList<LaneCell>?,
     followupCallout: ManeuverCallout?,
     followupLabel: String,
@@ -334,6 +349,27 @@ private fun MapNavigationManeuverBottomSection(
                         .fillMaxWidth()
                         .heightIn(max = ManeuverGuideImageMaxHeight),
                     guideImage = guideImage,
+                )
+            }
+        }
+
+        shouldPreferFollowupHint && followupCallout != null -> {
+            val panelColors = RouteColors.maneuver(roadClass)
+            Surface(
+                modifier = modifier.wrapContentWidth(Alignment.Start),
+                shape = RoundedCornerShape(
+                    topStart = 0.dp,
+                    topEnd = 0.dp,
+                    bottomStart = 16.dp,
+                    bottomEnd = 16.dp,
+                ),
+                color = panelColors.container,
+            ) {
+                MapNavigationManeuverFollowupHint(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    maneuver = followupCallout,
+                    label = followupLabel,
+                    contentColor = panelColors.onContainer,
                 )
             }
         }

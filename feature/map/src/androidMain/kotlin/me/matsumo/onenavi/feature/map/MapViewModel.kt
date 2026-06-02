@@ -44,6 +44,7 @@ import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
+import me.matsumo.onenavi.feature.map.state.NAVIGATION_GUIDE_IMAGE_VISIBILITY_METERS
 import me.matsumo.onenavi.feature.map.state.NavigationGuideImage
 import me.matsumo.onenavi.feature.map.state.NavigationGuideImageController
 import me.matsumo.onenavi.feature.map.state.RoutePreviewTopBarMode
@@ -184,7 +185,10 @@ class MapViewModel(
 
     private fun GuidanceState.currentGuideImageKeyOrNull(): GuideImageKey? {
         val guiding = this as? GuidanceState.Guiding ?: return null
-        return guiding.presentation.banner?.signpostImageKey
+        val banner = guiding.presentation.banner ?: return null
+        val isGuideImageVisible = banner.primary.distanceToManeuverMeters <= NAVIGATION_GUIDE_IMAGE_VISIBILITY_METERS
+        if (!isGuideImageVisible) return null
+        return banner.signpostImageKey
     }
 }
 

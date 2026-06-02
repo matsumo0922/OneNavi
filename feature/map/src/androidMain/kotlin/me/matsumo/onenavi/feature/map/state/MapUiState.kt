@@ -51,3 +51,6 @@ data class NavigationGuideImage(
     val key: GuideImageKey,
     val bitmap: ImageBitmap,
 )
+
+/** 案内画像を表示し始める案内地点までの距離 (m)。 */
+internal const val NAVIGATION_GUIDE_IMAGE_VISIBILITY_METERS: Int = 3_000

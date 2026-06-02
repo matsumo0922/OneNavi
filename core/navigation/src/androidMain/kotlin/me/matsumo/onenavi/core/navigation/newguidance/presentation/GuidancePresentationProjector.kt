@@ -65,6 +65,7 @@ internal class GuidancePresentationProjector {
             primary = nextManeuver,
             followupManeuver = followupManeuver,
             selection = selection,
+            currentCumulativeMeters = currentCumulativeMeters,
             currentRoadClass = currentRoadClass,
             currentRoadName = currentRoadName,
             hasMoreEvents = listItems.isNotEmpty(),
@@ -114,6 +115,7 @@ internal class GuidancePresentationProjector {
         primary: ManeuverCallout?,
         followupManeuver: ManeuverCallout?,
         selection: GuidanceSelection,
+        currentCumulativeMeters: Double,
         currentRoadClass: RoadClass,
         currentRoadName: String?,
         hasMoreEvents: Boolean,
@@ -126,6 +128,7 @@ internal class GuidancePresentationProjector {
         val support = bannerSupport(
             followupManeuver = followupManeuver,
             primaryEvent = selection.nextPrimaryEvent,
+            currentCumulativeMeters = currentCumulativeMeters,
         )
 
         return ManeuverBanner(
@@ -133,6 +136,7 @@ internal class GuidancePresentationProjector {
             secondaryLabel = secondaryLabel,
             signpostImageKey = selection.nextPrimaryEvent?.details?.signpost?.imageRef,
             roadClass = currentRoadClass,
+            followup = followupManeuver,
             support = support,
             hasMoreEvents = hasMoreEvents,
         )
@@ -167,13 +171,18 @@ internal class GuidancePresentationProjector {
      *
      * @param followupManeuver フォローアップの主案内。無ければ null
      * @param primaryEvent 上段に出す次の主案内イベント。無ければ null
+     * @param currentCumulativeMeters 現在地の geometry 累積距離
      * @return 下段の補助。出せるものが無ければ null
      */
     private fun bannerSupport(
         followupManeuver: ManeuverCallout?,
         primaryEvent: GuidanceEvent?,
+        currentCumulativeMeters: Double,
     ): BannerSupport? {
-        val laneSupport = bannerLaneSupport(primaryEvent = primaryEvent)
+        val laneSupport = bannerLaneSupport(
+            primaryEvent = primaryEvent,
+            currentCumulativeMeters = currentCumulativeMeters,
+        )
         if (laneSupport != null) return laneSupport
 
         val followup = followupManeuver ?: return null
@@ -181,21 +190,26 @@ internal class GuidancePresentationProjector {
     }
 
     /**
-     * 次の主案内イベントがレーンを持っていればバナー下段のレーン補助を作る。
+     * 次の主案内イベントがレーンを持ち、案内地点が近ければバナー下段のレーン補助を作る。
      *
      * 上段の案内地点と下段のレーン案内がずれると誤誘導になるため、バナーでは
      * [GuidanceSelection.nextPrimaryEvent] に付随するレーンだけを表示する。主案内を持たない
      * レーンイベントは semantic データとして残すが、ここでは表示しない。
      *
      * @param primaryEvent 上段に出す次の主案内イベント。無ければ null
+     * @param currentCumulativeMeters 現在地の geometry 累積距離
      * @return レーン補助。表示対象が無い場合は null
      */
     private fun bannerLaneSupport(
         primaryEvent: GuidanceEvent?,
+        currentCumulativeMeters: Double,
     ): BannerSupport? {
         val event = primaryEvent ?: return null
         val primary = event.primary ?: return null
         val lane = event.details.lane ?: return null
+        val geometryMeters = event.anchor.geometryDistanceFromStartMeters
+        val distanceMeters = geometryMeters - currentCumulativeMeters
+        if (distanceMeters !in 0.0..BANNER_LANE_VISIBILITY_METRES) return null
 
         val recommendedDirection = primary.modifier
         val lanePresentation = laneFactory.create(lane = lane, recommendedDirection = recommendedDirection) ?: return null
@@ -416,6 +430,9 @@ internal class GuidancePresentationProjector {
     }
 
     private companion object {
+        /** バナー下段でレーンを表示し始める案内地点までの距離。 */
+        private const val BANNER_LANE_VISIBILITY_METRES: Double = 3_000.0
+
         /** 秒からミリ秒へ変換する係数。 */
         private const val MILLIS_PER_SECOND: Long = 1_000L
     }
