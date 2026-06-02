@@ -41,8 +41,8 @@ internal fun MapNavigationContent(
     val rerouting = guidanceState as? GuidanceState.Rerouting
     val banner = guiding?.presentation?.banner
     val shouldShowTopPanel = (guiding != null && banner != null) || rerouting != null
+    val etaRoute = guiding?.route ?: rerouting?.previousRoute
     val etaProgress = guiding?.progress ?: rerouting?.previousProgress
-    val etaCongestionSegments = guiding?.route?.congestionSegments ?: rerouting?.previousRoute?.congestionSegments
 
     NavigationEventHandler(
         state = navigationState,
@@ -94,7 +94,7 @@ internal fun MapNavigationContent(
             }
         }
 
-        if (etaProgress != null && etaCongestionSegments != null) {
+        if (etaProgress != null && etaRoute != null) {
             MapNavigationEtaCard(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -105,7 +105,9 @@ internal fun MapNavigationContent(
                     .navigationBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 16.dp),
                 progress = etaProgress,
-                congestionSegments = etaCongestionSegments,
+                geometry = etaRoute.geometry,
+                roadClassSegments = etaRoute.roadClassSegments,
+                congestionSegments = etaRoute.congestionSegments,
                 onCloseClicked = {},
                 onAlternativesClicked = {},
                 onAddWaypointClicked = {},

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -35,6 +36,8 @@ import kotlinx.datetime.toLocalDateTime
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.model.CongestionSegment
+import me.matsumo.onenavi.core.model.RoadClassSegment
+import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_day
@@ -47,6 +50,7 @@ import me.matsumo.onenavi.core.resource.home_map_navigation_eta_alternatives
 import me.matsumo.onenavi.core.resource.home_map_navigation_eta_close
 import me.matsumo.onenavi.core.resource.home_map_navigation_eta_detour
 import me.matsumo.onenavi.core.resource.home_map_navigation_eta_more
+import me.matsumo.onenavi.core.ui.navigation.RouteTrafficBar
 import me.matsumo.onenavi.feature.map.state.NavigationTrafficLevel
 import me.matsumo.onenavi.feature.map.state.calculateNavigationTrafficLevel
 import org.jetbrains.compose.resources.stringResource
@@ -61,6 +65,8 @@ import kotlin.time.Instant
 @Composable
 internal fun MapNavigationEtaCard(
     progress: GuidanceProgress,
+    geometry: ImmutableList<RoutePoint>,
+    roadClassSegments: ImmutableList<RoadClassSegment>,
     congestionSegments: ImmutableList<CongestionSegment>,
     onCloseClicked: () -> Unit,
     onAlternativesClicked: () -> Unit,
@@ -117,6 +123,14 @@ internal fun MapNavigationEtaCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            RouteTrafficBar(
+                modifier = Modifier.fillMaxWidth(),
+                geometry = geometry,
+                currentCumulativeMeters = progress.currentCumulativeMeters,
+                roadClassSegments = roadClassSegments,
+                congestionSegments = congestionSegments,
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Bottom,
@@ -129,14 +143,16 @@ internal fun MapNavigationEtaCard(
                     fontWeight = FontWeight.Bold,
                 )
 
+                Spacer(
+                    modifier = Modifier.weight(1f),
+                )
+
                 Text(
                     text = summaryText,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyLarge,
                 )
             }
-
-            // TODO: 横線上でルート沿いの渋滞を表示
 
             MapNavigationEtaActionRow(
                 modifier = Modifier

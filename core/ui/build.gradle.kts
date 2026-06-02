@@ -29,6 +29,10 @@ kotlin {
             api(libs.lexilabs.basic.ads)
             api(libs.play.service.ads)
         }
+
+        androidUnitTest.dependencies {
+            implementation(kotlin("test"))
+        }
     }
 }
 
