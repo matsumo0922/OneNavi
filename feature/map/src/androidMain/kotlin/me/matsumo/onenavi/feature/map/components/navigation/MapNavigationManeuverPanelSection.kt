@@ -31,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -49,7 +50,12 @@ import kotlinx.coroutines.flow.collectLatest
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.common.formatYen
+import me.matsumo.onenavi.core.model.ManeuverModifier
+import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.RoadClass
+import me.matsumo.onenavi.core.model.RouteDetail
+import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListDetail
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListIcon
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListItem
@@ -57,6 +63,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.presentation.LanePresentat
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.HighwayBoundary
 import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.home_map_navigation_panel_destination
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_direction_sign
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_entrance
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_exit
@@ -66,17 +73,21 @@ import me.matsumo.onenavi.core.resource.home_map_navigation_panel_facility_pa
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_facility_sa
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_facility_toll_gate_badge
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_guidance_point
+import me.matsumo.onenavi.core.resource.home_map_navigation_panel_waypoint
 import me.matsumo.onenavi.core.resource.home_map_route_origin_current_location
 import me.matsumo.onenavi.core.resource.ic_vehicle_puck
 import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
 import me.matsumo.onenavi.core.ui.theme.RouteColors
+import me.matsumo.onenavi.feature.map.state.MapGeodesy
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.seconds
 
 @Suppress("UnusedParameter")
 @Composable
 internal fun MapNavigationManeuverPanelSection(
+    route: RouteDetail,
     listItems: ImmutableList<GuidanceListItem>,
     hazeState: HazeState,
     meterLabel: String,
@@ -85,14 +96,24 @@ internal fun MapNavigationManeuverPanelSection(
     hourLabel: String,
     minuteLabel: String,
     timestampMillis: Long,
+    currentCumulativeMeters: Double,
     elapsedSeconds: Int,
     traveledMeters: Int,
     modifier: Modifier = Modifier,
 ) {
     val screenHeight = LocalWindowInfo.current.containerDpSize.height
-    val roadClass = listItems.lastOrNull()?.roadClass ?: RoadClass.ORDINARY
+    val panelItems = remember(route, listItems, currentCumulativeMeters, timestampMillis) {
+        buildNavigationPanelItems(
+            route = route,
+            listItems = listItems,
+            currentCumulativeMeters = currentCumulativeMeters,
+            timestampMillis = timestampMillis,
+        )
+    }
+    val primaryGuidanceItemId = listItems.lastOrNull()?.id
+    val roadClass = panelItems.lastOrNull()?.roadClass ?: RoadClass.ORDINARY
     val panelColors = RouteColors.maneuver(roadClass)
-    val bottomIndex = listItems.size
+    val bottomIndex = panelItems.size
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = bottomIndex)
     val shape = RoundedCornerShape(
         topStart = 0.dp,
@@ -121,20 +142,33 @@ internal fun MapNavigationManeuverPanelSection(
             state = listState,
         ) {
             itemsIndexed(
-                items = listItems,
+                items = panelItems,
                 key = { _, item -> item.id },
-            ) { index, item ->
-                MapNavigationGuidancePanelRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    item = item,
-                    meterLabel = meterLabel,
-                    kilometerLabel = kilometerLabel,
-                    dayLabel = dayLabel,
-                    hourLabel = hourLabel,
-                    minuteLabel = minuteLabel,
-                    timestampMillis = timestampMillis,
-                    isPrimary = index == listItems.lastIndex,
-                )
+            ) { _, item ->
+                when (item) {
+                    is NavigationPanelGuidanceItem -> MapNavigationGuidancePanelRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        item = item.guidanceItem,
+                        meterLabel = meterLabel,
+                        kilometerLabel = kilometerLabel,
+                        dayLabel = dayLabel,
+                        hourLabel = hourLabel,
+                        minuteLabel = minuteLabel,
+                        timestampMillis = timestampMillis,
+                        isPrimary = item.guidanceItem.id == primaryGuidanceItemId,
+                    )
+
+                    is NavigationPanelStopItem -> MapNavigationStopPanelRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        item = item,
+                        meterLabel = meterLabel,
+                        kilometerLabel = kilometerLabel,
+                        dayLabel = dayLabel,
+                        hourLabel = hourLabel,
+                        minuteLabel = minuteLabel,
+                        timestampMillis = timestampMillis,
+                    )
+                }
             }
 
             item(key = "footer") {
@@ -203,6 +237,259 @@ private suspend fun LazyListState.scheduleReturnOnDragFinished(
 private fun LazyListState.isBottomReached(bottomIndex: Int): Boolean {
     val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return true
     return lastVisibleIndex >= bottomIndex
+}
+
+/**
+ * 案内パネルに表示する行の共通モデル。
+ */
+@Immutable
+private sealed interface NavigationPanelItem {
+    val id: String
+    val distanceMeters: Int
+    val roadClass: RoadClass
+}
+
+/**
+ * 通常の案内地点行。
+ *
+ * @property guidanceItem 表示元の案内地点。
+ */
+@Immutable
+private data class NavigationPanelGuidanceItem(
+    val guidanceItem: GuidanceListItem,
+) : NavigationPanelItem {
+    override val id: String = guidanceItem.id
+    override val distanceMeters: Int = guidanceItem.distanceMeters
+    override val roadClass: RoadClass = guidanceItem.roadClass
+}
+
+/**
+ * 経由地または目的地の行。
+ *
+ * @property id LazyColumn 用の安定 ID。
+ * @property title 地点名。空の場合は UI で既定文言を表示する。
+ * @property waypointNumber 経由地番号。目的地では null。
+ * @property isDestination 目的地行なら true。
+ * @property distanceMeters 現在位置から地点までの残距離。
+ * @property etaEpochMillis 推定到着時刻。算出できなければ null。
+ * @property roadClass 地点付近の道路種別。
+ */
+@Immutable
+private data class NavigationPanelStopItem(
+    override val id: String,
+    val title: String,
+    val waypointNumber: Int?,
+    val isDestination: Boolean,
+    override val distanceMeters: Int,
+    val etaEpochMillis: Long?,
+    override val roadClass: RoadClass,
+) : NavigationPanelItem
+
+/**
+ * ルート上の停車地点候補。
+ *
+ * @property id LazyColumn 用の安定 ID。
+ * @property title 地点名。空の場合は UI で既定文言を表示する。
+ * @property waypointNumber 経由地番号。目的地では null。
+ * @property isDestination 目的地候補なら true。
+ * @property point 地点座標。
+ */
+@Immutable
+private data class NavigationPanelStopCandidate(
+    val id: String,
+    val title: String,
+    val waypointNumber: Int?,
+    val isDestination: Boolean,
+    val point: RoutePoint,
+)
+
+private fun buildNavigationPanelItems(
+    route: RouteDetail,
+    listItems: ImmutableList<GuidanceListItem>,
+    currentCumulativeMeters: Double,
+    timestampMillis: Long,
+): List<NavigationPanelItem> {
+    val panelItems = mutableListOf<NavigationPanelItem>()
+    for (listItem in listItems) {
+        panelItems += NavigationPanelGuidanceItem(guidanceItem = listItem)
+    }
+    panelItems += buildNavigationStopPanelItems(
+        route = route,
+        currentCumulativeMeters = currentCumulativeMeters,
+        timestampMillis = timestampMillis,
+    )
+    return panelItems.sortedByDescending { item -> item.distanceMeters }
+}
+
+private fun buildNavigationStopPanelItems(
+    route: RouteDetail,
+    currentCumulativeMeters: Double,
+    timestampMillis: Long,
+): List<NavigationPanelStopItem> {
+    if (route.geometry.isEmpty()) return emptyList()
+
+    val cumulativeMeters = cumulativeMeters(route.geometry)
+    val totalGeometryMeters = cumulativeMeters.last()
+    val stopItems = mutableListOf<NavigationPanelStopItem>()
+
+    for (stopCandidate in route.navigationStopCandidates()) {
+        val stopItem = stopCandidate.toNavigationPanelStopItem(
+            route = route,
+            cumulativeMeters = cumulativeMeters,
+            totalGeometryMeters = totalGeometryMeters,
+            currentCumulativeMeters = currentCumulativeMeters,
+            timestampMillis = timestampMillis,
+        )
+        if (stopItem != null) {
+            stopItems += stopItem
+        }
+    }
+
+    return stopItems
+}
+
+private fun RouteDetail.navigationStopCandidates(): List<NavigationPanelStopCandidate> {
+    val stopCandidates = mutableListOf<NavigationPanelStopCandidate>()
+
+    for (waypointIndex in intermediateWaypoints.indices) {
+        val waypointNumber = waypointIndex + 1
+        val point = intermediateWaypoints[waypointIndex]
+        val displayWaypoint = routeWaypoints.displayPlaceForPoint(
+            point = point,
+            fallbackIndex = waypointNumber,
+        )
+        stopCandidates += NavigationPanelStopCandidate(
+            id = "waypoint:$waypointNumber:${point.latitude}:${point.longitude}",
+            title = displayWaypoint.name,
+            waypointNumber = waypointNumber,
+            isDestination = false,
+            point = point,
+        )
+    }
+
+    val destinationWaypoint = routeWaypoints.displayPlaceForPoint(
+        point = destination,
+        fallbackIndex = routeWaypoints.lastIndex,
+    )
+    stopCandidates += NavigationPanelStopCandidate(
+        id = "destination:${destination.latitude}:${destination.longitude}",
+        title = destinationWaypoint.name,
+        waypointNumber = null,
+        isDestination = true,
+        point = destination,
+    )
+
+    return stopCandidates
+}
+
+private fun NavigationPanelStopCandidate.toNavigationPanelStopItem(
+    route: RouteDetail,
+    cumulativeMeters: DoubleArray,
+    totalGeometryMeters: Double,
+    currentCumulativeMeters: Double,
+    timestampMillis: Long,
+): NavigationPanelStopItem? {
+    val targetIndex = nearestGeometryIndex(
+        geometry = route.geometry,
+        point = point,
+    )
+    val targetMeters = cumulativeMeters[targetIndex]
+    val shouldHidePassedWaypoint = !isDestination && targetMeters <= currentCumulativeMeters + PASSED_STOP_HIDE_MARGIN_METERS
+    if (shouldHidePassedWaypoint) return null
+
+    val distanceMeters = (targetMeters - currentCumulativeMeters).coerceAtLeast(0.0).roundToInt()
+    return NavigationPanelStopItem(
+        id = id,
+        title = title,
+        waypointNumber = waypointNumber,
+        isDestination = isDestination,
+        distanceMeters = distanceMeters,
+        etaEpochMillis = stopEtaEpochMillis(
+            route = route,
+            totalGeometryMeters = totalGeometryMeters,
+            currentCumulativeMeters = currentCumulativeMeters,
+            targetMeters = targetMeters,
+            timestampMillis = timestampMillis,
+        ),
+        roadClass = route.roadClassAt(pointIndex = targetIndex),
+    )
+}
+
+private fun List<RouteWaypoint>.displayPlaceForPoint(
+    point: RoutePoint,
+    fallbackIndex: Int,
+): RouteWaypoint.Place {
+    val fallbackWaypoint = getOrNull(fallbackIndex) as? RouteWaypoint.Place
+    val matchedWaypoint = fallbackWaypoint ?: findPlaceNear(point = point)
+    return RouteWaypoint.Place(
+        name = matchedWaypoint?.name.orEmpty(),
+        latitude = point.latitude,
+        longitude = point.longitude,
+    )
+}
+
+private fun List<RouteWaypoint>.findPlaceNear(point: RoutePoint): RouteWaypoint.Place? {
+    for (waypoint in this) {
+        val place = waypoint as? RouteWaypoint.Place ?: continue
+        val distanceMeters = MapGeodesy.haversineMeters(place.toRoutePoint(), point)
+        if (distanceMeters <= WAYPOINT_NAME_MATCH_DISTANCE_METERS) return place
+    }
+    return null
+}
+
+private fun RouteWaypoint.toRoutePoint(): RoutePoint = RoutePoint(
+    latitude = latitude,
+    longitude = longitude,
+)
+
+private fun cumulativeMeters(geometry: List<RoutePoint>): DoubleArray {
+    val cumulativeMeters = DoubleArray(geometry.size)
+    for (pointIndex in 1 until geometry.size) {
+        cumulativeMeters[pointIndex] = cumulativeMeters[pointIndex - 1] +
+            MapGeodesy.haversineMeters(geometry[pointIndex - 1], geometry[pointIndex])
+    }
+    return cumulativeMeters
+}
+
+private fun nearestGeometryIndex(
+    geometry: List<RoutePoint>,
+    point: RoutePoint,
+): Int {
+    var nearestIndex = 0
+    var nearestDistanceMeters = Double.POSITIVE_INFINITY
+
+    for (pointIndex in geometry.indices) {
+        val distanceMeters = MapGeodesy.haversineMeters(geometry[pointIndex], point)
+        if (distanceMeters < nearestDistanceMeters) {
+            nearestIndex = pointIndex
+            nearestDistanceMeters = distanceMeters
+        }
+    }
+
+    return nearestIndex
+}
+
+private fun stopEtaEpochMillis(
+    route: RouteDetail,
+    totalGeometryMeters: Double,
+    currentCumulativeMeters: Double,
+    targetMeters: Double,
+    timestampMillis: Long,
+): Long? {
+    if (route.durationSeconds <= 0.0 || totalGeometryMeters <= 0.0) return null
+
+    val distanceToTargetMeters = (targetMeters - currentCumulativeMeters).coerceAtLeast(0.0)
+    val secondsToTarget = route.durationSeconds * (distanceToTargetMeters / totalGeometryMeters)
+    return timestampMillis + secondsToTarget.roundToInt().toLong() * MILLIS_PER_SECOND.toLong()
+}
+
+private fun RouteDetail.roadClassAt(pointIndex: Int): RoadClass {
+    for (segment in roadClassSegments) {
+        val startPointIndex = minOf(segment.startPointIndex, segment.endPointIndex)
+        val endPointIndex = maxOf(segment.startPointIndex, segment.endPointIndex)
+        if (pointIndex in startPointIndex..endPointIndex) return segment.roadClass
+    }
+    return roadClassSegments.lastOrNull()?.roadClass ?: RoadClass.ORDINARY
 }
 
 @Composable
@@ -477,6 +764,178 @@ private fun MapNavigationGuidancePanelRow(
 }
 
 @Composable
+private fun MapNavigationStopPanelRow(
+    item: NavigationPanelStopItem,
+    meterLabel: String,
+    kilometerLabel: String,
+    dayLabel: String,
+    hourLabel: String,
+    minuteLabel: String,
+    timestampMillis: Long,
+    modifier: Modifier = Modifier,
+) {
+    val distanceText = remember(item.distanceMeters, meterLabel, kilometerLabel) {
+        formatPanelDistance(
+            meters = item.distanceMeters.toDouble(),
+            meterLabel = meterLabel,
+            kilometerLabel = kilometerLabel,
+        )
+    }
+    val etaText = remember(item.etaEpochMillis, timestampMillis, dayLabel, hourLabel, minuteLabel) {
+        panelDurationText(
+            etaEpochMillis = item.etaEpochMillis,
+            timestampMillis = timestampMillis,
+            dayLabel = dayLabel,
+            hourLabel = hourLabel,
+            minuteLabel = minuteLabel,
+        )
+    }
+    val title = item.panelTitle()
+    val panelColors = RouteColors.maneuver(item.roadClass)
+    val timelineColor = guidancePanelTimelineColor(item.roadClass)
+
+    Box(
+        modifier = modifier.heightIn(min = GuidancePanelRowMinHeight),
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(
+                    start = 20.dp,
+                    end = 16.dp,
+                )
+                .fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .border(
+                            width = 4.dp,
+                            color = timelineColor,
+                            shape = CircleShape,
+                        )
+                        .background(MaterialTheme.colorScheme.surfaceContainer),
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.weight(1f),
+                    color = panelColors.onPrimary,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .height(GuidancePanelRowMinHeight)
+                        .width(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    VerticalDivider(
+                        modifier = Modifier
+                            .requiredHeight(GuidancePanelRowMinHeight + 6.dp)
+                            .offset(y = 1.dp),
+                        color = timelineColor,
+                        thickness = 8.dp,
+                    )
+                }
+
+                MapNavigationStopPanelIcon(
+                    modifier = Modifier.size(40.dp),
+                    item = item,
+                    tint = panelColors.onPrimary,
+                )
+
+                Text(
+                    modifier = Modifier.weight(1f),
+                    text = title,
+                    color = panelColors.onPrimary,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
+                Column(
+                    modifier = Modifier.widthIn(min = 64.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    if (etaText != null) {
+                        Text(
+                            text = etaText,
+                            color = panelColors.onPrimary,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                        )
+                    }
+
+                    Text(
+                        text = distanceText,
+                        color = panelColors.onPrimary,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapNavigationStopPanelIcon(
+    item: NavigationPanelStopItem,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        if (item.isDestination) {
+            ManeuverIcon(
+                modifier = Modifier.size(34.dp),
+                type = ManeuverType.ARRIVE,
+                maneuverModifier = ManeuverModifier.STRAIGHT,
+                contentDescription = null,
+                tint = tint,
+            )
+        } else {
+            Surface(
+                modifier = Modifier.size(30.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                ),
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = item.waypointNumber?.toString().orEmpty(),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun MapNavigationGuidancePanelDetail(
     detail: GuidanceListDetail,
     contentColor: Color,
@@ -638,6 +1097,16 @@ private fun GuidanceListItem.panelTitle(): String {
     return title?.takeIf { value -> value.isNotBlank() } ?: fallbackTitle
 }
 
+@Composable
+private fun NavigationPanelStopItem.panelTitle(): String {
+    val fallbackTitle = if (isDestination) {
+        stringResource(Res.string.home_map_navigation_panel_destination)
+    } else {
+        stringResource(Res.string.home_map_navigation_panel_waypoint, waypointNumber ?: 0)
+    }
+    return title.takeIf { value -> value.isNotBlank() } ?: fallbackTitle
+}
+
 /** 境界種別ごとの表示文字列リソースを返す。 */
 private fun HighwayBoundary.boundaryLabel() = when (this) {
     HighwayBoundary.ENTRANCE -> Res.string.home_map_navigation_panel_entrance
@@ -665,6 +1134,12 @@ private val GuidancePanelSubtitleLaneSpacing = 6.dp
 
 /** 最新案内行の背景に使う道路種別色の透明度。 */
 private const val GUIDANCE_PANEL_PRIMARY_BACKGROUND_ALPHA = 0.24f
+
+/** 通過済み経由地としてパネルから隠すため現在位置に足す余裕距離。 */
+private const val PASSED_STOP_HIDE_MARGIN_METERS: Double = 30.0
+
+/** 経由地名を既存地点から引き継ぐため同一点とみなす距離。 */
+private const val WAYPOINT_NAME_MATCH_DISTANCE_METERS: Double = 30.0
 
 /** 手動スクロール後に自動で最下部へ戻すまでの待機時間。 */
 private val AutoScrollBackDelay = 5.seconds

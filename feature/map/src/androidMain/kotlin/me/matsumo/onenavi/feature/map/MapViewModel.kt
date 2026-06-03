@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.common.OpenLocationCode
+import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
@@ -585,19 +586,24 @@ private class UiEventDelegate(
             ),
         )
 
-        val waypoint = RoutePoint(
+        val waypoint = RouteWaypoint.Place(
+            name = result.name,
             latitude = result.latitude,
             longitude = result.longitude,
         )
-        val intermediatePoints = searchContext.intermediatePoints.insertWaypointByMinimalDetour(
+        val intermediateWaypoints = searchContext.intermediateWaypoints.insertWaypointByMinimalDetour(
             waypoint = waypoint,
             origin = searchContext.origin,
             destination = searchContext.destination,
         )
+        val routeWaypoints = listOf(searchContext.originWaypoint) +
+            intermediateWaypoints +
+            searchContext.destinationWaypoint
         val routePreviewState = newRouteManager.searchRoutePreview(
             origin = searchContext.origin,
             destination = searchContext.destination,
-            intermediatePoints = intermediatePoints,
+            intermediatePoints = intermediateWaypoints.map { routeWaypoint -> routeWaypoint.toRoutePoint() },
+            routeWaypoints = routeWaypoints,
             originDirectionDegrees = searchContext.originDirectionDegrees,
         )
         if (!uiState.value.overlayState.isAddWaypointOverlay()) return
@@ -616,17 +622,13 @@ private class UiEventDelegate(
 
     private fun createAddWaypointRouteSearchContext(): AddWaypointRouteSearchContext? {
         return when (val guidanceState = newGuidanceManager.state.value) {
-            is GuidanceState.Guiding -> AddWaypointRouteSearchContext(
+            is GuidanceState.Guiding -> guidanceState.route.toAddWaypointRouteSearchContext(
                 origin = guidanceState.progress.snappedLocation,
-                destination = guidanceState.route.destination,
-                intermediatePoints = guidanceState.route.intermediateWaypoints,
                 originDirectionDegrees = guidanceState.progress.bearingDegrees.toInt(),
             )
 
-            is GuidanceState.Rerouting -> AddWaypointRouteSearchContext(
+            is GuidanceState.Rerouting -> guidanceState.previousRoute.toAddWaypointRouteSearchContext(
                 origin = guidanceState.previousProgress.snappedLocation,
-                destination = guidanceState.previousRoute.destination,
-                intermediatePoints = guidanceState.previousRoute.intermediateWaypoints,
                 originDirectionDegrees = guidanceState.previousProgress.bearingDegrees.toInt(),
             )
 
@@ -775,24 +777,85 @@ private const val VEHICLE_LOCATION_SUBSCRIPTION_STOP_TIMEOUT_MILLIS = 5_000L
  * waypoint 追加候補の仮ルート検索に使う案内中コンテキスト。
  *
  * @property origin 仮ルートの出発地点。
+ * @property originWaypoint 表示名を保持する出発地点。
  * @property destination 現在案内中ルートの目的地。
- * @property intermediatePoints 現在案内中ルートの経由地。
+ * @property destinationWaypoint 表示名を保持する目的地。
+ * @property intermediateWaypoints 現在案内中ルートの経由地。
  * @property originDirectionDegrees 出発地点の進行方向。
  */
 @Immutable
 private data class AddWaypointRouteSearchContext(
     val origin: RoutePoint,
+    val originWaypoint: RouteWaypoint,
     val destination: RoutePoint,
-    val intermediatePoints: ImmutableList<RoutePoint>,
+    val destinationWaypoint: RouteWaypoint,
+    val intermediateWaypoints: ImmutableList<RouteWaypoint>,
     val originDirectionDegrees: Int,
 )
 
-private fun ImmutableList<RoutePoint>.insertWaypointByMinimalDetour(
-    waypoint: RoutePoint,
+private fun RouteDetail.toAddWaypointRouteSearchContext(
+    origin: RoutePoint,
+    originDirectionDegrees: Int,
+): AddWaypointRouteSearchContext {
+    val routeWaypoints = toAddWaypointRouteWaypoints(origin = origin)
+    return AddWaypointRouteSearchContext(
+        origin = origin,
+        originWaypoint = routeWaypoints.first(),
+        destination = destination,
+        destinationWaypoint = routeWaypoints.last(),
+        intermediateWaypoints = routeWaypoints.drop(1).dropLast(1).toImmutableList(),
+        originDirectionDegrees = originDirectionDegrees,
+    )
+}
+
+private fun RouteDetail.toAddWaypointRouteWaypoints(origin: RoutePoint): ImmutableList<RouteWaypoint> {
+    val displayIntermediateWaypoints = intermediateWaypoints
+        .mapIndexed { waypointIndex, point ->
+            routeWaypoints.displayPlaceForPoint(
+                point = point,
+                fallbackIndex = waypointIndex + 1,
+            )
+        }
+    val destinationWaypoint = routeWaypoints.displayPlaceForPoint(
+        point = destination,
+        fallbackIndex = routeWaypoints.lastIndex,
+    )
+    val originWaypoint = RouteWaypoint.CurrentLocation(
+        latitude = origin.latitude,
+        longitude = origin.longitude,
+    )
+    return (listOf(originWaypoint) + displayIntermediateWaypoints + destinationWaypoint).toImmutableList()
+}
+
+private fun List<RouteWaypoint>.displayPlaceForPoint(
+    point: RoutePoint,
+    fallbackIndex: Int,
+): RouteWaypoint.Place {
+    val fallbackWaypoint = getOrNull(fallbackIndex) as? RouteWaypoint.Place
+    val matchedWaypoint = fallbackWaypoint ?: findPlaceNear(point = point)
+    val displayName = matchedWaypoint?.name.orEmpty()
+    return RouteWaypoint.Place(
+        name = displayName,
+        latitude = point.latitude,
+        longitude = point.longitude,
+    )
+}
+
+private fun List<RouteWaypoint>.findPlaceNear(point: RoutePoint): RouteWaypoint.Place? {
+    for (waypoint in this) {
+        val place = waypoint as? RouteWaypoint.Place ?: continue
+        val distanceMeters = MapGeodesy.haversineMeters(place.toRoutePoint(), point)
+        if (distanceMeters <= WAYPOINT_NAME_MATCH_DISTANCE_METERS) return place
+    }
+    return null
+}
+
+private fun List<RouteWaypoint>.insertWaypointByMinimalDetour(
+    waypoint: RouteWaypoint,
     origin: RoutePoint,
     destination: RoutePoint,
-): List<RoutePoint> {
-    val routePoints = listOf(origin) + this + destination
+): List<RouteWaypoint> {
+    val routePoints = listOf(origin) + map { routeWaypoint -> routeWaypoint.toRoutePoint() } + destination
     var bestInsertIndex = size
     var bestAddedDistanceMeters = Double.POSITIVE_INFINITY
 
@@ -811,22 +874,31 @@ private fun ImmutableList<RoutePoint>.insertWaypointByMinimalDetour(
         }
     }
 
-    val sortedPoints = toMutableList()
-    sortedPoints.add(bestInsertIndex, waypoint)
-    return sortedPoints
+    val sortedWaypoints = toMutableList()
+    sortedWaypoints.add(bestInsertIndex, waypoint)
+    return sortedWaypoints
 }
 
 private fun calculateDetourDistanceMeters(
     fromPoint: RoutePoint,
-    waypoint: RoutePoint,
+    waypoint: RouteWaypoint,
     toPoint: RoutePoint,
 ): Double {
-    val viaWaypointDistanceMeters = MapGeodesy.haversineMeters(fromPoint, waypoint) +
-        MapGeodesy.haversineMeters(waypoint, toPoint)
+    val waypointPoint = waypoint.toRoutePoint()
+    val viaWaypointDistanceMeters = MapGeodesy.haversineMeters(fromPoint, waypointPoint) +
+        MapGeodesy.haversineMeters(waypointPoint, toPoint)
     val directDistanceMeters = MapGeodesy.haversineMeters(fromPoint, toPoint)
 
     return viaWaypointDistanceMeters - directDistanceMeters
 }
+
+private fun RouteWaypoint.toRoutePoint(): RoutePoint = RoutePoint(
+    latitude = latitude,
+    longitude = longitude,
+)
+
+/** 経由地名を既存地点から引き継ぐため同一点とみなす距離。 */
+private const val WAYPOINT_NAME_MATCH_DISTANCE_METERS: Double = 30.0
 
 private fun createMapPointResult(
     placeId: String?,

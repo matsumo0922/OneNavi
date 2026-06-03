@@ -57,6 +57,7 @@ class NewRouteManagerTest {
         assertEquals(0, state.selectedIndex)
         assertEquals(origin, state.routes[0].origin)
         assertEquals(destination, state.routes[0].destination)
+        assertEquals(defaultWaypoints.toImmutableList(), state.routes[0].routeWaypoints)
     }
 
     @Test
@@ -76,6 +77,25 @@ class NewRouteManagerTest {
             listOf(intermediate.latitude to intermediate.longitude),
             fakeDataSource.lastIntermediateWaypoints,
         )
+        val state = assertIs<RoutePreviewState.Ready>(manager.state.value)
+        assertEquals(
+            listOf(originWaypoint, intermediate, destinationWaypoint).toImmutableList(),
+            state.selectedRoute.routeWaypoints,
+        )
+    }
+
+    @Test
+    fun `searchRoutePreview は routeWaypoints を保持する`() = runTest {
+        fakeDataSource.nextResult = Result.success(listOf(buildRouteResult()))
+
+        val state = manager.searchRoutePreview(
+            origin = origin,
+            destination = destination,
+            routeWaypoints = defaultWaypoints,
+        )
+
+        val ready = assertIs<RoutePreviewState.Ready>(state)
+        assertEquals(defaultWaypoints.toImmutableList(), ready.selectedRoute.routeWaypoints)
     }
 
     @Test

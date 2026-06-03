@@ -104,6 +104,7 @@ internal fun MapNavigationContent(
             guiding != null && banner != null -> {
                 MapNavigationManeuverPanel(
                     modifier = topPanelModifier,
+                    route = guiding.route,
                     banner = banner,
                     listItems = guiding.presentation.listItems,
                     progress = guiding.progress,

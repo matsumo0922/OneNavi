@@ -39,6 +39,7 @@ import dev.chrisbanes.haze.HazeState
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.model.RoadClass
+import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePriority
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.BannerSupport
@@ -64,6 +65,7 @@ import kotlin.math.floor
 
 @Composable
 internal fun MapNavigationManeuverPanel(
+    route: RouteDetail,
     banner: ManeuverBanner,
     listItems: ImmutableList<GuidanceListItem>,
     progress: GuidanceProgress,
@@ -89,6 +91,7 @@ internal fun MapNavigationManeuverPanel(
     val hasPrioritizedHint = shouldPreferFollowupHint && followupCallout != null
     val hasHint = followupCallout != null
     val hasGuideImage = visibleGuideImage != null
+    val hasPanelItems = banner.hasMoreEvents || route.geometry.isNotEmpty()
     val topShape = when {
         hasGuideImage || showPanel -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
         hasPrioritizedHint -> RoundedCornerShape(
@@ -118,13 +121,15 @@ internal fun MapNavigationManeuverPanel(
             meterLabel = meterLabel,
             kilometerLabel = kilometerLabel,
             showPanelItems = showPanel,
+            hasPanelItems = hasPanelItems,
             shape = topShape,
             onShowPanelItemsClicked = { showPanel = !showPanel },
         )
 
-        if (banner.hasMoreEvents && showPanel) {
+        if (hasPanelItems && showPanel) {
             MapNavigationManeuverPanelSection(
                 modifier = Modifier.fillMaxWidth(),
+                route = route,
                 listItems = listItems,
                 hazeState = hazeState,
                 meterLabel = meterLabel,
@@ -133,6 +138,7 @@ internal fun MapNavigationManeuverPanel(
                 hourLabel = hourLabel,
                 minuteLabel = minuteLabel,
                 timestampMillis = progress.locationTimestampMillis,
+                currentCumulativeMeters = progress.currentCumulativeMeters,
                 elapsedSeconds = progress.elapsedSeconds,
                 traveledMeters = progress.traveledMeters,
             )
@@ -197,6 +203,7 @@ private fun MapNavigationManeuverTopSection(
     meterLabel: String,
     kilometerLabel: String,
     showPanelItems: Boolean,
+    hasPanelItems: Boolean,
     shape: Shape,
     onShowPanelItemsClicked: () -> Unit,
     modifier: Modifier = Modifier,
@@ -256,7 +263,7 @@ private fun MapNavigationManeuverTopSection(
                 }
             }
 
-            if (banner.hasMoreEvents) {
+            if (hasPanelItems) {
                 IconButton(onShowPanelItemsClicked) {
                     Icon(
                         imageVector = if (showPanelItems) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,

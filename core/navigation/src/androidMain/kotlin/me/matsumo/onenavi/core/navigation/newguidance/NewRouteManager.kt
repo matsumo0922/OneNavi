@@ -51,7 +51,7 @@ class NewRouteManager(
                 destination = destination,
                 intermediatePoints = intermediates,
                 originDirectionDegrees = null,
-            )
+            ).withRouteWaypoints(waypoints)
         }
             .onSuccess { routes ->
                 Napier.i(tag = TAG) { "searchRoutes ready: routes=${routes.size}" }
@@ -76,6 +76,7 @@ class NewRouteManager(
         origin: RoutePoint,
         destination: RoutePoint,
         intermediatePoints: List<RoutePoint> = emptyList(),
+        routeWaypoints: List<RouteWaypoint> = emptyList(),
         originDirectionDegrees: Int? = null,
     ): RoutePreviewState {
         return runCatching {
@@ -84,7 +85,7 @@ class NewRouteManager(
                 destination = destination,
                 intermediatePoints = intermediatePoints,
                 originDirectionDegrees = originDirectionDegrees,
-            )
+            ).withRouteWaypoints(routeWaypoints)
         }.fold(
             onSuccess = { routes ->
                 RoutePreviewState.Ready(
@@ -136,6 +137,14 @@ class NewRouteManager(
         require(results.isNotEmpty()) { "No route candidates returned" }
 
         return results.map { result -> result.detail }
+    }
+
+    private fun List<RouteDetail>.withRouteWaypoints(
+        routeWaypoints: List<RouteWaypoint>,
+    ): List<RouteDetail> {
+        if (routeWaypoints.isEmpty()) return this
+        val immutableRouteWaypoints = routeWaypoints.toImmutableList()
+        return map { route -> route.copy(routeWaypoints = immutableRouteWaypoints) }
     }
 
     private fun RouteWaypoint.toRoutePoint(): RoutePoint = RoutePoint(

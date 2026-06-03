@@ -84,6 +84,7 @@ data class RoadSegmentDistance(
  * @param tollFee 有料道路の合計料金（円）。料金不明 / 有料区間なしの場合は null。
  * @param tollDetails 有料道路の道路別料金内訳。空の場合は内訳不明 / 有料区間なし。
  * @param roadSegments ルートが通る道路の名前と距離。走行順は保持しない（同じ道路は複数区間に分割されている場合がある）。
+ * @param routeWaypoints 出発地、経由地、目的地を含む表示用の地点列。地点名を持たないルートでは空。
  */
 @Immutable
 data class RouteDetail(
@@ -101,6 +102,7 @@ data class RouteDetail(
     val tollFee: Int? = null,
     val tollDetails: ImmutableList<TollSegmentFee> = persistentListOf(),
     val roadSegments: ImmutableList<RoadSegmentDistance> = persistentListOf(),
+    val routeWaypoints: ImmutableList<RouteWaypoint> = persistentListOf(),
 ) {
     /**
      * ルート上で最初に高速道路に入る IC / JCT 名。

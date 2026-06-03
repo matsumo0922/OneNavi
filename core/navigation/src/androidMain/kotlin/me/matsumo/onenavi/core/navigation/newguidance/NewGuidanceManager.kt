@@ -2,6 +2,7 @@ package me.matsumo.onenavi.core.navigation.newguidance
 
 import android.os.SystemClock
 import io.github.aakira.napier.Napier
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,12 +16,15 @@ import me.matsumo.onenavi.core.datasource.location.CurrentLocationDataSource
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RouteDetail
+import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteResult
+import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavProgressSnapshot
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDecision
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
+import me.matsumo.onenavi.core.navigation.extnav.RouteGeometryMath
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
@@ -339,7 +343,12 @@ class NewGuidanceManager internal constructor(
             originDirectionDegrees = request.originDirectionDegrees,
         )
             .onSuccess { results ->
-                val nextRoute = selectRerouteCandidate(results = results, current = currentRoute)
+                val routeWaypoints = previousRoute.rerouteWaypoints(request = request)
+                val nextRoute = selectRerouteCandidate(
+                    results = results,
+                    current = currentRoute,
+                    routeWaypoints = routeWaypoints,
+                )
                 if (nextRoute == null) {
                     Napier.w(tag = TAG) { "Reroute returned no candidate" }
                     resumeAfterFailedReroute()
@@ -366,13 +375,52 @@ class NewGuidanceManager internal constructor(
     private fun selectRerouteCandidate(
         results: List<RouteResult>,
         current: RouteDetail?,
+        routeWaypoints: List<RouteWaypoint>,
     ): RouteDetail? {
-        val candidates = results.map { result -> result.detail }
+        val candidates = results.map { result ->
+            result.detail.copy(routeWaypoints = routeWaypoints.toImmutableList())
+        }
         if (candidates.isEmpty()) return null
 
         val priority = current?.priority
         return candidates.firstOrNull { candidate -> candidate.priority == priority }
             ?: candidates.first()
+    }
+
+    private fun RouteDetail.rerouteWaypoints(
+        request: ExtNavRerouteDecision.Request,
+    ): List<RouteWaypoint> {
+        val originWaypoint = RouteWaypoint.CurrentLocation(
+            latitude = request.origin.latitude,
+            longitude = request.origin.longitude,
+        )
+        val viaWaypoints = request.remainingViaPoints.map { routePoint ->
+            routeWaypoints.displayPlaceForPoint(point = routePoint)
+        }
+        val destinationWaypoint = routeWaypoints.displayPlaceForPoint(point = request.destination)
+        return listOf(originWaypoint) + viaWaypoints + destinationWaypoint
+    }
+
+    private fun List<RouteWaypoint>.displayPlaceForPoint(point: RoutePoint): RouteWaypoint.Place {
+        val matchedWaypoint = findPlaceNear(point = point)
+        return RouteWaypoint.Place(
+            name = matchedWaypoint?.name.orEmpty(),
+            latitude = point.latitude,
+            longitude = point.longitude,
+        )
+    }
+
+    private fun List<RouteWaypoint>.findPlaceNear(point: RoutePoint): RouteWaypoint.Place? {
+        for (waypoint in this) {
+            val place = waypoint as? RouteWaypoint.Place ?: continue
+            val waypointPoint = RoutePoint(
+                latitude = place.latitude,
+                longitude = place.longitude,
+            )
+            val distanceMetres = RouteGeometryMath.haversineMetres(waypointPoint, point)
+            if (distanceMetres <= WAYPOINT_NAME_MATCH_DISTANCE_METRES) return place
+        }
+        return null
     }
 
     /**
@@ -525,6 +573,9 @@ class NewGuidanceManager internal constructor(
 
         /** 案内 session id を進める加算値。 */
         const val SESSION_ID_INCREMENT = 1L
+
+        /** 経由地名を既存地点から引き継ぐため同一点とみなす距離。 */
+        const val WAYPOINT_NAME_MATCH_DISTANCE_METRES = 30.0
     }
 }
 

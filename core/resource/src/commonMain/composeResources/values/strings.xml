@@ -103,6 +103,8 @@
     <string name="home_map_navigation_followup">その先</string>
     <string name="home_map_navigation_rerouting_title">経路探索中...</string>
     <string name="home_map_navigation_panel_guidance_point">案内地点</string>
+    <string name="home_map_navigation_panel_destination">目的地</string>
+    <string name="home_map_navigation_panel_waypoint">経由地 %1$d</string>
     <string name="home_map_navigation_panel_direction_sign">%1$s方面</string>
     <string name="home_map_navigation_panel_entrance">入口</string>
     <string name="home_map_navigation_panel_exit">出口</string>
