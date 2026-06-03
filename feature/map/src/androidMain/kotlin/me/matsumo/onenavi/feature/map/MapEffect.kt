@@ -17,6 +17,7 @@ import me.matsumo.onenavi.feature.map.components.MapOriginMarker
 import me.matsumo.onenavi.feature.map.components.MapPolyline
 import me.matsumo.onenavi.feature.map.components.MapPolylineStyle
 import me.matsumo.onenavi.feature.map.components.MapVehiclePoseEffect
+import me.matsumo.onenavi.feature.map.components.MapWaypointNumberedMarker
 import me.matsumo.onenavi.feature.map.components.callout.MapGuidanceManeuverCallOutMarkerEffect
 import me.matsumo.onenavi.feature.map.components.callout.MapRoutePreviewCallOutMarkerEffect
 import me.matsumo.onenavi.feature.map.state.MapCameraState
@@ -249,11 +250,25 @@ private fun RoutePreviewEffect(
         )
     }
 
-    for (waypoint in screenState.waypoints.drop(1)) {
-        MapMarker(
+    val routeWaypoints = screenState.waypoints.drop(1)
+    val intermediateWaypoints = routeWaypoints.dropLast(1)
+
+    intermediateWaypoints.forEachIndexed { index, waypoint ->
+        MapWaypointNumberedMarker(
             googleMap = googleMap,
             latitude = waypoint.latitude,
             longitude = waypoint.longitude,
+            number = index + 1,
+            zIndex = ROUTE_WAYPOINT_MARKER_Z_INDEX,
+        )
+    }
+
+    val destinationWaypoint = routeWaypoints.lastOrNull()
+    if (destinationWaypoint != null) {
+        MapMarker(
+            googleMap = googleMap,
+            latitude = destinationWaypoint.latitude,
+            longitude = destinationWaypoint.longitude,
             zIndex = DESTINATION_MARKER_Z_INDEX,
         )
     }
@@ -390,6 +405,9 @@ private const val ORIGIN_MARKER_Z_INDEX = 10_500f
 
 /** 目的地 marker の zIndex。 */
 private const val DESTINATION_MARKER_Z_INDEX = 10_500f
+
+/** ルート Preview の経由地 marker の zIndex。 */
+private const val ROUTE_WAYPOINT_MARKER_Z_INDEX = 10_500f
 
 /** 検索結果 marker の zIndex 起点。 */
 private const val SEARCH_RESULT_MARKER_Z_INDEX = 11_000f

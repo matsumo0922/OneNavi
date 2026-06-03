@@ -52,8 +52,16 @@ internal fun MapNumberedMarker(
     number: Int,
     title: String? = null,
     zIndex: Float = DEFAULT_MARKER_Z_INDEX,
+    backgroundColor: Int = NumberedMarkerBackgroundColor,
+    borderColor: Int = NumberedMarkerBorderColor,
+    textColor: Int = NumberedMarkerTextColor,
 ) {
-    val icon = rememberNumberedMarkerIcon(number = number)
+    val icon = rememberNumberedMarkerIcon(
+        number = number,
+        backgroundColor = backgroundColor,
+        borderColor = borderColor,
+        textColor = textColor,
+    )
 
     DisposableEffect(googleMap, latitude, longitude, number, title, zIndex, icon) {
         val marker = googleMap.addMarker(
@@ -66,6 +74,28 @@ internal fun MapNumberedMarker(
         )
         onDispose { marker?.remove() }
     }
+}
+
+@Composable
+internal fun MapWaypointNumberedMarker(
+    googleMap: GoogleMap,
+    latitude: Double,
+    longitude: Double,
+    number: Int,
+    title: String? = null,
+    zIndex: Float = DEFAULT_MARKER_Z_INDEX,
+) {
+    MapNumberedMarker(
+        googleMap = googleMap,
+        latitude = latitude,
+        longitude = longitude,
+        number = number,
+        title = title,
+        zIndex = zIndex,
+        backgroundColor = Color.WHITE,
+        borderColor = Color.BLACK,
+        textColor = Color.BLACK,
+    )
 }
 
 @Composable
@@ -106,14 +136,22 @@ private fun rememberOriginMarkerIcon(): BitmapDescriptor {
 }
 
 @Composable
-private fun rememberNumberedMarkerIcon(number: Int): BitmapDescriptor {
+private fun rememberNumberedMarkerIcon(
+    number: Int,
+    backgroundColor: Int,
+    borderColor: Int,
+    textColor: Int,
+): BitmapDescriptor {
     val density = LocalDensity.current
     val text = remember(number) { number.toString() }
 
-    return remember(density, text) {
+    return remember(density, text, backgroundColor, borderColor, textColor) {
         createNumberedMarkerIcon(
             text = text,
             density = density,
+            backgroundColor = backgroundColor,
+            borderColor = borderColor,
+            textColor = textColor,
         )
     }
 }
@@ -121,6 +159,9 @@ private fun rememberNumberedMarkerIcon(number: Int): BitmapDescriptor {
 private fun createNumberedMarkerIcon(
     text: String,
     density: Density,
+    backgroundColor: Int,
+    borderColor: Int,
+    textColor: Int,
 ): BitmapDescriptor {
     val bitmapSize = with(density) { NumberedMarkerBitmapSize.roundToPx() }
     val circleRadius = with(density) { NumberedMarkerCircleRadius.toPx() }
@@ -142,7 +183,7 @@ private fun createNumberedMarkerIcon(
     )
 
     val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = NumberedMarkerBackgroundColor
+        color = backgroundColor
         style = Paint.Style.FILL
         setShadowLayer(
             shadowRadius,
@@ -152,12 +193,12 @@ private fun createNumberedMarkerIcon(
         )
     }
     val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
+        color = borderColor
         style = Paint.Style.STROKE
         strokeWidth = borderWidth
     }
     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
+        color = textColor
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         this.textSize = textSize
@@ -189,4 +230,11 @@ private val NumberedMarkerShadowOffsetY = 2.dp
 private val NumberedMarkerTextSize = 15.sp
 private val NumberedMarkerSmallTextSize = 12.sp
 private val NumberedMarkerBackgroundColor = Color.rgb(211, 47, 47)
+
+/** 通常 numbered marker の枠線色。 */
+private val NumberedMarkerBorderColor = Color.WHITE
+
+/** 通常 numbered marker の文字色。 */
+private val NumberedMarkerTextColor = Color.WHITE
+
 private val NumberedMarkerShadowColor = Color.argb(96, 0, 0, 0)
