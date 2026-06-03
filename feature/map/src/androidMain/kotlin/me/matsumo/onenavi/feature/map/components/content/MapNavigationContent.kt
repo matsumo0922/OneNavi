@@ -181,7 +181,9 @@ internal fun MapNavigationContent(
                 onCloseClicked = {
                     onUiEvent(MapUiEvent.OnNavigationAlternativesDismissed)
                 },
-                onRouteClicked = {},
+                onRouteClicked = { index ->
+                    onUiEvent(MapUiEvent.OnNavigationAlternativeRouteSelected(index))
+                },
             )
         } else if (etaProgress != null && etaRoute != null) {
             MapNavigationEtaCard(

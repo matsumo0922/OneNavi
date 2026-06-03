@@ -63,6 +63,9 @@ sealed interface MapUiEvent {
     /** ナビゲーション中に代替ルート候補の再探索を要求する。 */
     data object OnNavigationAlternativesClicked : MapUiEvent
 
+    /** ナビゲーション中の代替ルート候補を選択して案内ルートへ反映する。 */
+    data class OnNavigationAlternativeRouteSelected(val index: Int) : MapUiEvent
+
     /** ナビゲーション中の代替ルート候補表示を終了する。 */
     data object OnNavigationAlternativesDismissed : MapUiEvent
 

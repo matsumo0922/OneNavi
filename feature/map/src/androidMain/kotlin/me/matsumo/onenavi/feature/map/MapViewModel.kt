@@ -257,6 +257,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnNavigationRoutePreviewClicked -> handleNavigationRoutePreviewClicked()
             is MapUiEvent.OnNavigationRoutePreviewDismissed -> handleNavigationRoutePreviewDismissed()
             is MapUiEvent.OnNavigationAlternativesClicked -> handleNavigationAlternativesClicked()
+            is MapUiEvent.OnNavigationAlternativeRouteSelected -> handleNavigationAlternativeRouteSelected(event.index)
             is MapUiEvent.OnNavigationAlternativesDismissed -> handleNavigationAlternativesDismissed()
             is MapUiEvent.OnRoutePreviewDismissed -> handleRoutePreviewDismissed()
             is MapUiEvent.OnPlaceDetailsDismissed -> handlePlaceDetailsDismissed()
@@ -549,6 +550,16 @@ private class UiEventDelegate(
             suggestions = persistentListOf(),
             overlayState = MapOverlayState.None,
         )
+    }
+
+    private fun handleNavigationAlternativeRouteSelected(index: Int) {
+        val overlayState = uiState.value.overlayState as? MapOverlayState.NavigationAlternatives ?: return
+        val routePreviewState = overlayState.routePreviewState as? RoutePreviewState.Ready ?: return
+        val selectedRoute = routePreviewState.routes.getOrNull(index) ?: return
+
+        newGuidanceManager.startGuidance(route = selectedRoute)
+        clearNavigationOverlayState()
+        handleNavigationRoutePreviewDismissed()
     }
 
     private fun handleRoutePreviewDismissed() {
