@@ -198,6 +198,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                         cameraState = cameraState,
                         topAppBarHeightPx = uiState.topAppBarHeight,
                         bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
+                        navigationCardHeightPx = uiState.navigationCardHeight,
                         onRouteSelected = { index ->
                             viewModel.onUiEvent(MapUiEvent.OnRouteIndexChanged(index))
                         },

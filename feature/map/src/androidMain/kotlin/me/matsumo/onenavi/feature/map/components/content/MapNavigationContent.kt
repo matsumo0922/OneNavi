@@ -29,6 +29,7 @@ import me.matsumo.onenavi.core.resource.common_cancel
 import me.matsumo.onenavi.core.resource.common_ok
 import me.matsumo.onenavi.core.resource.home_map_navigation_cancel_dialog_message
 import me.matsumo.onenavi.core.resource.home_map_navigation_cancel_dialog_title
+import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationAlternativesCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationEtaCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationManeuverPanel
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationReroutingPanel
@@ -64,7 +65,9 @@ internal fun MapNavigationContent(
     val etaProgress = guiding?.progress ?: rerouting?.previousProgress
     val addWaypointSearchResults = overlayState as? MapOverlayState.AddWaypointSearchResults
     val addWaypointSelected = overlayState as? MapOverlayState.AddWaypointSelected
-    val hasNavigationBottomCard = etaProgress != null || addWaypointSearchResults != null || addWaypointSelected != null
+    val navigationAlternatives = overlayState as? MapOverlayState.NavigationAlternatives
+    val hasNavigationOverlayCard = addWaypointSearchResults != null || addWaypointSelected != null || navigationAlternatives != null
+    val hasNavigationBottomCard = etaProgress != null || hasNavigationOverlayCard
 
     fun cancelNavigation() {
         onUiEvent(MapUiEvent.OnNavigationStop)
@@ -163,6 +166,23 @@ internal fun MapNavigationContent(
                     onUiEvent(MapUiEvent.OnAddWaypointCandidateSelected(result))
                 },
             )
+        } else if (navigationAlternatives != null) {
+            MapNavigationAlternativesCard(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .onGloballyPositioned { coordinates ->
+                        onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
+                    }
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .height(bottomFloatingCardHeight),
+                routePreviewState = navigationAlternatives.routePreviewState,
+                onCloseClicked = {
+                    onUiEvent(MapUiEvent.OnNavigationAlternativesDismissed)
+                },
+                onRouteClicked = {},
+            )
         } else if (etaProgress != null && etaRoute != null) {
             MapNavigationEtaCard(
                 modifier = Modifier
@@ -178,7 +198,9 @@ internal fun MapNavigationContent(
                 roadClassSegments = etaRoute.roadClassSegments,
                 congestionSegments = etaRoute.congestionSegments,
                 onCloseClicked = ::cancelNavigation,
-                onAlternativesClicked = {},
+                onAlternativesClicked = {
+                    onUiEvent(MapUiEvent.OnNavigationAlternativesClicked)
+                },
                 onAddWaypointClicked = {
                     onUiEvent(MapUiEvent.OnAddWaypointRequested)
                 },

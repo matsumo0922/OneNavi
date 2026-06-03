@@ -48,8 +48,11 @@ internal fun MapCameraEffect(
         .calculateTopPadding()
     val addWaypointSearchResults = overlayState as? MapOverlayState.AddWaypointSearchResults
     val addWaypointSelected = overlayState as? MapOverlayState.AddWaypointSelected
+    val navigationAlternatives = overlayState as? MapOverlayState.NavigationAlternatives
+    val navigationAlternativesReady = navigationAlternatives?.routePreviewState as? RoutePreviewState.Ready
     val hasAddWaypointOverlay = addWaypointSearchResults != null || addWaypointSelected != null
-    val isGuidanceCameraActive = screenState is MapScreenState.Navigating && !hasAddWaypointOverlay
+    val hasNavigationPreviewOverlay = hasAddWaypointOverlay || navigationAlternatives != null
+    val isGuidanceCameraActive = screenState is MapScreenState.Navigating && !hasNavigationPreviewOverlay
 
     LaunchedEffect(isGuidanceCameraActive) {
         cameraState.setGuidanceCameraActive(isGuidanceCameraActive)
@@ -115,6 +118,7 @@ internal fun MapCameraEffect(
         screenState,
         addWaypointSearchResults,
         addWaypointSelected,
+        navigationAlternatives,
     ) {
         val top = uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }
         val bottom = if (screenState is MapScreenState.Navigating) {
@@ -137,10 +141,18 @@ internal fun MapCameraEffect(
         routePreviewState,
         uiState.isNavigationRoutePreviewing,
         guidanceState.routeOverviewKey(),
+        navigationAlternativesReady,
     ) {
         val ready = routePreviewState as? RoutePreviewState.Ready
         when (screenState) {
-            is MapScreenState.RoutePreview if ready != null -> ready.routes.flatMap { it.geometry }
+            is MapScreenState.RoutePreview if ready != null -> ready.routes.flatMap { route ->
+                route.overviewPoints()
+            }
+            is MapScreenState.Navigating if navigationAlternativesReady != null -> {
+                navigationAlternativesReady.routes.flatMap { route ->
+                    route.overviewPoints()
+                }
+            }
             is MapScreenState.Navigating if uiState.isNavigationRoutePreviewing -> when (guidanceState) {
                 is GuidanceState.Guiding -> remainingRouteOverviewPoints(
                     route = guidanceState.route,
@@ -162,15 +174,34 @@ internal fun MapCameraEffect(
         }
     }
 
-    val routeOverviewTopPaddingKey = if (screenState is MapScreenState.RoutePreview) uiState.topAppBarHeight else 0
-    val routeOverviewBottomPaddingKey = if (screenState is MapScreenState.RoutePreview) uiState.bottomSheetPeekHeight else 0.dp
+    val routeOverviewTopPaddingKey = when {
+        screenState is MapScreenState.RoutePreview -> uiState.topAppBarHeight
+        screenState is MapScreenState.Navigating && navigationAlternativesReady != null -> uiState.topAppBarHeight
+        else -> 0
+    }
+    val routeOverviewBottomPaddingKey = if (screenState is MapScreenState.RoutePreview) {
+        uiState.bottomSheetPeekHeight
+    } else {
+        0.dp
+    }
+    val shouldUseNavigationCardPadding = screenState is MapScreenState.Navigating && navigationAlternativesReady != null
+    val routeOverviewNavigationCardHeightKey = if (shouldUseNavigationCardPadding) {
+        uiState.navigationCardHeight
+    } else {
+        0
+    }
 
     // RoutePreview
-    LaunchedEffect(routeOverviewPoints, routeOverviewTopPaddingKey, routeOverviewBottomPaddingKey) {
+    LaunchedEffect(
+        routeOverviewPoints,
+        routeOverviewTopPaddingKey,
+        routeOverviewBottomPaddingKey,
+        routeOverviewNavigationCardHeightKey,
+    ) {
         routeOverviewPoints?.let { cameraState.showRouteOverview(it) }
     }
 
-    LaunchedEffect(screenState, addWaypointSearchResults, addWaypointSelected) {
+    LaunchedEffect(screenState, addWaypointSearchResults, addWaypointSelected, navigationAlternatives) {
         when (screenState) {
             is MapScreenState.Browsing -> {
                 cameraState.followVehicleLocation(vehicleLocationState)
@@ -214,6 +245,10 @@ internal fun MapCameraEffect(
                         cameraState.showSelectedWaypointRouteOverview(addWaypointSelected)
                     }
 
+                    navigationAlternativesReady != null -> {
+                        cameraState.showNavigationAlternativesRouteOverview(navigationAlternativesReady)
+                    }
+
                     addWaypointSearchResults != null -> {
                         cameraState.showSearchResultsOverview(addWaypointSearchResults)
                     }
@@ -233,7 +268,16 @@ internal fun MapCameraEffect(
 
 private fun MapCameraState.showSelectedWaypointRouteOverview(selected: MapOverlayState.AddWaypointSelected) {
     val routePreviewState = selected.routePreviewState as? RoutePreviewState.Ready ?: return
-    val points = routePreviewState.routes.flatMap { route -> route.geometry }
+    val points = routePreviewState.routes.flatMap { route ->
+        route.overviewPoints()
+    }
+    showRouteOverview(points)
+}
+
+private fun MapCameraState.showNavigationAlternativesRouteOverview(routePreviewState: RoutePreviewState.Ready) {
+    val points = routePreviewState.routes.flatMap { route ->
+        route.overviewPoints()
+    }
     showRouteOverview(points)
 }
 
@@ -255,6 +299,13 @@ private fun MapCameraState.showSearchResultsOverview(searchResults: MapOverlaySt
 
         else -> showRouteOverview(points)
     }
+}
+
+private fun RouteDetail.overviewPoints(): List<RoutePoint> = buildList {
+    addAll(geometry)
+    add(origin)
+    addAll(intermediateWaypoints)
+    add(destination)
 }
 
 /** 案内地点フォーカスを開始する残距離（m）。 */

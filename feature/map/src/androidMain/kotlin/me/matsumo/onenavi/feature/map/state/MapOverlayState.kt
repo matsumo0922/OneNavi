@@ -46,6 +46,16 @@ sealed interface MapOverlayState {
     ) : MapOverlayState
 
     /**
+     * ナビゲーション中の代替ルート候補オーバーレイ。
+     *
+     * @property routePreviewState 現在地から目的地までの代替ルート探索状態。
+     */
+    @Immutable
+    data class NavigationAlternatives(
+        val routePreviewState: RoutePreviewState,
+    ) : MapOverlayState
+
+    /**
      * waypoint 差し替え用の全画面地点検索オーバーレイ。
      * [waypointIndex] は差し替え対象の waypoint の index。
      */

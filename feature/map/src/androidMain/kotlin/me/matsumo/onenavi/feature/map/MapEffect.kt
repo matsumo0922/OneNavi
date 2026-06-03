@@ -3,6 +3,7 @@ package me.matsumo.onenavi.feature.map
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import com.google.android.gms.maps.GoogleMap
 import kotlinx.collections.immutable.ImmutableList
@@ -38,6 +39,7 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
  * @param cameraState 自車 pose を追従カメラへ反映する state holder
  * @param topAppBarHeightPx ルート選択 callout が避ける上部バー高さ
  * @param bottomSheetPeekHeight ルート選択 callout が避ける bottom sheet 高さ
+ * @param navigationCardHeightPx 案内中 callout が避ける下部カード高さ
  * @param onRouteSelected ルート候補が選択された時の callback
  * @param modifier callout overlay 用 modifier
  */
@@ -52,9 +54,13 @@ internal fun MapEffect(
     cameraState: MapCameraState,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
+    navigationCardHeightPx: Int,
     onRouteSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
+    val navigationCardHeight = with(density) { navigationCardHeightPx.toDp() }
+
     when (screenState) {
         is MapScreenState.Browsing -> Unit
 
@@ -85,9 +91,12 @@ internal fun MapEffect(
         }
         is MapScreenState.Navigating -> {
             val addWaypointSelectedState = overlayState as? MapOverlayState.AddWaypointSelected
-            val shouldSuppressGuidanceRouteOverlay = addWaypointSelectedState != null
-            val shouldSuppressGuidanceWaypointMarkers = addWaypointSelectedState
-                ?.routePreviewState is RoutePreviewState.Ready
+            val navigationAlternativesState = overlayState as? MapOverlayState.NavigationAlternatives
+            val shouldShowAddWaypointOverlay = addWaypointSelectedState != null
+            val shouldShowAddWaypointRoutePreview = addWaypointSelectedState?.routePreviewState is RoutePreviewState.Ready
+            val shouldShowNavigationAlternativesRoutes = navigationAlternativesState?.routePreviewState is RoutePreviewState.Ready
+            val shouldSuppressGuidanceRouteOverlay = shouldShowAddWaypointOverlay || shouldShowNavigationAlternativesRoutes
+            val shouldSuppressGuidanceWaypointMarkers = shouldShowAddWaypointRoutePreview || shouldShowNavigationAlternativesRoutes
 
             NavigationEffect(
                 modifier = modifier,
@@ -98,6 +107,7 @@ internal fun MapEffect(
                 bottomSheetPeekHeight = bottomSheetPeekHeight,
                 shouldSuppressGuidanceRouteOverlay = shouldSuppressGuidanceRouteOverlay,
                 shouldSuppressGuidanceWaypointMarkers = shouldSuppressGuidanceWaypointMarkers,
+                shouldSuppressGuidanceEndPointMarkers = shouldShowNavigationAlternativesRoutes,
             )
         }
         is MapScreenState.Arrived -> Unit
@@ -122,6 +132,18 @@ internal fun MapEffect(
             overlayState = overlayState,
             googleMap = googleMap,
             guidanceWaypointCount = guidanceWaypointCount,
+        )
+    }
+
+    val navigationAlternatives = overlayState as? MapOverlayState.NavigationAlternatives
+    val navigationAlternativesReady = navigationAlternatives?.routePreviewState as? RoutePreviewState.Ready
+    if (navigationAlternativesReady != null) {
+        NavigationAlternativesEffect(
+            modifier = modifier,
+            routePreviewState = navigationAlternativesReady,
+            googleMap = googleMap,
+            topAppBarHeightPx = topAppBarHeightPx,
+            bottomCardHeight = navigationCardHeight,
         )
     }
 
@@ -183,6 +205,63 @@ private fun AddWaypointSelectedEffect(
             isSelected = routeIndex == routePreviewState.selectedIndex,
         )
     }
+}
+
+/**
+ * ナビゲーション中に再探索した代替ルート候補を描画する。
+ *
+ * @param routePreviewState 代替ルート候補
+ * @param googleMap overlay 描画先の GoogleMap
+ * @param topAppBarHeightPx callout が避ける上部バー高さ
+ * @param bottomCardHeight callout が避ける下部カード高さ
+ * @param modifier callout overlay 用 modifier
+ */
+@Composable
+private fun NavigationAlternativesEffect(
+    routePreviewState: RoutePreviewState.Ready,
+    googleMap: GoogleMap,
+    topAppBarHeightPx: Int,
+    bottomCardHeight: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val selectedRoute = routePreviewState.selectedRoute
+
+    MapOriginMarker(
+        googleMap = googleMap,
+        latitude = selectedRoute.origin.latitude,
+        longitude = selectedRoute.origin.longitude,
+        zIndex = ORIGIN_MARKER_Z_INDEX,
+    )
+
+    RouteIntermediateWaypointMarkersEffect(
+        googleMap = googleMap,
+        route = selectedRoute,
+        zIndex = ROUTE_WAYPOINT_MARKER_Z_INDEX,
+    )
+
+    MapMarker(
+        googleMap = googleMap,
+        latitude = selectedRoute.destination.latitude,
+        longitude = selectedRoute.destination.longitude,
+        zIndex = DESTINATION_MARKER_Z_INDEX,
+    )
+
+    routePreviewState.routes.forEachIndexed { routeIndex, route ->
+        RoutePolylineEffect(
+            googleMap = googleMap,
+            route = route,
+            isSelected = routeIndex == routePreviewState.selectedIndex,
+        )
+    }
+
+    MapRoutePreviewCallOutMarkerEffect(
+        modifier = modifier,
+        googleMap = googleMap,
+        routePreviewState = routePreviewState,
+        topAppBarHeightPx = topAppBarHeightPx,
+        bottomSheetPeekHeight = bottomCardHeight,
+        onRouteSelected = {},
+    )
 }
 
 /**
@@ -353,6 +432,7 @@ private fun RoutePreviewEffect(
  * @param bottomSheetPeekHeight callout が避ける bottom sheet 高さ
  * @param shouldSuppressGuidanceRouteOverlay 案内中 route overlay を一時的に非表示にするか
  * @param shouldSuppressGuidanceWaypointMarkers 案内中 waypoint marker を一時的に非表示にするか
+ * @param shouldSuppressGuidanceEndPointMarkers 案内中の出発地・目的地 marker を一時的に非表示にするか
  * @param modifier callout overlay 用 modifier
  */
 @Composable
@@ -364,6 +444,7 @@ private fun NavigationEffect(
     bottomSheetPeekHeight: Dp,
     shouldSuppressGuidanceRouteOverlay: Boolean,
     shouldSuppressGuidanceWaypointMarkers: Boolean,
+    shouldSuppressGuidanceEndPointMarkers: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val guidanceRoute = guidanceState.routeForMapOverlay() ?: return
@@ -376,12 +457,14 @@ private fun NavigationEffect(
         )
     }
 
-    MapOriginMarker(
-        googleMap = googleMap,
-        latitude = guidanceRoute.route.origin.latitude,
-        longitude = guidanceRoute.route.origin.longitude,
-        zIndex = ORIGIN_MARKER_Z_INDEX,
-    )
+    if (!shouldSuppressGuidanceEndPointMarkers) {
+        MapOriginMarker(
+            googleMap = googleMap,
+            latitude = guidanceRoute.route.origin.latitude,
+            longitude = guidanceRoute.route.origin.longitude,
+            zIndex = ORIGIN_MARKER_Z_INDEX,
+        )
+    }
 
     if (!shouldSuppressGuidanceWaypointMarkers) {
         RouteIntermediateWaypointMarkersEffect(
@@ -391,12 +474,14 @@ private fun NavigationEffect(
         )
     }
 
-    MapMarker(
-        googleMap = googleMap,
-        latitude = guidanceRoute.route.destination.latitude,
-        longitude = guidanceRoute.route.destination.longitude,
-        zIndex = DESTINATION_MARKER_Z_INDEX,
-    )
+    if (!shouldSuppressGuidanceEndPointMarkers) {
+        MapMarker(
+            googleMap = googleMap,
+            latitude = guidanceRoute.route.destination.latitude,
+            longitude = guidanceRoute.route.destination.longitude,
+            zIndex = DESTINATION_MARKER_Z_INDEX,
+        )
+    }
 
     if (guidanceState is GuidanceState.Guiding && !shouldSuppressGuidanceRouteOverlay) {
         MapGuidanceManeuverArrowEffect(
