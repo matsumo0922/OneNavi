@@ -2,14 +2,19 @@ package me.matsumo.onenavi.core.navigation.newguidance
 
 import android.os.SystemClock
 import io.github.aakira.napier.Napier
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.datasource.location.CurrentLocationDataSource
@@ -25,6 +30,8 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDecision
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.extnav.RouteGeometryMath
+import me.matsumo.onenavi.core.navigation.extnav.RouteStopProgress
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
@@ -52,6 +59,7 @@ class NewGuidanceManager internal constructor(
 ) {
 
     private val _state = MutableStateFlow<GuidanceState>(GuidanceState.Idle)
+    private val _events = MutableSharedFlow<GuidanceEvent>(extraBufferCapacity = EVENT_BUFFER_CAPACITY)
 
     private var sessionJobs: List<Job> = emptyList()
     private var nextSessionId: Long = FIRST_SESSION_ID
@@ -66,6 +74,9 @@ class NewGuidanceManager internal constructor(
 
     /** Guidance 期の現在状態。 */
     val state: StateFlow<GuidanceState> = _state.asStateFlow()
+
+    /** Guidance 期の一度きりのイベント。 */
+    val events: SharedFlow<GuidanceEvent> = _events.asSharedFlow()
 
     /**
      * 指定ルートで案内を開始する。
@@ -243,7 +254,8 @@ class NewGuidanceManager internal constructor(
             tracker.snapshot.collect { snapshot ->
                 if (snapshot == null) return@collect
                 if (!isActiveSession(sessionId)) return@collect
-                publishGuidance(route = route, snapshot = snapshot)
+                val isGuidanceContinuing = publishGuidance(route = route, snapshot = snapshot)
+                if (!isGuidanceContinuing) return@collect
                 maybeRequestReroute(snapshot = snapshot, sessionId = sessionId)
             }
         } catch (cancellation: CancellationException) {
@@ -261,20 +273,112 @@ class NewGuidanceManager internal constructor(
      * 1 件の snapshot を UI と音声案内へ反映する。
      *
      * UI が読む [GuidanceState.Guiding] を更新し、同じ snapshot を音声案内へ流して発話 tick に変換させる。
+     * 目的地到達時は案内 session を完了し、継続しないことを呼び出し元へ返す。
      *
-     * @param route 案内対象ルート
+     * @param route session 開始時の案内対象ルート
      * @param snapshot tracker が発行した進捗 snapshot
+     * @return 案内を継続する場合は true
      */
     private fun publishGuidance(
         route: RouteDetail,
         snapshot: ExtNavProgressSnapshot,
-    ) {
+    ): Boolean {
+        val activeRoute = currentRoute ?: route
+        if (isDestinationReached(snapshot)) {
+            completeDestinationGuidance(route = activeRoute)
+            return false
+        }
+
+        val updatedRoute = activeRoute.withPassedIntermediateWaypointsRemoved(
+            currentCumulativeMeters = snapshot.currentCumulativeMeters,
+        )
+        if (updatedRoute != activeRoute) {
+            currentRoute = updatedRoute
+            rerouteDetector?.updateRoute(updatedRoute)
+        }
+
         _state.value = GuidanceState.Guiding(
-            route = route,
+            route = updatedRoute,
             progress = snapshot.progress,
             presentation = snapshot.presentation,
         )
         voiceController?.onSnapshot(snapshot)
+        return true
+    }
+
+    /**
+     * 目的地へ到達したかを判定する。
+     *
+     * @param snapshot tracker が発行した進捗 snapshot
+     * @return 到達済みなら true
+     */
+    private fun isDestinationReached(snapshot: ExtNavProgressSnapshot): Boolean = RouteStopProgress.isDestinationReached(
+        distanceRemainingMeters = snapshot.distanceRemainingMeters,
+        routeMatchState = snapshot.routeMatchState,
+        thresholdMeters = DESTINATION_REACHED_THRESHOLD_METRES,
+    )
+
+    /**
+     * 目的地到達により案内 session を完了する。
+     *
+     * @param route 到達した案内 route
+     */
+    private fun completeDestinationGuidance(route: RouteDetail) {
+        Napier.i(tag = TAG) { "Destination reached: routeId=${route.id}" }
+        rerouteJob?.cancel()
+        rerouteJob = null
+        stopGuidanceSession(detachTracker = isSessionActive)
+        rerouteDetector?.detach()
+        currentRoute = null
+        _state.value = GuidanceState.Idle
+        _events.tryEmit(GuidanceEvent.DestinationReached)
+    }
+
+    /**
+     * 通過済み経由地を取り除いた route を返す。
+     *
+     * @param currentCumulativeMeters 現在地の route geometry 累積距離
+     * @return 経由地リストを更新した route
+     */
+    private fun RouteDetail.withPassedIntermediateWaypointsRemoved(
+        currentCumulativeMeters: Double,
+    ): RouteDetail {
+        val remainingIntermediateWaypoints = RouteStopProgress.remainingIntermediateWaypoints(
+            route = this,
+            currentCumulativeMeters = currentCumulativeMeters,
+            marginMeters = PASSED_WAYPOINT_MARGIN_METRES,
+        )
+        if (remainingIntermediateWaypoints == intermediateWaypoints) return this
+
+        return copy(
+            intermediateWaypoints = remainingIntermediateWaypoints,
+            routeWaypoints = remainingRouteWaypoints(remainingIntermediateWaypoints),
+        )
+    }
+
+    /**
+     * 未通過経由地に対応する表示用地点列を作る。
+     *
+     * @param remainingIntermediateWaypoints 未通過の経由地
+     * @return 出発地、未通過経由地、目的地の表示用地点列
+     */
+    private fun RouteDetail.remainingRouteWaypoints(
+        remainingIntermediateWaypoints: ImmutableList<RoutePoint>,
+    ): ImmutableList<RouteWaypoint> {
+        if (routeWaypoints.isEmpty()) return persistentListOf()
+
+        val updatedRouteWaypoints = mutableListOf<RouteWaypoint>()
+        val originWaypoint = routeWaypoints.firstOrNull()
+            ?: RouteWaypoint.CurrentLocation(
+                latitude = origin.latitude,
+                longitude = origin.longitude,
+            )
+        updatedRouteWaypoints += originWaypoint
+        for (waypoint in remainingIntermediateWaypoints) {
+            updatedRouteWaypoints += routeWaypoints.displayPlaceForPoint(point = waypoint)
+        }
+        updatedRouteWaypoints += routeWaypoints.displayPlaceForPoint(point = destination)
+        return updatedRouteWaypoints.toImmutableList()
     }
 
     /**
@@ -576,6 +680,15 @@ class NewGuidanceManager internal constructor(
 
         /** 経由地名を既存地点から引き継ぐため同一点とみなす距離。 */
         const val WAYPOINT_NAME_MATCH_DISTANCE_METRES = 30.0
+
+        /** 到達済み経由地とみなす余裕距離。 */
+        const val PASSED_WAYPOINT_MARGIN_METRES = 30.0
+
+        /** 目的地到達とみなす残距離。 */
+        const val DESTINATION_REACHED_THRESHOLD_METRES = 30.0
+
+        /** Guidance event のバッファ容量。 */
+        const val EVENT_BUFFER_CAPACITY = 1
     }
 }
 

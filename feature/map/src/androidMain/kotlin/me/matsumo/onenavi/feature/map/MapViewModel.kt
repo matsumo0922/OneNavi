@@ -36,6 +36,7 @@ import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuideImageGateway
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuideImageKey
@@ -124,6 +125,7 @@ class MapViewModel(
         pushScreenState = ::pushScreenState,
         popScreenState = ::popScreenState,
         replaceCurrentScreenState = ::replaceCurrentScreenState,
+        showBrowsing = ::showBrowsing,
     )
     private val guideImageController = NavigationGuideImageController(
         loader = ExtNavNavigationGuideImageLoader(guideImageGateway),
@@ -149,6 +151,10 @@ class MapViewModel(
 
     fun replaceCurrentScreenState(state: MapScreenState) {
         setScreenStates(_screenStates.value.dropLast(1) + state)
+    }
+
+    private fun showBrowsing() {
+        setScreenStates(listOf(MapScreenState.Browsing))
     }
 
     private fun setScreenStates(states: List<MapScreenState>) {
@@ -206,6 +212,7 @@ private class UiEventDelegate(
     private val pushScreenState: (MapScreenState) -> Unit,
     private val popScreenState: () -> Unit,
     private val replaceCurrentScreenState: (MapScreenState) -> Unit,
+    private val showBrowsing: () -> Unit,
 ) {
     private var placeSearchJob: Job? = null
     private var routeSearchJob: Job? = null
@@ -224,6 +231,10 @@ private class UiEventDelegate(
             .debounce(DEBOUNCE.milliseconds)
             .distinctUntilChanged()
             .onEach { query -> performSearchSuggestions(query) }
+            .launchIn(scope)
+
+        newGuidanceManager.events
+            .onEach { event -> handleGuidanceEvent(event) }
             .launchIn(scope)
     }
 
@@ -450,6 +461,19 @@ private class UiEventDelegate(
         if (screenStates.value.lastOrNull() is MapScreenState.Navigating) {
             popScreenState()
         }
+    }
+
+    private fun handleGuidanceEvent(event: GuidanceEvent) {
+        when (event) {
+            GuidanceEvent.DestinationReached -> handleDestinationReached()
+        }
+    }
+
+    private fun handleDestinationReached() {
+        clearNavigationOverlayState()
+        handleNavigationRoutePreviewDismissed()
+        newRouteManager.reset()
+        showBrowsing()
     }
 
     private fun handleNavigationRoutePreviewClicked() {

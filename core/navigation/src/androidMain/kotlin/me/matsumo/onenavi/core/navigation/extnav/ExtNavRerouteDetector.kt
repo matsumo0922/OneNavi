@@ -1,8 +1,5 @@
 package me.matsumo.onenavi.core.navigation.extnav
 
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
@@ -30,6 +27,17 @@ internal class ExtNavRerouteDetector {
     fun attach(route: RouteDetail) {
         attachedRoute = route
         firstSnapshotTimestampMillis = null
+    }
+
+    /**
+     * attach 中の案内 route だけを更新する。
+     *
+     * 経由地通過で route の経由地リストだけが変わる場合、ウォームアップ状態は維持する。
+     *
+     * @param route 更新後の案内 route
+     */
+    fun updateRoute(route: RouteDetail) {
+        attachedRoute = route
     }
 
     /** attach 済みルートとウォームアップ状態を破棄する。 */
@@ -67,9 +75,10 @@ internal class ExtNavRerouteDetector {
         return ExtNavRerouteDecision.Request(
             origin = origin,
             destination = route.destination,
-            remainingViaPoints = remainingViaPoints(
+            remainingViaPoints = RouteStopProgress.remainingIntermediateWaypoints(
                 route = route,
                 currentCumulativeMeters = snapshot.currentCumulativeMeters,
+                marginMeters = REMAINING_VIA_MARGIN_METRES,
             ),
             currentCumulativeMeters = snapshot.currentCumulativeMeters,
             originDirectionDegrees = compassDirectionDegrees(snapshot.headingDegrees),
@@ -102,58 +111,6 @@ internal class ExtNavRerouteDetector {
     private fun isWithinWarmup(timestampMillis: Long): Boolean {
         val firstTimestampMillis = firstSnapshotTimestampMillis ?: return true
         return timestampMillis - firstTimestampMillis < REROUTE_WARMUP_MILLIS
-    }
-
-    /**
-     * まだ通過していない経由地だけを抽出する。
-     *
-     * 各経由地を最近接 geometry 点の累積距離に換算し、現在の累積距離より十分先にある点だけを残す。
-     * geometry を持たないルートでは判定できないため全件そのまま返す。
-     *
-     * @param route 経由地と geometry を持つ案内ルート
-     * @param currentCumulativeMeters 現在地の geometry 累積距離
-     * @return 未通過の経由地
-     */
-    private fun remainingViaPoints(
-        route: RouteDetail,
-        currentCumulativeMeters: Double,
-    ): ImmutableList<RoutePoint> {
-        val viaPoints = route.intermediateWaypoints
-        if (viaPoints.isEmpty()) return persistentListOf()
-
-        val geometry = route.geometry
-        if (geometry.isEmpty()) return viaPoints
-
-        val cumulativeMetres = RouteGeometryMath.cumulativeMetres(geometry)
-        return viaPoints
-            .filter { viaPoint ->
-                val nearestIndex = nearestGeometryIndex(geometry = geometry, point = viaPoint)
-                cumulativeMetres[nearestIndex] > currentCumulativeMeters + REMAINING_VIA_MARGIN_METRES
-            }
-            .toImmutableList()
-    }
-
-    /**
-     * 指定点に最も近い geometry 点の index を線形探索で求める。
-     *
-     * @param geometry route polyline
-     * @param point 距離を測る対象点
-     * @return 最近接 geometry 点の index
-     */
-    private fun nearestGeometryIndex(
-        geometry: List<RoutePoint>,
-        point: RoutePoint,
-    ): Int {
-        var bestIndex = 0
-        var bestDistanceMetres = Double.MAX_VALUE
-        for (index in geometry.indices) {
-            val distanceMetres = RouteGeometryMath.haversineMetres(geometry[index], point)
-            if (distanceMetres < bestDistanceMetres) {
-                bestDistanceMetres = distanceMetres
-                bestIndex = index
-            }
-        }
-        return bestIndex
     }
 
     /** リルート判定の数値閾値定義。 */
