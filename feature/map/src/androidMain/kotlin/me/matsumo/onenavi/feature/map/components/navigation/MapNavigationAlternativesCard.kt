@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,7 +17,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
@@ -150,47 +151,49 @@ private fun MapNavigationAlternativeRouteRow(
     onClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    val durationText = route.formattedDuration()
+    val distanceAndTollText = route.formattedDistanceAndToll()
+    val durationSpanStyle = MaterialTheme.typography.titleMedium.semiBold()
+        .toSpanStyle()
+        .copy(color = MaterialTheme.colorScheme.onSurface)
+    val distanceAndTollSpanStyle = MaterialTheme.typography.bodyLarge
+        .toSpanStyle()
+        .copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+    Column(
         modifier = modifier
             .clickable(onClick = onClicked)
-            .padding(16.dp, 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         MapNavigationAlternativePriority(
             priority = route.priority,
         )
 
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = route.formattedDuration(),
-                style = MaterialTheme.typography.titleMedium.semiBold(),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        Text(
+            text = buildAnnotatedString {
+                withStyle(durationSpanStyle) {
+                    append(durationText)
+                }
+                append("  ")
+                withStyle(distanceAndTollSpanStyle) {
+                    append(distanceAndTollText)
+                }
+            },
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
 
+        val viaRoadText = route.viaRoadText()
+        if (viaRoadText != null) {
             Text(
-                text = route.formattedDistanceAndToll(),
-                style = MaterialTheme.typography.bodyMedium,
+                text = viaRoadText,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-
-            val viaRoadText = route.viaRoadText()
-            if (viaRoadText != null) {
-                Text(
-                    text = viaRoadText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
         }
     }
 }
