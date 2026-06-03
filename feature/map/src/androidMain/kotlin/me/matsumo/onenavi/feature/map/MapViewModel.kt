@@ -308,11 +308,9 @@ private class UiEventDelegate(
         )
     }
 
-    private suspend fun openPlaceDetails(
-        result: SearchResultItem,
-        addHistory: Boolean,
-    ) {
+    private suspend fun openPlaceDetails(result: SearchResultItem, addHistory: Boolean) {
         if (consumeWaypointSearchSelection(result, addHistory)) return
+
         uiState.value = uiState.value.copy(
             query = result.name,
             selectedResult = result,
@@ -557,10 +555,7 @@ private class UiEventDelegate(
         }
     }
 
-    private suspend fun consumeWaypointSearchSelection(
-        result: SearchResultItem,
-        addHistory: Boolean,
-    ): Boolean {
+    private suspend fun consumeWaypointSearchSelection(result: SearchResultItem, addHistory: Boolean): Boolean {
         return when (val overlayState = uiState.value.overlayState) {
             MapOverlayState.AddWaypointSearch -> {
                 if (addHistory) {
@@ -640,9 +635,6 @@ private fun createMapPointResult(
     )
 }
 
-private fun formatCoordinateName(
-    latitude: Double,
-    longitude: Double,
-): String {
+private fun formatCoordinateName(latitude: Double, longitude: Double): String {
     return String.format(Locale.US, "%.6f, %.6f", latitude, longitude)
 }
