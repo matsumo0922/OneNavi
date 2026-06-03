@@ -89,6 +89,7 @@ internal fun MapNavigationContent(
         modifier = modifier,
         contentAlignment = Alignment.TopCenter,
     ) {
+        val searchResultsCardHeight = maxHeight / 3f
         val topPanelModifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
@@ -122,12 +123,12 @@ internal fun MapNavigationContent(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
                     .height(maxHeight / 3f)
                     .onGloballyPositioned { coordinates ->
                         onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
-                    },
+                    }
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
                 query = addWaypointSearchResults.query,
                 results = addWaypointSearchResults.results,
                 onCloseClicked = {

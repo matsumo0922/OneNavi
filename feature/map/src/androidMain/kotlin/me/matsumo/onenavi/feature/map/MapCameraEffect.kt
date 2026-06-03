@@ -15,6 +15,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.state.MapCameraState
+import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.RouteMeterIndex
@@ -26,6 +27,7 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
  * @param uiState map screen の UI state
  * @param screenState 現在の地図画面状態
  * @param routePreviewState Preview 期のルート候補状態
+ * @param overlayState 地図画面上に重ねるオーバーレイ状態
  * @param guidanceState Guidance 期の案内状態
  * @param vehicleLocationState 最新の自車位置
  * @param cameraState カメラ操作を保持する state holder
@@ -35,6 +37,7 @@ internal fun MapCameraEffect(
     uiState: MapUiState,
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
+    overlayState: MapOverlayState,
     guidanceState: GuidanceState,
     vehicleLocationState: VehicleLocationState?,
     cameraState: MapCameraState,
@@ -43,7 +46,8 @@ internal fun MapCameraEffect(
     val statusBarHeightPadding = WindowInsets.statusBars
         .asPaddingValues()
         .calculateTopPadding()
-    val isGuidanceCameraActive = screenState is MapScreenState.Navigating
+    val addWaypointSearchResults = overlayState as? MapOverlayState.AddWaypointSearchResults
+    val isGuidanceCameraActive = screenState is MapScreenState.Navigating && addWaypointSearchResults == null
 
     LaunchedEffect(isGuidanceCameraActive) {
         cameraState.setGuidanceCameraActive(isGuidanceCameraActive)
@@ -107,9 +111,10 @@ internal fun MapCameraEffect(
         uiState.topAppBarHeight,
         uiState.navigationCardHeight,
         screenState,
+        addWaypointSearchResults,
     ) {
         val top = uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }
-        val bottom = if (isGuidanceCameraActive) {
+        val bottom = if (screenState is MapScreenState.Navigating) {
             uiState.navigationCardHeight.toFloat()
         } else {
             with(density) { uiState.bottomSheetPeekHeight.toPx() }
@@ -162,7 +167,7 @@ internal fun MapCameraEffect(
         routeOverviewPoints?.let { cameraState.showRouteOverview(it) }
     }
 
-    LaunchedEffect(screenState) {
+    LaunchedEffect(screenState, addWaypointSearchResults) {
         when (screenState) {
             is MapScreenState.Browsing -> {
                 cameraState.followVehicleLocation(vehicleLocationState)
@@ -201,13 +206,37 @@ internal fun MapCameraEffect(
             }
 
             is MapScreenState.Navigating -> {
-                cameraState.startGuidanceCamera(vehicleLocationState)
+                if (addWaypointSearchResults != null) {
+                    cameraState.showSearchResultsOverview(addWaypointSearchResults)
+                } else {
+                    cameraState.startGuidanceCamera(vehicleLocationState)
+                }
             }
 
             is MapScreenState.Arrived -> {
                 // TODO
             }
         }
+    }
+}
+
+private fun MapCameraState.showSearchResultsOverview(searchResults: MapOverlayState.AddWaypointSearchResults) {
+    val points = searchResults.results.map { result ->
+        RoutePoint(
+            latitude = result.latitude,
+            longitude = result.longitude,
+        )
+    }
+
+    when (points.size) {
+        0 -> Unit
+        1 -> moveTo(
+            latitude = points.first().latitude,
+            longitude = points.first().longitude,
+            zoom = 16f,
+        )
+
+        else -> showRouteOverview(points)
     }
 }
 
