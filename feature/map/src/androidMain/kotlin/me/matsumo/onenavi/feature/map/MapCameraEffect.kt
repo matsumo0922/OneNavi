@@ -47,7 +47,9 @@ internal fun MapCameraEffect(
         .asPaddingValues()
         .calculateTopPadding()
     val addWaypointSearchResults = overlayState as? MapOverlayState.AddWaypointSearchResults
-    val isGuidanceCameraActive = screenState is MapScreenState.Navigating && addWaypointSearchResults == null
+    val addWaypointSelected = overlayState as? MapOverlayState.AddWaypointSelected
+    val hasAddWaypointOverlay = addWaypointSearchResults != null || addWaypointSelected != null
+    val isGuidanceCameraActive = screenState is MapScreenState.Navigating && !hasAddWaypointOverlay
 
     LaunchedEffect(isGuidanceCameraActive) {
         cameraState.setGuidanceCameraActive(isGuidanceCameraActive)
@@ -112,6 +114,7 @@ internal fun MapCameraEffect(
         uiState.navigationCardHeight,
         screenState,
         addWaypointSearchResults,
+        addWaypointSelected,
     ) {
         val top = uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }
         val bottom = if (screenState is MapScreenState.Navigating) {
@@ -167,7 +170,7 @@ internal fun MapCameraEffect(
         routeOverviewPoints?.let { cameraState.showRouteOverview(it) }
     }
 
-    LaunchedEffect(screenState, addWaypointSearchResults) {
+    LaunchedEffect(screenState, addWaypointSearchResults, addWaypointSelected) {
         when (screenState) {
             is MapScreenState.Browsing -> {
                 cameraState.followVehicleLocation(vehicleLocationState)
@@ -206,10 +209,18 @@ internal fun MapCameraEffect(
             }
 
             is MapScreenState.Navigating -> {
-                if (addWaypointSearchResults != null) {
-                    cameraState.showSearchResultsOverview(addWaypointSearchResults)
-                } else {
-                    cameraState.startGuidanceCamera(vehicleLocationState)
+                when {
+                    addWaypointSelected != null -> {
+                        cameraState.showSelectedWaypointRouteOverview(addWaypointSelected)
+                    }
+
+                    addWaypointSearchResults != null -> {
+                        cameraState.showSearchResultsOverview(addWaypointSearchResults)
+                    }
+
+                    else -> {
+                        cameraState.startGuidanceCamera(vehicleLocationState)
+                    }
                 }
             }
 
@@ -218,6 +229,12 @@ internal fun MapCameraEffect(
             }
         }
     }
+}
+
+private fun MapCameraState.showSelectedWaypointRouteOverview(selected: MapOverlayState.AddWaypointSelected) {
+    val routePreviewState = selected.routePreviewState as? RoutePreviewState.Ready ?: return
+    val points = routePreviewState.routes.flatMap { route -> route.geometry }
+    showRouteOverview(points)
 }
 
 private fun MapCameraState.showSearchResultsOverview(searchResults: MapOverlayState.AddWaypointSearchResults) {

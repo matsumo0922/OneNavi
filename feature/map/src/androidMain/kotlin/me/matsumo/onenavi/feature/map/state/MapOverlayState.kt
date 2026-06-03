@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.SearchResultItem
+import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 
 /**
  * 地図画面上に重ねて表示されるオーバーレイの状態。
@@ -30,6 +31,18 @@ sealed interface MapOverlayState {
     data class AddWaypointSearchResults(
         val query: String,
         val results: ImmutableList<SearchResultItem>,
+    ) : MapOverlayState
+
+    /**
+     * ナビゲーション中の waypoint 追加候補として選択した地点の詳細オーバーレイ。
+     *
+     * @property place 選択した地点。
+     * @property routePreviewState 選択地点を経由地にした仮ルート探索状態。
+     */
+    @Immutable
+    data class AddWaypointSelected(
+        val place: SearchResultItem,
+        val routePreviewState: RoutePreviewState,
     ) : MapOverlayState
 
     /**

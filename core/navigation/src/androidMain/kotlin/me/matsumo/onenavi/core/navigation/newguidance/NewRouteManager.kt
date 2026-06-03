@@ -5,6 +5,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
@@ -45,17 +46,12 @@ class NewRouteManager(
         val intermediates = waypoints.subList(1, waypoints.lastIndex).map { it.toRoutePoint() }
 
         runCatching {
-            val results = routeRepository.searchRoutes(
-                originLatitude = origin.latitude,
-                originLongitude = origin.longitude,
-                destinationLatitude = destination.latitude,
-                destinationLongitude = destination.longitude,
-                intermediateWaypoints = intermediates.map { it.latitude to it.longitude },
-            ).getOrThrow()
-
-            require(results.isNotEmpty()) { "No route candidates returned" }
-
-            results.map { result -> result.detail }
+            searchRouteDetails(
+                origin = origin,
+                destination = destination,
+                intermediatePoints = intermediates,
+                originDirectionDegrees = null,
+            )
         }
             .onSuccess { routes ->
                 Napier.i(tag = TAG) { "searchRoutes ready: routes=${routes.size}" }
@@ -68,6 +64,38 @@ class NewRouteManager(
                 Napier.w(tag = TAG, throwable = error) { "searchRoutes failed" }
                 _state.value = RoutePreviewState.Failed(error)
             }
+    }
+
+    /**
+     * [state] を更新せず、指定地点列のルート候補を探索する。
+     *
+     * ナビゲーション中に一時的な候補ルートを表示したい場合など、通常の RoutePreview 状態を壊したくない
+     * 呼び出し元が使用する。
+     */
+    suspend fun searchRoutePreview(
+        origin: RoutePoint,
+        destination: RoutePoint,
+        intermediatePoints: List<RoutePoint> = emptyList(),
+        originDirectionDegrees: Int? = null,
+    ): RoutePreviewState {
+        return runCatching {
+            searchRouteDetails(
+                origin = origin,
+                destination = destination,
+                intermediatePoints = intermediatePoints,
+                originDirectionDegrees = originDirectionDegrees,
+            )
+        }.fold(
+            onSuccess = { routes ->
+                RoutePreviewState.Ready(
+                    routes = routes.toImmutableList(),
+                    selectedIndex = 0,
+                )
+            },
+            onFailure = { error ->
+                RoutePreviewState.Failed(error)
+            },
+        )
     }
 
     /**
@@ -88,6 +116,26 @@ class NewRouteManager(
     /** Idle に戻す。case 切り替え (Browsing への離脱) で呼ぶ。 */
     fun reset() {
         _state.value = RoutePreviewState.Idle
+    }
+
+    private suspend fun searchRouteDetails(
+        origin: RoutePoint,
+        destination: RoutePoint,
+        intermediatePoints: List<RoutePoint>,
+        originDirectionDegrees: Int? = null,
+    ): List<RouteDetail> {
+        val results = routeRepository.searchRoutes(
+            originLatitude = origin.latitude,
+            originLongitude = origin.longitude,
+            destinationLatitude = destination.latitude,
+            destinationLongitude = destination.longitude,
+            intermediateWaypoints = intermediatePoints.map { point -> point.latitude to point.longitude },
+            originDirectionDegrees = originDirectionDegrees,
+        ).getOrThrow()
+
+        require(results.isNotEmpty()) { "No route candidates returned" }
+
+        return results.map { result -> result.detail }
     }
 
     private fun RouteWaypoint.toRoutePoint(): RoutePoint = RoutePoint(

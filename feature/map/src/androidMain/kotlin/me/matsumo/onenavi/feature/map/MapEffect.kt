@@ -101,6 +101,13 @@ internal fun MapEffect(
         )
     }
 
+    if (overlayState is MapOverlayState.AddWaypointSelected) {
+        AddWaypointSelectedEffect(
+            overlayState = overlayState,
+            googleMap = googleMap,
+        )
+    }
+
     if (vehicleLocationState != null) {
         val guidanceRoute = guidanceState.routeForMapOverlay()
         val routeGeometry = guidanceRoute
@@ -115,6 +122,36 @@ internal fun MapEffect(
             routeKey = guidanceRoute?.route?.id,
             routeGeometry = routeGeometry,
             zIndex = VEHICLE_PUCK_Z_INDEX,
+        )
+    }
+}
+
+/**
+ * ナビゲーション中に選択した waypoint 候補の仮ルートを描画する。
+ *
+ * @param overlayState 選択地点と仮ルート探索状態
+ * @param googleMap overlay 描画先の GoogleMap
+ */
+@Composable
+private fun AddWaypointSelectedEffect(
+    overlayState: MapOverlayState.AddWaypointSelected,
+    googleMap: GoogleMap,
+) {
+    MapMarker(
+        googleMap = googleMap,
+        latitude = overlayState.place.latitude,
+        longitude = overlayState.place.longitude,
+        title = overlayState.place.name,
+        zIndex = WAYPOINT_CANDIDATE_MARKER_Z_INDEX,
+    )
+
+    val routePreviewState = overlayState.routePreviewState as? RoutePreviewState.Ready ?: return
+
+    routePreviewState.routes.forEachIndexed { routeIndex, route ->
+        RoutePolylineEffect(
+            googleMap = googleMap,
+            route = route,
+            isSelected = routeIndex == routePreviewState.selectedIndex,
         )
     }
 }
@@ -350,6 +387,9 @@ private const val DESTINATION_MARKER_Z_INDEX = 10_500f
 
 /** 検索結果 marker の zIndex 起点。 */
 private const val SEARCH_RESULT_MARKER_Z_INDEX = 11_000f
+
+/** waypoint 候補 marker の zIndex。 */
+private const val WAYPOINT_CANDIDATE_MARKER_Z_INDEX = 11_500f
 
 /** 自車 marker の zIndex。 */
 private const val VEHICLE_PUCK_Z_INDEX = 12_000f

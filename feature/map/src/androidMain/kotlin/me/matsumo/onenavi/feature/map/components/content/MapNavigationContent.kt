@@ -33,6 +33,7 @@ import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationEtaCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationManeuverPanel
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationReroutingPanel
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSearchResultsCard
+import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSelectedWaypointCard
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.NavigationGuideImage
@@ -62,6 +63,8 @@ internal fun MapNavigationContent(
     val etaRoute = guiding?.route ?: rerouting?.previousRoute
     val etaProgress = guiding?.progress ?: rerouting?.previousProgress
     val addWaypointSearchResults = overlayState as? MapOverlayState.AddWaypointSearchResults
+    val addWaypointSelected = overlayState as? MapOverlayState.AddWaypointSelected
+    val hasNavigationBottomCard = etaProgress != null || addWaypointSearchResults != null || addWaypointSelected != null
 
     fun cancelNavigation() {
         onUiEvent(MapUiEvent.OnNavigationStop)
@@ -79,8 +82,8 @@ internal fun MapNavigationContent(
         }
     }
 
-    LaunchedEffect(etaProgress == null, addWaypointSearchResults == null) {
-        if (etaProgress == null && addWaypointSearchResults == null) {
+    LaunchedEffect(hasNavigationBottomCard) {
+        if (!hasNavigationBottomCard) {
             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(0))
         }
     }
@@ -89,7 +92,7 @@ internal fun MapNavigationContent(
         modifier = modifier,
         contentAlignment = Alignment.TopCenter,
     ) {
-        val searchResultsCardHeight = maxHeight / 3f
+        val bottomFloatingCardHeight = maxHeight / 3f
         val topPanelModifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
@@ -118,23 +121,44 @@ internal fun MapNavigationContent(
             }
         }
 
-        if (addWaypointSearchResults != null) {
-            MapNavigationSearchResultsCard(
+        if (addWaypointSelected != null) {
+            MapNavigationSelectedWaypointCard(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .height(maxHeight / 3f)
                     .onGloballyPositioned { coordinates ->
                         onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                     }
                     .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .height(bottomFloatingCardHeight),
+                place = addWaypointSelected.place,
+                routePreviewState = addWaypointSelected.routePreviewState,
+                onCloseClicked = {
+                    onUiEvent(MapUiEvent.OnWaypointSearchDismissed)
+                },
+                onAddWaypointClicked = {},
+                onAlternativesClicked = {},
+            )
+        } else if (addWaypointSearchResults != null) {
+            MapNavigationSearchResultsCard(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .onGloballyPositioned { coordinates ->
+                        onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
+                    }
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .height(bottomFloatingCardHeight),
                 query = addWaypointSearchResults.query,
                 results = addWaypointSearchResults.results,
                 onCloseClicked = {
                     onUiEvent(MapUiEvent.OnWaypointSearchDismissed)
                 },
-                onResultClicked = {},
+                onResultClicked = { result ->
+                    onUiEvent(MapUiEvent.OnAddWaypointCandidateSelected(result))
+                },
             )
         } else if (etaProgress != null && etaRoute != null) {
             MapNavigationEtaCard(

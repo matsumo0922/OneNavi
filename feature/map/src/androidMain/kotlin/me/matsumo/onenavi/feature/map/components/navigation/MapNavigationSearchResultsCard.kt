@@ -3,6 +3,7 @@ package me.matsumo.onenavi.feature.map.components.navigation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,7 +58,7 @@ internal fun MapNavigationSearchResultsCard(
         ) {
             MapNavigationSearchResultsHeader(
                 modifier = Modifier.fillMaxWidth(),
-                query = query,
+                title = query,
                 onCloseClicked = onCloseClicked,
             )
 
@@ -98,23 +99,27 @@ internal fun MapNavigationSearchResultsCard(
 }
 
 @Composable
-private fun MapNavigationSearchResultsHeader(
-    query: String,
+internal fun MapNavigationSearchResultsHeader(
     onCloseClicked: () -> Unit,
     modifier: Modifier = Modifier,
+    title: String? = null,
 ) {
     Row(
         modifier = modifier.padding(16.dp, 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            modifier = Modifier.weight(1f),
-            text = query,
-            style = MaterialTheme.typography.titleMedium.semiBold(),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (title != null) {
+            Text(
+                modifier = Modifier.weight(1f),
+                text = title,
+                style = MaterialTheme.typography.titleMedium.semiBold(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
+        }
 
         IconButton(
             onClick = onCloseClicked,
