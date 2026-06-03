@@ -82,6 +82,9 @@ fun MapScreen(modifier: Modifier = Modifier) {
     val isMapDarkMode = shouldUseDarkTheme(appSetting.theme)
     val isNavigating = screenState is MapScreenState.Navigating
     val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
+    val waypointSearchOverlay = uiState.overlayState as? MapOverlayState.WaypointSearch
+    val isAddWaypointSearchOverlay = uiState.overlayState is MapOverlayState.AddWaypointSearch
+    val shouldShowWaypointSearchOverlay = isAddWaypointSearchOverlay || waypointSearchOverlay != null
 
     val controlsBottomPadding by animateDpAsState(
         targetValue = when {
@@ -228,8 +231,8 @@ fun MapScreen(modifier: Modifier = Modifier) {
 
         MapWaypointSearchScreen(
             modifier = Modifier.fillMaxSize(),
-            isVisible = uiState.overlayState is MapOverlayState.WaypointSearch,
-            initialQuery = (uiState.overlayState as? MapOverlayState.WaypointSearch)?.initialQuery,
+            isVisible = shouldShowWaypointSearchOverlay,
+            initialQuery = waypointSearchOverlay?.initialQuery,
             suggestions = uiState.suggestions,
             histories = uiState.histories,
             onUiEvent = viewModel::onUiEvent,

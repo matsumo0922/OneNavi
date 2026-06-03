@@ -75,6 +75,9 @@ sealed interface MapUiEvent {
     /** 指定 index の waypoint を差し替えるための地点検索オーバーレイを開く。 */
     data class OnWaypointEditRequested(val index: Int) : MapUiEvent
 
+    /** ナビゲーション中に waypoint 追加用の地点検索オーバーレイを開く。 */
+    data object OnAddWaypointRequested : MapUiEvent
+
     /** waypoint 差し替え用の地点検索オーバーレイを閉じる。 */
     data object OnWaypointSearchDismissed : MapUiEvent
 

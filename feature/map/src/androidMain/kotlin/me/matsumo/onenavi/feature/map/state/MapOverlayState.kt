@@ -14,6 +14,10 @@ sealed interface MapOverlayState {
     @Stable
     data object None : MapOverlayState
 
+    /** ナビゲーション中の waypoint 追加用地点検索オーバーレイ。 */
+    @Stable
+    data object AddWaypointSearch : MapOverlayState
+
     /**
      * waypoint 差し替え用の全画面地点検索オーバーレイ。
      * [waypointIndex] は差し替え対象の waypoint の index。

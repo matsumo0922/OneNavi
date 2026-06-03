@@ -128,7 +128,9 @@ internal fun MapNavigationContent(
                 congestionSegments = etaRoute.congestionSegments,
                 onCloseClicked = ::cancelNavigation,
                 onAlternativesClicked = {},
-                onAddWaypointClicked = {},
+                onAddWaypointClicked = {
+                    onUiEvent(MapUiEvent.OnAddWaypointRequested)
+                },
                 onRoutePreviewClicked = {
                     onUiEvent(MapUiEvent.OnNavigationRoutePreviewClicked)
                 },
