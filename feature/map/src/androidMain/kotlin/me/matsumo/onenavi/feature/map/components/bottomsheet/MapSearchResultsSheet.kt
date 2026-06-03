@@ -107,7 +107,7 @@ internal fun MapSearchResultsSheet(
 }
 
 @Composable
-private fun MapSearchResultRow(
+internal fun MapSearchResultRow(
     index: Int,
     result: SearchResultItem,
     onClicked: () -> Unit,

@@ -51,6 +51,7 @@ internal fun MapWaypointSearchScreen(
     initialQuery: String?,
     suggestions: ImmutableList<SearchSuggestionItem>,
     histories: ImmutableList<SearchHistory>,
+    onSearch: (String) -> Unit,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -73,6 +74,7 @@ internal fun MapWaypointSearchScreen(
             initialQuery = initialQuery,
             suggestions = suggestions,
             histories = histories,
+            onSearch = onSearch,
             onUiEvent = onUiEvent,
         )
     }
@@ -84,6 +86,7 @@ private fun MapWaypointSearchContent(
     initialQuery: String?,
     suggestions: ImmutableList<SearchSuggestionItem>,
     histories: ImmutableList<SearchHistory>,
+    onSearch: (String) -> Unit,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -110,7 +113,10 @@ private fun MapWaypointSearchContent(
                 .statusBarsPadding()
                 .fillMaxWidth(),
             textFieldState = textFieldState,
-            onSearch = { keyboardController?.hide() },
+            onSearch = { query ->
+                keyboardController?.hide()
+                onSearch(query)
+            },
             onBackClicked = { onUiEvent(MapUiEvent.OnWaypointSearchDismissed) },
         )
 
@@ -137,7 +143,7 @@ private fun MapWaypointSearchContent(
 @Composable
 private fun MapWaypointSearchInputField(
     textFieldState: TextFieldState,
-    onSearch: () -> Unit,
+    onSearch: (String) -> Unit,
     onBackClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -145,7 +151,7 @@ private fun MapWaypointSearchInputField(
         modifier = modifier,
         searchBarState = rememberSearchBarState(initialValue = SearchBarValue.Expanded),
         textFieldState = textFieldState,
-        onSearch = { onSearch() },
+        onSearch = { query -> onSearch(query) },
         placeholder = {
             Text(
                 text = stringResource(Res.string.home_waypoint_search_placeholder),

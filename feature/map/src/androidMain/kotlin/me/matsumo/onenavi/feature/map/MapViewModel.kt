@@ -245,6 +245,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnRouteWaypointsConfirmed -> handleRouteWaypointsConfirmed(event.waypoints)
             is MapUiEvent.OnWaypointEditRequested -> handleWaypointEditRequested(event.index)
             is MapUiEvent.OnAddWaypointRequested -> handleAddWaypointRequested()
+            is MapUiEvent.OnAddWaypointSearch -> handleAddWaypointSearch(event.query, event.latitude, event.longitude)
             is MapUiEvent.OnWaypointSearchDismissed -> handleWaypointSearchDismissed()
             is MapUiEvent.OnWaypointEditResultConsumed -> handleWaypointEditResultConsumed()
             is MapUiEvent.OnTopAppBarHeightChanged -> handleTopAppBarHeightChanged(event.height)
@@ -510,6 +511,32 @@ private class UiEventDelegate(
         openWaypointSearchOverlay(MapOverlayState.AddWaypointSearch)
     }
 
+    private fun handleAddWaypointSearch(
+        query: String,
+        latitude: Double?,
+        longitude: Double?,
+    ) {
+        if (query.isBlank()) return
+
+        placeSearchJob?.cancel()
+        placeSearchJob = scope.launch {
+            searchRepository.searchMultiple(query, latitude, longitude)
+                .onSuccess { items ->
+                    uiState.value = uiState.value.copy(
+                        query = query,
+                        suggestions = persistentListOf(),
+                        overlayState = MapOverlayState.AddWaypointSearchResults(
+                            query = query,
+                            results = items.toImmutableList(),
+                        ),
+                    )
+                }
+                .onFailure {
+                    Napier.e(it, TAG) { "Failed to search waypoint candidates. query: $query" }
+                }
+        }
+    }
+
     private fun openWaypointSearchOverlay(overlayState: MapOverlayState) {
         uiState.value = uiState.value.copy(
             query = null,
@@ -520,7 +547,10 @@ private class UiEventDelegate(
     }
 
     private fun handleWaypointSearchDismissed() {
-        uiState.value = uiState.value.copy(overlayState = MapOverlayState.None)
+        uiState.value = uiState.value.copy(
+            suggestions = persistentListOf(),
+            overlayState = MapOverlayState.None,
+        )
     }
 
     private fun handleWaypointEditResultConsumed() {
@@ -555,7 +585,10 @@ private class UiEventDelegate(
         }
     }
 
-    private suspend fun consumeWaypointSearchSelection(result: SearchResultItem, addHistory: Boolean): Boolean {
+    private suspend fun consumeWaypointSearchSelection(
+        result: SearchResultItem,
+        addHistory: Boolean,
+    ): Boolean {
         return when (val overlayState = uiState.value.overlayState) {
             MapOverlayState.AddWaypointSearch -> {
                 if (addHistory) {
@@ -565,6 +598,8 @@ private class UiEventDelegate(
                 uiState.value = uiState.value.copy(overlayState = MapOverlayState.None)
                 true
             }
+
+            is MapOverlayState.AddWaypointSearchResults -> true
 
             MapOverlayState.None -> false
 

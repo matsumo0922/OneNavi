@@ -4,8 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import com.google.android.gms.maps.GoogleMap
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.model.RouteDetail
+import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.components.MapGuidanceManeuverArrowEffect
@@ -18,6 +20,7 @@ import me.matsumo.onenavi.feature.map.components.MapVehiclePoseEffect
 import me.matsumo.onenavi.feature.map.components.callout.MapGuidanceManeuverCallOutMarkerEffect
 import me.matsumo.onenavi.feature.map.components.callout.MapRoutePreviewCallOutMarkerEffect
 import me.matsumo.onenavi.feature.map.state.MapCameraState
+import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 
@@ -26,6 +29,7 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
  *
  * @param screenState 現在の地図画面状態
  * @param routePreviewState Preview 期のルート候補状態
+ * @param overlayState 地図画面上に重ねるオーバーレイ状態
  * @param guidanceState Guidance 期の案内状態
  * @param vehicleLocationState 最新の自車位置
  * @param googleMap overlay 描画先の GoogleMap
@@ -39,6 +43,7 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 internal fun MapEffect(
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
+    overlayState: MapOverlayState,
     guidanceState: GuidanceState,
     vehicleLocationState: VehicleLocationState?,
     googleMap: GoogleMap,
@@ -89,6 +94,13 @@ internal fun MapEffect(
         is MapScreenState.Arrived -> Unit
     }
 
+    if (overlayState is MapOverlayState.AddWaypointSearchResults) {
+        SearchResultsMarkersEffect(
+            results = overlayState.results,
+            googleMap = googleMap,
+        )
+    }
+
     if (vehicleLocationState != null) {
         val guidanceRoute = guidanceState.routeForMapOverlay()
         val routeGeometry = guidanceRoute
@@ -137,7 +149,24 @@ private fun SearchResultsListEffect(
     screenState: MapScreenState.SearchResultsList,
     googleMap: GoogleMap,
 ) {
-    screenState.results.forEachIndexed { index, result ->
+    SearchResultsMarkersEffect(
+        results = screenState.results,
+        googleMap = googleMap,
+    )
+}
+
+/**
+ * 検索結果一覧の numbered marker を描画する。
+ *
+ * @param results 検索結果一覧
+ * @param googleMap marker 描画先の GoogleMap
+ */
+@Composable
+private fun SearchResultsMarkersEffect(
+    results: ImmutableList<SearchResultItem>,
+    googleMap: GoogleMap,
+) {
+    results.forEachIndexed { index, result ->
         MapNumberedMarker(
             googleMap = googleMap,
             latitude = result.latitude,

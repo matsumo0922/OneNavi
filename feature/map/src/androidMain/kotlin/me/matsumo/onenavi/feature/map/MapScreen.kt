@@ -190,6 +190,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxSize(),
                         screenState = screenState,
                         routePreviewState = routePreviewState,
+                        overlayState = uiState.overlayState,
                         guidanceState = guidanceState,
                         vehicleLocationState = vehicleLocationState,
                         googleMap = it,
@@ -235,6 +236,17 @@ fun MapScreen(modifier: Modifier = Modifier) {
             initialQuery = waypointSearchOverlay?.initialQuery,
             suggestions = uiState.suggestions,
             histories = uiState.histories,
+            onSearch = { query ->
+                if (isAddWaypointSearchOverlay) {
+                    viewModel.onUiEvent(
+                        MapUiEvent.OnAddWaypointSearch(
+                            query = query,
+                            latitude = cameraState.myLocationLatitude,
+                            longitude = cameraState.myLocationLongitude,
+                        ),
+                    )
+                }
+            },
             onUiEvent = viewModel::onUiEvent,
         )
     }
@@ -280,6 +292,7 @@ private fun MapScreenContent(
                 modifier = modifier,
                 guidanceState = guidanceState,
                 navigationGuideImage = uiState.navigationGuideImage,
+                overlayState = uiState.overlayState,
                 hazeState = hazeState,
                 onUiEvent = onUiEvent,
             )

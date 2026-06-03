@@ -1,7 +1,8 @@
 package me.matsumo.onenavi.feature.map.components.content
 
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -31,6 +32,8 @@ import me.matsumo.onenavi.core.resource.home_map_navigation_cancel_dialog_title
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationEtaCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationManeuverPanel
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationReroutingPanel
+import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSearchResultsCard
+import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.NavigationGuideImage
 import org.jetbrains.compose.resources.stringResource
@@ -45,6 +48,7 @@ import org.jetbrains.compose.resources.stringResource
 internal fun MapNavigationContent(
     guidanceState: GuidanceState,
     navigationGuideImage: NavigationGuideImage?,
+    overlayState: MapOverlayState,
     hazeState: HazeState,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
@@ -57,6 +61,7 @@ internal fun MapNavigationContent(
     val shouldShowTopPanel = (guiding != null && banner != null) || rerouting != null
     val etaRoute = guiding?.route ?: rerouting?.previousRoute
     val etaProgress = guiding?.progress ?: rerouting?.previousProgress
+    val addWaypointSearchResults = overlayState as? MapOverlayState.AddWaypointSearchResults
 
     fun cancelNavigation() {
         onUiEvent(MapUiEvent.OnNavigationStop)
@@ -74,13 +79,13 @@ internal fun MapNavigationContent(
         }
     }
 
-    LaunchedEffect(etaProgress == null) {
-        if (etaProgress == null) {
+    LaunchedEffect(etaProgress == null, addWaypointSearchResults == null) {
+        if (etaProgress == null && addWaypointSearchResults == null) {
             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(0))
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier,
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -112,7 +117,25 @@ internal fun MapNavigationContent(
             }
         }
 
-        if (etaProgress != null && etaRoute != null) {
+        if (addWaypointSearchResults != null) {
+            MapNavigationSearchResultsCard(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .height(maxHeight / 3f)
+                    .onGloballyPositioned { coordinates ->
+                        onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
+                    },
+                query = addWaypointSearchResults.query,
+                results = addWaypointSearchResults.results,
+                onCloseClicked = {
+                    onUiEvent(MapUiEvent.OnWaypointSearchDismissed)
+                },
+                onResultClicked = {},
+            )
+        } else if (etaProgress != null && etaRoute != null) {
             MapNavigationEtaCard(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)

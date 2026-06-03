@@ -55,13 +55,13 @@ internal fun MapCameraEffect(
     val distanceToManeuverMeters = nextManeuver?.distanceToManeuverMeters
     val isOnRoute = guiding?.progress?.routeMatchState == RouteMatchState.ON_ROUTE
     val isManeuverPassed = distanceToManeuverMeters != null &&
-            distanceToManeuverMeters <= GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS
+        distanceToManeuverMeters <= GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS
     val shouldStartManeuverFocus = isGuidanceCameraActive &&
-            isOnRoute &&
-            guidancePointIndex != null &&
-            distanceToManeuverMeters != null &&
-            distanceToManeuverMeters > GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS &&
-            distanceToManeuverMeters <= GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS
+        isOnRoute &&
+        guidancePointIndex != null &&
+        distanceToManeuverMeters != null &&
+        distanceToManeuverMeters > GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS &&
+        distanceToManeuverMeters <= GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS
 
     LaunchedEffect(guiding?.route?.id) {
         cameraState.clearGuidanceManeuverFocus()
@@ -146,7 +146,8 @@ internal fun MapCameraEffect(
 
                 is GuidanceState.Arrived,
                 is GuidanceState.Failed,
-                is GuidanceState.Idle -> null
+                is GuidanceState.Idle,
+                -> null
             }
 
             else -> null
@@ -221,7 +222,8 @@ private fun GuidanceState.routeOverviewKey(): String? = when (this) {
     is GuidanceState.Rerouting -> previousRoute.id
     is GuidanceState.Arrived,
     is GuidanceState.Failed,
-    is GuidanceState.Idle -> null
+    is GuidanceState.Idle,
+    -> null
 }
 
 private fun remainingRouteOverviewPoints(

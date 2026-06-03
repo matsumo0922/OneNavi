@@ -78,6 +78,13 @@ sealed interface MapUiEvent {
     /** ナビゲーション中に waypoint 追加用の地点検索オーバーレイを開く。 */
     data object OnAddWaypointRequested : MapUiEvent
 
+    /** ナビゲーション中に waypoint 追加用の複数地点検索を実行する。 */
+    data class OnAddWaypointSearch(
+        val query: String,
+        val latitude: Double?,
+        val longitude: Double?,
+    ) : MapUiEvent
+
     /** waypoint 差し替え用の地点検索オーバーレイを閉じる。 */
     data object OnWaypointSearchDismissed : MapUiEvent
 
