@@ -82,6 +82,7 @@ internal fun MapEffect(
             )
         }
         is MapScreenState.Navigating -> {
+            val shouldSuppressGuidanceRouteOverlay = overlayState is MapOverlayState.AddWaypointSelected
             NavigationEffect(
                 modifier = modifier,
                 guidanceState = guidanceState,
@@ -89,6 +90,7 @@ internal fun MapEffect(
                 cameraZoom = cameraState.cameraState.zoom,
                 topAppBarHeightPx = topAppBarHeightPx,
                 bottomSheetPeekHeight = bottomSheetPeekHeight,
+                shouldSuppressGuidanceRouteOverlay = shouldSuppressGuidanceRouteOverlay,
             )
         }
         is MapScreenState.Arrived -> Unit
@@ -284,6 +286,7 @@ private fun RoutePreviewEffect(
  * @param cameraZoom 現在の GoogleMap zoom
  * @param topAppBarHeightPx callout が避ける上部バー高さ
  * @param bottomSheetPeekHeight callout が避ける bottom sheet 高さ
+ * @param shouldSuppressGuidanceRouteOverlay 案内中 route overlay を一時的に非表示にするか
  * @param modifier callout overlay 用 modifier
  */
 @Composable
@@ -293,15 +296,18 @@ private fun NavigationEffect(
     cameraZoom: Float,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
+    shouldSuppressGuidanceRouteOverlay: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val guidanceRoute = guidanceState.routeForMapOverlay() ?: return
 
-    RoutePolylineEffect(
-        googleMap = googleMap,
-        route = guidanceRoute.route,
-        isSelected = true,
-    )
+    if (!shouldSuppressGuidanceRouteOverlay) {
+        RoutePolylineEffect(
+            googleMap = googleMap,
+            route = guidanceRoute.route,
+            isSelected = true,
+        )
+    }
 
     MapOriginMarker(
         googleMap = googleMap,
@@ -317,7 +323,7 @@ private fun NavigationEffect(
         zIndex = DESTINATION_MARKER_Z_INDEX,
     )
 
-    if (guidanceState is GuidanceState.Guiding) {
+    if (guidanceState is GuidanceState.Guiding && !shouldSuppressGuidanceRouteOverlay) {
         MapGuidanceManeuverArrowEffect(
             googleMap = googleMap,
             guidanceState = guidanceState,
