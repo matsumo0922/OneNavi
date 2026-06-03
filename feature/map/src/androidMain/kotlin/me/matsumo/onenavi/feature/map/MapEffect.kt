@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.feature.map
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import com.google.android.gms.maps.GoogleMap
@@ -105,9 +106,17 @@ internal fun MapEffect(
     }
 
     if (overlayState is MapOverlayState.AddWaypointSelected) {
+        val guidanceWaypointCount = guidanceState
+            .routeForMapOverlay()
+            ?.route
+            ?.intermediateWaypoints
+            ?.size
+            ?: 0
+
         AddWaypointSelectedEffect(
             overlayState = overlayState,
             googleMap = googleMap,
+            guidanceWaypointCount = guidanceWaypointCount,
         )
     }
 
@@ -134,16 +143,24 @@ internal fun MapEffect(
  *
  * @param overlayState 選択地点と仮ルート探索状態
  * @param googleMap overlay 描画先の GoogleMap
+ * @param guidanceWaypointCount 現在案内中ルートが持つ経由地数
  */
 @Composable
 private fun AddWaypointSelectedEffect(
     overlayState: MapOverlayState.AddWaypointSelected,
     googleMap: GoogleMap,
+    guidanceWaypointCount: Int,
 ) {
-    MapMarker(
+    val candidateNumber = calculateWaypointCandidateNumber(
+        routePreviewState = overlayState.routePreviewState,
+        guidanceWaypointCount = guidanceWaypointCount,
+    )
+
+    MapWaypointNumberedMarker(
         googleMap = googleMap,
         latitude = overlayState.place.latitude,
         longitude = overlayState.place.longitude,
+        number = candidateNumber,
         title = overlayState.place.name,
         zIndex = WAYPOINT_CANDIDATE_MARKER_Z_INDEX,
     )
@@ -214,6 +231,30 @@ private fun SearchResultsMarkersEffect(
             number = index + 1,
             title = result.name,
             zIndex = SEARCH_RESULT_MARKER_Z_INDEX + index,
+        )
+    }
+}
+
+/**
+ * ルートが持つ中間経由地 marker を番号付きで描画する。
+ *
+ * @param googleMap marker 描画先の GoogleMap
+ * @param route 描画対象 route
+ * @param zIndex marker の zIndex
+ */
+@Composable
+private fun RouteIntermediateWaypointMarkersEffect(
+    googleMap: GoogleMap,
+    route: RouteDetail,
+    zIndex: Float,
+) {
+    route.intermediateWaypoints.forEachIndexed { index, waypoint ->
+        MapWaypointNumberedMarker(
+            googleMap = googleMap,
+            latitude = waypoint.latitude,
+            longitude = waypoint.longitude,
+            number = index + 1,
+            zIndex = zIndex,
         )
     }
 }
@@ -331,6 +372,12 @@ private fun NavigationEffect(
         zIndex = ORIGIN_MARKER_Z_INDEX,
     )
 
+    RouteIntermediateWaypointMarkersEffect(
+        googleMap = googleMap,
+        route = guidanceRoute.route,
+        zIndex = ROUTE_WAYPOINT_MARKER_Z_INDEX,
+    )
+
     MapMarker(
         googleMap = googleMap,
         latitude = guidanceRoute.route.destination.latitude,
@@ -378,10 +425,37 @@ private fun RoutePolylineEffect(
 }
 
 /**
+ * waypoint 追加候補に表示する番号を返す。
+ *
+ * @param routePreviewState waypoint 追加候補を含む仮ルート探索状態
+ * @param guidanceWaypointCount 現在案内中ルートが持つ経由地数
+ * @return 追加候補に割り当てる経由地番号
+ */
+private fun calculateWaypointCandidateNumber(
+    routePreviewState: RoutePreviewState,
+    guidanceWaypointCount: Int,
+): Int {
+    val fallbackNumber = guidanceWaypointCount + 1
+
+    return when (routePreviewState) {
+        is RoutePreviewState.Ready -> {
+            val previewWaypointCount = routePreviewState.selectedRoute.intermediateWaypoints.size
+            previewWaypointCount.coerceAtLeast(fallbackNumber)
+        }
+
+        RoutePreviewState.Idle,
+        RoutePreviewState.Searching,
+        is RoutePreviewState.Failed,
+        -> fallbackNumber
+    }
+}
+
+/**
  * 地図 overlay に使う案内ルート。
  *
  * @param route 描画対象 route
  */
+@Immutable
 private data class GuidanceOverlayRoute(
     val route: RouteDetail,
 )

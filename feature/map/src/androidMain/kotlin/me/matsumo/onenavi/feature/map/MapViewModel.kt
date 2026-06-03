@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.feature.map
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -577,10 +578,11 @@ private class UiEventDelegate(
             latitude = result.latitude,
             longitude = result.longitude,
         )
+        val intermediatePoints = searchContext.intermediatePoints + waypoint
         val routePreviewState = newRouteManager.searchRoutePreview(
             origin = searchContext.origin,
             destination = searchContext.destination,
-            intermediatePoints = listOf(waypoint),
+            intermediatePoints = intermediatePoints,
             originDirectionDegrees = searchContext.originDirectionDegrees,
         )
         if (!uiState.value.overlayState.isAddWaypointOverlay()) return
@@ -602,12 +604,14 @@ private class UiEventDelegate(
             is GuidanceState.Guiding -> AddWaypointRouteSearchContext(
                 origin = guidanceState.progress.snappedLocation,
                 destination = guidanceState.route.destination,
+                intermediatePoints = guidanceState.route.intermediateWaypoints,
                 originDirectionDegrees = guidanceState.progress.bearingDegrees.toInt(),
             )
 
             is GuidanceState.Rerouting -> AddWaypointRouteSearchContext(
                 origin = guidanceState.previousProgress.snappedLocation,
                 destination = guidanceState.previousRoute.destination,
+                intermediatePoints = guidanceState.previousRoute.intermediateWaypoints,
                 originDirectionDegrees = guidanceState.previousProgress.bearingDegrees.toInt(),
             )
 
@@ -757,11 +761,14 @@ private const val VEHICLE_LOCATION_SUBSCRIPTION_STOP_TIMEOUT_MILLIS = 5_000L
  *
  * @property origin 仮ルートの出発地点。
  * @property destination 現在案内中ルートの目的地。
+ * @property intermediatePoints 現在案内中ルートの経由地。
  * @property originDirectionDegrees 出発地点の進行方向。
  */
+@Immutable
 private data class AddWaypointRouteSearchContext(
     val origin: RoutePoint,
     val destination: RoutePoint,
+    val intermediatePoints: ImmutableList<RoutePoint>,
     val originDirectionDegrees: Int,
 )
 
