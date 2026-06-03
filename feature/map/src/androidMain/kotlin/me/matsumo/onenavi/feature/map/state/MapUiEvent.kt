@@ -88,6 +88,9 @@ sealed interface MapUiEvent {
     /** ナビゲーション中に waypoint 追加候補の地点を選択する。 */
     data class OnAddWaypointCandidateSelected(val item: SearchResultItem) : MapUiEvent
 
+    /** ナビゲーション中に選択した waypoint 候補を経由地として確定する。 */
+    data object OnAddWaypointConfirmed : MapUiEvent
+
     /** waypoint 差し替え用の地点検索オーバーレイを閉じる。 */
     data object OnWaypointSearchDismissed : MapUiEvent
 

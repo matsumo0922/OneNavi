@@ -137,7 +137,9 @@ internal fun MapNavigationContent(
                 onCloseClicked = {
                     onUiEvent(MapUiEvent.OnWaypointSearchDismissed)
                 },
-                onAddWaypointClicked = {},
+                onAddWaypointClicked = {
+                    onUiEvent(MapUiEvent.OnAddWaypointConfirmed)
+                },
                 onAlternativesClicked = {},
             )
         } else if (addWaypointSearchResults != null) {

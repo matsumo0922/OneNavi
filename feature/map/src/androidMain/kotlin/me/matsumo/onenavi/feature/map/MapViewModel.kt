@@ -251,6 +251,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnAddWaypointRequested -> handleAddWaypointRequested()
             is MapUiEvent.OnAddWaypointSearch -> handleAddWaypointSearch(event.query, event.latitude, event.longitude)
             is MapUiEvent.OnAddWaypointCandidateSelected -> handleAddWaypointCandidateSelected(event.item)
+            is MapUiEvent.OnAddWaypointConfirmed -> handleAddWaypointConfirmed()
             is MapUiEvent.OnWaypointSearchDismissed -> handleWaypointSearchDismissed()
             is MapUiEvent.OnWaypointEditResultConsumed -> handleWaypointEditResultConsumed()
             is MapUiEvent.OnTopAppBarHeightChanged -> handleTopAppBarHeightChanged(event.height)
@@ -551,6 +552,15 @@ private class UiEventDelegate(
             searchRepository.addHistory(result)
             searchAddWaypointRoute(result)
         }
+    }
+
+    private fun handleAddWaypointConfirmed() {
+        val overlayState = uiState.value.overlayState as? MapOverlayState.AddWaypointSelected ?: return
+        val routePreviewState = overlayState.routePreviewState as? RoutePreviewState.Ready ?: return
+
+        newGuidanceManager.startGuidance(route = routePreviewState.selectedRoute)
+        clearNavigationOverlayState()
+        handleNavigationRoutePreviewDismissed()
     }
 
     private suspend fun searchAddWaypointRoute(result: SearchResultItem) {

@@ -168,6 +168,7 @@ private fun MapNavigationSelectedWaypointBottomBar(
             Button(
                 modifier = Modifier.weight(1f),
                 onClick = onAddWaypointClicked,
+                enabled = routePreviewState is RoutePreviewState.Ready,
             ) {
                 Icon(
                     imageVector = Icons.Default.AddCircleOutline,
