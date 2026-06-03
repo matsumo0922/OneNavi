@@ -84,7 +84,11 @@ internal fun MapEffect(
             )
         }
         is MapScreenState.Navigating -> {
-            val shouldSuppressGuidanceRouteOverlay = overlayState is MapOverlayState.AddWaypointSelected
+            val addWaypointSelectedState = overlayState as? MapOverlayState.AddWaypointSelected
+            val shouldSuppressGuidanceRouteOverlay = addWaypointSelectedState != null
+            val shouldSuppressGuidanceWaypointMarkers = addWaypointSelectedState
+                ?.routePreviewState is RoutePreviewState.Ready
+
             NavigationEffect(
                 modifier = modifier,
                 guidanceState = guidanceState,
@@ -93,6 +97,7 @@ internal fun MapEffect(
                 topAppBarHeightPx = topAppBarHeightPx,
                 bottomSheetPeekHeight = bottomSheetPeekHeight,
                 shouldSuppressGuidanceRouteOverlay = shouldSuppressGuidanceRouteOverlay,
+                shouldSuppressGuidanceWaypointMarkers = shouldSuppressGuidanceWaypointMarkers,
             )
         }
         is MapScreenState.Arrived -> Unit
@@ -151,21 +156,25 @@ private fun AddWaypointSelectedEffect(
     googleMap: GoogleMap,
     guidanceWaypointCount: Int,
 ) {
-    val candidateNumber = calculateWaypointCandidateNumber(
-        routePreviewState = overlayState.routePreviewState,
-        guidanceWaypointCount = guidanceWaypointCount,
-    )
+    val routePreviewState = overlayState.routePreviewState as? RoutePreviewState.Ready
 
-    MapWaypointNumberedMarker(
+    if (routePreviewState == null) {
+        MapWaypointNumberedMarker(
+            googleMap = googleMap,
+            latitude = overlayState.place.latitude,
+            longitude = overlayState.place.longitude,
+            number = guidanceWaypointCount + 1,
+            title = overlayState.place.name,
+            zIndex = WAYPOINT_CANDIDATE_MARKER_Z_INDEX,
+        )
+        return
+    }
+
+    RouteIntermediateWaypointMarkersEffect(
         googleMap = googleMap,
-        latitude = overlayState.place.latitude,
-        longitude = overlayState.place.longitude,
-        number = candidateNumber,
-        title = overlayState.place.name,
+        route = routePreviewState.selectedRoute,
         zIndex = WAYPOINT_CANDIDATE_MARKER_Z_INDEX,
     )
-
-    val routePreviewState = overlayState.routePreviewState as? RoutePreviewState.Ready ?: return
 
     routePreviewState.routes.forEachIndexed { routeIndex, route ->
         RoutePolylineEffect(
@@ -343,6 +352,7 @@ private fun RoutePreviewEffect(
  * @param topAppBarHeightPx callout が避ける上部バー高さ
  * @param bottomSheetPeekHeight callout が避ける bottom sheet 高さ
  * @param shouldSuppressGuidanceRouteOverlay 案内中 route overlay を一時的に非表示にするか
+ * @param shouldSuppressGuidanceWaypointMarkers 案内中 waypoint marker を一時的に非表示にするか
  * @param modifier callout overlay 用 modifier
  */
 @Composable
@@ -353,6 +363,7 @@ private fun NavigationEffect(
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
     shouldSuppressGuidanceRouteOverlay: Boolean,
+    shouldSuppressGuidanceWaypointMarkers: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val guidanceRoute = guidanceState.routeForMapOverlay() ?: return
@@ -372,11 +383,13 @@ private fun NavigationEffect(
         zIndex = ORIGIN_MARKER_Z_INDEX,
     )
 
-    RouteIntermediateWaypointMarkersEffect(
-        googleMap = googleMap,
-        route = guidanceRoute.route,
-        zIndex = ROUTE_WAYPOINT_MARKER_Z_INDEX,
-    )
+    if (!shouldSuppressGuidanceWaypointMarkers) {
+        RouteIntermediateWaypointMarkersEffect(
+            googleMap = googleMap,
+            route = guidanceRoute.route,
+            zIndex = ROUTE_WAYPOINT_MARKER_Z_INDEX,
+        )
+    }
 
     MapMarker(
         googleMap = googleMap,
@@ -422,32 +435,6 @@ private fun RoutePolylineEffect(
         roadClassSegments = if (isSelected) route.roadClassSegments else persistentListOf(),
         congestionSegments = if (isSelected) route.congestionSegments else persistentListOf(),
     )
-}
-
-/**
- * waypoint 追加候補に表示する番号を返す。
- *
- * @param routePreviewState waypoint 追加候補を含む仮ルート探索状態
- * @param guidanceWaypointCount 現在案内中ルートが持つ経由地数
- * @return 追加候補に割り当てる経由地番号
- */
-private fun calculateWaypointCandidateNumber(
-    routePreviewState: RoutePreviewState,
-    guidanceWaypointCount: Int,
-): Int {
-    val fallbackNumber = guidanceWaypointCount + 1
-
-    return when (routePreviewState) {
-        is RoutePreviewState.Ready -> {
-            val previewWaypointCount = routePreviewState.selectedRoute.intermediateWaypoints.size
-            previewWaypointCount.coerceAtLeast(fallbackNumber)
-        }
-
-        RoutePreviewState.Idle,
-        RoutePreviewState.Searching,
-        is RoutePreviewState.Failed,
-        -> fallbackNumber
-    }
 }
 
 /**

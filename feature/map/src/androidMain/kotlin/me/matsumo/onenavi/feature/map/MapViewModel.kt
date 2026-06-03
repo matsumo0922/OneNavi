@@ -42,6 +42,7 @@ import me.matsumo.onenavi.core.repository.SearchRepository
 import me.matsumo.onenavi.feature.map.location.VehicleLocationDataSource
 import me.matsumo.onenavi.feature.map.state.ExtNavNavigationGuideImageLoader
 import me.matsumo.onenavi.feature.map.state.GuidanceVehicleLocationSelector
+import me.matsumo.onenavi.feature.map.state.MapGeodesy
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
@@ -578,7 +579,11 @@ private class UiEventDelegate(
             latitude = result.latitude,
             longitude = result.longitude,
         )
-        val intermediatePoints = searchContext.intermediatePoints + waypoint
+        val intermediatePoints = searchContext.intermediatePoints.insertWaypointByMinimalDetour(
+            waypoint = waypoint,
+            origin = searchContext.origin,
+            destination = searchContext.destination,
+        )
         val routePreviewState = newRouteManager.searchRoutePreview(
             origin = searchContext.origin,
             destination = searchContext.destination,
@@ -771,6 +776,47 @@ private data class AddWaypointRouteSearchContext(
     val intermediatePoints: ImmutableList<RoutePoint>,
     val originDirectionDegrees: Int,
 )
+
+private fun ImmutableList<RoutePoint>.insertWaypointByMinimalDetour(
+    waypoint: RoutePoint,
+    origin: RoutePoint,
+    destination: RoutePoint,
+): List<RoutePoint> {
+    val routePoints = listOf(origin) + this + destination
+    var bestInsertIndex = size
+    var bestAddedDistanceMeters = Double.POSITIVE_INFINITY
+
+    for (segmentIndex in 0 until routePoints.lastIndex) {
+        val fromPoint = routePoints[segmentIndex]
+        val toPoint = routePoints[segmentIndex + 1]
+        val addedDistanceMeters = calculateDetourDistanceMeters(
+            fromPoint = fromPoint,
+            waypoint = waypoint,
+            toPoint = toPoint,
+        )
+
+        if (addedDistanceMeters < bestAddedDistanceMeters) {
+            bestInsertIndex = segmentIndex
+            bestAddedDistanceMeters = addedDistanceMeters
+        }
+    }
+
+    val sortedPoints = toMutableList()
+    sortedPoints.add(bestInsertIndex, waypoint)
+    return sortedPoints
+}
+
+private fun calculateDetourDistanceMeters(
+    fromPoint: RoutePoint,
+    waypoint: RoutePoint,
+    toPoint: RoutePoint,
+): Double {
+    val viaWaypointDistanceMeters = MapGeodesy.haversineMeters(fromPoint, waypoint) +
+        MapGeodesy.haversineMeters(waypoint, toPoint)
+    val directDistanceMeters = MapGeodesy.haversineMeters(fromPoint, toPoint)
+
+    return viaWaypointDistanceMeters - directDistanceMeters
+}
 
 private fun createMapPointResult(
     placeId: String?,
