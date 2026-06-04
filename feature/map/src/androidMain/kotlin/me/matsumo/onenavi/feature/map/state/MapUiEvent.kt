@@ -46,6 +46,9 @@ sealed interface MapUiEvent {
         val longitude: Double?,
     ) : MapUiEvent
 
+    /** 地点詳細の選択地点を現在のルート文脈へ経由地として追加する。 */
+    data class OnPlaceAddWaypointClicked(val item: SearchResultItem) : MapUiEvent
+
     data class OnRouteIndexChanged(val index: Int) : MapUiEvent
 
     /** 選択中のルートでナビゲーションを開始する。 */

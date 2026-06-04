@@ -319,6 +319,7 @@ private fun MapScreenBottomSheetContent(
                 modifier = modifier,
                 cameraState = cameraState,
                 selectedResult = screenState.place,
+                placeAction = screenState.placeAction,
                 onUiEvent = onUiEvent,
             )
         }

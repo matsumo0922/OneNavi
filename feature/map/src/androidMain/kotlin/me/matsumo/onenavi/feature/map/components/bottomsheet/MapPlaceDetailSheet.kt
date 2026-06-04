@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled._360
+import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Directions
@@ -55,6 +56,7 @@ import me.matsumo.onenavi.core.resource.home_map_metadata
 import me.matsumo.onenavi.core.resource.home_map_metadata_accutary
 import me.matsumo.onenavi.core.resource.home_map_metadata_id
 import me.matsumo.onenavi.core.resource.home_map_metadata_type
+import me.matsumo.onenavi.core.resource.home_map_navigation_eta_add_waypoint
 import me.matsumo.onenavi.core.resource.home_map_point
 import me.matsumo.onenavi.core.resource.home_map_point_address
 import me.matsumo.onenavi.core.resource.home_map_point_coordinates
@@ -64,6 +66,7 @@ import me.matsumo.onenavi.core.resource.home_map_street_view
 import me.matsumo.onenavi.core.ui.components.CommonSectionItem
 import me.matsumo.onenavi.core.ui.theme.semiBold
 import me.matsumo.onenavi.feature.map.state.MapCameraState
+import me.matsumo.onenavi.feature.map.state.MapPlaceAction
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -72,6 +75,7 @@ import org.jetbrains.compose.resources.stringResource
 internal fun MapPlaceDetailSheet(
     cameraState: MapCameraState,
     selectedResult: SearchResultItem,
+    placeAction: MapPlaceAction,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -142,14 +146,27 @@ internal fun MapPlaceDetailSheet(
 
             ButtonSection(
                 modifier = Modifier.fillMaxWidth(),
-                onRouteClicked = {
-                    onUiEvent(
-                        MapUiEvent.OnRouteSearch(
-                            item = selectedResult,
-                            latitude = cameraState.myLocationLatitude,
-                            longitude = cameraState.myLocationLongitude,
-                        ),
-                    )
+                primaryActionText = placeAction.primaryActionText,
+                primaryActionIcon = placeAction.primaryActionIcon,
+                isPrimaryActionEnabled = placeAction.isPrimaryActionEnabled,
+                onPrimaryActionClicked = {
+                    when (placeAction) {
+                        MapPlaceAction.SearchRoute -> {
+                            onUiEvent(
+                                MapUiEvent.OnRouteSearch(
+                                    item = selectedResult,
+                                    latitude = cameraState.myLocationLatitude,
+                                    longitude = cameraState.myLocationLongitude,
+                                ),
+                            )
+                        }
+
+                        is MapPlaceAction.AddWaypointToRoutePreview,
+                        MapPlaceAction.AddWaypointToNavigation,
+                        -> {
+                            onUiEvent(MapUiEvent.OnPlaceAddWaypointClicked(selectedResult))
+                        }
+                    }
                 },
                 onFavoriteClicked = {},
                 onStreetViewClicked = {},
@@ -220,7 +237,10 @@ private fun TitleSection(
 
 @Composable
 private fun ButtonSection(
-    onRouteClicked: () -> Unit,
+    primaryActionText: StringResource,
+    primaryActionIcon: ImageVector,
+    isPrimaryActionEnabled: Boolean,
+    onPrimaryActionClicked: () -> Unit,
     onFavoriteClicked: () -> Unit,
     onStreetViewClicked: () -> Unit,
     onShareClicked: () -> Unit,
@@ -228,10 +248,11 @@ private fun ButtonSection(
 ) {
     val items = listOf(
         ButtonItem(
-            text = Res.string.home_map_search_route,
-            icon = Icons.Default.Directions,
-            onClick = onRouteClicked,
+            text = primaryActionText,
+            icon = primaryActionIcon,
+            onClick = onPrimaryActionClicked,
             isPrimary = true,
+            isEnabled = isPrimaryActionEnabled,
         ),
         ButtonItem(
             text = Res.string.home_map_bookmark,
@@ -262,10 +283,14 @@ private fun ButtonSection(
 
             if (item.isPrimary) {
                 aspectRatio = 2f
+            } else {
+                aspectRatio = 1f
+            }
+
+            if (item.isPrimary && item.isEnabled) {
                 containerColor = MaterialTheme.colorScheme.inverseSurface
                 contentColor = MaterialTheme.colorScheme.inverseOnSurface
             } else {
-                aspectRatio = 1f
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
             }
@@ -275,7 +300,7 @@ private fun ButtonSection(
                     .height(80.dp)
                     .aspectRatio(aspectRatio)
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable { item.onClick() }
+                    .clickable(enabled = item.isEnabled) { item.onClick() }
                     .background(containerColor)
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -343,12 +368,38 @@ private fun IncoSection(
     }
 }
 
+private val MapPlaceAction.primaryActionText: StringResource
+    get() = when (this) {
+        MapPlaceAction.SearchRoute -> Res.string.home_map_search_route
+        is MapPlaceAction.AddWaypointToRoutePreview,
+        MapPlaceAction.AddWaypointToNavigation,
+        -> Res.string.home_map_navigation_eta_add_waypoint
+    }
+
+private val MapPlaceAction.primaryActionIcon: ImageVector
+    get() = when (this) {
+        MapPlaceAction.SearchRoute -> Icons.Default.Directions
+        is MapPlaceAction.AddWaypointToRoutePreview,
+        MapPlaceAction.AddWaypointToNavigation,
+        -> Icons.Default.AddCircleOutline
+    }
+
+private val MapPlaceAction.isPrimaryActionEnabled: Boolean
+    get() = when (this) {
+        MapPlaceAction.SearchRoute,
+        MapPlaceAction.AddWaypointToNavigation,
+        -> true
+
+        is MapPlaceAction.AddWaypointToRoutePreview -> canAddWaypoint
+    }
+
 @Immutable
 private data class ButtonItem(
     val text: StringResource,
     val icon: ImageVector,
     val onClick: () -> Unit,
     val isPrimary: Boolean = false,
+    val isEnabled: Boolean = true,
 )
 
 @Immutable
