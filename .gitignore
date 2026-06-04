@@ -66,5 +66,6 @@ iosApp/OneNavi/Info.plist
 iosApp/ShareExtension/Info.plist
 iosApp/Pods
 
-# Claude Code
+# Coding Agents
 .claude/worktrees
+.codex/config.toml
