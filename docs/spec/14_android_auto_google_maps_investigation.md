@@ -387,7 +387,107 @@ OneNavi にとって重要なのは、「Google Maps だけができる特権 UI
 
 ---
 
-## 9. 参考ソース
+## 9. 既存 Compose Navigation UI を Android Auto Surface へ載せる方針
+
+> **追記日:** 2026-06-04
+> **背景:** 既存の `MapNavigationContent` / `MapNavigationManeuverPanel` などの Compose UI を、
+> Android Auto 側でも作り直さずに共通化したいという要望。PlayStore リリース予定はないため、
+> 配布ポリシー由来の制約は考慮しない前提で検討する。
+
+### 9.1 結論
+
+**Compose の navigation overlay は、作り直さず Android Auto Surface に載せて共通化できる見込みがある。**
+ただし「地図ごと丸ごと」載せるのは現状の地図レンダラ（Google Maps SDK）の制約で難しく、
+**地図レイヤーと Compose overlay レイヤーを分離**したうえで overlay 側だけを共通化するのが現実的である。
+
+### 9.2 共通化の前提はすでに満たされている
+
+`MapNavigationContent` と `MapNavigationManeuverPanel` は完全に state hoisting されており、
+内部で `koinViewModel()` 等に依存していない。引数で state を受け取るだけである。
+
+```kotlin
+internal fun MapNavigationContent(
+    guidanceState: GuidanceState,
+    overlayState: MapOverlayState,
+    hazeState: HazeState,
+    modifier: Modifier = Modifier,
+)
+```
+
+したがって、同じ state を Android Auto 側から渡せば同じ Composable がそのまま動作する。
+phone / car 双方が呼ぶ共通エントリ Composable を切り出すのが望ましい。
+
+```kotlin
+@Composable
+internal fun OneNaviNavigationOverlay(
+    guidanceState: GuidanceState,
+    overlayState: MapOverlayState,
+    modifier: Modifier = Modifier,
+)
+```
+
+state は ViewModel に閉じ込めず、`GuidanceManager` / repository 層（Koin singleton）から
+phone と car の双方が購読する形にすることで、画面間で共有できる。
+`MapViewModel` に閉じている state があれば、その分だけ下層へ引き上げる必要がある。
+
+### 9.3 描画ルート（VirtualDisplay + Presentation + ComposeView）
+
+`§3.3` で触れた `VirtualDisplay` / `Presentation` 手法を実運用する形。
+
+```text
+AppManager.setSurfaceCallback() で受け取る Surface
+  -> DisplayManager.createVirtualDisplay(name, width, height, dpi, surface, flags)
+  -> Presentation(carContext, virtualDisplay.display)
+  -> setContentView(composeView)
+  -> ComposeView { OneNaviNavigationOverlay(state) }
+```
+
+### 9.4 実装上のハマりどころ
+
+1. **Compose を View ツリー外で動かすための owner 注入**
+   `ComposeView` は `ViewTreeLifecycleOwner` / `ViewTreeViewModelStoreOwner` /
+   `ViewTreeSavedStateRegistryOwner` を要求する。`Presentation` の decorView には自動で
+   付かないため、`Session` の `Lifecycle` をぶら下げた自前 owner を 3 点セットで注入する。
+   これが無いと初回 compose で即クラッシュする。
+
+2. **タッチ転送**
+   Compose は `MotionEvent` 駆動だが、host からは `SurfaceCallback.onClick` / `onScroll` /
+   `onFling` しか届かない。これらを `MotionEvent` へ組み立て直して
+   `composeView.dispatchTouchEvent()` へ流す変換層が要る。ボタンタップ程度なら
+   `onClick(x, y)` から DOWN/UP を合成すれば足りる。
+
+3. **地図レンダラ（Google Maps SDK）の Surface 制約**
+   現状の地図は `play-services-maps` ベースであり、`MapView` は内部 `SurfaceView` / GL で
+   任意の `Surface` や `VirtualDisplay` 上に描画できない設計である。
+   そのため `MapNavigationContent` を**地図ごと**単一 `ComposeView` に載せる構成は成立しにくい。
+   地図は Android Auto 用に別経路で描画し、その上に**透過 `ComposeView`** で overlay
+   （`ManeuverPanel` / `EtaCard` / `AlternativesCard` 等）を重ねる二層構成にする。
+   `ManeuverPanel` 自体は地図非依存なので、overlay 側の共通化は素直に成立する。
+
+4. **サイズ / DPI / visibleArea**
+   `onSurfaceAvailable` / `onVisibleAreaChanged` で得る幅・高さ・dpi を `VirtualDisplay` と
+   Compose の `Density` に正しく渡す。host の safe area を `WindowInsets` 相当で overlay に
+   伝えないと、ETA カード等がクラスター領域に食われる。
+
+### 9.5 PoC 推奨順序
+
+1. `OneNaviNavigationOverlay(state)` を切り出し、phone 側を差し替えてリグレッションが無いことを確認する。
+2. 透過 `ComposeView` を `VirtualDisplay` + `Presentation` で Android Auto Surface に出す最小 PoC
+   （まず固定文字列）で owner 注入を検証する。
+3. その上に `ManeuverPanel` だけを仮 state で載せる。
+4. `GuidanceManager` の state を car session に配線する。
+5. 地図レイヤーを別途差し込む（Google Maps SDK の Surface 制約への対処は別途判断）。
+
+### 9.6 Maneuver をリッチに描く観点での意味
+
+この方針が成立すれば、Maneuver 描画は host 固定アイコンに縛られず、phone と同一の
+自前グリフ（`MapGuidanceManeuverArrow` の Canvas 描画、`MapNavigationManeuverLaneIcons` の
+レーン図）を Android Auto でもそのまま使える。`§7` の「地図 surface 側の表現力を上げる」を、
+UI コードを二重に持たずに達成する道筋になる。
+
+---
+
+## 10. 参考ソース
 
 ### Android Developers / AndroidX 公式
 
@@ -438,6 +538,15 @@ OneNavi にとって重要なのは、「Google Maps だけができる特権 UI
 
 16. `TestNavigationManager` API reference  
     https://developer.android.com/reference/kotlin/androidx/car/app/testing/navigation/TestNavigationManager
+
+17. `DisplayManager.createVirtualDisplay` API reference  
+    https://developer.android.com/reference/android/hardware/display/DisplayManager
+
+18. `Presentation` API reference  
+    https://developer.android.com/reference/android/app/Presentation
+
+19. `ComposeView` API reference  
+    https://developer.android.com/reference/kotlin/androidx/compose/ui/platform/ComposeView
 
 ### リポジトリ内確認箇所
 
