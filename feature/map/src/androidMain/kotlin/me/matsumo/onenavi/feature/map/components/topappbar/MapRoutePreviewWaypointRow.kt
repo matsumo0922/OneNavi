@@ -35,6 +35,7 @@ internal fun MapRoutePreviewWaypointRow(
     position: WaypointPosition,
     isEditing: Boolean,
     waypointLabel: String?,
+    isEnabled: Boolean,
     modifier: Modifier = Modifier,
     onClicked: () -> Unit,
 ) {
@@ -47,7 +48,7 @@ internal fun MapRoutePreviewWaypointRow(
 
     Row(
         modifier = modifier
-            .clickable(onClick = onClicked)
+            .clickable(enabled = isEnabled, onClick = onClicked)
             .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),

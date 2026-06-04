@@ -45,6 +45,7 @@ private val DIVIDER_HEIGHT = 16.dp
 internal fun MapRoutePreviewTopAppBarEditing(
     waypoints: ImmutableList<RouteWaypoint>,
     waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
+    isInteractionEnabled: Boolean,
     onUiEvent: (MapUiEvent) -> Unit,
     onEditingFinished: () -> Unit,
     modifier: Modifier = Modifier,
@@ -86,6 +87,7 @@ internal fun MapRoutePreviewTopAppBarEditing(
         ) {
             IconButton(
                 modifier = Modifier.size(48.dp),
+                enabled = isInteractionEnabled,
                 onClick = onEditingFinished,
             ) {
                 Icon(
@@ -146,11 +148,16 @@ internal fun MapRoutePreviewTopAppBarEditing(
                                     position = position,
                                     isEditing = true,
                                     waypointLabel = waypointLabel,
+                                    isEnabled = isInteractionEnabled,
                                     onClicked = { onUiEvent(MapUiEvent.OnWaypointEditRequested(index)) },
                                 )
 
                                 Icon(
-                                    modifier = Modifier.draggableHandle(),
+                                    modifier = if (isInteractionEnabled) {
+                                        Modifier.draggableHandle()
+                                    } else {
+                                        Modifier
+                                    },
                                     imageVector = Icons.Filled.DragHandle,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -159,6 +166,7 @@ internal fun MapRoutePreviewTopAppBarEditing(
                                 if (item != null) {
                                     IconButton(
                                         modifier = Modifier.size(40.dp),
+                                        enabled = isInteractionEnabled,
                                         onClick = {
                                             editingList = editingList.toMutableList().apply {
                                                 removeAt(index)
@@ -196,7 +204,7 @@ internal fun MapRoutePreviewTopAppBarEditing(
                     onUiEvent(MapUiEvent.OnRouteWaypointsConfirmed(confirmed))
                     onEditingFinished()
                 },
-                enabled = canConfirm,
+                enabled = isInteractionEnabled && canConfirm,
             ) {
                 Text(
                     text = stringResource(Res.string.home_map_route_done),

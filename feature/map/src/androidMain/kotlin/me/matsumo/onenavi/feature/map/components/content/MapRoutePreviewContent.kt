@@ -18,6 +18,7 @@ import me.matsumo.onenavi.feature.map.state.MapUiState
 internal fun MapRoutePreviewContent(
     screenState: MapScreenState.RoutePreview,
     uiState: MapUiState,
+    isSheetOverlayVisible: Boolean,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -35,6 +36,7 @@ internal fun MapRoutePreviewContent(
                 },
             waypoints = screenState.waypoints,
             waypointEditResult = uiState.routeWaypointEditResult,
+            isInteractionEnabled = !isSheetOverlayVisible,
             onUiEvent = onUiEvent,
         )
     }

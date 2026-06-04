@@ -765,6 +765,7 @@ private class UiEventDelegate(
     }
 
     private fun handleRoutePreviewDismissed() {
+        clearOverlaySheetState()
         newRouteManager.reset()
         popScreenState()
     }

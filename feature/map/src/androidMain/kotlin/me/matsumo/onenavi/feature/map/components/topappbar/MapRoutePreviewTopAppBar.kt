@@ -22,13 +22,17 @@ import me.matsumo.onenavi.feature.map.state.MapUiEvent
 internal fun MapRoutePreviewTopAppBar(
     waypoints: ImmutableList<RouteWaypoint>,
     waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
+    isInteractionEnabled: Boolean,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     var isEditing by remember { mutableStateOf(false) }
 
-    NavigationEventHandler(navigationState) {
+    NavigationEventHandler(
+        state = navigationState,
+        isBackEnabled = isInteractionEnabled,
+    ) {
         if (isEditing) {
             isEditing = false
         } else {
@@ -50,6 +54,7 @@ internal fun MapRoutePreviewTopAppBar(
             MapRoutePreviewTopAppBarEditing(
                 waypoints = waypoints,
                 waypointEditResult = waypointEditResult,
+                isInteractionEnabled = isInteractionEnabled,
                 onUiEvent = onUiEvent,
                 onEditingFinished = { isEditing = false },
             )
@@ -57,6 +62,7 @@ internal fun MapRoutePreviewTopAppBar(
             MapRoutePreviewTopAppBarConfirmed(
                 waypoints = waypoints,
                 waypointEditResult = waypointEditResult,
+                isInteractionEnabled = isInteractionEnabled,
                 onUiEvent = onUiEvent,
                 onEditClicked = { isEditing = true },
             )

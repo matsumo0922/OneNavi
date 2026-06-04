@@ -27,6 +27,7 @@ import me.matsumo.onenavi.feature.map.state.MapUiEvent
 internal fun MapRoutePreviewTopAppBarConfirmed(
     waypoints: ImmutableList<RouteWaypoint>,
     waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
+    isInteractionEnabled: Boolean,
     onUiEvent: (MapUiEvent) -> Unit,
     onEditClicked: () -> Unit,
     modifier: Modifier = Modifier,
@@ -48,6 +49,7 @@ internal fun MapRoutePreviewTopAppBarConfirmed(
     ) {
         IconButton(
             modifier = Modifier.size(48.dp),
+            enabled = isInteractionEnabled,
             onClick = { onUiEvent(MapUiEvent.OnRoutePreviewDismissed) },
         ) {
             Icon(
@@ -73,6 +75,7 @@ internal fun MapRoutePreviewTopAppBarConfirmed(
                     ),
                     isEditing = false,
                     waypointLabel = if (!hasWaypoints) null else null,
+                    isEnabled = isInteractionEnabled,
                     onClicked = { onUiEvent(MapUiEvent.OnWaypointEditRequested(index)) },
                 )
 
@@ -89,6 +92,7 @@ internal fun MapRoutePreviewTopAppBarConfirmed(
         ) {
             IconButton(
                 modifier = Modifier.size(48.dp),
+                enabled = isInteractionEnabled,
                 onClick = onEditClicked,
             ) {
                 Icon(
@@ -100,6 +104,7 @@ internal fun MapRoutePreviewTopAppBarConfirmed(
             if (!hasWaypoints) {
                 IconButton(
                     modifier = Modifier.size(48.dp),
+                    enabled = isInteractionEnabled,
                     onClick = { onUiEvent(MapUiEvent.OnSwapWaypoints) },
                 ) {
                     Icon(

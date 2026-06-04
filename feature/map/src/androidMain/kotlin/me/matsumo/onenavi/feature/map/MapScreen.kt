@@ -306,6 +306,7 @@ private fun MapScreenContent(
                 modifier = modifier,
                 screenState = screenState,
                 uiState = uiState,
+                isSheetOverlayVisible = uiState.overlayState.isSheetOverlay(),
                 onUiEvent = onUiEvent,
             )
         }
