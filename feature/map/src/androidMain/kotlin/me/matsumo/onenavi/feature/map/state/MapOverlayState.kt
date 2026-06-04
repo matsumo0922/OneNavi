@@ -18,6 +18,30 @@ sealed interface MapOverlayState {
     @Stable
     data object None : MapOverlayState
 
+    /**
+     * ルート文脈上で表示する地点詳細ボトムシート。
+     *
+     * @property place 表示対象の地点。
+     */
+    @Immutable
+    data class PlaceDetails(
+        val place: SearchResultItem,
+    ) : MapOverlayState
+
+    /**
+     * ルート文脈上で表示する検索結果ボトムシート。
+     *
+     * @property query 検索クエリ。
+     * @property results 検索結果一覧。
+     * @property waypointIndex waypoint 差し替え検索由来の場合の差し替え対象 index。
+     */
+    @Immutable
+    data class SearchResults(
+        val query: String,
+        val results: ImmutableList<SearchResultItem>,
+        val waypointIndex: Int? = null,
+    ) : MapOverlayState
+
     /** ナビゲーション中の waypoint 追加用地点検索オーバーレイ。 */
     @Stable
     data object AddWaypointSearch : MapOverlayState

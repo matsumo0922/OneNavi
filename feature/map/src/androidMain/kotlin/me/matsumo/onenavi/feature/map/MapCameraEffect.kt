@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
@@ -49,12 +50,15 @@ internal fun MapCameraEffect(
     val addWaypointSearchResults = overlayState as? MapOverlayState.AddWaypointSearchResults
     val addWaypointSelected = overlayState as? MapOverlayState.AddWaypointSelected
     val navigationWaypointEditor = overlayState as? MapOverlayState.NavigationWaypointEditor
+    val placeDetailsOverlay = overlayState as? MapOverlayState.PlaceDetails
+    val searchResultsOverlay = overlayState as? MapOverlayState.SearchResults
     val hasNavigationAlternativesOverlay = overlayState.hasNavigationAlternativesOverlay()
     val navigationAlternativesReady = overlayState.alternativesRoutePreviewState() as? RoutePreviewState.Ready
     val hasAddWaypointOverlay = addWaypointSearchResults != null || addWaypointSelected != null
     val hasRouteEditOverlay = navigationWaypointEditor != null
+    val hasSheetOverlay = placeDetailsOverlay != null || searchResultsOverlay != null
     val hasNavigationRouteOverlay = hasAddWaypointOverlay || hasNavigationAlternativesOverlay
-    val hasNavigationPreviewOverlay = hasNavigationRouteOverlay || hasRouteEditOverlay
+    val hasNavigationPreviewOverlay = hasNavigationRouteOverlay || hasRouteEditOverlay || hasSheetOverlay
     val isGuidanceCameraActive = screenState is MapScreenState.Navigating && !hasNavigationPreviewOverlay
 
     LaunchedEffect(isGuidanceCameraActive) {
@@ -65,15 +69,14 @@ internal fun MapCameraEffect(
     val nextManeuver = guiding?.presentation?.nextManeuver
     val guidancePointIndex = nextManeuver?.guidancePointIndex
     val distanceToManeuverMeters = nextManeuver?.distanceToManeuverMeters
+    val maneuverDistanceMeters = distanceToManeuverMeters?.toDouble() ?: Double.MAX_VALUE
     val isOnRoute = guiding?.progress?.routeMatchState == RouteMatchState.ON_ROUTE
-    val isManeuverPassed = distanceToManeuverMeters != null &&
-        distanceToManeuverMeters <= GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS
-    val shouldStartManeuverFocus = isGuidanceCameraActive &&
-        isOnRoute &&
-        guidancePointIndex != null &&
-        distanceToManeuverMeters != null &&
-        distanceToManeuverMeters > GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS &&
-        distanceToManeuverMeters <= GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS
+    val isManeuverTargetKnown = guidancePointIndex != null && distanceToManeuverMeters != null
+    val isManeuverPassed = isManeuverTargetKnown && maneuverDistanceMeters <= GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS
+    val isManeuverAhead = maneuverDistanceMeters > GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS
+    val isManeuverWithinFocusRange = maneuverDistanceMeters <= GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS
+    val canStartManeuverFocus = isGuidanceCameraActive && isOnRoute && isManeuverTargetKnown
+    val shouldStartManeuverFocus = canStartManeuverFocus && isManeuverAhead && isManeuverWithinFocusRange
 
     LaunchedEffect(guiding?.route?.id) {
         cameraState.clearGuidanceManeuverFocus()
@@ -124,10 +127,10 @@ internal fun MapCameraEffect(
         overlayState,
     ) {
         val top = uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }
-        val bottom = if (screenState is MapScreenState.Navigating) {
-            uiState.navigationCardHeight.toFloat()
-        } else {
-            with(density) { uiState.bottomSheetPeekHeight.toPx() }
+        val bottom = when {
+            hasSheetOverlay -> with(density) { uiState.bottomSheetPeekHeight.toPx() }
+            screenState is MapScreenState.Navigating -> uiState.navigationCardHeight.toFloat()
+            else -> with(density) { uiState.bottomSheetPeekHeight.toPx() }
         }
         val horizontal = with(density) { 24.dp.toPx() }
 
@@ -145,18 +148,23 @@ internal fun MapCameraEffect(
         uiState.isNavigationRoutePreviewing,
         guidanceState.routeOverviewKey(),
         navigationAlternativesReady,
+        hasSheetOverlay,
     ) {
         val ready = routePreviewState as? RoutePreviewState.Ready
-        when (screenState) {
-            is MapScreenState.RoutePreview if ready != null -> ready.routes.flatMap { route ->
+        when {
+            hasSheetOverlay -> null
+
+            screenState is MapScreenState.RoutePreview && ready != null -> ready.routes.flatMap { route ->
                 route.overviewPoints()
             }
-            is MapScreenState.Navigating if navigationAlternativesReady != null -> {
+
+            screenState is MapScreenState.Navigating && navigationAlternativesReady != null -> {
                 navigationAlternativesReady.routes.flatMap { route ->
                     route.overviewPoints()
                 }
             }
-            is MapScreenState.Navigating if uiState.isNavigationRoutePreviewing -> when (guidanceState) {
+
+            screenState is MapScreenState.Navigating && uiState.isNavigationRoutePreviewing -> when (guidanceState) {
                 is GuidanceState.Guiding -> remainingRouteOverviewPoints(
                     route = guidanceState.route,
                     progress = guidanceState.progress,
@@ -178,19 +186,20 @@ internal fun MapCameraEffect(
     }
 
     val routeOverviewTopPaddingKey = when {
+        hasSheetOverlay -> 0
         screenState is MapScreenState.RoutePreview -> uiState.topAppBarHeight
         screenState is MapScreenState.Navigating && navigationAlternativesReady != null -> uiState.topAppBarHeight
         screenState is MapScreenState.Navigating && uiState.isNavigationRoutePreviewing -> uiState.topAppBarHeight
         else -> 0
     }
-    val routeOverviewBottomPaddingKey = if (screenState is MapScreenState.RoutePreview) {
+    val routeOverviewBottomPaddingKey = if (!hasSheetOverlay && screenState is MapScreenState.RoutePreview) {
         uiState.bottomSheetPeekHeight
     } else {
         0.dp
     }
     val shouldUseAlternativesCardPadding = screenState is MapScreenState.Navigating && navigationAlternativesReady != null
     val shouldUseRoutePreviewCardPadding = screenState is MapScreenState.Navigating && uiState.isNavigationRoutePreviewing
-    val shouldUseNavigationCardPadding = shouldUseAlternativesCardPadding || shouldUseRoutePreviewCardPadding
+    val shouldUseNavigationCardPadding = !hasSheetOverlay && (shouldUseAlternativesCardPadding || shouldUseRoutePreviewCardPadding)
     val routeOverviewNavigationCardHeightKey = if (shouldUseNavigationCardPadding) {
         uiState.navigationCardHeight
     } else {
@@ -208,67 +217,67 @@ internal fun MapCameraEffect(
     }
 
     LaunchedEffect(screenState, addWaypointSearchResults, addWaypointSelected, overlayState) {
-        when (screenState) {
-            is MapScreenState.Browsing -> {
-                cameraState.followVehicleLocation(vehicleLocationState)
-            }
-
-            is MapScreenState.PlaceDetails -> {
+        when {
+            placeDetailsOverlay != null -> {
                 cameraState.moveTo(
-                    latitude = screenState.place.latitude,
-                    longitude = screenState.place.longitude,
+                    latitude = placeDetailsOverlay.place.latitude,
+                    longitude = placeDetailsOverlay.place.longitude,
                     zoom = 18f,
                 )
             }
 
-            is MapScreenState.SearchResultsList -> {
-                val points = screenState.results.map { result ->
-                    RoutePoint(
-                        latitude = result.latitude,
-                        longitude = result.longitude,
-                    )
-                }
-
-                when (points.size) {
-                    0 -> Unit
-                    1 -> cameraState.moveTo(
-                        latitude = points.first().latitude,
-                        longitude = points.first().longitude,
-                        zoom = 16f,
-                    )
-
-                    else -> cameraState.showRouteOverview(points)
-                }
+            searchResultsOverlay != null -> {
+                cameraState.showSearchResultsOverview(searchResultsOverlay.results)
             }
 
-            is MapScreenState.RoutePreview -> {
-                // ルートが揃ったタイミングで下の LaunchedEffect がカメラをフィットさせる
-            }
-
-            is MapScreenState.Navigating -> {
-                when {
-                    addWaypointSelected != null -> {
-                        cameraState.showSelectedWaypointRouteOverview(addWaypointSelected)
+            else -> {
+                when (screenState) {
+                    is MapScreenState.Browsing -> {
+                        cameraState.followVehicleLocation(vehicleLocationState)
                     }
 
-                    navigationAlternativesReady != null -> {
-                        cameraState.showNavigationAlternativesRouteOverview(navigationAlternativesReady)
+                    is MapScreenState.PlaceDetails -> {
+                        cameraState.moveTo(
+                            latitude = screenState.place.latitude,
+                            longitude = screenState.place.longitude,
+                            zoom = 18f,
+                        )
                     }
 
-                    navigationWaypointEditor != null -> Unit
-
-                    addWaypointSearchResults != null -> {
-                        cameraState.showSearchResultsOverview(addWaypointSearchResults)
+                    is MapScreenState.SearchResultsList -> {
+                        cameraState.showSearchResultsOverview(screenState.results)
                     }
 
-                    else -> {
-                        cameraState.startGuidanceCamera(vehicleLocationState)
+                    is MapScreenState.RoutePreview -> {
+                        // ルートが揃ったタイミングで上の LaunchedEffect がカメラをフィットさせる
+                    }
+
+                    is MapScreenState.Navigating -> {
+                        when {
+                            addWaypointSelected != null -> {
+                                cameraState.showSelectedWaypointRouteOverview(addWaypointSelected)
+                            }
+
+                            navigationAlternativesReady != null -> {
+                                cameraState.showNavigationAlternativesRouteOverview(navigationAlternativesReady)
+                            }
+
+                            navigationWaypointEditor != null -> Unit
+
+                            addWaypointSearchResults != null -> {
+                                cameraState.showSearchResultsOverview(addWaypointSearchResults.results)
+                            }
+
+                            else -> {
+                                cameraState.startGuidanceCamera(vehicleLocationState)
+                            }
+                        }
+                    }
+
+                    is MapScreenState.Arrived -> {
+                        // TODO
                     }
                 }
-            }
-
-            is MapScreenState.Arrived -> {
-                // TODO
             }
         }
     }
@@ -289,8 +298,8 @@ private fun MapCameraState.showNavigationAlternativesRouteOverview(routePreviewS
     showRouteOverview(points)
 }
 
-private fun MapCameraState.showSearchResultsOverview(searchResults: MapOverlayState.AddWaypointSearchResults) {
-    val points = searchResults.results.map { result ->
+private fun MapCameraState.showSearchResultsOverview(results: List<SearchResultItem>) {
+    val points = results.map { result ->
         RoutePoint(
             latitude = result.latitude,
             longitude = result.longitude,
@@ -326,6 +335,8 @@ private fun MapOverlayState.hasNavigationAlternativesOverlay(): Boolean {
         is MapOverlayState.AddWaypointSearchResults,
         is MapOverlayState.AddWaypointSelected,
         is MapOverlayState.NavigationWaypointEditor,
+        is MapOverlayState.PlaceDetails,
+        is MapOverlayState.SearchResults,
         MapOverlayState.None,
         is MapOverlayState.WaypointSearch,
         -> false
@@ -340,6 +351,8 @@ private fun MapOverlayState.alternativesRoutePreviewState(): RoutePreviewState? 
         is MapOverlayState.AddWaypointSearchResults,
         is MapOverlayState.AddWaypointSelected,
         is MapOverlayState.NavigationWaypointEditor,
+        is MapOverlayState.PlaceDetails,
+        is MapOverlayState.SearchResults,
         MapOverlayState.None,
         is MapOverlayState.WaypointSearch,
         -> null

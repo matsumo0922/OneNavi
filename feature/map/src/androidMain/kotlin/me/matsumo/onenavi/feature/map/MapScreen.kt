@@ -70,9 +70,12 @@ fun MapScreen(modifier: Modifier = Modifier) {
 
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
     var allowSheetHide by remember { mutableStateOf(false) }
-    val shouldShowSheet by remember(screenState) {
+    val hasSheetOverlay = uiState.overlayState.isSheetOverlay()
+    val shouldShowSheet by remember(screenState, uiState.overlayState, uiState.bottomSheetPeekHeight) {
         derivedStateOf {
-            screenState::class in SHEET_VISIBLE_STATES && uiState.bottomSheetPeekHeight > 0.dp
+            val hasScreenStateSheet = screenState::class in SHEET_VISIBLE_STATES
+            val hasSheetContent = hasSheetOverlay || hasScreenStateSheet
+            hasSheetContent && uiState.bottomSheetPeekHeight > 0.dp
         }
     }
 
@@ -88,6 +91,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
 
     val controlsBottomPadding by animateDpAsState(
         targetValue = when {
+            hasSheetOverlay -> uiState.bottomSheetPeekHeight
             isNavigating -> navigationCardHeightDp.coerceAtLeast(navigationBarHeightDp)
             shouldShowSheet -> uiState.bottomSheetPeekHeight
             else -> navigationBarHeightDp
@@ -110,9 +114,13 @@ fun MapScreen(modifier: Modifier = Modifier) {
 
     NavigationEventHandler(
         state = navigationState,
-        isBackEnabled = hasScreenStateStack && screenState !is MapScreenState.Navigating,
+        isBackEnabled = hasSheetOverlay || (hasScreenStateStack && screenState !is MapScreenState.Navigating),
     ) {
-        viewModel.popScreenState()
+        if (hasSheetOverlay) {
+            viewModel.onUiEvent(MapUiEvent.OnOverlaySheetDismissed)
+        } else {
+            viewModel.popScreenState()
+        }
     }
 
     LaunchedEffect(shouldShowSheet) {
@@ -149,6 +157,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 MapScreenBottomSheetContent(
                     modifier = Modifier.fillMaxSize(),
                     screenState = screenState,
+                    overlayState = uiState.overlayState,
                     routePreviewState = routePreviewState,
                     cameraState = cameraState,
                     onUiEvent = viewModel::onUiEvent,
@@ -239,14 +248,26 @@ fun MapScreen(modifier: Modifier = Modifier) {
             suggestions = uiState.suggestions,
             histories = uiState.histories,
             onSearch = { query ->
-                if (isAddWaypointSearchOverlay) {
-                    viewModel.onUiEvent(
-                        MapUiEvent.OnAddWaypointSearch(
-                            query = query,
-                            latitude = cameraState.myLocationLatitude,
-                            longitude = cameraState.myLocationLongitude,
-                        ),
-                    )
+                when {
+                    isAddWaypointSearchOverlay -> {
+                        viewModel.onUiEvent(
+                            MapUiEvent.OnAddWaypointSearch(
+                                query = query,
+                                latitude = cameraState.myLocationLatitude,
+                                longitude = cameraState.myLocationLongitude,
+                            ),
+                        )
+                    }
+
+                    waypointSearchOverlay != null -> {
+                        viewModel.onUiEvent(
+                            MapUiEvent.OnWaypointSearch(
+                                query = query,
+                                latitude = cameraState.myLocationLatitude,
+                                longitude = cameraState.myLocationLongitude,
+                            ),
+                        )
+                    }
                 }
             },
             onUiEvent = viewModel::onUiEvent,
@@ -307,11 +328,49 @@ private fun MapScreenContent(
 @Composable
 private fun MapScreenBottomSheetContent(
     screenState: MapScreenState,
+    overlayState: MapOverlayState,
     routePreviewState: RoutePreviewState,
     cameraState: MapCameraState,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    when (overlayState) {
+        is MapOverlayState.PlaceDetails -> {
+            MapPlaceDetailSheet(
+                modifier = modifier,
+                cameraState = cameraState,
+                selectedResult = overlayState.place,
+                isAddWaypointAction = screenState.supportsPlaceAddWaypoint(),
+                isPrimaryActionEnabled = screenState.canAddWaypointFromPlaceDetails(),
+                onUiEvent = onUiEvent,
+            )
+            return
+        }
+
+        is MapOverlayState.SearchResults -> {
+            MapSearchResultsSheet(
+                modifier = modifier,
+                query = overlayState.query,
+                results = overlayState.results,
+                onResultClicked = { result ->
+                    onUiEvent(MapUiEvent.OnSearchResultSelected(result))
+                },
+                onUiEvent = onUiEvent,
+            )
+            return
+        }
+
+        MapOverlayState.AddWaypointSearch,
+        is MapOverlayState.AddWaypointSearchResults,
+        is MapOverlayState.AddWaypointSelected,
+        is MapOverlayState.AddWaypointAlternatives,
+        is MapOverlayState.NavigationAlternatives,
+        is MapOverlayState.NavigationWaypointEditor,
+        MapOverlayState.None,
+        is MapOverlayState.WaypointSearch,
+        -> Unit
+    }
+
     when (screenState) {
         is MapScreenState.Browsing -> Unit
         is MapScreenState.PlaceDetails -> {
@@ -319,7 +378,8 @@ private fun MapScreenBottomSheetContent(
                 modifier = modifier,
                 cameraState = cameraState,
                 selectedResult = screenState.place,
-                placeAction = screenState.placeAction,
+                isAddWaypointAction = false,
+                isPrimaryActionEnabled = true,
                 onUiEvent = onUiEvent,
             )
         }
@@ -329,6 +389,9 @@ private fun MapScreenBottomSheetContent(
                 modifier = modifier,
                 query = screenState.query,
                 results = screenState.results,
+                onResultClicked = { result ->
+                    onUiEvent(MapUiEvent.OnSearchResultSelected(result))
+                },
                 onUiEvent = onUiEvent,
             )
         }
@@ -354,3 +417,48 @@ private val SHEET_VISIBLE_STATES = listOf(
     MapScreenState.PlaceDetails::class,
     MapScreenState.RoutePreview::class,
 )
+
+private fun MapOverlayState.isSheetOverlay(): Boolean {
+    return when (this) {
+        is MapOverlayState.PlaceDetails,
+        is MapOverlayState.SearchResults,
+        -> true
+
+        MapOverlayState.AddWaypointSearch,
+        is MapOverlayState.AddWaypointSearchResults,
+        is MapOverlayState.AddWaypointSelected,
+        is MapOverlayState.AddWaypointAlternatives,
+        is MapOverlayState.NavigationAlternatives,
+        is MapOverlayState.NavigationWaypointEditor,
+        MapOverlayState.None,
+        is MapOverlayState.WaypointSearch,
+        -> false
+    }
+}
+
+private fun MapScreenState.supportsPlaceAddWaypoint(): Boolean {
+    return when (this) {
+        is MapScreenState.RoutePreview,
+        MapScreenState.Navigating,
+        -> true
+
+        is MapScreenState.Arrived,
+        MapScreenState.Browsing,
+        is MapScreenState.PlaceDetails,
+        is MapScreenState.SearchResultsList,
+        -> false
+    }
+}
+
+private fun MapScreenState.canAddWaypointFromPlaceDetails(): Boolean {
+    return when (this) {
+        is MapScreenState.RoutePreview -> waypoints.size < MAP_ROUTE_PREVIEW_MAX_WAYPOINTS
+        MapScreenState.Navigating -> true
+
+        is MapScreenState.Arrived,
+        MapScreenState.Browsing,
+        is MapScreenState.PlaceDetails,
+        is MapScreenState.SearchResultsList,
+        -> false
+    }
+}

@@ -17,28 +17,18 @@ sealed interface MapScreenState {
     @Stable
     data object Browsing : MapScreenState
 
-    /**
-     * テキスト検索結果の一覧を表示中。
-     *
-     * @property placeAction 結果から開いた地点詳細に引き継ぐ主要アクション。
-     */
+    /** テキスト検索結果の一覧を表示中。 */
     @Immutable
     data class SearchResultsList(
         val query: String,
         val results: ImmutableList<SearchResultItem>,
-        val placeAction: MapPlaceAction = MapPlaceAction.SearchRoute,
         val isLoading: Boolean = false,
     ) : MapScreenState
 
-    /**
-     * 選択された地点の詳細を表示中。
-     *
-     * @property placeAction 詳細画面の主要ボタンで実行するアクション。
-     */
+    /** 選択された地点の詳細を表示中。 */
     @Immutable
     data class PlaceDetails(
         val place: SearchResultItem,
-        val placeAction: MapPlaceAction = MapPlaceAction.SearchRoute,
         val isLoading: Boolean = false,
     ) : MapScreenState
 

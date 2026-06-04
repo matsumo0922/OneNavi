@@ -83,6 +83,9 @@ sealed interface MapUiEvent {
     /** 地点詳細を閉じて直前の画面へ戻る。 */
     data object OnPlaceDetailsDismissed : MapUiEvent
 
+    /** ルート文脈上に重ねたボトムシートを閉じる。 */
+    data object OnOverlaySheetDismissed : MapUiEvent
+
     /** 出発地と目的地を入れ替えてルートを再探索する。 */
     data object OnSwapWaypoints : MapUiEvent
 
@@ -91,6 +94,13 @@ sealed interface MapUiEvent {
 
     /** 指定 index の waypoint を差し替えるための地点検索オーバーレイを開く。 */
     data class OnWaypointEditRequested(val index: Int) : MapUiEvent
+
+    /** waypoint 差し替え用の複数地点検索を実行する。 */
+    data class OnWaypointSearch(
+        val query: String,
+        val latitude: Double?,
+        val longitude: Double?,
+    ) : MapUiEvent
 
     /** ナビゲーション中に waypoint 追加用の地点検索オーバーレイを開く。 */
     data object OnAddWaypointRequested : MapUiEvent

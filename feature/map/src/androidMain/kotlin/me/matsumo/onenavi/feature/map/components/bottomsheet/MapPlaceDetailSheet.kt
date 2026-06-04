@@ -66,7 +66,6 @@ import me.matsumo.onenavi.core.resource.home_map_street_view
 import me.matsumo.onenavi.core.ui.components.CommonSectionItem
 import me.matsumo.onenavi.core.ui.theme.semiBold
 import me.matsumo.onenavi.feature.map.state.MapCameraState
-import me.matsumo.onenavi.feature.map.state.MapPlaceAction
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -75,7 +74,8 @@ import org.jetbrains.compose.resources.stringResource
 internal fun MapPlaceDetailSheet(
     cameraState: MapCameraState,
     selectedResult: SearchResultItem,
-    placeAction: MapPlaceAction,
+    isAddWaypointAction: Boolean,
+    isPrimaryActionEnabled: Boolean,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -146,26 +146,28 @@ internal fun MapPlaceDetailSheet(
 
             ButtonSection(
                 modifier = Modifier.fillMaxWidth(),
-                primaryActionText = placeAction.primaryActionText,
-                primaryActionIcon = placeAction.primaryActionIcon,
-                isPrimaryActionEnabled = placeAction.isPrimaryActionEnabled,
+                primaryActionText = if (isAddWaypointAction) {
+                    Res.string.home_map_navigation_eta_add_waypoint
+                } else {
+                    Res.string.home_map_search_route
+                },
+                primaryActionIcon = if (isAddWaypointAction) {
+                    Icons.Default.AddCircleOutline
+                } else {
+                    Icons.Default.Directions
+                },
+                isPrimaryActionEnabled = isPrimaryActionEnabled,
                 onPrimaryActionClicked = {
-                    when (placeAction) {
-                        MapPlaceAction.SearchRoute -> {
-                            onUiEvent(
-                                MapUiEvent.OnRouteSearch(
-                                    item = selectedResult,
-                                    latitude = cameraState.myLocationLatitude,
-                                    longitude = cameraState.myLocationLongitude,
-                                ),
-                            )
-                        }
-
-                        is MapPlaceAction.AddWaypointToRoutePreview,
-                        MapPlaceAction.AddWaypointToNavigation,
-                        -> {
-                            onUiEvent(MapUiEvent.OnPlaceAddWaypointClicked(selectedResult))
-                        }
+                    if (isAddWaypointAction) {
+                        onUiEvent(MapUiEvent.OnPlaceAddWaypointClicked(selectedResult))
+                    } else {
+                        onUiEvent(
+                            MapUiEvent.OnRouteSearch(
+                                item = selectedResult,
+                                latitude = cameraState.myLocationLatitude,
+                                longitude = cameraState.myLocationLongitude,
+                            ),
+                        )
                     }
                 },
                 onFavoriteClicked = {},
@@ -367,31 +369,6 @@ private fun IncoSection(
         }
     }
 }
-
-private val MapPlaceAction.primaryActionText: StringResource
-    get() = when (this) {
-        MapPlaceAction.SearchRoute -> Res.string.home_map_search_route
-        is MapPlaceAction.AddWaypointToRoutePreview,
-        MapPlaceAction.AddWaypointToNavigation,
-        -> Res.string.home_map_navigation_eta_add_waypoint
-    }
-
-private val MapPlaceAction.primaryActionIcon: ImageVector
-    get() = when (this) {
-        MapPlaceAction.SearchRoute -> Icons.Default.Directions
-        is MapPlaceAction.AddWaypointToRoutePreview,
-        MapPlaceAction.AddWaypointToNavigation,
-        -> Icons.Default.AddCircleOutline
-    }
-
-private val MapPlaceAction.isPrimaryActionEnabled: Boolean
-    get() = when (this) {
-        MapPlaceAction.SearchRoute,
-        MapPlaceAction.AddWaypointToNavigation,
-        -> true
-
-        is MapPlaceAction.AddWaypointToRoutePreview -> canAddWaypoint
-    }
 
 @Immutable
 private data class ButtonItem(
