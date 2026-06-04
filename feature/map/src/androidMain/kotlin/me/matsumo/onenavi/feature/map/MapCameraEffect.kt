@@ -48,10 +48,10 @@ internal fun MapCameraEffect(
         .calculateTopPadding()
     val addWaypointSearchResults = overlayState as? MapOverlayState.AddWaypointSearchResults
     val addWaypointSelected = overlayState as? MapOverlayState.AddWaypointSelected
-    val navigationAlternatives = overlayState as? MapOverlayState.NavigationAlternatives
-    val navigationAlternativesReady = navigationAlternatives?.routePreviewState as? RoutePreviewState.Ready
+    val hasNavigationAlternativesOverlay = overlayState.hasNavigationAlternativesOverlay()
+    val navigationAlternativesReady = overlayState.alternativesRoutePreviewState() as? RoutePreviewState.Ready
     val hasAddWaypointOverlay = addWaypointSearchResults != null || addWaypointSelected != null
-    val hasNavigationPreviewOverlay = hasAddWaypointOverlay || navigationAlternatives != null
+    val hasNavigationPreviewOverlay = hasAddWaypointOverlay || hasNavigationAlternativesOverlay
     val isGuidanceCameraActive = screenState is MapScreenState.Navigating && !hasNavigationPreviewOverlay
 
     LaunchedEffect(isGuidanceCameraActive) {
@@ -118,7 +118,7 @@ internal fun MapCameraEffect(
         screenState,
         addWaypointSearchResults,
         addWaypointSelected,
-        navigationAlternatives,
+        overlayState,
     ) {
         val top = uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }
         val bottom = if (screenState is MapScreenState.Navigating) {
@@ -201,7 +201,7 @@ internal fun MapCameraEffect(
         routeOverviewPoints?.let { cameraState.showRouteOverview(it) }
     }
 
-    LaunchedEffect(screenState, addWaypointSearchResults, addWaypointSelected, navigationAlternatives) {
+    LaunchedEffect(screenState, addWaypointSearchResults, addWaypointSelected, overlayState) {
         when (screenState) {
             is MapScreenState.Browsing -> {
                 cameraState.followVehicleLocation(vehicleLocationState)
@@ -306,6 +306,34 @@ private fun RouteDetail.overviewPoints(): List<RoutePoint> = buildList {
     add(origin)
     addAll(intermediateWaypoints)
     add(destination)
+}
+
+private fun MapOverlayState.hasNavigationAlternativesOverlay(): Boolean {
+    return when (this) {
+        is MapOverlayState.AddWaypointAlternatives,
+        is MapOverlayState.NavigationAlternatives,
+        -> true
+
+        MapOverlayState.AddWaypointSearch,
+        is MapOverlayState.AddWaypointSearchResults,
+        is MapOverlayState.AddWaypointSelected,
+        MapOverlayState.None,
+        is MapOverlayState.WaypointSearch,
+        -> false
+    }
+}
+
+private fun MapOverlayState.alternativesRoutePreviewState(): RoutePreviewState? {
+    return when (this) {
+        is MapOverlayState.AddWaypointAlternatives -> routePreviewState
+        is MapOverlayState.NavigationAlternatives -> routePreviewState
+        MapOverlayState.AddWaypointSearch,
+        is MapOverlayState.AddWaypointSearchResults,
+        is MapOverlayState.AddWaypointSelected,
+        MapOverlayState.None,
+        is MapOverlayState.WaypointSearch,
+        -> null
+    }
 }
 
 /** 案内地点フォーカスを開始する残距離（m）。 */

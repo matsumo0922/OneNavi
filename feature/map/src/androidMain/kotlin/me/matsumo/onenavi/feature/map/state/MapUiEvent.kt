@@ -100,6 +100,9 @@ sealed interface MapUiEvent {
     /** ナビゲーション中に選択した waypoint 候補を経由地として確定する。 */
     data object OnAddWaypointConfirmed : MapUiEvent
 
+    /** ナビゲーション中に選択した waypoint 候補を経由する代替ルート候補を表示する。 */
+    data object OnAddWaypointAlternativesClicked : MapUiEvent
+
     /** waypoint 差し替え用の地点検索オーバーレイを閉じる。 */
     data object OnWaypointSearchDismissed : MapUiEvent
 

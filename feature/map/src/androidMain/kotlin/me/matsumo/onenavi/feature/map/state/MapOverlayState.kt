@@ -46,6 +46,18 @@ sealed interface MapOverlayState {
     ) : MapOverlayState
 
     /**
+     * ナビゲーション中の waypoint 追加候補を経由する代替ルート候補オーバーレイ。
+     *
+     * @property place 選択した地点。
+     * @property routePreviewState 選択地点を経由地にした仮ルート探索状態。
+     */
+    @Immutable
+    data class AddWaypointAlternatives(
+        val place: SearchResultItem,
+        val routePreviewState: RoutePreviewState,
+    ) : MapOverlayState
+
+    /**
      * ナビゲーション中の代替ルート候補オーバーレイ。
      *
      * @property routePreviewState 現在地から目的地までの代替ルート探索状態。

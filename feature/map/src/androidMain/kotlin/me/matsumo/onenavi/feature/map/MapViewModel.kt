@@ -268,6 +268,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnAddWaypointSearch -> handleAddWaypointSearch(event.query, event.latitude, event.longitude)
             is MapUiEvent.OnAddWaypointCandidateSelected -> handleAddWaypointCandidateSelected(event.item)
             is MapUiEvent.OnAddWaypointConfirmed -> handleAddWaypointConfirmed()
+            is MapUiEvent.OnAddWaypointAlternativesClicked -> handleAddWaypointAlternativesClicked()
             is MapUiEvent.OnWaypointSearchDismissed -> handleWaypointSearchDismissed()
             is MapUiEvent.OnWaypointEditResultConsumed -> handleWaypointEditResultConsumed()
             is MapUiEvent.OnTopAppBarHeightChanged -> handleTopAppBarHeightChanged(event.height)
@@ -546,6 +547,19 @@ private class UiEventDelegate(
 
     private fun handleNavigationAlternativesDismissed() {
         navigationAlternativesRouteSearchJob?.cancel()
+        val addWaypointAlternatives = uiState.value.overlayState as? MapOverlayState.AddWaypointAlternatives
+
+        if (addWaypointAlternatives != null) {
+            uiState.value = uiState.value.copy(
+                suggestions = persistentListOf(),
+                overlayState = MapOverlayState.AddWaypointSelected(
+                    place = addWaypointAlternatives.place,
+                    routePreviewState = addWaypointAlternatives.routePreviewState,
+                ),
+            )
+            return
+        }
+
         uiState.value = uiState.value.copy(
             suggestions = persistentListOf(),
             overlayState = MapOverlayState.None,
@@ -553,8 +567,9 @@ private class UiEventDelegate(
     }
 
     private fun handleNavigationAlternativeRouteSelected(index: Int) {
-        val overlayState = uiState.value.overlayState as? MapOverlayState.NavigationAlternatives ?: return
-        val routePreviewState = overlayState.routePreviewState as? RoutePreviewState.Ready ?: return
+        val currentOverlayState = uiState.value.overlayState
+        val candidateRoutePreviewState = currentOverlayState.routePreviewStateForAlternativeSelection()
+        val routePreviewState = candidateRoutePreviewState as? RoutePreviewState.Ready ?: return
         val selectedRoute = routePreviewState.routes.getOrNull(index) ?: return
 
         newGuidanceManager.startGuidance(route = selectedRoute)
@@ -662,6 +677,18 @@ private class UiEventDelegate(
         handleNavigationRoutePreviewDismissed()
     }
 
+    private fun handleAddWaypointAlternativesClicked() {
+        val overlayState = uiState.value.overlayState as? MapOverlayState.AddWaypointSelected ?: return
+
+        uiState.value = uiState.value.copy(
+            suggestions = persistentListOf(),
+            overlayState = MapOverlayState.AddWaypointAlternatives(
+                place = overlayState.place,
+                routePreviewState = overlayState.routePreviewState,
+            ),
+        )
+    }
+
     private suspend fun searchAddWaypointRoute(result: SearchResultItem) {
         val searchContext = createNavigationRouteSearchContext() ?: run {
             uiState.value = uiState.value.copy(
@@ -704,14 +731,15 @@ private class UiEventDelegate(
             routeWaypoints = routeWaypoints,
             originDirectionDegrees = searchContext.originDirectionDegrees,
         )
-        if (!uiState.value.overlayState.isAddWaypointOverlay()) return
+        val currentOverlayState = uiState.value.overlayState
+        if (!currentOverlayState.isAddWaypointOverlay()) return
 
         if (routePreviewState is RoutePreviewState.Failed) {
             Napier.e(routePreviewState.error, TAG) { "Failed to search add waypoint route. placeId: ${result.placeId}" }
         }
 
         uiState.value = uiState.value.copy(
-            overlayState = MapOverlayState.AddWaypointSelected(
+            overlayState = currentOverlayState.toAddWaypointRoutePreviewOverlay(
                 place = result,
                 routePreviewState = routePreviewState,
             ),
@@ -828,7 +856,9 @@ private class UiEventDelegate(
                 true
             }
 
-            is MapOverlayState.AddWaypointSelected -> true
+            is MapOverlayState.AddWaypointSelected,
+            is MapOverlayState.AddWaypointAlternatives,
+            -> true
 
             is MapOverlayState.NavigationAlternatives -> false
 
@@ -857,12 +887,49 @@ private class UiEventDelegate(
             MapOverlayState.AddWaypointSearch,
             is MapOverlayState.AddWaypointSearchResults,
             is MapOverlayState.AddWaypointSelected,
+            is MapOverlayState.AddWaypointAlternatives,
             -> true
 
             is MapOverlayState.NavigationAlternatives,
             MapOverlayState.None,
             is MapOverlayState.WaypointSearch,
             -> false
+        }
+    }
+
+    private fun MapOverlayState.toAddWaypointRoutePreviewOverlay(
+        place: SearchResultItem,
+        routePreviewState: RoutePreviewState,
+    ): MapOverlayState {
+        return when (this) {
+            is MapOverlayState.AddWaypointAlternatives -> MapOverlayState.AddWaypointAlternatives(
+                place = place,
+                routePreviewState = routePreviewState,
+            )
+
+            MapOverlayState.AddWaypointSearch,
+            is MapOverlayState.AddWaypointSearchResults,
+            is MapOverlayState.AddWaypointSelected,
+            is MapOverlayState.NavigationAlternatives,
+            MapOverlayState.None,
+            is MapOverlayState.WaypointSearch,
+            -> MapOverlayState.AddWaypointSelected(
+                place = place,
+                routePreviewState = routePreviewState,
+            )
+        }
+    }
+
+    private fun MapOverlayState.routePreviewStateForAlternativeSelection(): RoutePreviewState? {
+        return when (this) {
+            is MapOverlayState.AddWaypointAlternatives -> routePreviewState
+            is MapOverlayState.NavigationAlternatives -> routePreviewState
+            MapOverlayState.AddWaypointSearch,
+            is MapOverlayState.AddWaypointSearchResults,
+            is MapOverlayState.AddWaypointSelected,
+            MapOverlayState.None,
+            is MapOverlayState.WaypointSearch,
+            -> null
         }
     }
 

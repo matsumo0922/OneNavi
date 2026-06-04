@@ -91,10 +91,10 @@ internal fun MapEffect(
         }
         is MapScreenState.Navigating -> {
             val addWaypointSelectedState = overlayState as? MapOverlayState.AddWaypointSelected
-            val navigationAlternativesState = overlayState as? MapOverlayState.NavigationAlternatives
+            val alternativesRoutePreviewState = overlayState.alternativesRoutePreviewState()
             val shouldShowAddWaypointOverlay = addWaypointSelectedState != null
             val shouldShowAddWaypointRoutePreview = addWaypointSelectedState?.routePreviewState is RoutePreviewState.Ready
-            val shouldShowNavigationAlternativesRoutes = navigationAlternativesState?.routePreviewState is RoutePreviewState.Ready
+            val shouldShowNavigationAlternativesRoutes = alternativesRoutePreviewState is RoutePreviewState.Ready
             val shouldSuppressGuidanceRouteOverlay = shouldShowAddWaypointOverlay || shouldShowNavigationAlternativesRoutes
             val shouldSuppressGuidanceWaypointMarkers = shouldShowAddWaypointRoutePreview || shouldShowNavigationAlternativesRoutes
 
@@ -135,8 +135,7 @@ internal fun MapEffect(
         )
     }
 
-    val navigationAlternatives = overlayState as? MapOverlayState.NavigationAlternatives
-    val navigationAlternativesReady = navigationAlternatives?.routePreviewState as? RoutePreviewState.Ready
+    val navigationAlternativesReady = overlayState.alternativesRoutePreviewState() as? RoutePreviewState.Ready
     if (navigationAlternativesReady != null) {
         NavigationAlternativesEffect(
             modifier = modifier,
@@ -544,6 +543,19 @@ private fun GuidanceState.routeForMapOverlay(): GuidanceOverlayRoute? = when (th
     is GuidanceState.Failed,
     GuidanceState.Idle,
     -> null
+}
+
+private fun MapOverlayState.alternativesRoutePreviewState(): RoutePreviewState? {
+    return when (this) {
+        is MapOverlayState.AddWaypointAlternatives -> routePreviewState
+        is MapOverlayState.NavigationAlternatives -> routePreviewState
+        MapOverlayState.AddWaypointSearch,
+        is MapOverlayState.AddWaypointSearchResults,
+        is MapOverlayState.AddWaypointSelected,
+        MapOverlayState.None,
+        is MapOverlayState.WaypointSearch,
+        -> null
+    }
 }
 
 /** 出発地 marker の zIndex。 */

@@ -65,8 +65,12 @@ internal fun MapNavigationContent(
     val etaProgress = guiding?.progress ?: rerouting?.previousProgress
     val addWaypointSearchResults = overlayState as? MapOverlayState.AddWaypointSearchResults
     val addWaypointSelected = overlayState as? MapOverlayState.AddWaypointSelected
+    val addWaypointAlternatives = overlayState as? MapOverlayState.AddWaypointAlternatives
     val navigationAlternatives = overlayState as? MapOverlayState.NavigationAlternatives
-    val hasNavigationOverlayCard = addWaypointSearchResults != null || addWaypointSelected != null || navigationAlternatives != null
+    val alternativesRoutePreviewState = addWaypointAlternatives?.routePreviewState ?: navigationAlternatives?.routePreviewState
+    val hasAddWaypointOverlayCard = addWaypointSearchResults != null || addWaypointSelected != null
+    val hasAlternativesOverlayCard = alternativesRoutePreviewState != null
+    val hasNavigationOverlayCard = hasAddWaypointOverlayCard || hasAlternativesOverlayCard
     val hasNavigationBottomCard = etaProgress != null || hasNavigationOverlayCard
 
     fun cancelNavigation() {
@@ -144,7 +148,9 @@ internal fun MapNavigationContent(
                 onAddWaypointClicked = {
                     onUiEvent(MapUiEvent.OnAddWaypointConfirmed)
                 },
-                onAlternativesClicked = {},
+                onAlternativesClicked = {
+                    onUiEvent(MapUiEvent.OnAddWaypointAlternativesClicked)
+                },
             )
         } else if (addWaypointSearchResults != null) {
             MapNavigationSearchResultsCard(
@@ -166,7 +172,7 @@ internal fun MapNavigationContent(
                     onUiEvent(MapUiEvent.OnAddWaypointCandidateSelected(result))
                 },
             )
-        } else if (navigationAlternatives != null) {
+        } else if (alternativesRoutePreviewState != null) {
             MapNavigationAlternativesCard(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -177,7 +183,7 @@ internal fun MapNavigationContent(
                     .navigationBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 16.dp)
                     .height(bottomFloatingCardHeight),
-                routePreviewState = navigationAlternatives.routePreviewState,
+                routePreviewState = alternativesRoutePreviewState,
                 onCloseClicked = {
                     onUiEvent(MapUiEvent.OnNavigationAlternativesDismissed)
                 },
