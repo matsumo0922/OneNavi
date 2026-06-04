@@ -69,6 +69,9 @@ internal fun MapNavigationContent(
     val addWaypointAlternatives = overlayState as? MapOverlayState.AddWaypointAlternatives
     val navigationAlternatives = overlayState as? MapOverlayState.NavigationAlternatives
     val navigationWaypointEditor = overlayState as? MapOverlayState.NavigationWaypointEditor
+    val isPlaceDetailsSheetOverlay = overlayState is MapOverlayState.PlaceDetails
+    val isSearchResultsSheetOverlay = overlayState is MapOverlayState.SearchResults
+    val hasSheetOverlay = isPlaceDetailsSheetOverlay || isSearchResultsSheetOverlay
     val alternativesRoutePreviewState = addWaypointAlternatives?.routePreviewState
         ?: navigationAlternatives?.routePreviewState
     val hasAddWaypointOverlayCard = addWaypointSearchResults != null || addWaypointSelected != null
@@ -76,7 +79,8 @@ internal fun MapNavigationContent(
     val hasWaypointEditorOverlayCard = navigationWaypointEditor != null
     val hasNavigationRouteOverlayCard = hasAddWaypointOverlayCard || hasAlternativesOverlayCard
     val hasNavigationOverlayCard = hasNavigationRouteOverlayCard || hasWaypointEditorOverlayCard
-    val hasNavigationBottomCard = etaProgress != null || hasNavigationOverlayCard
+    val hasNavigationBottomCardContent = etaProgress != null || hasNavigationOverlayCard
+    val hasNavigationBottomCard = !hasSheetOverlay && hasNavigationBottomCardContent
 
     fun cancelNavigation() {
         onUiEvent(MapUiEvent.OnNavigationStop)
@@ -84,6 +88,7 @@ internal fun MapNavigationContent(
 
     NavigationEventHandler(
         state = navigationState,
+        isBackEnabled = !hasSheetOverlay,
     ) {
         showCancelDialog = true
     }
@@ -134,114 +139,116 @@ internal fun MapNavigationContent(
             }
         }
 
-        if (addWaypointSelected != null) {
-            MapNavigationSelectedWaypointCard(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .onGloballyPositioned { coordinates ->
-                        onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
-                    }
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
-                    .height(bottomFloatingCardHeight),
-                place = addWaypointSelected.place,
-                routePreviewState = addWaypointSelected.routePreviewState,
-                onCloseClicked = {
-                    onUiEvent(MapUiEvent.OnWaypointSearchDismissed)
-                },
-                onAddWaypointClicked = {
-                    onUiEvent(MapUiEvent.OnAddWaypointConfirmed)
-                },
-                onAlternativesClicked = {
-                    onUiEvent(MapUiEvent.OnAddWaypointAlternativesClicked)
-                },
-            )
-        } else if (addWaypointSearchResults != null) {
-            MapNavigationSearchResultsCard(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .onGloballyPositioned { coordinates ->
-                        onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
-                    }
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
-                    .height(bottomFloatingCardHeight),
-                query = addWaypointSearchResults.query,
-                results = addWaypointSearchResults.results,
-                onCloseClicked = {
-                    onUiEvent(MapUiEvent.OnWaypointSearchDismissed)
-                },
-                onResultClicked = { result ->
-                    onUiEvent(MapUiEvent.OnAddWaypointCandidateSelected(result))
-                },
-            )
-        } else if (alternativesRoutePreviewState != null) {
-            MapNavigationAlternativesCard(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .onGloballyPositioned { coordinates ->
-                        onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
-                    }
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
-                    .height(bottomFloatingCardHeight),
-                routePreviewState = alternativesRoutePreviewState,
-                onCloseClicked = {
-                    onUiEvent(MapUiEvent.OnNavigationAlternativesDismissed)
-                },
-                onRouteClicked = { index ->
-                    onUiEvent(MapUiEvent.OnNavigationAlternativeRouteSelected(index))
-                },
-            )
-        } else if (navigationWaypointEditor != null) {
-            MapNavigationWaypointEditorCard(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .onGloballyPositioned { coordinates ->
-                        onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
-                    }
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
-                    .height(bottomFloatingCardHeight),
-                originWaypoint = navigationWaypointEditor.originWaypoint,
-                waypoints = navigationWaypointEditor.waypoints,
-                routePreviewState = navigationWaypointEditor.routePreviewState,
-                onCloseClicked = {
-                    onUiEvent(MapUiEvent.OnNavigationRoutePreviewDismissed)
-                },
-                onDoneClicked = { waypoints ->
-                    onUiEvent(MapUiEvent.OnNavigationWaypointEditConfirmed(waypoints))
-                },
-            )
-        } else if (etaProgress != null && etaRoute != null) {
-            MapNavigationEtaCard(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .onGloballyPositioned { coordinates ->
-                        onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
-                    }
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                progress = etaProgress,
-                geometry = etaRoute.geometry,
-                roadClassSegments = etaRoute.roadClassSegments,
-                congestionSegments = etaRoute.congestionSegments,
-                onCloseClicked = ::cancelNavigation,
-                onAlternativesClicked = {
-                    onUiEvent(MapUiEvent.OnNavigationAlternativesClicked)
-                },
-                onAddWaypointClicked = {
-                    onUiEvent(MapUiEvent.OnAddWaypointRequested)
-                },
-                onRoutePreviewClicked = {
-                    onUiEvent(MapUiEvent.OnNavigationRoutePreviewClicked)
-                },
-            )
+        if (!hasSheetOverlay) {
+            if (addWaypointSelected != null) {
+                MapNavigationSelectedWaypointCard(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .onGloballyPositioned { coordinates ->
+                            onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
+                        }
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                        .height(bottomFloatingCardHeight),
+                    place = addWaypointSelected.place,
+                    routePreviewState = addWaypointSelected.routePreviewState,
+                    onCloseClicked = {
+                        onUiEvent(MapUiEvent.OnWaypointSearchDismissed)
+                    },
+                    onAddWaypointClicked = {
+                        onUiEvent(MapUiEvent.OnAddWaypointConfirmed)
+                    },
+                    onAlternativesClicked = {
+                        onUiEvent(MapUiEvent.OnAddWaypointAlternativesClicked)
+                    },
+                )
+            } else if (addWaypointSearchResults != null) {
+                MapNavigationSearchResultsCard(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .onGloballyPositioned { coordinates ->
+                            onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
+                        }
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                        .height(bottomFloatingCardHeight),
+                    query = addWaypointSearchResults.query,
+                    results = addWaypointSearchResults.results,
+                    onCloseClicked = {
+                        onUiEvent(MapUiEvent.OnWaypointSearchDismissed)
+                    },
+                    onResultClicked = { result ->
+                        onUiEvent(MapUiEvent.OnAddWaypointCandidateSelected(result))
+                    },
+                )
+            } else if (alternativesRoutePreviewState != null) {
+                MapNavigationAlternativesCard(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .onGloballyPositioned { coordinates ->
+                            onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
+                        }
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                        .height(bottomFloatingCardHeight),
+                    routePreviewState = alternativesRoutePreviewState,
+                    onCloseClicked = {
+                        onUiEvent(MapUiEvent.OnNavigationAlternativesDismissed)
+                    },
+                    onRouteClicked = { index ->
+                        onUiEvent(MapUiEvent.OnNavigationAlternativeRouteSelected(index))
+                    },
+                )
+            } else if (navigationWaypointEditor != null) {
+                MapNavigationWaypointEditorCard(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .onGloballyPositioned { coordinates ->
+                            onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
+                        }
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                        .height(bottomFloatingCardHeight),
+                    originWaypoint = navigationWaypointEditor.originWaypoint,
+                    waypoints = navigationWaypointEditor.waypoints,
+                    routePreviewState = navigationWaypointEditor.routePreviewState,
+                    onCloseClicked = {
+                        onUiEvent(MapUiEvent.OnNavigationRoutePreviewDismissed)
+                    },
+                    onDoneClicked = { waypoints ->
+                        onUiEvent(MapUiEvent.OnNavigationWaypointEditConfirmed(waypoints))
+                    },
+                )
+            } else if (etaProgress != null && etaRoute != null) {
+                MapNavigationEtaCard(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .onGloballyPositioned { coordinates ->
+                            onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
+                        }
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    progress = etaProgress,
+                    geometry = etaRoute.geometry,
+                    roadClassSegments = etaRoute.roadClassSegments,
+                    congestionSegments = etaRoute.congestionSegments,
+                    onCloseClicked = ::cancelNavigation,
+                    onAlternativesClicked = {
+                        onUiEvent(MapUiEvent.OnNavigationAlternativesClicked)
+                    },
+                    onAddWaypointClicked = {
+                        onUiEvent(MapUiEvent.OnAddWaypointRequested)
+                    },
+                    onRoutePreviewClicked = {
+                        onUiEvent(MapUiEvent.OnNavigationRoutePreviewClicked)
+                    },
+                )
+            }
         }
     }
 

@@ -2,6 +2,7 @@ package me.matsumo.onenavi.feature.map
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.aakira.napier.Napier
@@ -252,6 +253,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnMapPointOfInterestSelected -> handleMapPointOfInterestSelected(event.placeId, event.name, event.latitude, event.longitude)
             is MapUiEvent.OnMapLongPressed -> handleMapLongPressed(event.latitude, event.longitude)
             is MapUiEvent.OnRouteSearch -> handleRouteSearch(event.item, event.latitude, event.longitude)
+            is MapUiEvent.OnPlaceAddWaypointClicked -> handlePlaceAddWaypointClicked(event.item)
             is MapUiEvent.OnRouteIndexChanged -> handleRouteIndexChanged(event.index)
             is MapUiEvent.OnNavigationStart -> handleNavigationStart()
             is MapUiEvent.OnNavigationStop -> handleNavigationStop()
@@ -263,9 +265,11 @@ private class UiEventDelegate(
             is MapUiEvent.OnNavigationAlternativesDismissed -> handleNavigationAlternativesDismissed()
             is MapUiEvent.OnRoutePreviewDismissed -> handleRoutePreviewDismissed()
             is MapUiEvent.OnPlaceDetailsDismissed -> handlePlaceDetailsDismissed()
+            is MapUiEvent.OnOverlaySheetDismissed -> handleOverlaySheetDismissed()
             is MapUiEvent.OnSwapWaypoints -> handleSwapWaypoints()
             is MapUiEvent.OnRouteWaypointsConfirmed -> handleRouteWaypointsConfirmed(event.waypoints)
             is MapUiEvent.OnWaypointEditRequested -> handleWaypointEditRequested(event.index)
+            is MapUiEvent.OnWaypointSearch -> handleWaypointSearch(event.query, event.latitude, event.longitude)
             is MapUiEvent.OnAddWaypointRequested -> handleAddWaypointRequested()
             is MapUiEvent.OnAddWaypointSearch -> handleAddWaypointSearch(event.query, event.latitude, event.longitude)
             is MapUiEvent.OnAddWaypointCandidateSelected -> handleAddWaypointCandidateSelected(event.item)
@@ -288,12 +292,24 @@ private class UiEventDelegate(
         placeSearchJob = scope.launch {
             searchRepository.searchMultiple(query, latitude, longitude)
                 .onSuccess { items ->
-                    pushScreenState(
-                        MapScreenState.SearchResultsList(
+                    val results = items.toImmutableList()
+                    if (screenStates.value.lastOrNull().supportsRouteContextOverlay()) {
+                        uiState.value = uiState.value.copy(
                             query = query,
-                            results = items.toImmutableList(),
-                        ),
-                    )
+                            suggestions = persistentListOf(),
+                            overlayState = MapOverlayState.SearchResults(
+                                query = query,
+                                results = results,
+                            ),
+                        )
+                    } else {
+                        pushScreenState(
+                            MapScreenState.SearchResultsList(
+                                query = query,
+                                results = results,
+                            ),
+                        )
+                    }
                 }
                 .onFailure {
                     Napier.e(it, TAG) { "Failed to search. query: $query" }
@@ -334,8 +350,23 @@ private class UiEventDelegate(
         )
     }
 
-    private suspend fun openPlaceDetails(result: SearchResultItem, addHistory: Boolean) {
+    private suspend fun openPlaceDetails(
+        result: SearchResultItem,
+        addHistory: Boolean,
+    ) {
         if (consumeWaypointSearchSelection(result, addHistory)) return
+
+        if (screenStates.value.lastOrNull().supportsRouteContextOverlay()) {
+            if (addHistory) {
+                searchRepository.addHistory(result)
+            }
+            uiState.value = uiState.value.copy(
+                query = result.name,
+                suggestions = persistentListOf(),
+                overlayState = MapOverlayState.PlaceDetails(place = result),
+            )
+            return
+        }
 
         uiState.value = uiState.value.copy(
             query = result.name,
@@ -404,6 +435,7 @@ private class UiEventDelegate(
         longitude: Double,
     ) {
         placeSearchJob?.cancel()
+
         scope.launch {
             openPlaceDetails(
                 result = createMapPointResult(
@@ -446,6 +478,47 @@ private class UiEventDelegate(
         routeSearchJob?.cancel()
         routeSearchJob = scope.launch {
             newRouteManager.searchRoutes(waypoints = waypoints)
+        }
+    }
+
+    private fun handlePlaceAddWaypointClicked(item: SearchResultItem) {
+        if (uiState.value.overlayState !is MapOverlayState.PlaceDetails) return
+
+        when (val screenState = screenStates.value.lastOrNull()) {
+            is MapScreenState.RoutePreview -> handlePlaceAddWaypointToRoutePreview(
+                item = item,
+                routePreview = screenState,
+            )
+
+            MapScreenState.Navigating -> handlePlaceAddWaypointToNavigation(item)
+
+            is MapScreenState.Arrived,
+            MapScreenState.Browsing,
+            is MapScreenState.PlaceDetails,
+            is MapScreenState.SearchResultsList,
+            null,
+            -> Unit
+        }
+    }
+
+    private fun handlePlaceAddWaypointToRoutePreview(
+        item: SearchResultItem,
+        routePreview: MapScreenState.RoutePreview,
+    ) {
+        val waypoint = item.toRouteWaypoint()
+        val waypoints = MapRouteWaypointPlanner.addWaypointToRoutePreview(
+            waypoints = routePreview.waypoints,
+            waypoint = waypoint,
+        ) ?: return
+
+        clearOverlaySheetState()
+        replaceRoutePreview(waypoints)
+    }
+
+    private fun handlePlaceAddWaypointToNavigation(item: SearchResultItem) {
+        addWaypointRouteSearchJob?.cancel()
+        addWaypointRouteSearchJob = scope.launch {
+            searchAddWaypointRoute(item)
         }
     }
 
@@ -692,6 +765,7 @@ private class UiEventDelegate(
     }
 
     private fun handleRoutePreviewDismissed() {
+        clearOverlaySheetState(shouldPreserveRoutePreviewPeekHeight = false)
         newRouteManager.reset()
         popScreenState()
     }
@@ -699,10 +773,54 @@ private class UiEventDelegate(
     private fun handlePlaceDetailsDismissed() {
         popScreenState()
 
-        uiState.update {
-            it.copy(
+        clearPlaceSelectionState()
+    }
+
+    private fun handleOverlaySheetDismissed() {
+        clearOverlaySheetState()
+    }
+
+    private fun clearPlaceSelectionState() {
+        uiState.update { currentUiState ->
+            currentUiState.copy(
                 query = null,
                 selectedResult = null,
+            )
+        }
+    }
+
+    private fun clearOverlaySheetState(
+        shouldPreserveRoutePreviewPeekHeight: Boolean = true,
+    ) {
+        uiState.update { currentUiState ->
+            val overlayState = when (currentUiState.overlayState) {
+                is MapOverlayState.PlaceDetails,
+                is MapOverlayState.SearchResults,
+                -> MapOverlayState.None
+
+                MapOverlayState.AddWaypointSearch,
+                is MapOverlayState.AddWaypointSearchResults,
+                is MapOverlayState.AddWaypointSelected,
+                is MapOverlayState.AddWaypointAlternatives,
+                is MapOverlayState.NavigationAlternatives,
+                is MapOverlayState.NavigationWaypointEditor,
+                MapOverlayState.None,
+                is MapOverlayState.WaypointSearch,
+                -> currentUiState.overlayState
+            }
+            val isRoutePreviewScreen = screenStates.value.lastOrNull() is MapScreenState.RoutePreview
+            val shouldPreservePeekHeight = shouldPreserveRoutePreviewPeekHeight && isRoutePreviewScreen
+            val bottomSheetPeekHeight = if (shouldPreservePeekHeight) {
+                currentUiState.bottomSheetPeekHeight
+            } else {
+                0.dp
+            }
+
+            currentUiState.copy(
+                query = null,
+                suggestions = persistentListOf(),
+                overlayState = overlayState,
+                bottomSheetPeekHeight = bottomSheetPeekHeight,
             )
         }
     }
@@ -740,6 +858,36 @@ private class UiEventDelegate(
                 waypointIndex = index,
             ),
         )
+    }
+
+    private fun handleWaypointSearch(
+        query: String,
+        latitude: Double?,
+        longitude: Double?,
+    ) {
+        if (query.isBlank()) return
+
+        placeSearchJob?.cancel()
+        placeSearchJob = scope.launch {
+            searchRepository.searchMultiple(query, latitude, longitude)
+                .onSuccess { items ->
+                    val waypointSearch = uiState.value.overlayState as? MapOverlayState.WaypointSearch
+                        ?: return@onSuccess
+
+                    uiState.value = uiState.value.copy(
+                        query = query,
+                        suggestions = persistentListOf(),
+                        overlayState = MapOverlayState.SearchResults(
+                            query = query,
+                            results = items.toImmutableList(),
+                            waypointIndex = waypointSearch.waypointIndex,
+                        ),
+                    )
+                }
+                .onFailure {
+                    Napier.e(it, TAG) { "Failed to search waypoint candidates. query: $query" }
+                }
+        }
     }
 
     private fun handleAddWaypointRequested() {
@@ -825,12 +973,9 @@ private class UiEventDelegate(
             ),
         )
 
-        val waypoint = RouteWaypoint.Place(
-            name = result.name,
-            latitude = result.latitude,
-            longitude = result.longitude,
-        )
-        val intermediateWaypoints = searchContext.intermediateWaypoints.insertWaypointByMinimalDetour(
+        val waypoint = result.toRouteWaypoint()
+        val intermediateWaypoints = MapRouteWaypointPlanner.insertIntermediateWaypointByMinimalDetour(
+            intermediateWaypoints = searchContext.intermediateWaypoints,
             waypoint = waypoint,
             origin = searchContext.origin,
             destination = searchContext.destination,
@@ -979,6 +1124,27 @@ private class UiEventDelegate(
 
             is MapOverlayState.NavigationAlternatives -> false
             is MapOverlayState.NavigationWaypointEditor -> false
+            is MapOverlayState.PlaceDetails -> false
+            is MapOverlayState.SearchResults -> {
+                val waypointIndex = overlayState.waypointIndex
+                if (waypointIndex == null) {
+                    false
+                } else {
+                    if (addHistory) {
+                        searchRepository.addHistory(result)
+                    }
+
+                    uiState.value = uiState.value.copy(
+                        overlayState = MapOverlayState.None,
+                        routeWaypointEditResult = waypointIndex to RouteWaypoint.Place(
+                            name = result.name,
+                            latitude = result.latitude,
+                            longitude = result.longitude,
+                        ),
+                    )
+                    true
+                }
+            }
 
             MapOverlayState.None -> false
 
@@ -1010,6 +1176,8 @@ private class UiEventDelegate(
 
             is MapOverlayState.NavigationAlternatives,
             is MapOverlayState.NavigationWaypointEditor,
+            is MapOverlayState.PlaceDetails,
+            is MapOverlayState.SearchResults,
             MapOverlayState.None,
             is MapOverlayState.WaypointSearch,
             -> false
@@ -1031,6 +1199,8 @@ private class UiEventDelegate(
             is MapOverlayState.AddWaypointSelected,
             is MapOverlayState.NavigationAlternatives,
             is MapOverlayState.NavigationWaypointEditor,
+            is MapOverlayState.PlaceDetails,
+            is MapOverlayState.SearchResults,
             MapOverlayState.None,
             is MapOverlayState.WaypointSearch,
             -> MapOverlayState.AddWaypointSelected(
@@ -1048,6 +1218,8 @@ private class UiEventDelegate(
             is MapOverlayState.AddWaypointSearchResults,
             is MapOverlayState.AddWaypointSelected,
             is MapOverlayState.NavigationWaypointEditor,
+            is MapOverlayState.PlaceDetails,
+            is MapOverlayState.SearchResults,
             MapOverlayState.None,
             is MapOverlayState.WaypointSearch,
             -> null
@@ -1064,6 +1236,21 @@ private const val MAP_POINT_ID_PREFIX = "map-point:"
 
 /** 自車位置 stream の一時的な unsubscribe を許容する猶予時間（ms）。 */
 private const val VEHICLE_LOCATION_SUBSCRIPTION_STOP_TIMEOUT_MILLIS = 5_000L
+
+private fun MapScreenState?.supportsRouteContextOverlay(): Boolean {
+    return when (this) {
+        is MapScreenState.RoutePreview,
+        MapScreenState.Navigating,
+        -> true
+
+        is MapScreenState.Arrived,
+        MapScreenState.Browsing,
+        is MapScreenState.PlaceDetails,
+        is MapScreenState.SearchResultsList,
+        null,
+        -> false
+    }
+}
 
 private fun RoutePreviewState.Ready.routeMatchingPriority(currentRoute: RouteDetail?): RouteDetail {
     val currentPriority = currentRoute?.priority
@@ -1143,55 +1330,16 @@ private fun List<RouteWaypoint>.findPlaceNear(point: RoutePoint): RouteWaypoint.
     return null
 }
 
-private fun List<RouteWaypoint>.insertWaypointByMinimalDetour(
-    waypoint: RouteWaypoint,
-    origin: RoutePoint,
-    destination: RoutePoint,
-): List<RouteWaypoint> {
-    val routePoints = listOf(origin) + map { routeWaypoint -> routeWaypoint.toRoutePoint() } + destination
-    var bestInsertIndex = size
-    var bestAddedDistanceMeters = Double.POSITIVE_INFINITY
-
-    for (segmentIndex in 0 until routePoints.lastIndex) {
-        val fromPoint = routePoints[segmentIndex]
-        val toPoint = routePoints[segmentIndex + 1]
-        val addedDistanceMeters = calculateDetourDistanceMeters(
-            fromPoint = fromPoint,
-            waypoint = waypoint,
-            toPoint = toPoint,
-        )
-
-        if (addedDistanceMeters < bestAddedDistanceMeters) {
-            bestInsertIndex = segmentIndex
-            bestAddedDistanceMeters = addedDistanceMeters
-        }
-    }
-
-    val sortedWaypoints = toMutableList()
-    sortedWaypoints.add(bestInsertIndex, waypoint)
-    return sortedWaypoints
-}
-
-private fun calculateDetourDistanceMeters(
-    fromPoint: RoutePoint,
-    waypoint: RouteWaypoint,
-    toPoint: RoutePoint,
-): Double {
-    val waypointPoint = waypoint.toRoutePoint()
-    val viaWaypointDistanceMeters = MapGeodesy.haversineMeters(fromPoint, waypointPoint) +
-        MapGeodesy.haversineMeters(waypointPoint, toPoint)
-    val directDistanceMeters = MapGeodesy.haversineMeters(fromPoint, toPoint)
-
-    return viaWaypointDistanceMeters - directDistanceMeters
-}
-
-private fun RouteWaypoint.toRoutePoint(): RoutePoint = RoutePoint(
-    latitude = latitude,
-    longitude = longitude,
-)
-
 /** 経由地名を既存地点から引き継ぐため同一点とみなす距離。 */
 private const val WAYPOINT_NAME_MATCH_DISTANCE_METERS: Double = 30.0
+
+private fun SearchResultItem.toRouteWaypoint(): RouteWaypoint.Place {
+    return RouteWaypoint.Place(
+        name = name,
+        latitude = latitude,
+        longitude = longitude,
+    )
+}
 
 private fun createMapPointResult(
     placeId: String?,

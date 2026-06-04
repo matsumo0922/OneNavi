@@ -40,6 +40,7 @@ import org.jetbrains.compose.resources.stringResource
 internal fun MapSearchResultsSheet(
     query: String,
     results: ImmutableList<SearchResultItem>,
+    onResultClicked: (SearchResultItem) -> Unit,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -97,7 +98,7 @@ internal fun MapSearchResultsSheet(
                 index = index + 1,
                 result = result,
                 onClicked = {
-                    onUiEvent(MapUiEvent.OnSearchResultSelected(result))
+                    onResultClicked(result)
                 },
             )
 

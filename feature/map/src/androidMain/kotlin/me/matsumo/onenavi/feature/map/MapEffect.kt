@@ -66,7 +66,7 @@ internal fun MapEffect(
 
         is MapScreenState.PlaceDetails -> {
             PlaceDetailsEffect(
-                screenState = screenState,
+                place = screenState.place,
                 googleMap = googleMap,
             )
         }
@@ -114,6 +114,20 @@ internal fun MapEffect(
     }
 
     if (overlayState is MapOverlayState.AddWaypointSearchResults) {
+        SearchResultsMarkersEffect(
+            results = overlayState.results,
+            googleMap = googleMap,
+        )
+    }
+
+    if (overlayState is MapOverlayState.PlaceDetails) {
+        PlaceDetailsEffect(
+            place = overlayState.place,
+            googleMap = googleMap,
+        )
+    }
+
+    if (overlayState is MapOverlayState.SearchResults) {
         SearchResultsMarkersEffect(
             results = overlayState.results,
             googleMap = googleMap,
@@ -266,19 +280,19 @@ private fun NavigationAlternativesEffect(
 /**
  * 地点詳細画面の marker を描画する。
  *
- * @param screenState 地点詳細画面 state
+ * @param place 地点詳細の地点
  * @param googleMap marker 描画先の GoogleMap
  */
 @Composable
 private fun PlaceDetailsEffect(
-    screenState: MapScreenState.PlaceDetails,
+    place: SearchResultItem,
     googleMap: GoogleMap,
 ) {
     MapMarker(
         googleMap = googleMap,
-        latitude = screenState.place.latitude,
-        longitude = screenState.place.longitude,
-        title = screenState.place.name,
+        latitude = place.latitude,
+        longitude = place.longitude,
+        title = place.name,
     )
 }
 
@@ -553,6 +567,8 @@ private fun MapOverlayState.alternativesRoutePreviewState(): RoutePreviewState? 
         is MapOverlayState.AddWaypointSearchResults,
         is MapOverlayState.AddWaypointSelected,
         is MapOverlayState.NavigationWaypointEditor,
+        is MapOverlayState.PlaceDetails,
+        is MapOverlayState.SearchResults,
         MapOverlayState.None,
         is MapOverlayState.WaypointSearch,
         -> null

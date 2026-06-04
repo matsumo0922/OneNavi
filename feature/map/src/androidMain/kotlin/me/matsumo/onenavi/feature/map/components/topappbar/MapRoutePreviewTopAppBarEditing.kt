@@ -33,11 +33,11 @@ import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_map_route_done
+import me.matsumo.onenavi.feature.map.MAP_ROUTE_PREVIEW_MAX_WAYPOINTS
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import org.jetbrains.compose.resources.stringResource
 import sh.calvin.reorderable.ReorderableColumn
 
-private const val MAX_WAYPOINTS = 5
 private val ITEM_HEIGHT = 32.dp
 private val DIVIDER_HEIGHT = 16.dp
 
@@ -45,6 +45,7 @@ private val DIVIDER_HEIGHT = 16.dp
 internal fun MapRoutePreviewTopAppBarEditing(
     waypoints: ImmutableList<RouteWaypoint>,
     waypointEditResult: Pair<Int, RouteWaypoint.Place>?,
+    isInteractionEnabled: Boolean,
     onUiEvent: (MapUiEvent) -> Unit,
     onEditingFinished: () -> Unit,
     modifier: Modifier = Modifier,
@@ -54,7 +55,7 @@ internal fun MapRoutePreviewTopAppBarEditing(
             buildList {
                 addAll(waypoints)
 
-                if (size < MAX_WAYPOINTS) {
+                if (size < MAP_ROUTE_PREVIEW_MAX_WAYPOINTS) {
                     add(null)
                 }
             },
@@ -67,7 +68,7 @@ internal fun MapRoutePreviewTopAppBarEditing(
 
         editingList = editingList.toMutableList().apply {
             set(index, place)
-            if (none { it == null } && size < MAX_WAYPOINTS) {
+            if (none { it == null } && size < MAP_ROUTE_PREVIEW_MAX_WAYPOINTS) {
                 add(null)
             }
         }
@@ -86,6 +87,7 @@ internal fun MapRoutePreviewTopAppBarEditing(
         ) {
             IconButton(
                 modifier = Modifier.size(48.dp),
+                enabled = isInteractionEnabled,
                 onClick = onEditingFinished,
             ) {
                 Icon(
@@ -146,11 +148,16 @@ internal fun MapRoutePreviewTopAppBarEditing(
                                     position = position,
                                     isEditing = true,
                                     waypointLabel = waypointLabel,
+                                    isEnabled = isInteractionEnabled,
                                     onClicked = { onUiEvent(MapUiEvent.OnWaypointEditRequested(index)) },
                                 )
 
                                 Icon(
-                                    modifier = Modifier.draggableHandle(),
+                                    modifier = if (isInteractionEnabled) {
+                                        Modifier.draggableHandle()
+                                    } else {
+                                        Modifier
+                                    },
                                     imageVector = Icons.Filled.DragHandle,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -159,10 +166,11 @@ internal fun MapRoutePreviewTopAppBarEditing(
                                 if (item != null) {
                                     IconButton(
                                         modifier = Modifier.size(40.dp),
+                                        enabled = isInteractionEnabled,
                                         onClick = {
                                             editingList = editingList.toMutableList().apply {
                                                 removeAt(index)
-                                                if (none { it == null } && size < MAX_WAYPOINTS) {
+                                                if (none { it == null } && size < MAP_ROUTE_PREVIEW_MAX_WAYPOINTS) {
                                                     add(null)
                                                 }
                                             }
@@ -196,7 +204,7 @@ internal fun MapRoutePreviewTopAppBarEditing(
                     onUiEvent(MapUiEvent.OnRouteWaypointsConfirmed(confirmed))
                     onEditingFinished()
                 },
-                enabled = canConfirm,
+                enabled = isInteractionEnabled && canConfirm,
             ) {
                 Text(
                     text = stringResource(Res.string.home_map_route_done),

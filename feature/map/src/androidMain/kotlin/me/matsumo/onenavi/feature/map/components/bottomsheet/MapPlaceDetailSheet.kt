@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled._360
+import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Directions
@@ -55,6 +56,7 @@ import me.matsumo.onenavi.core.resource.home_map_metadata
 import me.matsumo.onenavi.core.resource.home_map_metadata_accutary
 import me.matsumo.onenavi.core.resource.home_map_metadata_id
 import me.matsumo.onenavi.core.resource.home_map_metadata_type
+import me.matsumo.onenavi.core.resource.home_map_navigation_eta_add_waypoint
 import me.matsumo.onenavi.core.resource.home_map_point
 import me.matsumo.onenavi.core.resource.home_map_point_address
 import me.matsumo.onenavi.core.resource.home_map_point_coordinates
@@ -72,6 +74,8 @@ import org.jetbrains.compose.resources.stringResource
 internal fun MapPlaceDetailSheet(
     cameraState: MapCameraState,
     selectedResult: SearchResultItem,
+    isAddWaypointAction: Boolean,
+    isPrimaryActionEnabled: Boolean,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -142,14 +146,29 @@ internal fun MapPlaceDetailSheet(
 
             ButtonSection(
                 modifier = Modifier.fillMaxWidth(),
-                onRouteClicked = {
-                    onUiEvent(
-                        MapUiEvent.OnRouteSearch(
-                            item = selectedResult,
-                            latitude = cameraState.myLocationLatitude,
-                            longitude = cameraState.myLocationLongitude,
-                        ),
-                    )
+                primaryActionText = if (isAddWaypointAction) {
+                    Res.string.home_map_navigation_eta_add_waypoint
+                } else {
+                    Res.string.home_map_search_route
+                },
+                primaryActionIcon = if (isAddWaypointAction) {
+                    Icons.Default.AddCircleOutline
+                } else {
+                    Icons.Default.Directions
+                },
+                isPrimaryActionEnabled = isPrimaryActionEnabled,
+                onPrimaryActionClicked = {
+                    if (isAddWaypointAction) {
+                        onUiEvent(MapUiEvent.OnPlaceAddWaypointClicked(selectedResult))
+                    } else {
+                        onUiEvent(
+                            MapUiEvent.OnRouteSearch(
+                                item = selectedResult,
+                                latitude = cameraState.myLocationLatitude,
+                                longitude = cameraState.myLocationLongitude,
+                            ),
+                        )
+                    }
                 },
                 onFavoriteClicked = {},
                 onStreetViewClicked = {},
@@ -220,7 +239,10 @@ private fun TitleSection(
 
 @Composable
 private fun ButtonSection(
-    onRouteClicked: () -> Unit,
+    primaryActionText: StringResource,
+    primaryActionIcon: ImageVector,
+    isPrimaryActionEnabled: Boolean,
+    onPrimaryActionClicked: () -> Unit,
     onFavoriteClicked: () -> Unit,
     onStreetViewClicked: () -> Unit,
     onShareClicked: () -> Unit,
@@ -228,10 +250,11 @@ private fun ButtonSection(
 ) {
     val items = listOf(
         ButtonItem(
-            text = Res.string.home_map_search_route,
-            icon = Icons.Default.Directions,
-            onClick = onRouteClicked,
+            text = primaryActionText,
+            icon = primaryActionIcon,
+            onClick = onPrimaryActionClicked,
             isPrimary = true,
+            isEnabled = isPrimaryActionEnabled,
         ),
         ButtonItem(
             text = Res.string.home_map_bookmark,
@@ -262,10 +285,14 @@ private fun ButtonSection(
 
             if (item.isPrimary) {
                 aspectRatio = 2f
+            } else {
+                aspectRatio = 1f
+            }
+
+            if (item.isPrimary && item.isEnabled) {
                 containerColor = MaterialTheme.colorScheme.inverseSurface
                 contentColor = MaterialTheme.colorScheme.inverseOnSurface
             } else {
-                aspectRatio = 1f
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
             }
@@ -275,7 +302,7 @@ private fun ButtonSection(
                     .height(80.dp)
                     .aspectRatio(aspectRatio)
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable { item.onClick() }
+                    .clickable(enabled = item.isEnabled) { item.onClick() }
                     .background(containerColor)
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -349,6 +376,7 @@ private data class ButtonItem(
     val icon: ImageVector,
     val onClick: () -> Unit,
     val isPrimary: Boolean = false,
+    val isEnabled: Boolean = true,
 )
 
 @Immutable
