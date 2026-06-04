@@ -765,7 +765,7 @@ private class UiEventDelegate(
     }
 
     private fun handleRoutePreviewDismissed() {
-        clearOverlaySheetState()
+        clearOverlaySheetState(shouldPreserveRoutePreviewPeekHeight = false)
         newRouteManager.reset()
         popScreenState()
     }
@@ -789,7 +789,9 @@ private class UiEventDelegate(
         }
     }
 
-    private fun clearOverlaySheetState() {
+    private fun clearOverlaySheetState(
+        shouldPreserveRoutePreviewPeekHeight: Boolean = true,
+    ) {
         uiState.update { currentUiState ->
             val overlayState = when (currentUiState.overlayState) {
                 is MapOverlayState.PlaceDetails,
@@ -806,12 +808,19 @@ private class UiEventDelegate(
                 is MapOverlayState.WaypointSearch,
                 -> currentUiState.overlayState
             }
+            val isRoutePreviewScreen = screenStates.value.lastOrNull() is MapScreenState.RoutePreview
+            val shouldPreservePeekHeight = shouldPreserveRoutePreviewPeekHeight && isRoutePreviewScreen
+            val bottomSheetPeekHeight = if (shouldPreservePeekHeight) {
+                currentUiState.bottomSheetPeekHeight
+            } else {
+                0.dp
+            }
 
             currentUiState.copy(
                 query = null,
                 suggestions = persistentListOf(),
                 overlayState = overlayState,
-                bottomSheetPeekHeight = 0.dp,
+                bottomSheetPeekHeight = bottomSheetPeekHeight,
             )
         }
     }

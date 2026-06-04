@@ -24,9 +24,7 @@ internal object MapRouteWaypointPlanner {
 
         val originWaypoint = waypoints.first()
         val destinationWaypoint = waypoints.last()
-        val intermediateWaypoints = waypoints
-            .drop(1)
-            .dropLast(1)
+        val intermediateWaypoints = waypoints.drop(1).dropLast(1)
         val sortedIntermediateWaypoints = insertWaypointByMinimalDetour(
             intermediateWaypoints = intermediateWaypoints,
             waypoint = waypoint,
