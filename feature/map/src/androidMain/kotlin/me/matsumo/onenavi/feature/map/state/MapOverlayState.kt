@@ -3,6 +3,7 @@ package me.matsumo.onenavi.feature.map.state
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import kotlinx.collections.immutable.ImmutableList
+import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 
@@ -64,6 +65,20 @@ sealed interface MapOverlayState {
      */
     @Immutable
     data class NavigationAlternatives(
+        val routePreviewState: RoutePreviewState,
+    ) : MapOverlayState
+
+    /**
+     * ナビゲーション中の waypoint 並び替えオーバーレイ。
+     *
+     * @property originWaypoint 固定表示する現在地。
+     * @property waypoints 並び替え・削除対象の未通過 waypoint。最後の地点を目的地として扱う。
+     * @property routePreviewState 完了時の再探索状態。
+     */
+    @Immutable
+    data class NavigationWaypointEditor(
+        val originWaypoint: RouteWaypoint.CurrentLocation,
+        val waypoints: ImmutableList<RouteWaypoint.Place>,
         val routePreviewState: RoutePreviewState,
     ) : MapOverlayState
 

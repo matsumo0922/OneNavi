@@ -60,6 +60,11 @@ sealed interface MapUiEvent {
     /** ナビゲーション中のルート全体プレビュー表示を終了する。 */
     data object OnNavigationRoutePreviewDismissed : MapUiEvent
 
+    /** ナビゲーション中の waypoint 編集結果を現在の案内ルートへ反映する。 */
+    data class OnNavigationWaypointEditConfirmed(
+        val waypoints: ImmutableList<RouteWaypoint.Place>,
+    ) : MapUiEvent
+
     /** ナビゲーション中に代替ルート候補の再探索を要求する。 */
     data object OnNavigationAlternativesClicked : MapUiEvent
 

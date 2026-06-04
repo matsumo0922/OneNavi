@@ -218,6 +218,7 @@ private class UiEventDelegate(
     private var routeSearchJob: Job? = null
     private var addWaypointRouteSearchJob: Job? = null
     private var navigationAlternativesRouteSearchJob: Job? = null
+    private var navigationWaypointEditRouteSearchJob: Job? = null
 
     init {
         scope.launch {
@@ -256,6 +257,7 @@ private class UiEventDelegate(
             is MapUiEvent.OnNavigationStop -> handleNavigationStop()
             is MapUiEvent.OnNavigationRoutePreviewClicked -> handleNavigationRoutePreviewClicked()
             is MapUiEvent.OnNavigationRoutePreviewDismissed -> handleNavigationRoutePreviewDismissed()
+            is MapUiEvent.OnNavigationWaypointEditConfirmed -> handleNavigationWaypointEditConfirmed(event.waypoints)
             is MapUiEvent.OnNavigationAlternativesClicked -> handleNavigationAlternativesClicked()
             is MapUiEvent.OnNavigationAlternativeRouteSelected -> handleNavigationAlternativeRouteSelected(event.index)
             is MapUiEvent.OnNavigationAlternativesDismissed -> handleNavigationAlternativesDismissed()
@@ -482,18 +484,118 @@ private class UiEventDelegate(
     }
 
     private fun handleNavigationRoutePreviewClicked() {
-        uiState.update {
-            it.copy(isNavigationRoutePreviewing = true)
-        }
+        val searchContext = createNavigationRouteSearchContext() ?: return
+        val editableWaypoints = (searchContext.intermediateWaypoints + searchContext.destinationWaypoint)
+            .toImmutableList()
+        if (editableWaypoints.isEmpty()) return
+
+        addWaypointRouteSearchJob?.cancel()
+        navigationAlternativesRouteSearchJob?.cancel()
+        navigationWaypointEditRouteSearchJob?.cancel()
+        uiState.value = uiState.value.copy(
+            query = null,
+            suggestions = persistentListOf(),
+            selectedResult = null,
+            isNavigationRoutePreviewing = true,
+            overlayState = MapOverlayState.NavigationWaypointEditor(
+                originWaypoint = searchContext.originWaypoint,
+                waypoints = editableWaypoints,
+                routePreviewState = RoutePreviewState.Idle,
+            ),
+        )
     }
 
     private fun handleNavigationRoutePreviewDismissed() {
+        navigationWaypointEditRouteSearchJob?.cancel()
         uiState.update {
-            it.copy(isNavigationRoutePreviewing = false)
+            it.copy(
+                isNavigationRoutePreviewing = false,
+                overlayState = if (it.overlayState is MapOverlayState.NavigationWaypointEditor) {
+                    MapOverlayState.None
+                } else {
+                    it.overlayState
+                },
+            )
         }
     }
 
+    private fun handleNavigationWaypointEditConfirmed(waypoints: ImmutableList<RouteWaypoint.Place>) {
+        if (waypoints.isEmpty()) return
+        navigationWaypointEditRouteSearchJob?.cancel()
+        navigationWaypointEditRouteSearchJob = scope.launch {
+            searchNavigationWaypointEditRoute(waypoints = waypoints)
+        }
+    }
+
+    private suspend fun searchNavigationWaypointEditRoute(waypoints: ImmutableList<RouteWaypoint.Place>) {
+        val overlayState = uiState.value.overlayState as? MapOverlayState.NavigationWaypointEditor ?: return
+        val searchContext = createNavigationRouteSearchContext() ?: run {
+            updateNavigationWaypointEditorRoutePreviewState(
+                waypoints = waypoints,
+                routePreviewState = RoutePreviewState.Failed(
+                    IllegalStateException("Guidance route is not available"),
+                ),
+            )
+            return
+        }
+        val currentRoute = currentNavigationRoute()
+        val destinationWaypoint = waypoints.last()
+        val intermediateWaypoints = waypoints.dropLast(1)
+        val routeWaypoints = listOf(searchContext.originWaypoint) + waypoints
+
+        uiState.value = uiState.value.copy(
+            overlayState = overlayState.copy(
+                waypoints = waypoints,
+                routePreviewState = RoutePreviewState.Searching,
+            ),
+        )
+
+        val routePreviewState = newRouteManager.searchRoutePreview(
+            origin = searchContext.origin,
+            destination = destinationWaypoint.toRoutePoint(),
+            intermediatePoints = intermediateWaypoints.map { waypoint -> waypoint.toRoutePoint() },
+            routeWaypoints = routeWaypoints,
+            originDirectionDegrees = searchContext.originDirectionDegrees,
+        )
+        if (uiState.value.overlayState !is MapOverlayState.NavigationWaypointEditor) return
+
+        if (routePreviewState is RoutePreviewState.Failed) {
+            Napier.e(routePreviewState.error, TAG) { "Failed to search navigation waypoint edit route." }
+            updateNavigationWaypointEditorRoutePreviewState(
+                waypoints = waypoints,
+                routePreviewState = routePreviewState,
+            )
+            return
+        }
+
+        val readyState = routePreviewState as? RoutePreviewState.Ready ?: return
+        val selectedRoute = readyState.routeMatchingPriority(currentRoute)
+        newGuidanceManager.startGuidance(route = selectedRoute)
+        uiState.value = uiState.value.copy(
+            query = null,
+            suggestions = persistentListOf(),
+            selectedResult = null,
+            overlayState = MapOverlayState.None,
+            navigationCardHeight = 0,
+            isNavigationRoutePreviewing = false,
+        )
+    }
+
+    private fun updateNavigationWaypointEditorRoutePreviewState(
+        waypoints: ImmutableList<RouteWaypoint.Place>,
+        routePreviewState: RoutePreviewState,
+    ) {
+        val overlayState = uiState.value.overlayState as? MapOverlayState.NavigationWaypointEditor ?: return
+        uiState.value = uiState.value.copy(
+            overlayState = overlayState.copy(
+                waypoints = waypoints,
+                routePreviewState = routePreviewState,
+            ),
+        )
+    }
+
     private fun handleNavigationAlternativesClicked() {
+        navigationWaypointEditRouteSearchJob?.cancel()
         navigationAlternativesRouteSearchJob?.cancel()
         navigationAlternativesRouteSearchJob = scope.launch {
             searchNavigationAlternativesRoute()
@@ -575,6 +677,18 @@ private class UiEventDelegate(
         newGuidanceManager.startGuidance(route = selectedRoute)
         clearNavigationOverlayState()
         handleNavigationRoutePreviewDismissed()
+    }
+
+    private fun currentNavigationRoute(): RouteDetail? {
+        return when (val guidanceState = newGuidanceManager.state.value) {
+            is GuidanceState.Guiding -> guidanceState.route
+            is GuidanceState.Rerouting -> guidanceState.previousRoute
+
+            GuidanceState.Arrived,
+            is GuidanceState.Failed,
+            GuidanceState.Idle,
+            -> null
+        }
     }
 
     private fun handleRoutePreviewDismissed() {
@@ -768,6 +882,7 @@ private class UiEventDelegate(
     private fun openWaypointSearchOverlay(overlayState: MapOverlayState) {
         addWaypointRouteSearchJob?.cancel()
         navigationAlternativesRouteSearchJob?.cancel()
+        navigationWaypointEditRouteSearchJob?.cancel()
         uiState.value = uiState.value.copy(
             query = null,
             suggestions = persistentListOf(),
@@ -779,6 +894,7 @@ private class UiEventDelegate(
     private fun handleWaypointSearchDismissed() {
         addWaypointRouteSearchJob?.cancel()
         navigationAlternativesRouteSearchJob?.cancel()
+        navigationWaypointEditRouteSearchJob?.cancel()
         uiState.value = uiState.value.copy(
             suggestions = persistentListOf(),
             overlayState = MapOverlayState.None,
@@ -789,6 +905,7 @@ private class UiEventDelegate(
         placeSearchJob?.cancel()
         addWaypointRouteSearchJob?.cancel()
         navigationAlternativesRouteSearchJob?.cancel()
+        navigationWaypointEditRouteSearchJob?.cancel()
         uiState.value = uiState.value.copy(
             query = null,
             suggestions = persistentListOf(),
@@ -861,6 +978,7 @@ private class UiEventDelegate(
             -> true
 
             is MapOverlayState.NavigationAlternatives -> false
+            is MapOverlayState.NavigationWaypointEditor -> false
 
             MapOverlayState.None -> false
 
@@ -891,6 +1009,7 @@ private class UiEventDelegate(
             -> true
 
             is MapOverlayState.NavigationAlternatives,
+            is MapOverlayState.NavigationWaypointEditor,
             MapOverlayState.None,
             is MapOverlayState.WaypointSearch,
             -> false
@@ -911,6 +1030,7 @@ private class UiEventDelegate(
             is MapOverlayState.AddWaypointSearchResults,
             is MapOverlayState.AddWaypointSelected,
             is MapOverlayState.NavigationAlternatives,
+            is MapOverlayState.NavigationWaypointEditor,
             MapOverlayState.None,
             is MapOverlayState.WaypointSearch,
             -> MapOverlayState.AddWaypointSelected(
@@ -927,6 +1047,7 @@ private class UiEventDelegate(
             MapOverlayState.AddWaypointSearch,
             is MapOverlayState.AddWaypointSearchResults,
             is MapOverlayState.AddWaypointSelected,
+            is MapOverlayState.NavigationWaypointEditor,
             MapOverlayState.None,
             is MapOverlayState.WaypointSearch,
             -> null
@@ -944,6 +1065,11 @@ private const val MAP_POINT_ID_PREFIX = "map-point:"
 /** 自車位置 stream の一時的な unsubscribe を許容する猶予時間（ms）。 */
 private const val VEHICLE_LOCATION_SUBSCRIPTION_STOP_TIMEOUT_MILLIS = 5_000L
 
+private fun RoutePreviewState.Ready.routeMatchingPriority(currentRoute: RouteDetail?): RouteDetail {
+    val currentPriority = currentRoute?.priority
+    return routes.firstOrNull { route -> route.priority == currentPriority } ?: selectedRoute
+}
+
 /**
  * 案内中の一時ルート検索に使うコンテキスト。
  *
@@ -957,10 +1083,10 @@ private const val VEHICLE_LOCATION_SUBSCRIPTION_STOP_TIMEOUT_MILLIS = 5_000L
 @Immutable
 private data class NavigationRouteSearchContext(
     val origin: RoutePoint,
-    val originWaypoint: RouteWaypoint,
+    val originWaypoint: RouteWaypoint.CurrentLocation,
     val destination: RoutePoint,
-    val destinationWaypoint: RouteWaypoint,
-    val intermediateWaypoints: ImmutableList<RouteWaypoint>,
+    val destinationWaypoint: RouteWaypoint.Place,
+    val intermediateWaypoints: ImmutableList<RouteWaypoint.Place>,
     val originDirectionDegrees: Int,
 )
 
@@ -968,18 +1094,10 @@ private fun RouteDetail.toNavigationRouteSearchContext(
     origin: RoutePoint,
     originDirectionDegrees: Int,
 ): NavigationRouteSearchContext {
-    val routeWaypoints = toNavigationRouteWaypoints(origin = origin)
-    return NavigationRouteSearchContext(
-        origin = origin,
-        originWaypoint = routeWaypoints.first(),
-        destination = destination,
-        destinationWaypoint = routeWaypoints.last(),
-        intermediateWaypoints = routeWaypoints.drop(1).dropLast(1).toImmutableList(),
-        originDirectionDegrees = originDirectionDegrees,
+    val originWaypoint = RouteWaypoint.CurrentLocation(
+        latitude = origin.latitude,
+        longitude = origin.longitude,
     )
-}
-
-private fun RouteDetail.toNavigationRouteWaypoints(origin: RoutePoint): ImmutableList<RouteWaypoint> {
     val displayIntermediateWaypoints = intermediateWaypoints
         .mapIndexed { waypointIndex, point ->
             routeWaypoints.displayPlaceForPoint(
@@ -987,15 +1105,19 @@ private fun RouteDetail.toNavigationRouteWaypoints(origin: RoutePoint): Immutabl
                 fallbackIndex = waypointIndex + 1,
             )
         }
+        .toImmutableList()
     val destinationWaypoint = routeWaypoints.displayPlaceForPoint(
         point = destination,
         fallbackIndex = routeWaypoints.lastIndex,
     )
-    val originWaypoint = RouteWaypoint.CurrentLocation(
-        latitude = origin.latitude,
-        longitude = origin.longitude,
+    return NavigationRouteSearchContext(
+        origin = origin,
+        originWaypoint = originWaypoint,
+        destination = destination,
+        destinationWaypoint = destinationWaypoint,
+        intermediateWaypoints = displayIntermediateWaypoints,
+        originDirectionDegrees = originDirectionDegrees,
     )
-    return (listOf(originWaypoint) + displayIntermediateWaypoints + destinationWaypoint).toImmutableList()
 }
 
 private fun List<RouteWaypoint>.displayPlaceForPoint(

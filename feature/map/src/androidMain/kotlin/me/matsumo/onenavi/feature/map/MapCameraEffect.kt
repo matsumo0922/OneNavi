@@ -48,10 +48,13 @@ internal fun MapCameraEffect(
         .calculateTopPadding()
     val addWaypointSearchResults = overlayState as? MapOverlayState.AddWaypointSearchResults
     val addWaypointSelected = overlayState as? MapOverlayState.AddWaypointSelected
+    val navigationWaypointEditor = overlayState as? MapOverlayState.NavigationWaypointEditor
     val hasNavigationAlternativesOverlay = overlayState.hasNavigationAlternativesOverlay()
     val navigationAlternativesReady = overlayState.alternativesRoutePreviewState() as? RoutePreviewState.Ready
     val hasAddWaypointOverlay = addWaypointSearchResults != null || addWaypointSelected != null
-    val hasNavigationPreviewOverlay = hasAddWaypointOverlay || hasNavigationAlternativesOverlay
+    val hasRouteEditOverlay = navigationWaypointEditor != null
+    val hasNavigationRouteOverlay = hasAddWaypointOverlay || hasNavigationAlternativesOverlay
+    val hasNavigationPreviewOverlay = hasNavigationRouteOverlay || hasRouteEditOverlay
     val isGuidanceCameraActive = screenState is MapScreenState.Navigating && !hasNavigationPreviewOverlay
 
     LaunchedEffect(isGuidanceCameraActive) {
@@ -177,6 +180,7 @@ internal fun MapCameraEffect(
     val routeOverviewTopPaddingKey = when {
         screenState is MapScreenState.RoutePreview -> uiState.topAppBarHeight
         screenState is MapScreenState.Navigating && navigationAlternativesReady != null -> uiState.topAppBarHeight
+        screenState is MapScreenState.Navigating && uiState.isNavigationRoutePreviewing -> uiState.topAppBarHeight
         else -> 0
     }
     val routeOverviewBottomPaddingKey = if (screenState is MapScreenState.RoutePreview) {
@@ -184,7 +188,9 @@ internal fun MapCameraEffect(
     } else {
         0.dp
     }
-    val shouldUseNavigationCardPadding = screenState is MapScreenState.Navigating && navigationAlternativesReady != null
+    val shouldUseAlternativesCardPadding = screenState is MapScreenState.Navigating && navigationAlternativesReady != null
+    val shouldUseRoutePreviewCardPadding = screenState is MapScreenState.Navigating && uiState.isNavigationRoutePreviewing
+    val shouldUseNavigationCardPadding = shouldUseAlternativesCardPadding || shouldUseRoutePreviewCardPadding
     val routeOverviewNavigationCardHeightKey = if (shouldUseNavigationCardPadding) {
         uiState.navigationCardHeight
     } else {
@@ -248,6 +254,8 @@ internal fun MapCameraEffect(
                     navigationAlternativesReady != null -> {
                         cameraState.showNavigationAlternativesRouteOverview(navigationAlternativesReady)
                     }
+
+                    navigationWaypointEditor != null -> Unit
 
                     addWaypointSearchResults != null -> {
                         cameraState.showSearchResultsOverview(addWaypointSearchResults)
@@ -317,6 +325,7 @@ private fun MapOverlayState.hasNavigationAlternativesOverlay(): Boolean {
         MapOverlayState.AddWaypointSearch,
         is MapOverlayState.AddWaypointSearchResults,
         is MapOverlayState.AddWaypointSelected,
+        is MapOverlayState.NavigationWaypointEditor,
         MapOverlayState.None,
         is MapOverlayState.WaypointSearch,
         -> false
@@ -330,6 +339,7 @@ private fun MapOverlayState.alternativesRoutePreviewState(): RoutePreviewState? 
         MapOverlayState.AddWaypointSearch,
         is MapOverlayState.AddWaypointSearchResults,
         is MapOverlayState.AddWaypointSelected,
+        is MapOverlayState.NavigationWaypointEditor,
         MapOverlayState.None,
         is MapOverlayState.WaypointSearch,
         -> null

@@ -552,6 +552,7 @@ private fun MapOverlayState.alternativesRoutePreviewState(): RoutePreviewState? 
         MapOverlayState.AddWaypointSearch,
         is MapOverlayState.AddWaypointSearchResults,
         is MapOverlayState.AddWaypointSelected,
+        is MapOverlayState.NavigationWaypointEditor,
         MapOverlayState.None,
         is MapOverlayState.WaypointSearch,
         -> null

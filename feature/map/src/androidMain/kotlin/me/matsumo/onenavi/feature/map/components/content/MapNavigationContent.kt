@@ -35,6 +35,7 @@ import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationManeuve
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationReroutingPanel
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSearchResultsCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSelectedWaypointCard
+import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationWaypointEditorCard
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.NavigationGuideImage
@@ -67,10 +68,14 @@ internal fun MapNavigationContent(
     val addWaypointSelected = overlayState as? MapOverlayState.AddWaypointSelected
     val addWaypointAlternatives = overlayState as? MapOverlayState.AddWaypointAlternatives
     val navigationAlternatives = overlayState as? MapOverlayState.NavigationAlternatives
-    val alternativesRoutePreviewState = addWaypointAlternatives?.routePreviewState ?: navigationAlternatives?.routePreviewState
+    val navigationWaypointEditor = overlayState as? MapOverlayState.NavigationWaypointEditor
+    val alternativesRoutePreviewState = addWaypointAlternatives?.routePreviewState
+        ?: navigationAlternatives?.routePreviewState
     val hasAddWaypointOverlayCard = addWaypointSearchResults != null || addWaypointSelected != null
     val hasAlternativesOverlayCard = alternativesRoutePreviewState != null
-    val hasNavigationOverlayCard = hasAddWaypointOverlayCard || hasAlternativesOverlayCard
+    val hasWaypointEditorOverlayCard = navigationWaypointEditor != null
+    val hasNavigationRouteOverlayCard = hasAddWaypointOverlayCard || hasAlternativesOverlayCard
+    val hasNavigationOverlayCard = hasNavigationRouteOverlayCard || hasWaypointEditorOverlayCard
     val hasNavigationBottomCard = etaProgress != null || hasNavigationOverlayCard
 
     fun cancelNavigation() {
@@ -189,6 +194,27 @@ internal fun MapNavigationContent(
                 },
                 onRouteClicked = { index ->
                     onUiEvent(MapUiEvent.OnNavigationAlternativeRouteSelected(index))
+                },
+            )
+        } else if (navigationWaypointEditor != null) {
+            MapNavigationWaypointEditorCard(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .onGloballyPositioned { coordinates ->
+                        onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
+                    }
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .height(bottomFloatingCardHeight),
+                originWaypoint = navigationWaypointEditor.originWaypoint,
+                waypoints = navigationWaypointEditor.waypoints,
+                routePreviewState = navigationWaypointEditor.routePreviewState,
+                onCloseClicked = {
+                    onUiEvent(MapUiEvent.OnNavigationRoutePreviewDismissed)
+                },
+                onDoneClicked = { waypoints ->
+                    onUiEvent(MapUiEvent.OnNavigationWaypointEditConfirmed(waypoints))
                 },
             )
         } else if (etaProgress != null && etaRoute != null) {

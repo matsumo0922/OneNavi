@@ -92,6 +92,7 @@
     <string name="home_map_route_input_waypoint">経由地を選択</string>
     <string name="home_map_route_input_destination">目的地を入力</string>
     <string name="home_map_route_done">完了</string>
+    <string name="home_map_navigation_waypoint_editor_title">経由地</string>
     <string name="home_subscription_expired_title">Pro プランの失効</string>
     <string name="home_subscription_expired_message">OneNavi Pro の定期購入が解約または返金されたため、Pro 機能が無効になりました。\n引き続きご利用いただくには、再度アップグレードしてください。</string>
     <string name="home_map_route_result_duration_distance">%1$s（%2$s）</string>
