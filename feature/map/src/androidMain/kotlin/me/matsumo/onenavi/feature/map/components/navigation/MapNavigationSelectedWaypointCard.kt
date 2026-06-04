@@ -9,10 +9,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,7 +36,6 @@ import me.matsumo.onenavi.core.resource.common_unit_kilometer
 import me.matsumo.onenavi.core.resource.common_unit_meter
 import me.matsumo.onenavi.core.resource.common_unit_minute
 import me.matsumo.onenavi.core.resource.home_map_navigation_eta_add_waypoint
-import me.matsumo.onenavi.core.resource.home_map_navigation_eta_alternatives
 import me.matsumo.onenavi.core.ui.theme.semiBold
 import org.jetbrains.compose.resources.stringResource
 
@@ -170,11 +168,6 @@ private fun MapNavigationSelectedWaypointBottomBar(
                 onClick = onAddWaypointClicked,
                 enabled = routePreviewState is RoutePreviewState.Ready,
             ) {
-                Icon(
-                    imageVector = Icons.Default.AddCircleOutline,
-                    contentDescription = null,
-                )
-
                 Text(
                     text = stringResource(Res.string.home_map_navigation_eta_add_waypoint),
                     maxLines = 1,
@@ -182,19 +175,12 @@ private fun MapNavigationSelectedWaypointBottomBar(
                 )
             }
 
-            FilledTonalButton(
-                modifier = Modifier.weight(1f),
+            FilledTonalIconButton(
                 onClick = onAlternativesClicked,
             ) {
                 Icon(
                     imageVector = Icons.Default.Route,
                     contentDescription = null,
-                )
-
-                Text(
-                    text = stringResource(Res.string.home_map_navigation_eta_alternatives),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

@@ -75,27 +75,33 @@ internal fun MapNavigationAlternativesCard(
             when (routePreviewState) {
                 RoutePreviewState.Idle,
                 RoutePreviewState.Searching,
-                -> MapNavigationAlternativesMessage(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    text = stringResource(Res.string.common_loading),
-                )
+                -> {
+                    MapNavigationAlternativesMessage(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        text = stringResource(Res.string.common_loading),
+                    )
+                }
 
-                is RoutePreviewState.Failed -> MapNavigationAlternativesMessage(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    text = stringResource(Res.string.common_error),
-                )
+                is RoutePreviewState.Failed -> {
+                    MapNavigationAlternativesMessage(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        text = stringResource(Res.string.common_error),
+                    )
+                }
 
-                is RoutePreviewState.Ready -> MapNavigationAlternativesRouteList(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    routes = routePreviewState.routes,
-                    onRouteClicked = onRouteClicked,
-                )
+                is RoutePreviewState.Ready -> {
+                    MapNavigationAlternativesRouteList(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        routes = routePreviewState.routes,
+                        onRouteClicked = onRouteClicked,
+                    )
+                }
             }
         }
     }
