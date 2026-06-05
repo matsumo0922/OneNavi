@@ -23,32 +23,40 @@ internal data class MapPanelLayout(
         get() = widthSizeClass == MapWidthSizeClass.EXPANDED && panelWidth > 0.dp
 
     /**
+     * 分割時に UI 帯側へ確保する横 inset。UI 帯幅と画面端の map controls カラム幅
+     * （[MAP_CONTROLS_COLUMN_WIDTH]）の合計。Compact では 0dp。
+     */
+    val splitHorizontalInset: Dp
+        get() = if (isSplit) panelWidth + MAP_CONTROLS_COLUMN_WIDTH else 0.dp
+
+    /**
      * GoogleMap に渡す左右 padding を返す。
      *
-     * 分割レイアウトでは MapView の実 viewport を UI 帯幅ぶん横へ広げるため、
-     * 左右に同じ inset を足して padded center と 3D 投影中心を一致させる。
+     * 分割レイアウトでは MapView の実 viewport を [splitHorizontalInset]（UI 帯 + map controls
+     * カラム）ぶん横へ広げるため、左右に同じ inset を足して padded center と 3D 投影中心を一致させる。
      *
      * @param basePaddingPx 左右に常に確保する基本 padding（px）
-     * @param panelWidthPx UI 帯の幅（px）
+     * @param splitInsetPx 分割時に UI 帯側へ確保する inset（[splitHorizontalInset] の px）
      * @return start padding と end padding
      */
     fun resolveHorizontalCameraPaddingPx(
         basePaddingPx: Int,
-        panelWidthPx: Int,
+        splitInsetPx: Int,
     ): Pair<Int, Int> {
         if (!isSplit) {
             return basePaddingPx to basePaddingPx
         }
 
-        val splitPaddingPx = basePaddingPx + panelWidthPx
+        val splitPaddingPx = basePaddingPx + splitInsetPx
         return splitPaddingPx to splitPaddingPx
     }
 
     /**
      * MapView の実 viewport 配置を返す。
      *
-     * 分割レイアウトでは実 MapView を画面より UI 帯幅ぶん広くし、UI 帯と反対側へはみ出させる。
-     * これにより画面全域を MapView で覆ったまま、実 viewport の中心を地図領域の中心へ置く。
+     * 分割レイアウトでは実 MapView を画面より [splitHorizontalInset]（UI 帯 + map controls カラム）
+     * ぶん広くし、UI 帯と反対側へはみ出させる。これにより画面全域を MapView で覆ったまま、
+     * 実 viewport の中心を地図領域の中心へ置く。
      *
      * @param viewportWidth 画面に表示される地図コンテナ幅
      * @return MapView の実幅・オフセット・padding 用 inset
@@ -62,13 +70,14 @@ internal data class MapPanelLayout(
             )
         }
 
+        val insetWidth = splitHorizontalInset
         return MapCanvasLayout(
-            width = viewportWidth + panelWidth,
+            width = viewportWidth + insetWidth,
             offsetX = when (panelSide) {
                 MapPanelSide.LEFT -> 0.dp
-                MapPanelSide.RIGHT -> -panelWidth
+                MapPanelSide.RIGHT -> -insetWidth
             },
-            horizontalInset = panelWidth,
+            horizontalInset = insetWidth,
         )
     }
 }
@@ -132,3 +141,9 @@ internal val MAP_PANEL_EXPANDED_MIN_WIDTH = 840.dp
 
 /** 分割レイアウトで使う UI 帯の固定幅。 */
 internal val MAP_PANEL_WIDTH = 400.dp
+
+/**
+ * 分割レイアウトで UI 帯側に確保する map controls カラムの占有幅。
+ * controls UI（FAB 56dp + 画面端 16dp）に、UI 帯との間隔 16dp を加えた値。
+ */
+internal val MAP_CONTROLS_COLUMN_WIDTH = 88.dp

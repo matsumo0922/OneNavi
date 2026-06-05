@@ -158,10 +158,10 @@ internal fun MapCameraEffect(
             safeDrawingRightPadding,
         )
         val horizontalBasePaddingPx = with(density) { horizontalBasePadding.toPx() }.toInt()
-        val panelWidthPx = with(density) { panelLayout.panelWidth.toPx() }.toInt()
+        val splitInsetPx = with(density) { panelLayout.splitHorizontalInset.toPx() }.toInt()
         val (startPaddingPx, endPaddingPx) = panelLayout.resolveHorizontalCameraPaddingPx(
             basePaddingPx = horizontalBasePaddingPx,
-            panelWidthPx = panelWidthPx,
+            splitInsetPx = splitInsetPx,
         )
         val statusBarHeightPaddingPx = with(density) { statusBarHeightPadding.toPx() }.toInt()
         val navigationBarBottomPaddingPx = with(density) { navigationBarBottomPadding.toPx() }.toInt()
