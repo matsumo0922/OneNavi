@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.BottomSheetScaffoldState
@@ -86,6 +87,9 @@ fun MapScreen(modifier: Modifier = Modifier) {
     val navigationBarHeightDp = WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
+    val statusBarHeightDp = WindowInsets.statusBars
+        .asPaddingValues()
+        .calculateTopPadding()
 
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
     var allowSheetHide by remember { mutableStateOf(false) }
@@ -104,6 +108,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
     val isMapDarkMode = shouldUseDarkTheme(appSetting.theme)
     val isNavigating = screenState is MapScreenState.Navigating
     val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
+    val topAppBarHeightDp = with(density) { uiState.topAppBarHeight.toDp() }
     val waypointSearchOverlay = uiState.overlayState as? MapOverlayState.WaypointSearch
     val isAddWaypointSearchOverlay = uiState.overlayState is MapOverlayState.AddWaypointSearch
     val shouldShowWaypointSearchOverlay = isAddWaypointSearchOverlay || waypointSearchOverlay != null
@@ -166,6 +171,14 @@ fun MapScreen(modifier: Modifier = Modifier) {
             ),
             label = "ControlsBottomPadding",
         )
+        val controlsTopPadding by animateDpAsState(
+            targetValue = resolveMapControlsTopPadding(
+                isSplit = panelLayout.isSplit,
+                statusBarHeight = statusBarHeightDp,
+                topAppBarHeight = topAppBarHeightDp,
+            ),
+            label = "ControlsTopPadding",
+        )
 
         googleMap?.let {
             MapCameraEffect(
@@ -196,6 +209,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 panelLayout = panelLayout,
                 mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
+                controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
                 scaffoldState = scaffoldState,
                 onMapUpdate = { googleMap = it },
@@ -227,6 +241,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 panelLayout = panelLayout,
                 mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
+                controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
                 scaffoldState = scaffoldState,
                 onMapUpdate = { googleMap = it },
@@ -311,6 +326,7 @@ private fun MapScreenCompactLayout(
     panelLayout: MapPanelLayout,
     mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
+    controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
     scaffoldState: BottomSheetScaffoldState,
     onMapUpdate: (GoogleMap?) -> Unit,
@@ -374,7 +390,10 @@ private fun MapScreenCompactLayout(
                 modifier = Modifier.fillMaxSize(),
                 cameraState = cameraState,
                 panelLayout = panelLayout,
+                topPadding = controlsTopPadding,
                 bottomPadding = controlsBottomPadding,
+                isNavigating = screenState is MapScreenState.Navigating,
+                onSettingClicked = onSettingClicked,
             )
         }
     }
@@ -394,6 +413,7 @@ private fun MapScreenSplitLayout(
     panelLayout: MapPanelLayout,
     mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
+    controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
     scaffoldState: BottomSheetScaffoldState,
     onMapUpdate: (GoogleMap?) -> Unit,
@@ -429,7 +449,10 @@ private fun MapScreenSplitLayout(
             modifier = Modifier.fillMaxSize(),
             cameraState = cameraState,
             panelLayout = panelLayout,
+            topPadding = controlsTopPadding,
             bottomPadding = controlsBottomPadding,
+            isNavigating = screenState is MapScreenState.Navigating,
+            onSettingClicked = onSettingClicked,
         )
 
         BottomSheetScaffold(
@@ -706,6 +729,31 @@ private fun MapScreenBottomSheetContent(
         is MapScreenState.Navigating -> Unit
         is MapScreenState.Arrived -> Unit
     }
+}
+
+/**
+ * map controls カラム上グループ（設定/音量/コンパス）の上 padding を返す。
+ *
+ * 分割レイアウトではトップパネルは UI 帯ペイン内に収まり controls カラムへ被らないため status bar 分のみ。
+ * Compact ではトップバー（検索バー / 案内パネル）が地図に重なるため、その下端へ揃える。トップバーは
+ * `.statusBarsPadding()` の内側で高さ計測されるため [topAppBarHeight] は status bar を含まない。よって
+ * 下端 = status bar + トップバー高さ。トップバー未表示時（0dp）は status bar 分だけ確保される。
+ *
+ * @param isSplit 分割レイアウトか
+ * @param statusBarHeight ステータスバー高さ
+ * @param topAppBarHeight 計測済みトップバー高さ（status bar を含まない）。未表示時は 0dp
+ * @return controls 上グループへ与える上 padding
+ */
+private fun resolveMapControlsTopPadding(
+    isSplit: Boolean,
+    statusBarHeight: Dp,
+    topAppBarHeight: Dp,
+): Dp {
+    if (isSplit) {
+        return statusBarHeight
+    }
+
+    return statusBarHeight + topAppBarHeight
 }
 
 private fun resolveMapControlsBottomPadding(

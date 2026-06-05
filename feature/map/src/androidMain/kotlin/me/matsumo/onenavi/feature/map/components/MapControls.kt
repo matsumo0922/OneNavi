@@ -1,5 +1,8 @@
 package me.matsumo.onenavi.feature.map.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,8 +14,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -25,14 +30,17 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_map_control_compass
+import me.matsumo.onenavi.core.resource.home_map_control_volume
 import me.matsumo.onenavi.core.resource.home_map_control_zoom_in
 import me.matsumo.onenavi.core.resource.home_map_control_zoom_out
+import me.matsumo.onenavi.core.resource.setting_title
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapPanelLayout
 import me.matsumo.onenavi.feature.map.state.MapPanelSide
@@ -42,9 +50,14 @@ import org.jetbrains.compose.resources.stringResource
 internal fun MapControls(
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
+    topPadding: Dp,
     bottomPadding: Dp,
+    isNavigating: Boolean,
+    onSettingClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val settingContentDescription = stringResource(Res.string.setting_title)
+    val volumeContentDescription = stringResource(Res.string.home_map_control_volume)
     val compassContentDescription = stringResource(Res.string.home_map_control_compass)
     val zoomInContentDescription = stringResource(Res.string.home_map_control_zoom_in)
     val zoomOutContentDescription = stringResource(Res.string.home_map_control_zoom_out)
@@ -52,27 +65,82 @@ internal fun MapControls(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(bottom = bottomPadding)
+            .padding(top = topPadding, bottom = bottomPadding)
             .padding(16.dp),
-        contentAlignment = panelLayout.toControlsAlignment(),
     ) {
         Column(
+            modifier = Modifier.align(panelLayout.toControlsTopAlignment()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // 設定・音量は案内中のみ表示する
+            AnimatedVisibility(
+                visible = isNavigating,
+                enter = fadeIn(),
+                exit = fadeOut(),
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    MapControlIconButton(
+                        modifier = Modifier.size(48.dp),
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = settingContentDescription,
+                        onClicked = onSettingClicked,
+                    )
+
+                    MapControlIconButton(
+                        modifier = Modifier.size(48.dp),
+                        imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = volumeContentDescription,
+                        // TODO: TTS ミュート配線は別 PR で対応する
+                        onClicked = {},
+                    )
+                }
+            }
+
             MapCompass(
                 modifier = Modifier.size(48.dp),
                 bearing = cameraState.cameraState.bearing,
                 contentDescription = compassContentDescription,
                 onClicked = cameraState::toggleCompassPerspective,
             )
+        }
 
-            MapZoomButtons(
-                modifier = Modifier.width(48.dp),
-                zoomInContentDescription = zoomInContentDescription,
-                zoomOutContentDescription = zoomOutContentDescription,
-                onZoomInClicked = cameraState::zoomIn,
-                onZoomOutClicked = cameraState::zoomOut,
+        MapZoomButtons(
+            modifier = Modifier
+                .align(panelLayout.toControlsBottomAlignment())
+                .width(48.dp),
+            zoomInContentDescription = zoomInContentDescription,
+            zoomOutContentDescription = zoomOutContentDescription,
+            onZoomInClicked = cameraState::zoomIn,
+            onZoomOutClicked = cameraState::zoomOut,
+        )
+    }
+}
+
+@Composable
+private fun MapControlIconButton(
+    imageVector: ImageVector,
+    contentDescription: String,
+    onClicked: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 6.dp,
+        shadowElevation = 6.dp,
+        onClick = onClicked,
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = imageVector,
+                contentDescription = contentDescription,
             )
         }
     }
@@ -198,9 +266,20 @@ private fun MapCompass(
     }
 }
 
-private fun MapPanelLayout.toControlsAlignment(): Alignment {
-    val isLeftPanelSplit = isSplit && panelSide == MapPanelSide.LEFT
-    return if (isLeftPanelSplit) {
+/** controls カラムを置く物理側が左かどうか。Split かつ UI 帯が左のときだけ左側。 */
+private val MapPanelLayout.isControlsOnLeft: Boolean
+    get() = isSplit && panelSide == MapPanelSide.LEFT
+
+private fun MapPanelLayout.toControlsTopAlignment(): Alignment {
+    return if (isControlsOnLeft) {
+        AbsoluteAlignment.TopLeft
+    } else {
+        AbsoluteAlignment.TopRight
+    }
+}
+
+private fun MapPanelLayout.toControlsBottomAlignment(): Alignment {
+    return if (isControlsOnLeft) {
         AbsoluteAlignment.BottomLeft
     } else {
         AbsoluteAlignment.BottomRight
