@@ -20,6 +20,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR
+import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.Saver
 
 /**
  * GoogleMap 用のカメラ状態 holder を Compose 上で保持する。
@@ -59,8 +60,9 @@ internal class MapCameraState internal constructor(
     private var rawBottomPaddingPx: Int = 0
     private var startPaddingPx: Int = 0
     private var endPaddingPx: Int = 0
+    private var hasCameraPadding: Boolean = false
     private var guidanceAnchorFraction: Float? = null
-    private var isGuidanceCameraActive: Boolean = false
+    private var isGuidanceCameraActive: Boolean = initialRestoreState?.isGuidanceCameraActive ?: false
     private var density: Float = DEFAULT_DENSITY
     private var lastVehiclePose: VehiclePose? = null
     private var guidanceManeuverCameraFocus: GuidanceManeuverCameraFocus? = null
@@ -121,20 +123,23 @@ internal class MapCameraState internal constructor(
             }
         }
 
-        applyPendingRestore(googleMap)
+        applyCameraPadding()
+        applyPendingRestoreIfReady()
     }
 
     /**
-     * 接続直後の GoogleMap へ、保存しておいた復元カメラ位置を一度だけ適用する。
+     * 接続後の GoogleMap へ、保存しておいた復元カメラ位置を一度だけ適用する。
      *
      * 画面回転・画面遷移・プロセス死で MapView が作り直されると初期 target（既定座標）から始まるため、
-     * attach のタイミングで復元位置へ即座に寄せて既定座標のチラ見えを防ぐ。bearing は保存しないので 0
-     * から始め、追従再開時に自車 heading へ更新される。
-     *
-     * @param googleMap 復元位置を適用する GoogleMap
+     * 復元位置へ即座に寄せて既定座標のチラ見えを防ぐ。案内中復元では下端アンカー用 padding が必要なため、
+     * padding 初回更新までは適用を保留する。bearing は保存しないので 0 から始め、追従再開時に自車 heading
+     * へ更新される。
      */
-    private fun applyPendingRestore(googleMap: GoogleMap) {
+    private fun applyPendingRestoreIfReady() {
+        val map = googleMap ?: return
         val restore = pendingRestoreState ?: return
+        if (restore.isGuidanceCameraActive && !hasCameraPadding) return
+
         pendingRestoreState = null
 
         val cameraPosition = CameraPosition.Builder()
@@ -144,7 +149,7 @@ internal class MapCameraState internal constructor(
             .tilt(vehicleCameraPositionFactory.vehicleTiltDegrees(restore.perspective))
             .build()
 
-        googleMap.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
+        map.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
     }
 
     /**
@@ -178,6 +183,7 @@ internal class MapCameraState internal constructor(
             zoom = cameraState.zoom,
             perspective = cameraState.perspective,
             isFollowingMyLocation = cameraState.isFollowingMyLocation,
+            isGuidanceCameraActive = isGuidanceCameraActive,
         )
     }
 
@@ -223,8 +229,10 @@ internal class MapCameraState internal constructor(
         rawBottomPaddingPx = bottom
         startPaddingPx = start
         endPaddingPx = end
+        hasCameraPadding = true
         this.guidanceAnchorFraction = guidanceAnchorFraction
         applyCameraPadding()
+        applyPendingRestoreIfReady()
         moveFollowCameraIfNeeded()
     }
 
@@ -1155,8 +1163,11 @@ internal class MapCameraState internal constructor(
         /** 案内地点フォーカス中の zoom。 */
         private const val GUIDANCE_MANEUVER_FOCUS_ZOOM = 18f
 
+        /** 旧 [Saver] 復元データの要素数。 */
+        private const val LEGACY_RESTORE_FIELD_COUNT = 5
+
         /** [Saver] が保存する復元データの要素数。 */
-        private const val RESTORE_FIELD_COUNT = 5
+        private const val RESTORE_FIELD_COUNT = 6
 
         /**
          * 画面回転・画面遷移・プロセス死を跨いで [MapCameraState] を復元する [Saver]。
@@ -1173,21 +1184,42 @@ internal class MapCameraState internal constructor(
                     restore.zoom,
                     restore.perspective,
                     restore.isFollowingMyLocation,
+                    restore.isGuidanceCameraActive,
                 )
             },
             restore = { saved ->
-                val restore = saved.takeIf { it.size == RESTORE_FIELD_COUNT }?.let { fields ->
-                    MapCameraRestoreState(
-                        latitude = fields[0] as Double,
-                        longitude = fields[1] as Double,
-                        zoom = fields[2] as Float,
-                        perspective = fields[3] as Int,
-                        isFollowingMyLocation = fields[4] as Boolean,
-                    )
-                }
-                MapCameraState(initialRestoreState = restore)
+                MapCameraState(initialRestoreState = restoreStateFromSavedFields(saved))
             },
         )
+
+        /**
+         * [Saver] の保存リストから復元データを作る。
+         *
+         * @param saved 保存済みフィールド
+         * @return 復元できる場合は [MapCameraRestoreState]、フィールド数が不正な場合は null
+         */
+        internal fun restoreStateFromSavedFields(
+            saved: List<Any?>,
+        ): MapCameraRestoreState? {
+            val fields = saved.takeIf { fields ->
+                when (fields.size) {
+                    RESTORE_FIELD_COUNT,
+                    LEGACY_RESTORE_FIELD_COUNT,
+                    -> true
+
+                    else -> false
+                }
+            } ?: return null
+
+            return MapCameraRestoreState(
+                latitude = fields[0] as Double,
+                longitude = fields[1] as Double,
+                zoom = fields[2] as Float,
+                perspective = fields[3] as Int,
+                isFollowingMyLocation = fields[4] as Boolean,
+                isGuidanceCameraActive = fields.getOrNull(5) as? Boolean ?: false,
+            )
+        }
     }
 }
 
@@ -1199,6 +1231,7 @@ internal class MapCameraState internal constructor(
  * @param zoom 復元するズーム値
  * @param perspective 復元する [MapCameraPerspective]
  * @param isFollowingMyLocation 復元時点で自車追従中だったか
+ * @param isGuidanceCameraActive 復元時点で案内用の下端アンカーを使っていたか
  */
 @Immutable
 internal data class MapCameraRestoreState(
@@ -1207,6 +1240,7 @@ internal data class MapCameraRestoreState(
     val zoom: Float,
     val perspective: Int,
     val isFollowingMyLocation: Boolean,
+    val isGuidanceCameraActive: Boolean,
 )
 
 /**
