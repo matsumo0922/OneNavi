@@ -27,7 +27,9 @@ import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,6 +56,7 @@ import me.matsumo.onenavi.feature.map.components.content.MapNavigationContent
 import me.matsumo.onenavi.feature.map.components.content.MapRoutePreviewContent
 import me.matsumo.onenavi.feature.map.components.topappbar.MapWaypointSearchScreen
 import me.matsumo.onenavi.feature.map.state.MapCameraState
+import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapPanelLayout
 import me.matsumo.onenavi.feature.map.state.MapPanelSide
@@ -143,6 +146,9 @@ fun MapScreen(modifier: Modifier = Modifier) {
         val panelLayout = remember(maxWidth) {
             resolveMapPanelLayout(maxWidth = maxWidth)
         }
+        val mapCanvasLayout = remember(panelLayout, maxWidth) {
+            panelLayout.resolveCanvasLayout(viewportWidth = maxWidth)
+        }
         val viewportWidthPx = with(density) { maxWidth.roundToPx() }
         val viewportHeightPx = with(density) { maxHeight.roundToPx() }
         val controlsBottomPadding by animateDpAsState(
@@ -185,6 +191,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 cameraState = cameraState,
                 hazeState = hazeState,
                 panelLayout = panelLayout,
+                mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
                 controlsBottomPadding = controlsBottomPadding,
                 scaffoldState = scaffoldState,
@@ -218,6 +225,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 cameraState = cameraState,
                 hazeState = hazeState,
                 panelLayout = panelLayout,
+                mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
                 controlsBottomPadding = controlsBottomPadding,
                 scaffoldState = scaffoldState,
@@ -287,6 +295,7 @@ private fun MapScreenCompactLayout(
     cameraState: MapCameraState,
     hazeState: HazeState,
     panelLayout: MapPanelLayout,
+    mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
     controlsBottomPadding: Dp,
     scaffoldState: BottomSheetScaffoldState,
@@ -328,6 +337,7 @@ private fun MapScreenCompactLayout(
                 googleMap = googleMap,
                 cameraState = cameraState,
                 hazeState = hazeState,
+                mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
                 onMapUpdate = onMapUpdate,
                 onPointOfInterestClicked = onPointOfInterestClicked,
@@ -372,6 +382,7 @@ private fun MapScreenSplitLayout(
     cameraState: MapCameraState,
     hazeState: HazeState,
     panelLayout: MapPanelLayout,
+    mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
     controlsBottomPadding: Dp,
     scaffoldState: BottomSheetScaffoldState,
@@ -397,6 +408,7 @@ private fun MapScreenSplitLayout(
             googleMap = googleMap,
             cameraState = cameraState,
             hazeState = hazeState,
+            mapCanvasLayout = mapCanvasLayout,
             isMapDarkMode = isMapDarkMode,
             onMapUpdate = onMapUpdate,
             onPointOfInterestClicked = onPointOfInterestClicked,
@@ -465,6 +477,7 @@ private fun MapScreenMapLayer(
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
     hazeState: HazeState,
+    mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
@@ -474,7 +487,6 @@ private fun MapScreenMapLayer(
 ) {
     Box(
         modifier = modifier,
-        contentAlignment = Alignment.Center,
     ) {
         MapItem(
             modifier = Modifier.fillMaxSize(),
@@ -482,26 +494,69 @@ private fun MapScreenMapLayer(
             cameraState = cameraState,
             hazeState = hazeState,
             isDarkMode = isMapDarkMode,
+            mapCanvasLayout = mapCanvasLayout,
             onMapUpdate = onMapUpdate,
             onPointOfInterestClicked = onPointOfInterestClicked,
             onMapLongClicked = onMapLongClicked,
         )
 
         googleMap?.let {
-            MapEffect(
+            MapScreenMapCanvasLayer(
                 modifier = Modifier.fillMaxSize(),
-                screenState = screenState,
-                routePreviewState = routePreviewState,
-                overlayState = uiState.overlayState,
-                guidanceState = guidanceState,
-                vehicleLocationState = vehicleLocationState,
-                googleMap = it,
-                cameraState = cameraState,
-                topAppBarHeightPx = uiState.topAppBarHeight,
-                bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
-                navigationCardHeightPx = uiState.navigationCardHeight,
-                onRouteSelected = onRouteSelected,
-            )
+                mapCanvasLayout = mapCanvasLayout,
+            ) {
+                MapEffect(
+                    modifier = Modifier.fillMaxSize(),
+                    screenState = screenState,
+                    routePreviewState = routePreviewState,
+                    overlayState = uiState.overlayState,
+                    guidanceState = guidanceState,
+                    vehicleLocationState = vehicleLocationState,
+                    googleMap = it,
+                    cameraState = cameraState,
+                    topAppBarHeightPx = uiState.topAppBarHeight,
+                    bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
+                    navigationCardHeightPx = uiState.navigationCardHeight,
+                    horizontalViewportPadding = mapCanvasLayout.horizontalInset,
+                    onRouteSelected = onRouteSelected,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapScreenMapCanvasLayer(
+    mapCanvasLayout: MapCanvasLayout,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Layout(
+        modifier = modifier,
+        content = content,
+    ) { measurables, constraints ->
+        val viewportWidthPx = constraints.maxWidth
+        val viewportHeightPx = constraints.maxHeight
+        val canvasWidthPx = mapCanvasLayout.width.roundToPx().coerceAtLeast(viewportWidthPx)
+        val canvasOffsetXPx = mapCanvasLayout.offsetX.roundToPx()
+        val canvasConstraints = Constraints.fixed(
+            width = canvasWidthPx,
+            height = viewportHeightPx,
+        )
+        val placeables = measurables.map { measurable ->
+            measurable.measure(canvasConstraints)
+        }
+
+        layout(
+            width = viewportWidthPx,
+            height = viewportHeightPx,
+        ) {
+            placeables.forEach { placeable ->
+                placeable.placeRelative(
+                    x = canvasOffsetXPx,
+                    y = 0,
+                )
+            }
         }
     }
 }

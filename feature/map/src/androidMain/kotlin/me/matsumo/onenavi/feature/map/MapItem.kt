@@ -1,18 +1,25 @@
 package me.matsumo.onenavi.feature.map
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.os.Bundle
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -28,6 +35,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import me.matsumo.onenavi.feature.map.state.MapCameraDefaults
 import me.matsumo.onenavi.feature.map.state.MapCameraState
+import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
 
 @Composable
 internal fun MapItem(
@@ -35,12 +43,19 @@ internal fun MapItem(
     cameraState: MapCameraState,
     hazeState: HazeState,
     isDarkMode: Boolean,
+    mapCanvasLayout: MapCanvasLayout,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
     val mapView = rememberMapViewWithLifecycle(isDarkMode = isDarkMode)
+    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+    val canvasWidthPx = with(density) {
+        mapCanvasLayout.width.roundToPx().coerceAtLeast(viewportSize.width)
+    }
+    val canvasOffsetXPx = with(density) { mapCanvasLayout.offsetX.roundToPx() }
 
     MapViewLifecycleEffect(
         mapView = mapView,
@@ -60,26 +75,93 @@ internal fun MapItem(
         }
     }
 
-    Box(modifier) {
+    LaunchedEffect(
+        viewportSize,
+        canvasWidthPx,
+    ) {
+        if (viewportSize.hasNoArea()) return@LaunchedEffect
+
+        cameraState.updateViewportSize(
+            widthPx = canvasWidthPx,
+            heightPx = viewportSize.height,
+        )
+    }
+
+    Box(
+        modifier = modifier,
+    ) {
         AndroidView(
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(hazeState)
                 .onSizeChanged { size ->
-                    cameraState.updateViewportSize(
-                        widthPx = size.width,
-                        heightPx = size.height,
-                    )
+                    viewportSize = size
                 },
             factory = {
-                mapView.apply {
-                    getMapAsync { map ->
-                        onMapUpdate(map)
-                    }
-                }
+                it.createMapContainer(
+                    mapView = mapView,
+                    onMapUpdate = onMapUpdate,
+                )
+            },
+            update = { container ->
+                container.updateMapViewLayout(
+                    mapView = mapView,
+                    canvasWidthPx = canvasWidthPx,
+                    canvasHeightPx = viewportSize.height,
+                    canvasOffsetXPx = canvasOffsetXPx,
+                )
             },
         )
     }
+}
+
+private fun Context.createMapContainer(
+    mapView: MapView,
+    onMapUpdate: (GoogleMap?) -> Unit,
+): FrameLayout {
+    return FrameLayout(this).apply {
+        clipChildren = false
+        clipToPadding = false
+        addView(mapView)
+        mapView.getMapAsync { map ->
+            onMapUpdate(map)
+        }
+    }
+}
+
+private fun FrameLayout.updateMapViewLayout(
+    mapView: MapView,
+    canvasWidthPx: Int,
+    canvasHeightPx: Int,
+    canvasOffsetXPx: Int,
+) {
+    if (canvasWidthPx <= 0 || canvasHeightPx <= 0) return
+
+    if (mapView.parent != this) {
+        (mapView.parent as? ViewGroup)?.removeView(mapView)
+        addView(mapView)
+    }
+
+    val currentLayoutParams = mapView.layoutParams as? FrameLayout.LayoutParams
+    val shouldUpdateLayoutParams = when {
+        currentLayoutParams == null -> true
+        currentLayoutParams.width != canvasWidthPx -> true
+        currentLayoutParams.height != canvasHeightPx -> true
+        else -> false
+    }
+
+    if (shouldUpdateLayoutParams) {
+        mapView.layoutParams = FrameLayout.LayoutParams(
+            canvasWidthPx,
+            canvasHeightPx,
+        )
+    }
+
+    mapView.translationX = canvasOffsetXPx.toFloat()
+}
+
+private fun IntSize.hasNoArea(): Boolean {
+    return width <= 0 || height <= 0
 }
 
 @Composable
