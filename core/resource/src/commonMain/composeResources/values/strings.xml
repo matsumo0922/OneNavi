@@ -125,6 +125,7 @@
     <string name="home_map_control_zoom_in">地図を拡大</string>
     <string name="home_map_control_zoom_out">地図を縮小</string>
     <string name="home_map_control_current_location">現在地へ移動</string>
+    <string name="home_map_control_recenter">現在地に戻る</string>
     <string name="home_map_navigation_cancel_dialog_title">ナビゲーションを終了しますか？</string>
     <string name="home_map_navigation_cancel_dialog_message">ナビゲーションをキャンセルして、ルートプレビューに戻ります。</string>
     <string name="home_map_not_available_ios">この機能はiOSでは利用できません</string>

@@ -52,6 +52,23 @@ internal data class MapPanelLayout(
     }
 
     /**
+     * UI 帯と map controls カラムに隠れていない地図の可視幅を返す。
+     *
+     * 分割レイアウトでは画面幅から [splitHorizontalInset]（UI 帯 + map controls カラム）を除いた
+     * 残りが可視地図領域になる。Compact では画面全体が可視地図。
+     *
+     * @param viewportWidth 画面に表示される地図コンテナ幅
+     * @return UI 帯側を除いた可視地図領域の幅
+     */
+    fun visibleMapWidth(viewportWidth: Dp): Dp {
+        if (!isSplit) {
+            return viewportWidth
+        }
+
+        return (viewportWidth - splitHorizontalInset).coerceAtLeast(0.dp)
+    }
+
+    /**
      * MapView の実 viewport 配置を返す。
      *
      * 分割レイアウトでは実 MapView を画面より [splitHorizontalInset]（UI 帯 + map controls カラム）

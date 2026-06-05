@@ -12,10 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.LocationSearching
-import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,29 +31,23 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_map_control_compass
-import me.matsumo.onenavi.core.resource.home_map_control_current_location
 import me.matsumo.onenavi.core.resource.home_map_control_zoom_in
 import me.matsumo.onenavi.core.resource.home_map_control_zoom_out
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapPanelLayout
 import me.matsumo.onenavi.feature.map.state.MapPanelSide
-import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun MapControls(
     cameraState: MapCameraState,
-    vehicleLocationState: VehicleLocationState?,
     panelLayout: MapPanelLayout,
     bottomPadding: Dp,
-    isNavigating: Boolean,
-    onNavigationRoutePreviewDismissed: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val compassContentDescription = stringResource(Res.string.home_map_control_compass)
     val zoomInContentDescription = stringResource(Res.string.home_map_control_zoom_in)
     val zoomOutContentDescription = stringResource(Res.string.home_map_control_zoom_out)
-    val currentLocationContentDescription = stringResource(Res.string.home_map_control_current_location)
 
     Box(
         modifier = modifier
@@ -83,27 +74,6 @@ internal fun MapControls(
                 onZoomInClicked = cameraState::zoomIn,
                 onZoomOutClicked = cameraState::zoomOut,
             )
-
-            FloatingActionButton(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                onClick = {
-                    if (isNavigating) {
-                        onNavigationRoutePreviewDismissed()
-                        cameraState.startGuidanceCamera(vehicleLocationState)
-                    } else {
-                        cameraState.followVehicleLocation(vehicleLocationState)
-                    }
-                },
-            ) {
-                Icon(
-                    imageVector = if (cameraState.cameraState.isFollowingMyLocation) {
-                        Icons.Default.MyLocation
-                    } else {
-                        Icons.Default.LocationSearching
-                    },
-                    contentDescription = currentLocationContentDescription,
-                )
-            }
         }
     }
 }

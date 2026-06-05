@@ -39,6 +39,15 @@ class MapPanelLayoutTest {
     }
 
     @Test
+    fun `分割時の可視地図幅は画面幅から inset を引いた残りになる`() {
+        val splitLayout = resolveMapPanelLayout(maxWidth = 840.dp)
+        val compactLayout = resolveMapPanelLayout(maxWidth = 839.dp)
+
+        assertEquals(840.dp - 488.dp, splitLayout.visibleMapWidth(viewportWidth = 840.dp))
+        assertEquals(839.dp, compactLayout.visibleMapWidth(viewportWidth = 839.dp))
+    }
+
+    @Test
     fun `Compact では左右に基本 padding だけを返す`() {
         val layout = resolveMapPanelLayout(maxWidth = 839.dp)
 

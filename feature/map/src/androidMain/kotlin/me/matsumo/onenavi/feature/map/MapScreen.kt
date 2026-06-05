@@ -49,6 +49,7 @@ import me.matsumo.onenavi.core.ui.theme.LocalAppSetting
 import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
 import me.matsumo.onenavi.core.ui.theme.shouldUseDarkTheme
 import me.matsumo.onenavi.feature.map.components.MapControls
+import me.matsumo.onenavi.feature.map.components.MapRecenterButton
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapPlaceDetailSheet
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapRoutePreviewSheet
 import me.matsumo.onenavi.feature.map.components.bottomsheet.MapSearchResultsSheet
@@ -211,9 +212,6 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 onSettingClicked = {
                     navBackStack.add(Destination.Setting.Root)
                 },
-                onNavigationRoutePreviewDismissed = {
-                    viewModel.onUiEvent(MapUiEvent.OnNavigationRoutePreviewDismissed)
-                },
             )
         } else {
             MapScreenCompactLayout(
@@ -245,11 +243,25 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 onSettingClicked = {
                     navBackStack.add(Destination.Setting.Root)
                 },
-                onNavigationRoutePreviewDismissed = {
-                    viewModel.onUiEvent(MapUiEvent.OnNavigationRoutePreviewDismissed)
-                },
             )
         }
+
+        MapRecenterButton(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(panelLayout.visibleMapWidth(maxWidth))
+                .align(panelLayout.toMapColumnAlignment()),
+            isVisible = screenState.allowsRecenterButton() && !cameraState.cameraState.isFollowingMyLocation,
+            bottomPadding = controlsBottomPadding,
+            onClicked = {
+                if (isNavigating) {
+                    viewModel.onUiEvent(MapUiEvent.OnNavigationRoutePreviewDismissed)
+                    cameraState.startGuidanceCamera(vehicleLocationState)
+                } else {
+                    cameraState.followVehicleLocation(vehicleLocationState)
+                }
+            },
+        )
 
         MapWaypointSearchScreen(
             modifier = Modifier.fillMaxSize(),
@@ -307,7 +319,6 @@ private fun MapScreenCompactLayout(
     onRouteSelected: (Int) -> Unit,
     onUiEvent: (MapUiEvent) -> Unit,
     onSettingClicked: () -> Unit,
-    onNavigationRoutePreviewDismissed: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BottomSheetScaffold(
@@ -362,11 +373,8 @@ private fun MapScreenCompactLayout(
             MapControls(
                 modifier = Modifier.fillMaxSize(),
                 cameraState = cameraState,
-                vehicleLocationState = vehicleLocationState,
                 panelLayout = panelLayout,
                 bottomPadding = controlsBottomPadding,
-                isNavigating = screenState is MapScreenState.Navigating,
-                onNavigationRoutePreviewDismissed = onNavigationRoutePreviewDismissed,
             )
         }
     }
@@ -394,7 +402,6 @@ private fun MapScreenSplitLayout(
     onRouteSelected: (Int) -> Unit,
     onUiEvent: (MapUiEvent) -> Unit,
     onSettingClicked: () -> Unit,
-    onNavigationRoutePreviewDismissed: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -421,11 +428,8 @@ private fun MapScreenSplitLayout(
         MapControls(
             modifier = Modifier.fillMaxSize(),
             cameraState = cameraState,
-            vehicleLocationState = vehicleLocationState,
             panelLayout = panelLayout,
             bottomPadding = controlsBottomPadding,
-            isNavigating = screenState is MapScreenState.Navigating,
-            onNavigationRoutePreviewDismissed = onNavigationRoutePreviewDismissed,
         )
 
         BottomSheetScaffold(
@@ -729,6 +733,41 @@ private fun MapPanelLayout.toPanelAlignment(): Alignment {
     return when (panelSide) {
         MapPanelSide.LEFT -> AbsoluteAlignment.CenterLeft
         MapPanelSide.RIGHT -> AbsoluteAlignment.CenterRight
+    }
+}
+
+/**
+ * 可視地図領域（UI 帯の反対側）へ寄せる縦中央寄せの alignment を返す。
+ *
+ * UI 帯が右なら地図は左側、左なら右側に見えるため、その側へ寄せる。
+ *
+ * @return 可視地図領域側へ寄せる alignment
+ */
+/**
+ * 「現在地に戻る」ボタンを出してよい画面状態かを返す。
+ *
+ * ブラウジング / 案内中 / 到着のみ許可し、検索結果・地点詳細・ルートプレビューでは出さない。
+ *
+ * @return ボタン表示を許可する場合 true
+ */
+private fun MapScreenState.allowsRecenterButton(): Boolean {
+    return when (this) {
+        MapScreenState.Browsing,
+        MapScreenState.Navigating,
+        is MapScreenState.Arrived,
+        -> true
+
+        is MapScreenState.SearchResultsList,
+        is MapScreenState.PlaceDetails,
+        is MapScreenState.RoutePreview,
+        -> false
+    }
+}
+
+private fun MapPanelLayout.toMapColumnAlignment(): Alignment {
+    return when (panelSide) {
+        MapPanelSide.LEFT -> AbsoluteAlignment.CenterRight
+        MapPanelSide.RIGHT -> AbsoluteAlignment.CenterLeft
     }
 }
 
