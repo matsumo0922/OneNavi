@@ -112,6 +112,7 @@ kotlin {
             implementation(libs.koin.androidx.startup)
             implementation(libs.accompanist.permissions)
             implementation(libs.androidx.car.app)
+            implementation(libs.play.services.maps)
         }
     }
 }
