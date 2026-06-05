@@ -31,8 +31,6 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapColorScheme
 import com.google.android.gms.maps.model.PointOfInterest
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import me.matsumo.onenavi.feature.map.state.MapCameraDefaults
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
@@ -41,7 +39,6 @@ import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
 internal fun MapItem(
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
-    hazeState: HazeState,
     isDarkMode: Boolean,
     mapCanvasLayout: MapCanvasLayout,
     onMapUpdate: (GoogleMap?) -> Unit,
@@ -93,7 +90,6 @@ internal fun MapItem(
         AndroidView(
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(hazeState)
                 .onSizeChanged { size ->
                     viewportSize = size
                 },

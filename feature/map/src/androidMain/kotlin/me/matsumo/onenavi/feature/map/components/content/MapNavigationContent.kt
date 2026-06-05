@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
-import dev.chrisbanes.haze.HazeState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_cancel
@@ -53,7 +52,6 @@ internal fun MapNavigationContent(
     guidanceState: GuidanceState,
     navigationGuideImage: NavigationGuideImage?,
     overlayState: MapOverlayState,
-    hazeState: HazeState,
     panelLayout: MapPanelLayout,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
@@ -133,7 +131,6 @@ internal fun MapNavigationContent(
                     listItems = guiding.presentation.listItems,
                     progress = guiding.progress,
                     guideImage = navigationGuideImage,
-                    hazeState = hazeState,
                     horizontalPadding = horizontalContentPadding,
                 )
             }

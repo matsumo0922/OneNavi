@@ -41,8 +41,6 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PointOfInterest
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.rememberHazeState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.ui.screen.Destination
@@ -113,7 +111,6 @@ fun MapScreen(modifier: Modifier = Modifier) {
     val isAddWaypointSearchOverlay = uiState.overlayState is MapOverlayState.AddWaypointSearch
     val shouldShowWaypointSearchOverlay = isAddWaypointSearchOverlay || waypointSearchOverlay != null
 
-    val hazeState = rememberHazeState()
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     val cameraState = rememberMapCameraState()
     val scaffoldState = rememberBottomSheetScaffoldState(
@@ -205,7 +202,6 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 vehicleLocationState = vehicleLocationState,
                 googleMap = googleMap,
                 cameraState = cameraState,
-                hazeState = hazeState,
                 panelLayout = panelLayout,
                 mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
@@ -237,7 +233,6 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 vehicleLocationState = vehicleLocationState,
                 googleMap = googleMap,
                 cameraState = cameraState,
-                hazeState = hazeState,
                 panelLayout = panelLayout,
                 mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
@@ -322,7 +317,6 @@ private fun MapScreenCompactLayout(
     vehicleLocationState: VehicleLocationState?,
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
-    hazeState: HazeState,
     panelLayout: MapPanelLayout,
     mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
@@ -365,7 +359,6 @@ private fun MapScreenCompactLayout(
                 vehicleLocationState = vehicleLocationState,
                 googleMap = googleMap,
                 cameraState = cameraState,
-                hazeState = hazeState,
                 mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
                 onMapUpdate = onMapUpdate,
@@ -380,7 +373,6 @@ private fun MapScreenCompactLayout(
                 screenState = screenState,
                 guidanceState = guidanceState,
                 cameraState = cameraState,
-                hazeState = hazeState,
                 panelLayout = panelLayout,
                 onUiEvent = onUiEvent,
                 onSettingClicked = onSettingClicked,
@@ -409,7 +401,6 @@ private fun MapScreenSplitLayout(
     vehicleLocationState: VehicleLocationState?,
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
-    hazeState: HazeState,
     panelLayout: MapPanelLayout,
     mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
@@ -436,7 +427,6 @@ private fun MapScreenSplitLayout(
             vehicleLocationState = vehicleLocationState,
             googleMap = googleMap,
             cameraState = cameraState,
-            hazeState = hazeState,
             mapCanvasLayout = mapCanvasLayout,
             isMapDarkMode = isMapDarkMode,
             onMapUpdate = onMapUpdate,
@@ -487,7 +477,6 @@ private fun MapScreenSplitLayout(
                     screenState = screenState,
                     guidanceState = guidanceState,
                     cameraState = cameraState,
-                    hazeState = hazeState,
                     panelLayout = panelLayout,
                     onUiEvent = onUiEvent,
                     onSettingClicked = onSettingClicked,
@@ -506,7 +495,6 @@ private fun MapScreenMapLayer(
     vehicleLocationState: VehicleLocationState?,
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
-    hazeState: HazeState,
     mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
     onMapUpdate: (GoogleMap?) -> Unit,
@@ -522,7 +510,6 @@ private fun MapScreenMapLayer(
             modifier = Modifier.fillMaxSize(),
             googleMap = googleMap,
             cameraState = cameraState,
-            hazeState = hazeState,
             isDarkMode = isMapDarkMode,
             mapCanvasLayout = mapCanvasLayout,
             onMapUpdate = onMapUpdate,
@@ -597,7 +584,6 @@ private fun MapScreenContent(
     screenState: MapScreenState,
     guidanceState: GuidanceState,
     cameraState: MapCameraState,
-    hazeState: HazeState,
     panelLayout: MapPanelLayout,
     onUiEvent: (MapUiEvent) -> Unit,
     onSettingClicked: () -> Unit,
@@ -635,7 +621,6 @@ private fun MapScreenContent(
                 guidanceState = guidanceState,
                 navigationGuideImage = uiState.navigationGuideImage,
                 overlayState = uiState.overlayState,
-                hazeState = hazeState,
                 panelLayout = panelLayout,
                 onUiEvent = onUiEvent,
             )

@@ -42,7 +42,6 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -80,12 +79,10 @@ import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.seconds
 
-@Suppress("UnusedParameter")
 @Composable
 internal fun MapNavigationManeuverPanelSection(
     route: RouteDetail,
     listItems: ImmutableList<GuidanceListItem>,
-    hazeState: HazeState,
     meterLabel: String,
     kilometerLabel: String,
     dayLabel: String,
@@ -93,8 +90,6 @@ internal fun MapNavigationManeuverPanelSection(
     minuteLabel: String,
     timestampMillis: Long,
     currentCumulativeMeters: Double,
-    elapsedSeconds: Int,
-    traveledMeters: Int,
     modifier: Modifier = Modifier,
 ) {
     val screenHeight = LocalWindowInfo.current.containerDpSize.height

@@ -36,7 +36,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import dev.chrisbanes.haze.HazeState
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.model.RoadClass
@@ -71,7 +70,6 @@ internal fun MapNavigationManeuverPanel(
     listItems: ImmutableList<GuidanceListItem>,
     progress: GuidanceProgress,
     guideImage: NavigationGuideImage?,
-    hazeState: HazeState,
     horizontalPadding: Dp = 16.dp,
     modifier: Modifier = Modifier,
 ) {
@@ -133,7 +131,6 @@ internal fun MapNavigationManeuverPanel(
                 modifier = Modifier.fillMaxWidth(),
                 route = route,
                 listItems = listItems,
-                hazeState = hazeState,
                 meterLabel = meterLabel,
                 kilometerLabel = kilometerLabel,
                 dayLabel = dayLabel,
@@ -141,8 +138,6 @@ internal fun MapNavigationManeuverPanel(
                 minuteLabel = minuteLabel,
                 timestampMillis = progress.locationTimestampMillis,
                 currentCumulativeMeters = progress.currentCumulativeMeters,
-                elapsedSeconds = progress.elapsedSeconds,
-                traveledMeters = progress.traveledMeters,
             )
         } else {
             MapNavigationManeuverBottomSection(
