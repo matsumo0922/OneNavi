@@ -141,6 +141,7 @@ internal fun MapNavigationContent(
                     progress = guiding.progress,
                     guideImage = navigationGuideImage,
                     isSplit = panelLayout.isSplit,
+                    availableHeight = topPanelMaxHeight,
                     horizontalPadding = horizontalContentPadding,
                 )
             }

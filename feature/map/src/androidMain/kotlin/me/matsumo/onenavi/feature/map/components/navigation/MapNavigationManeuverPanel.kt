@@ -71,6 +71,7 @@ internal fun MapNavigationManeuverPanel(
     progress: GuidanceProgress,
     guideImage: NavigationGuideImage?,
     isSplit: Boolean,
+    availableHeight: Dp,
     modifier: Modifier = Modifier,
     horizontalPadding: Dp = 16.dp,
 ) {
@@ -93,6 +94,10 @@ internal fun MapNavigationManeuverPanel(
     val hasHint = followupCallout != null
     val hasGuideImage = visibleGuideImage != null
     val hasPanelItems = banner.hasMoreEvents || route.geometry.isNotEmpty()
+    val bottomSectionMaxHeight = navigationManeuverBottomSectionMaxHeight(
+        isSplit = isSplit,
+        availableHeight = availableHeight,
+    )
     val topShape = when {
         hasGuideImage || showPanel -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
         hasPrioritizedHint -> RoundedCornerShape(
@@ -140,6 +145,7 @@ internal fun MapNavigationManeuverPanel(
                 timestampMillis = progress.locationTimestampMillis,
                 currentCumulativeMeters = progress.currentCumulativeMeters,
                 isSplit = isSplit,
+                availableHeight = availableHeight,
             )
         } else {
             MapNavigationManeuverBottomSection(
@@ -150,6 +156,7 @@ internal fun MapNavigationManeuverPanel(
                 followupCallout = followupCallout,
                 followupLabel = followupLabel,
                 roadClass = banner.roadClass,
+                maxHeight = bottomSectionMaxHeight,
             )
         }
     }
@@ -195,6 +202,19 @@ private fun bannerLaneCells(support: BannerSupport?): ImmutableList<LaneCell>? {
 private fun bannerFollowupCallout(support: BannerSupport?): ManeuverCallout? {
     val followupSupport = support as? BannerSupport.Followup ?: return null
     return followupSupport.maneuver
+}
+
+private fun navigationManeuverBottomSectionMaxHeight(
+    isSplit: Boolean,
+    availableHeight: Dp,
+): Dp {
+    if (isSplit) {
+        return (availableHeight / 2f)
+            .coerceAtMost(ManeuverGuideImageMaxHeight)
+            .coerceAtLeast(0.dp)
+    }
+
+    return ManeuverGuideImageMaxHeight
 }
 
 @Composable
@@ -341,20 +361,23 @@ private fun MapNavigationManeuverBottomSection(
     followupCallout: ManeuverCallout?,
     followupLabel: String,
     roadClass: RoadClass,
+    maxHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
     when {
         guideImage != null -> {
             val panelColors = RouteColors.maneuver(roadClass)
             Surface(
-                modifier = modifier.fillMaxWidth(),
+                modifier = modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxHeight),
                 shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
                 color = panelColors.container,
             ) {
                 MapNavigationManeuverGuideImage(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = ManeuverGuideImageMaxHeight),
+                        .heightIn(max = maxHeight),
                     guideImage = guideImage,
                 )
             }
@@ -363,7 +386,9 @@ private fun MapNavigationManeuverBottomSection(
         shouldPreferFollowupHint && followupCallout != null -> {
             val panelColors = RouteColors.maneuver(roadClass)
             Surface(
-                modifier = modifier.wrapContentWidth(Alignment.Start),
+                modifier = modifier
+                    .heightIn(max = maxHeight)
+                    .wrapContentWidth(Alignment.Start),
                 shape = RoundedCornerShape(
                     topStart = 0.dp,
                     topEnd = 0.dp,
@@ -384,7 +409,7 @@ private fun MapNavigationManeuverBottomSection(
         laneCells != null -> {
             val panelColors = RouteColors.maneuver(roadClass)
             Surface(
-                modifier = modifier,
+                modifier = modifier.heightIn(max = maxHeight),
                 shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
                 color = panelColors.container,
             ) {
@@ -402,7 +427,9 @@ private fun MapNavigationManeuverBottomSection(
         followupCallout != null -> {
             val panelColors = RouteColors.maneuver(roadClass)
             Surface(
-                modifier = modifier.wrapContentWidth(Alignment.Start),
+                modifier = modifier
+                    .heightIn(max = maxHeight)
+                    .wrapContentWidth(Alignment.Start),
                 shape = RoundedCornerShape(
                     topStart = 0.dp,
                     topEnd = 0.dp,

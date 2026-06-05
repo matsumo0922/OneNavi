@@ -39,7 +39,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -93,9 +92,9 @@ internal fun MapNavigationManeuverPanelSection(
     timestampMillis: Long,
     currentCumulativeMeters: Double,
     isSplit: Boolean,
+    availableHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
-    val screenHeight = LocalWindowInfo.current.containerDpSize.height
     val panelItems = remember(route, listItems, currentCumulativeMeters, timestampMillis) {
         buildNavigationPanelItems(
             route = route,
@@ -125,7 +124,7 @@ internal fun MapNavigationManeuverPanelSection(
         modifier = modifier
             .navigationPanelHeight(
                 isSplit = isSplit,
-                screenHeight = screenHeight,
+                availableHeight = availableHeight,
             )
             .shadow(
                 elevation = 8.dp,
@@ -173,13 +172,13 @@ internal fun MapNavigationManeuverPanelSection(
 
 private fun Modifier.navigationPanelHeight(
     isSplit: Boolean,
-    screenHeight: Dp,
+    availableHeight: Dp,
 ): Modifier {
     if (isSplit) {
-        return heightIn(max = screenHeight / 2f).fillMaxHeight()
+        return heightIn(max = availableHeight / 2f).fillMaxHeight()
     }
 
-    return height(screenHeight / 4f)
+    return height(availableHeight / 4f)
 }
 
 /**
