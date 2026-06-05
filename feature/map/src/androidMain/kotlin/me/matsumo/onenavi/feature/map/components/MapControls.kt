@@ -67,9 +67,10 @@ internal fun MapControls(
             .fillMaxSize()
             .padding(top = topPadding, bottom = bottomPadding)
             .padding(
-                top = 8.dp,
+                top = if (panelLayout.isSplit) 8.dp else 16.dp,
                 start = 16.dp,
                 end = 16.dp,
+                bottom = if (panelLayout.isSplit) 0.dp else 16.dp,
             ),
     ) {
         Column(
@@ -136,7 +137,6 @@ private fun MapControlIconButton(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        tonalElevation = 6.dp,
         shadowElevation = 6.dp,
         onClick = onClicked,
     ) {
@@ -164,7 +164,6 @@ private fun MapZoomButtons(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        tonalElevation = 6.dp,
         shadowElevation = 6.dp,
     ) {
         Column(
@@ -229,7 +228,6 @@ private fun MapCompass(
         shape = CircleShape,
         color = surfaceColor,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        tonalElevation = 6.dp,
         shadowElevation = 6.dp,
         onClick = onClicked,
     ) {

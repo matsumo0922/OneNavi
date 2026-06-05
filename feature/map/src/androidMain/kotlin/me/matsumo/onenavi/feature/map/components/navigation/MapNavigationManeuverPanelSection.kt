@@ -1,7 +1,6 @@
 package me.matsumo.onenavi.feature.map.components.navigation
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.DragInteraction
@@ -74,12 +73,9 @@ import me.matsumo.onenavi.core.resource.home_map_navigation_panel_facility_sa
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_facility_toll_gate_badge
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_guidance_point
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_waypoint
-import me.matsumo.onenavi.core.resource.home_map_route_origin_current_location
-import me.matsumo.onenavi.core.resource.ic_vehicle_puck
 import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
 import me.matsumo.onenavi.core.ui.theme.RouteColors
 import me.matsumo.onenavi.feature.map.state.MapGeodesy
-import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.seconds
@@ -129,7 +125,7 @@ internal fun MapNavigationManeuverPanelSection(
 
     Surface(
         modifier = modifier
-            .height(screenHeight / 3f)
+            .height(screenHeight / 4f)
             .shadow(
                 elevation = 8.dp,
                 shape = shape,
@@ -169,20 +165,6 @@ internal fun MapNavigationManeuverPanelSection(
                         timestampMillis = timestampMillis,
                     )
                 }
-            }
-
-            item(key = "footer") {
-                MapNavigationGuidancePanelFooter(
-                    modifier = Modifier.fillMaxWidth(),
-                    roadClass = roadClass,
-                    elapsedSeconds = elapsedSeconds,
-                    traveledMeters = traveledMeters,
-                    meterLabel = meterLabel,
-                    kilometerLabel = kilometerLabel,
-                    dayLabel = dayLabel,
-                    hourLabel = hourLabel,
-                    minuteLabel = minuteLabel,
-                )
             }
         }
     }
@@ -446,7 +428,7 @@ private fun cumulativeMeters(geometry: List<RoutePoint>): DoubleArray {
     val cumulativeMeters = DoubleArray(geometry.size)
     for (pointIndex in 1 until geometry.size) {
         cumulativeMeters[pointIndex] = cumulativeMeters[pointIndex - 1] +
-            MapGeodesy.haversineMeters(geometry[pointIndex - 1], geometry[pointIndex])
+                MapGeodesy.haversineMeters(geometry[pointIndex - 1], geometry[pointIndex])
     }
     return cumulativeMeters
 }
@@ -490,122 +472,6 @@ private fun RouteDetail.roadClassAt(pointIndex: Int): RoadClass {
         if (pointIndex in startPointIndex..endPointIndex) return segment.roadClass
     }
     return roadClassSegments.lastOrNull()?.roadClass ?: RoadClass.ORDINARY
-}
-
-@Composable
-private fun MapNavigationGuidancePanelFooter(
-    roadClass: RoadClass,
-    elapsedSeconds: Int,
-    traveledMeters: Int,
-    meterLabel: String,
-    kilometerLabel: String,
-    dayLabel: String,
-    hourLabel: String,
-    minuteLabel: String,
-    modifier: Modifier = Modifier,
-) {
-    val panelColors = RouteColors.maneuver(roadClass)
-    val timelineColor = guidancePanelTimelineColor(roadClass)
-    val elapsedText = remember(elapsedSeconds, dayLabel, hourLabel, minuteLabel) {
-        formatDuration(
-            totalSeconds = elapsedSeconds.toDouble(),
-            dayLabel = dayLabel,
-            hourLabel = hourLabel,
-            minuteLabel = minuteLabel,
-        )
-    }
-    val traveledText = remember(traveledMeters, meterLabel, kilometerLabel) {
-        formatDistance(
-            meters = traveledMeters.toDouble(),
-            meterLabel = meterLabel,
-            kilometerLabel = kilometerLabel,
-        )
-    }
-
-    Column(
-        modifier = modifier.padding(bottom = 16.dp),
-        horizontalAlignment = Alignment.Start,
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(
-                    start = 20.dp,
-                    end = 16.dp,
-                )
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .height(16.dp)
-                    .width(16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                VerticalDivider(
-                    modifier = Modifier
-                        .requiredHeight(20.dp)
-                        .offset(y = 4.dp),
-                    color = timelineColor,
-                    thickness = 8.dp,
-                )
-            }
-
-            HorizontalDivider(
-                modifier = Modifier.weight(1f),
-                color = panelColors.onPrimary,
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Image(
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .size(40.dp),
-                painter = painterResource(Res.drawable.ic_vehicle_puck),
-                contentDescription = null,
-            )
-
-            Text(
-                modifier = Modifier
-                    .padding(start = 36.dp)
-                    .weight(1f),
-                text = stringResource(Res.string.home_map_route_origin_current_location),
-                color = panelColors.onPrimary,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            Column(
-                modifier = Modifier
-                    .padding(end = 16.dp)
-                    .widthIn(min = 64.dp),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Text(
-                    text = elapsedText,
-                    color = panelColors.onPrimary,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                )
-
-                Text(
-                    text = traveledText,
-                    color = panelColors.onPrimary,
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1,
-                )
-            }
-        }
-    }
 }
 
 @Composable
