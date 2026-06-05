@@ -3,7 +3,7 @@ package me.matsumo.onenavi.feature.map.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,13 +26,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.matsumo.onenavi.core.resource.Res
@@ -40,10 +35,12 @@ import me.matsumo.onenavi.core.resource.home_map_control_compass
 import me.matsumo.onenavi.core.resource.home_map_control_volume
 import me.matsumo.onenavi.core.resource.home_map_control_zoom_in
 import me.matsumo.onenavi.core.resource.home_map_control_zoom_out
+import me.matsumo.onenavi.core.resource.ic_map_compass
 import me.matsumo.onenavi.core.resource.setting_title
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapPanelLayout
 import me.matsumo.onenavi.feature.map.state.MapPanelSide
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -201,10 +198,6 @@ private fun MapZoomButtons(
     }
 }
 
-private const val COMPASS_NEEDLE_WIDTH_RATIO = 0.1f
-private const val COMPASS_NEEDLE_LENGTH_RATIO = 0.35f
-private const val COMPASS_NEEDLE_INSET_RATIO = 0.03f
-
 /** 地図コントロールの丸ボタンサイズ。 */
 private val MapControlButtonSize = 56.dp
 
@@ -217,59 +210,25 @@ private fun MapCompass(
 ) {
     val rotationDegrees = -bearing.toFloat()
 
-    val northColor = Color(0xFFE53935)
-    val southColor = Color(0xFF757575)
-    val surfaceColor = MaterialTheme.colorScheme.surface
-
     Surface(
-        modifier = modifier.semantics {
-            this.contentDescription = contentDescription
-        },
+        modifier = modifier,
         shape = CircleShape,
-        color = surfaceColor,
+        color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         shadowElevation = 6.dp,
         onClick = onClicked,
     ) {
-        Canvas(
-            modifier = Modifier.fillMaxSize(),
+        Box(
+            modifier = Modifier.padding(4.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            val centerX = size.width / 2
-            val centerY = size.height / 2
-            val needleWidth = size.width * COMPASS_NEEDLE_WIDTH_RATIO
-            val needleLength = size.height * COMPASS_NEEDLE_LENGTH_RATIO
-            val inset = size.height * COMPASS_NEEDLE_INSET_RATIO
-
-            rotate(
-                degrees = rotationDegrees,
-                pivot = Offset(centerX, centerY),
-            ) {
-                // 北側の針（赤）
-                val northPath = Path().apply {
-                    moveTo(centerX, centerY - needleLength) // 先端
-                    lineTo(centerX - needleWidth, centerY) // 左肩
-                    lineTo(centerX, centerY - inset) // 中央の食い込み
-                    lineTo(centerX + needleWidth, centerY) // 右肩
-                    close()
-                }
-                drawPath(
-                    path = northPath,
-                    color = northColor,
-                )
-
-                // 南側の針（グレー）
-                val southPath = Path().apply {
-                    moveTo(centerX, centerY + needleLength) // 先端
-                    lineTo(centerX - needleWidth, centerY) // 左肩
-                    lineTo(centerX, centerY + inset) // 中央の食い込み
-                    lineTo(centerX + needleWidth, centerY) // 右肩
-                    close()
-                }
-                drawPath(
-                    path = southPath,
-                    color = southColor,
-                )
-            }
+            Image(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .rotate(rotationDegrees),
+                painter = painterResource(Res.drawable.ic_map_compass),
+                contentDescription = contentDescription,
+            )
         }
     }
 }
