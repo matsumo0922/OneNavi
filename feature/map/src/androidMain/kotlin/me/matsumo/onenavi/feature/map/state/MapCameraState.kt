@@ -8,7 +8,9 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -27,7 +29,7 @@ import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ROUT
 @Composable
 internal fun rememberMapCameraState(): MapCameraState {
     val density = LocalDensity.current.density
-    val state = remember { MapCameraState() }
+    val state = rememberSaveable(saver = MapCameraState.Saver) { MapCameraState() }
 
     SideEffect {
         state.updateDensity(density)
@@ -40,7 +42,9 @@ internal fun rememberMapCameraState(): MapCameraState {
  * GoogleMap のカメラ操作と UI 表示用カメラ状態を仲介する state holder。
  */
 @Stable
-internal class MapCameraState internal constructor() {
+internal class MapCameraState internal constructor(
+    initialRestoreState: MapCameraRestoreState? = null,
+) {
 
     private var googleMap: GoogleMap? = null
     private val cameraAnimator = MapCameraAnimator(
@@ -61,8 +65,20 @@ internal class MapCameraState internal constructor() {
     private var lastVehiclePose: VehiclePose? = null
     private var guidanceManeuverCameraFocus: GuidanceManeuverCameraFocus? = null
     private var handledGuidanceManeuverFocusIndex: Int? = null
+    private var pendingRestoreState: MapCameraRestoreState? = initialRestoreState
+    private var pendingManualBrowsingRestore: Boolean = initialRestoreState?.isFollowingMyLocation == false
 
-    var cameraState by mutableStateOf(MapCameraSnapshot())
+    var cameraState by mutableStateOf(
+        if (initialRestoreState == null) {
+            MapCameraSnapshot()
+        } else {
+            MapCameraSnapshot(
+                zoom = initialRestoreState.zoom,
+                perspective = initialRestoreState.perspective,
+                isFollowingMyLocation = initialRestoreState.isFollowingMyLocation,
+            )
+        },
+    )
         private set
 
     /** 最後に受け取った自車位置の緯度。未取得の場合は初期緯度を返す。 */
@@ -104,6 +120,65 @@ internal class MapCameraState internal constructor() {
                 cameraState = cameraState.copy(isFollowingMyLocation = shouldKeepFollowing)
             }
         }
+
+        applyPendingRestore(googleMap)
+    }
+
+    /**
+     * 接続直後の GoogleMap へ、保存しておいた復元カメラ位置を一度だけ適用する。
+     *
+     * 画面回転・画面遷移・プロセス死で MapView が作り直されると初期 target（既定座標）から始まるため、
+     * attach のタイミングで復元位置へ即座に寄せて既定座標のチラ見えを防ぐ。bearing は保存しないので 0
+     * から始め、追従再開時に自車 heading へ更新される。
+     *
+     * @param googleMap 復元位置を適用する GoogleMap
+     */
+    private fun applyPendingRestore(googleMap: GoogleMap) {
+        val restore = pendingRestoreState ?: return
+        pendingRestoreState = null
+
+        val cameraPosition = CameraPosition.Builder()
+            .target(LatLng(restore.latitude, restore.longitude))
+            .zoom(restore.zoom)
+            .bearing(0f)
+            .tilt(vehicleCameraPositionFactory.vehicleTiltDegrees(restore.perspective))
+            .build()
+
+        googleMap.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
+    }
+
+    /**
+     * 復元された手動閲覧状態を初回 Browsing で 1 度だけ消費する。
+     *
+     * 復元時に追従 OFF（手動でカメラを動かしていた）だった場合のみ true を返し、以後は false を返す。
+     * これにより初回の自車追従への自動復帰を抑制し、復元したカメラ位置を維持する。
+     *
+     * @return 初回 Browsing で自動追従を抑制すべき場合 true
+     */
+    fun consumeInitialBrowsingRestore(): Boolean {
+        if (!pendingManualBrowsingRestore) return false
+        pendingManualBrowsingRestore = false
+        return true
+    }
+
+    /**
+     * 現在のカメラ状態を保存用の復元データへ変換する。
+     *
+     * target は UI state に持たないため GoogleMap から直接読み取る。未接続の場合は target を取得できないため
+     * null を返す。
+     *
+     * @return 保存対象の [MapCameraRestoreState]。GoogleMap 未接続時は null
+     */
+    fun toRestoreState(): MapCameraRestoreState? {
+        val cameraPosition = googleMap?.cameraPosition ?: return null
+
+        return MapCameraRestoreState(
+            latitude = cameraPosition.target.latitude,
+            longitude = cameraPosition.target.longitude,
+            zoom = cameraState.zoom,
+            perspective = cameraState.perspective,
+            isFollowingMyLocation = cameraState.isFollowingMyLocation,
+        )
     }
 
     /**
@@ -306,6 +381,7 @@ internal class MapCameraState internal constructor() {
      * @param vehicleLocationState 追従開始時に寄せる自車位置。未取得の場合は次の pose 更新を待つ
      */
     fun followVehicleLocation(vehicleLocationState: VehicleLocationState?) {
+        pendingManualBrowsingRestore = false
         cameraAnimator.cancel()
         cameraState = cameraState.copy(isFollowingMyLocation = true)
         if (vehicleLocationState != null) {
@@ -323,6 +399,7 @@ internal class MapCameraState internal constructor() {
      * @param vehicleLocationState 案内開始時点の自車位置。未取得の場合は次の pose 更新を待つ
      */
     fun startGuidanceCamera(vehicleLocationState: VehicleLocationState?) {
+        pendingManualBrowsingRestore = false
         val map = googleMap
         cameraAnimator.cancel()
         map?.stopAnimation()
@@ -542,6 +619,7 @@ internal class MapCameraState internal constructor() {
      * @param zoom 移動後ズーム値
      */
     fun moveTo(latitude: Double, longitude: Double, zoom: Float = cameraState.zoom) {
+        pendingManualBrowsingRestore = false
         flyCameraTo(
             target = CameraPosition.Builder()
                 .target(LatLng(latitude, longitude))
@@ -576,6 +654,7 @@ internal class MapCameraState internal constructor() {
         val map = googleMap ?: return
         if (routePoints.isEmpty()) return
 
+        pendingManualBrowsingRestore = false
         cameraAnimator.cancel()
         map.stopAnimation()
         gestureController.clear()
@@ -1075,8 +1154,60 @@ internal class MapCameraState internal constructor() {
 
         /** 案内地点フォーカス中の zoom。 */
         private const val GUIDANCE_MANEUVER_FOCUS_ZOOM = 18f
+
+        /** [Saver] が保存する復元データの要素数。 */
+        private const val RESTORE_FIELD_COUNT = 5
+
+        /**
+         * 画面回転・画面遷移・プロセス死を跨いで [MapCameraState] を復元する [Saver]。
+         *
+         * target は UI state に持たないため保存時に GoogleMap から読み取る。GoogleMap 未接続で target を
+         * 取得できない場合は空リストを保存し、復元時は既定状態で開始する。
+         */
+        val Saver: Saver<MapCameraState, Any> = listSaver(
+            save = { state ->
+                val restore = state.toRestoreState() ?: return@listSaver emptyList()
+                listOf(
+                    restore.latitude,
+                    restore.longitude,
+                    restore.zoom,
+                    restore.perspective,
+                    restore.isFollowingMyLocation,
+                )
+            },
+            restore = { saved ->
+                val restore = saved.takeIf { it.size == RESTORE_FIELD_COUNT }?.let { fields ->
+                    MapCameraRestoreState(
+                        latitude = fields[0] as Double,
+                        longitude = fields[1] as Double,
+                        zoom = fields[2] as Float,
+                        perspective = fields[3] as Int,
+                        isFollowingMyLocation = fields[4] as Boolean,
+                    )
+                }
+                MapCameraState(initialRestoreState = restore)
+            },
+        )
     }
 }
+
+/**
+ * 画面回転・画面遷移・プロセス死を跨いでカメラを復元するための保存データ。
+ *
+ * @param latitude 復元するカメラ target の緯度
+ * @param longitude 復元するカメラ target の経度
+ * @param zoom 復元するズーム値
+ * @param perspective 復元する [MapCameraPerspective]
+ * @param isFollowingMyLocation 復元時点で自車追従中だったか
+ */
+@Immutable
+internal data class MapCameraRestoreState(
+    val latitude: Double,
+    val longitude: Double,
+    val zoom: Float,
+    val perspective: Int,
+    val isFollowingMyLocation: Boolean,
+)
 
 /**
  * 案内地点接近時の一時フォーカス状態。

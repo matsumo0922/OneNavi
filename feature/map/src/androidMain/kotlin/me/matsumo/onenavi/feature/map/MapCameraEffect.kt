@@ -304,7 +304,10 @@ internal fun MapCameraEffect(
             else -> {
                 when (screenState) {
                     is MapScreenState.Browsing -> {
-                        cameraState.followVehicleLocation(vehicleLocationState)
+                        // 復元した手動閲覧位置がある初回のみ自動追従を抑制し、復元位置を維持する
+                        if (!cameraState.consumeInitialBrowsingRestore()) {
+                            cameraState.followVehicleLocation(vehicleLocationState)
+                        }
                     }
 
                     is MapScreenState.PlaceDetails -> {
