@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,10 +61,9 @@ internal fun MapControls(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .then(panelLayout.toMapAreaModifier())
             .padding(bottom = bottomPadding)
             .padding(16.dp),
-        contentAlignment = AbsoluteAlignment.BottomRight,
+        contentAlignment = panelLayout.toControlsAlignment(),
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -230,13 +228,11 @@ private fun MapCompass(
     }
 }
 
-private fun MapPanelLayout.toMapAreaModifier(): Modifier {
-    if (!isSplit) {
-        return Modifier
-    }
-
-    return when (panelSide) {
-        MapPanelSide.LEFT -> Modifier.absolutePadding(left = panelWidth)
-        MapPanelSide.RIGHT -> Modifier.absolutePadding(right = panelWidth)
+private fun MapPanelLayout.toControlsAlignment(): Alignment {
+    val isLeftPanelSplit = isSplit && panelSide == MapPanelSide.LEFT
+    return if (isLeftPanelSplit) {
+        AbsoluteAlignment.BottomLeft
+    } else {
+        AbsoluteAlignment.BottomRight
     }
 }

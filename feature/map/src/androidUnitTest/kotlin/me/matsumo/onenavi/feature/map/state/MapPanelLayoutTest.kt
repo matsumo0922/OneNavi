@@ -29,19 +29,29 @@ class MapPanelLayoutTest {
     }
 
     @Test
+    fun `分割時の横 inset は UI 帯 + controls カラム幅になる`() {
+        val splitLayout = resolveMapPanelLayout(maxWidth = 840.dp)
+        val compactLayout = resolveMapPanelLayout(maxWidth = 839.dp)
+
+        assertEquals(MAP_PANEL_WIDTH + MAP_CONTROLS_COLUMN_WIDTH, splitLayout.splitHorizontalInset)
+        assertEquals(488.dp, splitLayout.splitHorizontalInset)
+        assertEquals(0.dp, compactLayout.splitHorizontalInset)
+    }
+
+    @Test
     fun `Compact では左右に基本 padding だけを返す`() {
         val layout = resolveMapPanelLayout(maxWidth = 839.dp)
 
         val horizontalPadding = layout.resolveHorizontalCameraPaddingPx(
             basePaddingPx = 24,
-            panelWidthPx = 400,
+            splitInsetPx = 488,
         )
 
         assertEquals(24 to 24, horizontalPadding)
     }
 
     @Test
-    fun `右 UI 帯では左右 padding に UI 帯幅を加算する`() {
+    fun `右 UI 帯では左右 padding に inset を加算する`() {
         val layout = resolveMapPanelLayout(
             maxWidth = 840.dp,
             panelSide = MapPanelSide.RIGHT,
@@ -49,14 +59,14 @@ class MapPanelLayoutTest {
 
         val horizontalPadding = layout.resolveHorizontalCameraPaddingPx(
             basePaddingPx = 24,
-            panelWidthPx = 400,
+            splitInsetPx = 488,
         )
 
-        assertEquals(424 to 424, horizontalPadding)
+        assertEquals(512 to 512, horizontalPadding)
     }
 
     @Test
-    fun `左 UI 帯では左右 padding に UI 帯幅を加算する`() {
+    fun `左 UI 帯では左右 padding に inset を加算する`() {
         val layout = resolveMapPanelLayout(
             maxWidth = 840.dp,
             panelSide = MapPanelSide.LEFT,
@@ -64,10 +74,10 @@ class MapPanelLayoutTest {
 
         val horizontalPadding = layout.resolveHorizontalCameraPaddingPx(
             basePaddingPx = 24,
-            panelWidthPx = 400,
+            splitInsetPx = 488,
         )
 
-        assertEquals(424 to 424, horizontalPadding)
+        assertEquals(512 to 512, horizontalPadding)
     }
 
     @Test
@@ -82,7 +92,7 @@ class MapPanelLayoutTest {
     }
 
     @Test
-    fun `右 UI 帯では MapView を左へはみ出させて地図領域中心に寄せる`() {
+    fun `右 UI 帯では MapView を左へ inset ぶんはみ出させて地図領域中心に寄せる`() {
         val layout = resolveMapPanelLayout(
             maxWidth = 840.dp,
             panelSide = MapPanelSide.RIGHT,
@@ -90,13 +100,13 @@ class MapPanelLayoutTest {
 
         val canvasLayout = layout.resolveCanvasLayout(viewportWidth = 840.dp)
 
-        assertEquals(1240.dp, canvasLayout.width)
-        assertEquals((-400).dp, canvasLayout.offsetX)
-        assertEquals(400.dp, canvasLayout.horizontalInset)
+        assertEquals(1328.dp, canvasLayout.width)
+        assertEquals((-488).dp, canvasLayout.offsetX)
+        assertEquals(488.dp, canvasLayout.horizontalInset)
     }
 
     @Test
-    fun `左 UI 帯では MapView を右へはみ出させて地図領域中心に寄せる`() {
+    fun `左 UI 帯では MapView を右へ inset ぶんはみ出させて地図領域中心に寄せる`() {
         val layout = resolveMapPanelLayout(
             maxWidth = 840.dp,
             panelSide = MapPanelSide.LEFT,
@@ -104,8 +114,8 @@ class MapPanelLayoutTest {
 
         val canvasLayout = layout.resolveCanvasLayout(viewportWidth = 840.dp)
 
-        assertEquals(1240.dp, canvasLayout.width)
+        assertEquals(1328.dp, canvasLayout.width)
         assertEquals(0.dp, canvasLayout.offsetX)
-        assertEquals(400.dp, canvasLayout.horizontalInset)
+        assertEquals(488.dp, canvasLayout.horizontalInset)
     }
 }

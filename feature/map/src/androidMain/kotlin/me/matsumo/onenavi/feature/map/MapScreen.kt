@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -55,6 +56,7 @@ import me.matsumo.onenavi.feature.map.components.content.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.content.MapNavigationContent
 import me.matsumo.onenavi.feature.map.components.content.MapRoutePreviewContent
 import me.matsumo.onenavi.feature.map.components.topappbar.MapWaypointSearchScreen
+import me.matsumo.onenavi.feature.map.state.MAP_CONTROLS_COLUMN_WIDTH
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
@@ -430,7 +432,8 @@ private fun MapScreenSplitLayout(
             modifier = Modifier
                 .width(panelLayout.panelWidth)
                 .fillMaxHeight()
-                .align(panelLayout.toPanelAlignment()),
+                .align(panelLayout.toPanelAlignment())
+                .absoluteOffset(x = panelLayout.panelControlsOffsetX()),
             scaffoldState = scaffoldState,
             sheetPeekHeight = uiState.bottomSheetPeekHeight,
             containerColor = Color.Transparent,
@@ -726,6 +729,25 @@ private fun MapPanelLayout.toPanelAlignment(): Alignment {
     return when (panelSide) {
         MapPanelSide.LEFT -> AbsoluteAlignment.CenterLeft
         MapPanelSide.RIGHT -> AbsoluteAlignment.CenterRight
+    }
+}
+
+/**
+ * UI パネルを画面端の map controls カラムぶん内側へ寄せるオフセットを返す。
+ *
+ * 分割時は map controls が画面端の専用カラムに置かれるため、パネルはその幅
+ * （[MAP_CONTROLS_COLUMN_WIDTH]）ぶん中央側へずらして重なりを避ける。
+ *
+ * @return パネルへ与える X 方向オフセット。Compact では 0dp
+ */
+private fun MapPanelLayout.panelControlsOffsetX(): Dp {
+    if (!isSplit) {
+        return 0.dp
+    }
+
+    return when (panelSide) {
+        MapPanelSide.LEFT -> MAP_CONTROLS_COLUMN_WIDTH
+        MapPanelSide.RIGHT -> -MAP_CONTROLS_COLUMN_WIDTH
     }
 }
 
