@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
@@ -90,6 +92,7 @@ internal fun MapNavigationManeuverPanelSection(
     minuteLabel: String,
     timestampMillis: Long,
     currentCumulativeMeters: Double,
+    isSplit: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val screenHeight = LocalWindowInfo.current.containerDpSize.height
@@ -120,7 +123,10 @@ internal fun MapNavigationManeuverPanelSection(
 
     Surface(
         modifier = modifier
-            .height(screenHeight / 4f)
+            .navigationPanelHeight(
+                isSplit = isSplit,
+                screenHeight = screenHeight,
+            )
             .shadow(
                 elevation = 8.dp,
                 shape = shape,
@@ -163,6 +169,17 @@ internal fun MapNavigationManeuverPanelSection(
             }
         }
     }
+}
+
+private fun Modifier.navigationPanelHeight(
+    isSplit: Boolean,
+    screenHeight: Dp,
+): Modifier {
+    if (isSplit) {
+        return heightIn(max = screenHeight / 2f).fillMaxHeight()
+    }
+
+    return height(screenHeight / 4f)
 }
 
 /**
@@ -423,7 +440,7 @@ private fun cumulativeMeters(geometry: List<RoutePoint>): DoubleArray {
     val cumulativeMeters = DoubleArray(geometry.size)
     for (pointIndex in 1 until geometry.size) {
         cumulativeMeters[pointIndex] = cumulativeMeters[pointIndex - 1] +
-                MapGeodesy.haversineMeters(geometry[pointIndex - 1], geometry[pointIndex])
+            MapGeodesy.haversineMeters(geometry[pointIndex - 1], geometry[pointIndex])
     }
     return cumulativeMeters
 }

@@ -70,8 +70,9 @@ internal fun MapNavigationManeuverPanel(
     listItems: ImmutableList<GuidanceListItem>,
     progress: GuidanceProgress,
     guideImage: NavigationGuideImage?,
-    horizontalPadding: Dp = 16.dp,
+    isSplit: Boolean,
     modifier: Modifier = Modifier,
+    horizontalPadding: Dp = 16.dp,
 ) {
     val meterLabel = stringResource(Res.string.common_unit_meter)
     val kilometerLabel = stringResource(Res.string.common_unit_kilometer)
@@ -138,6 +139,7 @@ internal fun MapNavigationManeuverPanel(
                 minuteLabel = minuteLabel,
                 timestampMillis = progress.locationTimestampMillis,
                 currentCumulativeMeters = progress.currentCumulativeMeters,
+                isSplit = isSplit,
             )
         } else {
             MapNavigationManeuverBottomSection(
@@ -157,8 +159,8 @@ internal fun MapNavigationManeuverPanel(
 internal fun MapNavigationReroutingPanel(
     routePriority: RoutePriority?,
     roadClass: RoadClass,
-    horizontalPadding: Dp = 16.dp,
     modifier: Modifier = Modifier,
+    horizontalPadding: Dp = 16.dp,
 ) {
     val title = stringResource(Res.string.home_map_navigation_rerouting_title)
     val routeModeLabel = (routePriority ?: RoutePriority.Recommended).label

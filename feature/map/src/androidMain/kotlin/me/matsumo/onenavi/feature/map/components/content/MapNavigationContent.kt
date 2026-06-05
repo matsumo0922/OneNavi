@@ -3,6 +3,7 @@ package me.matsumo.onenavi.feature.map.components.content
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -18,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
@@ -53,6 +55,7 @@ internal fun MapNavigationContent(
     navigationGuideImage: NavigationGuideImage?,
     overlayState: MapOverlayState,
     panelLayout: MapPanelLayout,
+    navigationCardHeight: Dp,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -115,8 +118,14 @@ internal fun MapNavigationContent(
             maxHeight / 3f
         }
         val horizontalContentPadding = if (panelLayout.isSplit) 0.dp else 16.dp
+        val topPanelMaxHeight = if (panelLayout.isSplit && hasNavigationBottomCard) {
+            (maxHeight - navigationCardHeight).coerceAtLeast(0.dp)
+        } else {
+            maxHeight
+        }
         val topPanelModifier = Modifier
             .fillMaxWidth()
+            .heightIn(max = topPanelMaxHeight)
             .statusBarsPadding()
             .onGloballyPositioned { coordinates ->
                 onUiEvent(MapUiEvent.OnTopAppBarHeightChanged(coordinates.size.height))
@@ -131,6 +140,7 @@ internal fun MapNavigationContent(
                     listItems = guiding.presentation.listItems,
                     progress = guiding.progress,
                     guideImage = navigationGuideImage,
+                    isSplit = panelLayout.isSplit,
                     horizontalPadding = horizontalContentPadding,
                 )
             }

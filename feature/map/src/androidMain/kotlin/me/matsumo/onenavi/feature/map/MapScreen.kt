@@ -589,6 +589,9 @@ private fun MapScreenContent(
     onSettingClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
+    val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
+
     when (screenState) {
         is MapScreenState.Browsing,
         is MapScreenState.PlaceDetails,
@@ -622,6 +625,7 @@ private fun MapScreenContent(
                 navigationGuideImage = uiState.navigationGuideImage,
                 overlayState = uiState.overlayState,
                 panelLayout = panelLayout,
+                navigationCardHeight = navigationCardHeightDp,
                 onUiEvent = onUiEvent,
             )
         }
