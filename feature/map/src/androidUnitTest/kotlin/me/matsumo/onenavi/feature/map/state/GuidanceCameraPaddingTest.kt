@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+/** 案内中のカメラ padding 計算を検証するテスト。 */
 class GuidanceCameraPaddingTest {
 
     @Test
@@ -96,5 +97,47 @@ class GuidanceCameraPaddingTest {
 
         assertEquals(collapsed, expanded)
         assertTrue(collapsed > 0)
+    }
+
+    @Test
+    fun `分割案内では padded 中心が画面下端から指定割合の位置に来る上 padding を返す`() {
+        val mapViewHeightPx = 1000
+        val rawBottomPaddingPx = 48
+
+        val topPaddingPx = GuidanceCameraPadding.resolveTopPaddingPx(
+            isGuidanceFollowActive = true,
+            mapViewHeightPx = mapViewHeightPx,
+            rawTopPaddingPx = 24,
+            rawBottomPaddingPx = rawBottomPaddingPx,
+            density = 2f,
+            anchorFractionFromBottom = 0.25f,
+        )
+
+        assertEquals(548, topPaddingPx)
+
+        val paddedCenterY = (topPaddingPx + mapViewHeightPx - rawBottomPaddingPx) / 2
+        assertEquals(750, paddedCenterY)
+    }
+
+    @Test
+    fun `分割案内で低身長なら navigation bar と puck の下限を優先する`() {
+        val mapViewHeightPx = 360
+        val rawBottomPaddingPx = 96
+        val density = 3f
+
+        val topPaddingPx = GuidanceCameraPadding.resolveTopPaddingPx(
+            isGuidanceFollowActive = true,
+            mapViewHeightPx = mapViewHeightPx,
+            rawTopPaddingPx = 24,
+            rawBottomPaddingPx = rawBottomPaddingPx,
+            density = density,
+            anchorFractionFromBottom = 0.25f,
+        )
+
+        assertEquals(24, topPaddingPx)
+
+        val paddedCenterY = (topPaddingPx + mapViewHeightPx - rawBottomPaddingPx) / 2
+        val distanceFromBottomPx = mapViewHeightPx - paddedCenterY
+        assertEquals(216, distanceFromBottomPx)
     }
 }

@@ -34,6 +34,7 @@ internal fun MapGuidanceManeuverCallOutMarkerEffect(
     guidanceState: GuidanceState,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
+    horizontalViewportPadding: Dp,
     modifier: Modifier = Modifier,
 ) {
     if (googleMap == null) return
@@ -68,9 +69,9 @@ internal fun MapGuidanceManeuverCallOutMarkerEffect(
         googleMap = googleMap,
         requests = requests,
         viewportPadding = PaddingValues(
-            start = GUIDANCE_CALLOUT_VIEWPORT_PADDING,
+            start = horizontalViewportPadding + GUIDANCE_CALLOUT_VIEWPORT_PADDING,
             top = topPadding,
-            end = GUIDANCE_CALLOUT_VIEWPORT_PADDING,
+            end = horizontalViewportPadding + GUIDANCE_CALLOUT_VIEWPORT_PADDING,
             bottom = bottomSheetPeekHeight + GUIDANCE_CALLOUT_VIEWPORT_PADDING,
         ),
         onCallOutClick = { _, _ -> },

@@ -55,6 +55,7 @@ internal class MapCameraState internal constructor() {
     private var rawBottomPaddingPx: Int = 0
     private var startPaddingPx: Int = 0
     private var endPaddingPx: Int = 0
+    private var guidanceAnchorFraction: Float? = null
     private var isGuidanceCameraActive: Boolean = false
     private var density: Float = DEFAULT_DENSITY
     private var lastVehiclePose: VehiclePose? = null
@@ -112,9 +113,13 @@ internal class MapCameraState internal constructor() {
      * @param heightPx 地図ビューの高さ（px）
      */
     fun updateViewportSize(widthPx: Int, heightPx: Int) {
+        if (mapViewWidthPx == widthPx && mapViewHeightPx == heightPx) return
+
         mapViewWidthPx = widthPx
         mapViewHeightPx = heightPx
         vehicleCameraPositionFactory.updateViewportHeight(heightPx)
+        applyCameraPadding()
+        moveFollowCameraIfNeeded()
     }
 
     /** 画面密度を記録する。GoogleMap の zoom は dp 基準なので fly-to で px → dp 換算に使う。 */
@@ -130,12 +135,34 @@ internal class MapCameraState internal constructor() {
      * @param bottom 下端 padding（px）
      * @param start 左端 padding（px）
      * @param end 右端 padding（px）
+     * @param guidanceAnchorFraction 案内中に自車を画面下端から置く割合。null の場合は Compact 用のカード基準を使う
      */
-    fun updatePadding(top: Int, bottom: Int, start: Int, end: Int) {
+    fun updatePadding(
+        top: Int,
+        bottom: Int,
+        start: Int,
+        end: Int,
+        guidanceAnchorFraction: Float? = null,
+    ) {
         rawTopPaddingPx = top
         rawBottomPaddingPx = bottom
         startPaddingPx = start
         endPaddingPx = end
+        this.guidanceAnchorFraction = guidanceAnchorFraction
+        applyCameraPadding()
+        moveFollowCameraIfNeeded()
+    }
+
+    /**
+     * UI 帯レイアウトまたは viewport 制約が変わったことを通知する。
+     *
+     * レイアウト変更は padding の即時スナップとして扱うため、進行中の自前 animation と GoogleMap animation を
+     * この経路でのみ中断する。通常の padding 更新では animation を止めない。
+     */
+    fun onPanelLayoutChanged() {
+        val map = googleMap
+        cameraAnimator.cancel()
+        map?.stopAnimation()
         applyCameraPadding()
         moveFollowCameraIfNeeded()
     }
@@ -143,9 +170,11 @@ internal class MapCameraState internal constructor() {
     /**
      * 案内中カメラとして扱うかを更新する。
      *
-     * 案内中は自車を「下部カード上端から [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上」へ固定するため、
-     * follow 専用の下端基準 padding を使う（[applyCameraPadding]）。それ以外は実際の obstruction
-     * padding をそのまま使い、自車を可視領域の中心へ置く。モードが変わるたびに padding を再適用する。
+     * 案内中は自車を padding center へ置く。Compact では下部カード上端から
+     * [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上、分割レイアウトでは画面下端から
+     * [guidanceAnchorFraction] の位置に来るよう [applyCameraPadding] で上 padding を調整する。
+     * それ以外は実際の obstruction padding をそのまま使い、自車を可視領域の中心へ置く。
+     * モードが変わるたびに padding を再適用する。
      *
      * @param isActive 案内中カメラとして扱う場合 true
      */
@@ -158,11 +187,11 @@ internal class MapCameraState internal constructor() {
     /**
      * 現在のモードに応じた描画 padding を GoogleMap へ適用する。
      *
-     * 案内中追従では、自車（camera target）を下部カード上端から
-     * [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上へ置きたい。GoogleMap は camera target を
-     * 「padding を除いた可視領域の中心」に置くので、その中心がアンカー位置に一致するよう上 padding を
-     * 算出する。アンカーは下端基準なので、上部マニューバパネルの展開で実 top padding が変わっても
-     * 自車位置は動かない（tilt も SDK が padded-center 不変則で正しく扱う）。案内中以外は実 padding を使う。
+     * GoogleMap は camera target を「padding を除いた可視領域の中心」に置く。分割レイアウトでは
+     * MapView の実 viewport を UI 帯幅ぶん広げ、左右対称 padding で padded center と 3D 投影中心を
+     * 地図領域の中心へ一致させる。案内中追従の縦方向は、その中心が Compact では下部カード基準、
+     * 分割レイアウトでは [guidanceAnchorFraction] 基準に一致するよう上 padding を算出する。
+     * 案内中以外の split 縦方向は上下対称 padding にして、camera target と 3D 投影中心を一致させる。
      */
     private fun applyCameraPadding() {
         val map = googleMap ?: return
@@ -180,6 +209,7 @@ internal class MapCameraState internal constructor() {
         rawTopPaddingPx = rawTopPaddingPx,
         rawBottomPaddingPx = rawBottomPaddingPx,
         density = density,
+        anchorFractionFromBottom = guidanceAnchorFraction,
     )
 
     /**
@@ -330,6 +360,7 @@ internal class MapCameraState internal constructor() {
                     perspective = MapCameraPerspective.TILTED,
                     isFollowingMyLocation = true,
                 )
+                moveFollowCameraIfNeeded()
             },
         )
     }
@@ -786,11 +817,14 @@ internal class MapCameraState internal constructor() {
             target = centeredVehicleCameraPosition(vehiclePose = vehiclePose, current = current),
             keepFollowingMyLocation = true,
             moveCamera = { _, cameraPosition -> moveVehicleCamera(cameraPosition) },
+            onFinished = {
+                moveFollowCameraIfNeeded()
+            },
         )
     }
 
     /**
-     * 自車を camera target 中心へ置く追従カメラ位置を作る。下端アンカーは projection で別途与える。
+     * 自車を camera target へ置く追従カメラ位置を作る。画面上の表示位置は GoogleMap の padding で与える。
      *
      * @param vehiclePose frame 時点の自車 pose
      * @param current 現在のカメラ位置

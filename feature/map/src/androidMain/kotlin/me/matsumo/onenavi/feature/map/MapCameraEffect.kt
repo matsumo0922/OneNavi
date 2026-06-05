@@ -2,11 +2,14 @@ package me.matsumo.onenavi.feature.map
 
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
@@ -17,6 +20,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
+import me.matsumo.onenavi.feature.map.state.MapPanelLayout
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.RouteMeterIndex
@@ -32,6 +36,9 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
  * @param guidanceState Guidance 期の案内状態
  * @param vehicleLocationState 最新の自車位置
  * @param cameraState カメラ操作を保持する state holder
+ * @param panelLayout 地図 UI 帯の配置情報
+ * @param viewportWidthPx 地図 viewport の幅
+ * @param viewportHeightPx 地図 viewport の高さ
  */
 @Composable
 internal fun MapCameraEffect(
@@ -42,11 +49,21 @@ internal fun MapCameraEffect(
     guidanceState: GuidanceState,
     vehicleLocationState: VehicleLocationState?,
     cameraState: MapCameraState,
+    panelLayout: MapPanelLayout,
+    viewportWidthPx: Int,
+    viewportHeightPx: Int,
 ) {
     val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
     val statusBarHeightPadding = WindowInsets.statusBars
         .asPaddingValues()
         .calculateTopPadding()
+    val navigationBarBottomPadding = WindowInsets.navigationBars
+        .asPaddingValues()
+        .calculateBottomPadding()
+    val safeDrawingPadding = WindowInsets.safeDrawing.asPaddingValues()
+    val safeDrawingLeftPadding = safeDrawingPadding.calculateLeftPadding(layoutDirection)
+    val safeDrawingRightPadding = safeDrawingPadding.calculateRightPadding(layoutDirection)
     val addWaypointSearchResults = overlayState as? MapOverlayState.AddWaypointSearchResults
     val addWaypointSelected = overlayState as? MapOverlayState.AddWaypointSelected
     val navigationWaypointEditor = overlayState as? MapOverlayState.NavigationWaypointEditor
@@ -125,21 +142,70 @@ internal fun MapCameraEffect(
         addWaypointSearchResults,
         addWaypointSelected,
         overlayState,
+        panelLayout.widthSizeClass,
+        panelLayout.panelWidth,
+        panelLayout.panelSide,
+        viewportWidthPx,
+        viewportHeightPx,
+        statusBarHeightPadding,
+        navigationBarBottomPadding,
+        safeDrawingLeftPadding,
+        safeDrawingRightPadding,
     ) {
-        val top = uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }
-        val bottom = when {
-            hasSheetOverlay -> with(density) { uiState.bottomSheetPeekHeight.toPx() }
-            screenState is MapScreenState.Navigating -> uiState.navigationCardHeight.toFloat()
-            else -> with(density) { uiState.bottomSheetPeekHeight.toPx() }
+        val horizontalBasePadding = maxOf(
+            MAP_CAMERA_HORIZONTAL_BASE_PADDING,
+            safeDrawingLeftPadding,
+            safeDrawingRightPadding,
+        )
+        val horizontalBasePaddingPx = with(density) { horizontalBasePadding.toPx() }.toInt()
+        val panelWidthPx = with(density) { panelLayout.panelWidth.toPx() }.toInt()
+        val (startPaddingPx, endPaddingPx) = panelLayout.resolveHorizontalCameraPaddingPx(
+            basePaddingPx = horizontalBasePaddingPx,
+            panelWidthPx = panelWidthPx,
+        )
+        val statusBarHeightPaddingPx = with(density) { statusBarHeightPadding.toPx() }.toInt()
+        val navigationBarBottomPaddingPx = with(density) { navigationBarBottomPadding.toPx() }.toInt()
+        val splitVerticalPaddingPx = maxOf(
+            statusBarHeightPaddingPx,
+            navigationBarBottomPaddingPx,
+        )
+        val topPaddingPx = if (panelLayout.isSplit) {
+            splitVerticalPaddingPx
+        } else {
+            uiState.topAppBarHeight + statusBarHeightPaddingPx
         }
-        val horizontal = with(density) { 24.dp.toPx() }
+        val bottomPaddingPx = if (panelLayout.isSplit) {
+            splitVerticalPaddingPx
+        } else {
+            resolveCompactBottomPaddingPx(
+                hasSheetOverlay = hasSheetOverlay,
+                isNavigating = screenState is MapScreenState.Navigating,
+                bottomSheetPeekHeightPx = with(density) { uiState.bottomSheetPeekHeight.toPx() }.toInt(),
+                navigationCardHeightPx = uiState.navigationCardHeight,
+            )
+        }
 
         cameraState.updatePadding(
-            top = top.toInt(),
-            bottom = bottom.toInt(),
-            start = horizontal.toInt(),
-            end = horizontal.toInt(),
+            top = topPaddingPx,
+            bottom = bottomPaddingPx,
+            start = startPaddingPx,
+            end = endPaddingPx,
+            guidanceAnchorFraction = if (panelLayout.isSplit) {
+                SPLIT_GUIDANCE_ANCHOR_FRACTION_FROM_BOTTOM
+            } else {
+                null
+            },
         )
+    }
+
+    LaunchedEffect(
+        panelLayout.widthSizeClass,
+        panelLayout.panelWidth,
+        panelLayout.panelSide,
+        viewportWidthPx,
+        viewportHeightPx,
+    ) {
+        cameraState.onPanelLayoutChanged()
     }
 
     val routeOverviewPoints = remember(
@@ -212,6 +278,11 @@ internal fun MapCameraEffect(
         routeOverviewTopPaddingKey,
         routeOverviewBottomPaddingKey,
         routeOverviewNavigationCardHeightKey,
+        panelLayout.widthSizeClass,
+        panelLayout.panelWidth,
+        panelLayout.panelSide,
+        viewportWidthPx,
+        viewportHeightPx,
     ) {
         routeOverviewPoints?.let { cameraState.showRouteOverview(it) }
     }
@@ -318,6 +389,19 @@ private fun MapCameraState.showSearchResultsOverview(results: List<SearchResultI
     }
 }
 
+private fun resolveCompactBottomPaddingPx(
+    hasSheetOverlay: Boolean,
+    isNavigating: Boolean,
+    bottomSheetPeekHeightPx: Int,
+    navigationCardHeightPx: Int,
+): Int {
+    return when {
+        hasSheetOverlay -> bottomSheetPeekHeightPx
+        isNavigating -> navigationCardHeightPx
+        else -> bottomSheetPeekHeightPx
+    }
+}
+
 private fun RouteDetail.overviewPoints(): List<RoutePoint> = buildList {
     addAll(geometry)
     add(origin)
@@ -364,6 +448,12 @@ private const val GUIDANCE_MANEUVER_FOCUS_DISTANCE_METERS = 100
 
 /** 案内地点を通過済みと扱う残距離（m）。 */
 private const val GUIDANCE_MANEUVER_PASSED_DISTANCE_METERS = 0
+
+/** 地図カメラ padding の左右に最低限確保する余白。 */
+private val MAP_CAMERA_HORIZONTAL_BASE_PADDING = 24.dp
+
+/** 分割案内で自車を画面下端から置く割合。 */
+private const val SPLIT_GUIDANCE_ANCHOR_FRACTION_FROM_BOTTOM = 0.25f
 
 private fun GuidanceState.routeOverviewKey(): String? = when (this) {
     is GuidanceState.Guiding -> route.id
