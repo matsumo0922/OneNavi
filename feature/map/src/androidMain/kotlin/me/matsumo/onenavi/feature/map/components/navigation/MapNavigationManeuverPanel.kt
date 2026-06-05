@@ -458,7 +458,7 @@ private fun MapNavigationManeuverGuideImage(
         modifier = modifier.padding(horizontal = 24.dp),
         bitmap = guideImage.bitmap,
         contentDescription = null,
-        contentScale = ContentScale.FillWidth,
+        contentScale = ContentScale.Fit,
     )
 }
 
