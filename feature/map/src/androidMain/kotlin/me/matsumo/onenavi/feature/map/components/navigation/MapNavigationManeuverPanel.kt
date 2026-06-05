@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import dev.chrisbanes.haze.HazeState
@@ -71,6 +72,7 @@ internal fun MapNavigationManeuverPanel(
     progress: GuidanceProgress,
     guideImage: NavigationGuideImage?,
     hazeState: HazeState,
+    horizontalPadding: Dp = 16.dp,
     modifier: Modifier = Modifier,
 ) {
     val meterLabel = stringResource(Res.string.common_unit_meter)
@@ -113,7 +115,7 @@ internal fun MapNavigationManeuverPanel(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = horizontalPadding, vertical = 8.dp),
     ) {
         MapNavigationManeuverTopSection(
             modifier = Modifier.fillMaxWidth(),
@@ -160,6 +162,7 @@ internal fun MapNavigationManeuverPanel(
 internal fun MapNavigationReroutingPanel(
     routePriority: RoutePriority?,
     roadClass: RoadClass,
+    horizontalPadding: Dp = 16.dp,
     modifier: Modifier = Modifier,
 ) {
     val title = stringResource(Res.string.home_map_navigation_rerouting_title)
@@ -168,7 +171,7 @@ internal fun MapNavigationReroutingPanel(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = horizontalPadding, vertical = 8.dp),
     ) {
         MapNavigationReroutingTopSection(
             modifier = Modifier.fillMaxWidth(),

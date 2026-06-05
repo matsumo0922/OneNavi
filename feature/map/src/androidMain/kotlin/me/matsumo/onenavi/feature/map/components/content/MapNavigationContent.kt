@@ -116,6 +116,7 @@ internal fun MapNavigationContent(
         } else {
             maxHeight / 3f
         }
+        val horizontalContentPadding = if (panelLayout.isSplit) 0.dp else 16.dp
         val topPanelModifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
@@ -133,6 +134,7 @@ internal fun MapNavigationContent(
                     progress = guiding.progress,
                     guideImage = navigationGuideImage,
                     hazeState = hazeState,
+                    horizontalPadding = horizontalContentPadding,
                 )
             }
 
@@ -141,6 +143,7 @@ internal fun MapNavigationContent(
                     modifier = topPanelModifier,
                     routePriority = rerouting.previousRoute.priority,
                     roadClass = rerouting.previousProgress.currentRoadClass,
+                    horizontalPadding = horizontalContentPadding,
                 )
             }
         }
@@ -155,7 +158,7 @@ internal fun MapNavigationContent(
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
                         .navigationBarsPadding()
-                        .padding(horizontal = 16.dp)
+                        .padding(horizontal = horizontalContentPadding)
                         .height(bottomFloatingCardHeight),
                     place = addWaypointSelected.place,
                     routePreviewState = addWaypointSelected.routePreviewState,
@@ -178,7 +181,7 @@ internal fun MapNavigationContent(
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
                         .navigationBarsPadding()
-                        .padding(horizontal = 16.dp)
+                        .padding(horizontal = horizontalContentPadding)
                         .height(bottomFloatingCardHeight),
                     query = addWaypointSearchResults.query,
                     results = addWaypointSearchResults.results,
@@ -198,7 +201,7 @@ internal fun MapNavigationContent(
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
                         .navigationBarsPadding()
-                        .padding(horizontal = 16.dp)
+                        .padding(horizontal = horizontalContentPadding)
                         .height(bottomFloatingCardHeight),
                     routePreviewState = alternativesRoutePreviewState,
                     onCloseClicked = {
@@ -217,7 +220,7 @@ internal fun MapNavigationContent(
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
                         .navigationBarsPadding()
-                        .padding(horizontal = 16.dp)
+                        .padding(horizontal = horizontalContentPadding)
                         .height(bottomFloatingCardHeight),
                     originWaypoint = navigationWaypointEditor.originWaypoint,
                     waypoints = navigationWaypointEditor.waypoints,
@@ -238,7 +241,7 @@ internal fun MapNavigationContent(
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
                         .navigationBarsPadding()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = horizontalContentPadding),
                     progress = etaProgress,
                     geometry = etaRoute.geometry,
                     roadClassSegments = etaRoute.roadClassSegments,

@@ -161,6 +161,6 @@ internal val MAP_PANEL_WIDTH = 400.dp
 
 /**
  * 分割レイアウトで UI 帯側に確保する map controls カラムの占有幅。
- * controls UI（FAB 56dp + 画面端 16dp）に、UI 帯との間隔 16dp を加えた値。
+ * controls UI（FAB 56dp + 画面端 16dp）。
  */
 internal val MAP_CONTROLS_COLUMN_WIDTH = 88.dp

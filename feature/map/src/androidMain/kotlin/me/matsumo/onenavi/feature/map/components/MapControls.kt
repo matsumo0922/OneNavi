@@ -66,7 +66,11 @@ internal fun MapControls(
         modifier = modifier
             .fillMaxSize()
             .padding(top = topPadding, bottom = bottomPadding)
-            .padding(16.dp),
+            .padding(
+                top = 8.dp,
+                start = 16.dp,
+                end = 16.dp,
+            ),
     ) {
         Column(
             modifier = Modifier.align(panelLayout.toControlsTopAlignment()),
@@ -84,14 +88,14 @@ internal fun MapControls(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     MapControlIconButton(
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier.size(MapControlButtonSize),
                         imageVector = Icons.Default.Settings,
                         contentDescription = settingContentDescription,
                         onClicked = onSettingClicked,
                     )
 
                     MapControlIconButton(
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier.size(MapControlButtonSize),
                         imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                         contentDescription = volumeContentDescription,
                         // TODO: TTS ミュート配線は別 PR で対応する
@@ -101,7 +105,7 @@ internal fun MapControls(
             }
 
             MapCompass(
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(MapControlButtonSize),
                 bearing = cameraState.cameraState.bearing,
                 contentDescription = compassContentDescription,
                 onClicked = cameraState::toggleCompassPerspective,
@@ -111,7 +115,7 @@ internal fun MapControls(
         MapZoomButtons(
             modifier = Modifier
                 .align(panelLayout.toControlsBottomAlignment())
-                .width(48.dp),
+                .width(MapControlButtonSize),
             zoomInContentDescription = zoomInContentDescription,
             zoomOutContentDescription = zoomOutContentDescription,
             onZoomInClicked = cameraState::zoomIn,
@@ -130,7 +134,8 @@ private fun MapControlIconButton(
     Surface(
         modifier = modifier,
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         tonalElevation = 6.dp,
         shadowElevation = 6.dp,
         onClick = onClicked,
@@ -157,7 +162,8 @@ private fun MapZoomButtons(
     Surface(
         modifier = modifier,
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         tonalElevation = 6.dp,
         shadowElevation = 6.dp,
     ) {
@@ -166,7 +172,7 @@ private fun MapZoomButtons(
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(MapControlButtonSize)
                     .clickable { onZoomInClicked() },
                 contentAlignment = Alignment.Center,
             ) {
@@ -178,12 +184,12 @@ private fun MapZoomButtons(
 
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 8.dp),
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
+                color = MaterialTheme.colorScheme.outlineVariant,
             )
 
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(MapControlButtonSize)
                     .clickable { onZoomOutClicked() },
                 contentAlignment = Alignment.Center,
             ) {
@@ -200,6 +206,9 @@ private const val COMPASS_NEEDLE_WIDTH_RATIO = 0.1f
 private const val COMPASS_NEEDLE_LENGTH_RATIO = 0.35f
 private const val COMPASS_NEEDLE_INSET_RATIO = 0.03f
 
+/** 地図コントロールの丸ボタンサイズ。 */
+private val MapControlButtonSize = 56.dp
+
 @Composable
 private fun MapCompass(
     bearing: Double,
@@ -211,7 +220,7 @@ private fun MapCompass(
 
     val northColor = Color(0xFFE53935)
     val southColor = Color(0xFF757575)
-    val surfaceColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    val surfaceColor = MaterialTheme.colorScheme.surface
 
     Surface(
         modifier = modifier.semantics {
@@ -219,12 +228,13 @@ private fun MapCompass(
         },
         shape = CircleShape,
         color = surfaceColor,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         tonalElevation = 6.dp,
         shadowElevation = 6.dp,
         onClick = onClicked,
     ) {
         Canvas(
-            modifier = Modifier.size(48.dp),
+            modifier = Modifier.fillMaxSize(),
         ) {
             val centerX = size.width / 2
             val centerY = size.height / 2

@@ -8,8 +8,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.matsumo.onenavi.feature.map.components.topappbar.MapRoutePreviewTopAppBar
+import me.matsumo.onenavi.feature.map.state.MapPanelLayout
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
@@ -19,9 +21,16 @@ internal fun MapRoutePreviewContent(
     screenState: MapScreenState.RoutePreview,
     uiState: MapUiState,
     isSheetOverlayVisible: Boolean,
+    panelLayout: MapPanelLayout,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val horizontalPadding = if (panelLayout.isSplit) {
+        0.dp
+    } else {
+        MAP_ROUTE_PREVIEW_TOP_APP_BAR_HORIZONTAL_PADDING
+    }
+
     Box(
         modifier = modifier,
         contentAlignment = Alignment.TopCenter,
@@ -30,7 +39,7 @@ internal fun MapRoutePreviewContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 8.dp)
+                .padding(horizontal = horizontalPadding)
                 .onGloballyPositioned {
                     onUiEvent(MapUiEvent.OnTopAppBarHeightChanged(it.size.height))
                 },
@@ -41,3 +50,6 @@ internal fun MapRoutePreviewContent(
         )
     }
 }
+
+/** ルートプレビュー TopAppBar の縦画面時の左右余白。 */
+private val MAP_ROUTE_PREVIEW_TOP_APP_BAR_HORIZONTAL_PADDING: Dp = 8.dp
