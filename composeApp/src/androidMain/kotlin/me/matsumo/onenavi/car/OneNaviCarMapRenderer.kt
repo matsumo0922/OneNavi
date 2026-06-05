@@ -10,27 +10,51 @@ import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.Display
+import android.view.MotionEvent
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.car.app.AppManager
 import androidx.car.app.CarContext
 import androidx.car.app.SurfaceCallback
 import androidx.car.app.SurfaceContainer
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.GoogleMapOptions
 import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
+import me.matsumo.onenavi.feature.map.car.CarMapControlsOverlay
 import kotlin.math.ln
 
 /**
  * Android Auto の地図サーフェスを描画するレンダラ。
  *
  * ホストから受け取った [android.view.Surface] を [VirtualDisplay] の出力にし、
- * その仮想ディスプレイ上の [Presentation] へ Google Maps の [MapView] を載せて描画する。
+ * その仮想ディスプレイ上の [Presentation] へ Google Maps の [MapView] と、
+ * その上に重ねる Compose 製の地図コントロールを載せて描画する。
  * Google Maps SDK は任意の Surface へ直接描画できないため、View 階層を持つ
  * [Presentation] を仲介させる構成を取っている。
+ *
+ * 車載画面のタッチは View 階層へ届かず、ホストから [onClick] / [onScroll] /
+ * [onScale] として通知される。コントロールのタップは [onClick] を合成 [MotionEvent]
+ * に変換して Compose へ転送することで成立させる。
  *
  * [AppManager.setSurfaceCallback] に登録して使用する。
  */
@@ -69,6 +93,7 @@ class OneNaviCarMapRenderer(
             outerContext = carContext,
             targetDisplay = createdDisplay.display,
             onMapReady = ::onMapReady,
+            onSettingClicked = { /* TODO: 車載の設定導線は別途対応する */ },
         )
         presentation.show()
         mapPresentation = presentation
@@ -80,7 +105,11 @@ class OneNaviCarMapRenderer(
 
     override fun onVisibleAreaChanged(visibleArea: Rect) {
         this.visibleArea = visibleArea
-        applyMapPadding()
+        applyVisibleArea()
+    }
+
+    override fun onClick(x: Float, y: Float) {
+        mapPresentation?.dispatchTap(x, y)
     }
 
     override fun onScroll(distanceX: Float, distanceY: Float) {
@@ -117,19 +146,20 @@ class OneNaviCarMapRenderer(
         }
 
         map.moveCamera(CameraUpdateFactory.newCameraPosition(defaultCameraPosition()))
-        applyMapPadding()
+        applyVisibleArea()
     }
 
-    private fun applyMapPadding() {
-        val map = googleMap ?: return
+    private fun applyVisibleArea() {
         val area = visibleArea ?: return
         if (area.isEmpty) return
 
-        val leftPadding = area.left.coerceAtLeast(0)
-        val topPadding = area.top.coerceAtLeast(0)
-        val rightPadding = (surfaceWidth - area.right).coerceAtLeast(0)
-        val bottomPadding = (surfaceHeight - area.bottom).coerceAtLeast(0)
-        map.setPadding(leftPadding, topPadding, rightPadding, bottomPadding)
+        val leftInset = area.left.coerceAtLeast(0)
+        val topInset = area.top.coerceAtLeast(0)
+        val rightInset = (surfaceWidth - area.right).coerceAtLeast(0)
+        val bottomInset = (surfaceHeight - area.bottom).coerceAtLeast(0)
+
+        googleMap?.setPadding(leftInset, topInset, rightInset, bottomInset)
+        mapPresentation?.updateControlsInsets(leftInset, topInset, rightInset, bottomInset)
     }
 
     private fun hasLocationPermission(): Boolean {
@@ -152,30 +182,53 @@ class OneNaviCarMapRenderer(
 }
 
 /**
- * 仮想ディスプレイ上に Google Maps の [MapView] を表示する [Presentation]。
+ * 仮想ディスプレイ上に Google Maps の [MapView] と Compose の地図コントロールを表示する [Presentation]。
  *
  * [MapView] のライフサイクルは本 [Presentation] のライフサイクルに同期させる。
+ * Compose の動作に必要な owner 群は [CarPresentationOwner] から供給する。
  */
 private class MapPresentation(
     outerContext: Context,
     targetDisplay: Display,
     private val onMapReady: (GoogleMap) -> Unit,
+    private val onSettingClicked: () -> Unit,
 ) : Presentation(outerContext, targetDisplay) {
 
+    private val composeOwner = CarPresentationOwner()
+    private val googleMapState = mutableStateOf<GoogleMap?>(null)
+
     private var mapView: MapView? = null
+    private var composeView: ComposeView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        composeOwner.onCreate()
+
+        val container = FrameLayout(context)
+        container.setViewTreeLifecycleOwner(composeOwner)
+        container.setViewTreeViewModelStoreOwner(composeOwner)
+        container.setViewTreeSavedStateRegistryOwner(composeOwner)
 
         val createdMapView = MapView(context, mapOptions())
         mapView = createdMapView
-        setContentView(createdMapView)
+        container.addView(createdMapView, matchParentLayoutParams())
+
+        val createdComposeView = createComposeView()
+        composeView = createdComposeView
+        container.addView(createdComposeView, matchParentLayoutParams())
+
+        setContentView(container)
+
         createdMapView.onCreate(null)
-        createdMapView.getMapAsync { readyMap -> onMapReady(readyMap) }
+        createdMapView.getMapAsync { readyMap ->
+            googleMapState.value = readyMap
+            onMapReady(readyMap)
+        }
     }
 
     override fun onStart() {
         super.onStart()
+        composeOwner.onResume()
         mapView?.onStart()
         mapView?.onResume()
     }
@@ -184,14 +237,56 @@ private class MapPresentation(
         super.onStop()
         mapView?.onPause()
         mapView?.onStop()
+        composeOwner.onPause()
+    }
+
+    /** ホストから通知されたタップ座標を Compose へ転送する。 */
+    fun dispatchTap(x: Float, y: Float) {
+        val targetView = composeView ?: return
+        val eventTime = SystemClock.uptimeMillis()
+        val downEvent = MotionEvent.obtain(eventTime, eventTime, MotionEvent.ACTION_DOWN, x, y, 0)
+        val upEvent = MotionEvent.obtain(eventTime, eventTime + TAP_DURATION_MS, MotionEvent.ACTION_UP, x, y, 0)
+        targetView.dispatchTouchEvent(downEvent)
+        targetView.dispatchTouchEvent(upEvent)
+        downEvent.recycle()
+        upEvent.recycle()
+    }
+
+    /** ホストの可視領域に合わせてコントロールの内側余白を更新する。 */
+    fun updateControlsInsets(left: Int, top: Int, right: Int, bottom: Int) {
+        composeView?.setPadding(left, top, right, bottom)
     }
 
     /** [MapView] を破棄して [Presentation] を閉じる。 */
     fun release() {
         mapView?.onDestroy()
         mapView = null
+        composeView = null
+        composeOwner.onDestroy()
         dismiss()
     }
+
+    private fun createComposeView(): ComposeView {
+        val view = ComposeView(context)
+        view.setContent {
+            val map = googleMapState.value
+            OneNaviTheme(drawBackground = false) {
+                if (map != null) {
+                    CarMapControlsOverlay(
+                        googleMap = map,
+                        isNavigating = false,
+                        onSettingClicked = onSettingClicked,
+                    )
+                }
+            }
+        }
+        return view
+    }
+
+    private fun matchParentLayoutParams(): ViewGroup.LayoutParams = ViewGroup.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.MATCH_PARENT,
+    )
 
     private fun mapOptions(): GoogleMapOptions = GoogleMapOptions()
         .mapType(GoogleMap.MAP_TYPE_NORMAL)
@@ -201,6 +296,52 @@ private class MapPresentation(
         .zoomControlsEnabled(false)
         .rotateGesturesEnabled(true)
         .tiltGesturesEnabled(true)
+
+    companion object {
+        /** 合成タップの押下から離上までの時間（ミリ秒）。 */
+        private const val TAP_DURATION_MS = 16L
+    }
+}
+
+/**
+ * [Presentation] 上で Compose を動かすための owner。
+ *
+ * Compose は [LifecycleOwner] / [ViewModelStoreOwner] / [SavedStateRegistryOwner] を要求するが、
+ * [Presentation] はこれらを提供しないため、本クラスが代替として供給する。
+ */
+private class CarPresentationOwner :
+    LifecycleOwner,
+    ViewModelStoreOwner,
+    SavedStateRegistryOwner {
+
+    private val lifecycleRegistry = LifecycleRegistry(this)
+    private val savedStateRegistryController = SavedStateRegistryController.create(this)
+
+    override val lifecycle: Lifecycle
+        get() = lifecycleRegistry
+
+    override val viewModelStore: ViewModelStore = ViewModelStore()
+
+    override val savedStateRegistry: SavedStateRegistry
+        get() = savedStateRegistryController.savedStateRegistry
+
+    fun onCreate() {
+        savedStateRegistryController.performRestore(null)
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+    }
+
+    fun onResume() {
+        lifecycleRegistry.currentState = Lifecycle.State.RESUMED
+    }
+
+    fun onPause() {
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+    }
+
+    fun onDestroy() {
+        lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
+        viewModelStore.clear()
+    }
 }
 
 /** 地図初期表示の緯度（東京駅付近）。 */

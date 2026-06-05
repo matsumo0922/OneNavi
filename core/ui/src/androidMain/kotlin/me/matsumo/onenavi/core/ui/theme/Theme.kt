@@ -19,6 +19,7 @@ import org.koin.compose.koinInject
 fun OneNaviTheme(
     appSetting: AppSetting = AppSetting.DEFAULT,
     appConfig: AppConfig = koinInject(),
+    drawBackground: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = rememberColorScheme(
@@ -34,10 +35,14 @@ fun OneNaviTheme(
         MaterialExpressiveTheme(
             colorScheme = colorScheme,
         ) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                content = content,
-            )
+            if (drawBackground) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    content = content,
+                )
+            } else {
+                content()
+            }
         }
     }
 }
