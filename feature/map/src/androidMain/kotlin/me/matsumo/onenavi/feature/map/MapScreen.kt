@@ -552,7 +552,7 @@ private fun MapScreenMapCanvasLayer(
             height = viewportHeightPx,
         ) {
             placeables.forEach { placeable ->
-                placeable.placeRelative(
+                placeable.place(
                     x = canvasOffsetXPx,
                     y = 0,
                 )
