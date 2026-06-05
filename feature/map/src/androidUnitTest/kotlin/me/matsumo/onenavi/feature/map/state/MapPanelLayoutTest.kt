@@ -41,7 +41,7 @@ class MapPanelLayoutTest {
     }
 
     @Test
-    fun `右 UI 帯では end padding に UI 帯幅を加算する`() {
+    fun `右 UI 帯では左右 padding に UI 帯幅を加算する`() {
         val layout = resolveMapPanelLayout(
             maxWidth = 840.dp,
             panelSide = MapPanelSide.RIGHT,
@@ -52,11 +52,11 @@ class MapPanelLayoutTest {
             panelWidthPx = 400,
         )
 
-        assertEquals(24 to 424, horizontalPadding)
+        assertEquals(424 to 424, horizontalPadding)
     }
 
     @Test
-    fun `左 UI 帯では start padding に UI 帯幅を加算する`() {
+    fun `左 UI 帯では左右 padding に UI 帯幅を加算する`() {
         val layout = resolveMapPanelLayout(
             maxWidth = 840.dp,
             panelSide = MapPanelSide.LEFT,
@@ -67,6 +67,45 @@ class MapPanelLayoutTest {
             panelWidthPx = 400,
         )
 
-        assertEquals(424 to 24, horizontalPadding)
+        assertEquals(424 to 424, horizontalPadding)
+    }
+
+    @Test
+    fun `Compact では MapView を画面幅のまま配置する`() {
+        val layout = resolveMapPanelLayout(maxWidth = 839.dp)
+
+        val canvasLayout = layout.resolveCanvasLayout(viewportWidth = 839.dp)
+
+        assertEquals(839.dp, canvasLayout.width)
+        assertEquals(0.dp, canvasLayout.offsetX)
+        assertEquals(0.dp, canvasLayout.horizontalInset)
+    }
+
+    @Test
+    fun `右 UI 帯では MapView を左へはみ出させて地図領域中心に寄せる`() {
+        val layout = resolveMapPanelLayout(
+            maxWidth = 840.dp,
+            panelSide = MapPanelSide.RIGHT,
+        )
+
+        val canvasLayout = layout.resolveCanvasLayout(viewportWidth = 840.dp)
+
+        assertEquals(1240.dp, canvasLayout.width)
+        assertEquals((-400).dp, canvasLayout.offsetX)
+        assertEquals(400.dp, canvasLayout.horizontalInset)
+    }
+
+    @Test
+    fun `左 UI 帯では MapView を右へはみ出させて地図領域中心に寄せる`() {
+        val layout = resolveMapPanelLayout(
+            maxWidth = 840.dp,
+            panelSide = MapPanelSide.LEFT,
+        )
+
+        val canvasLayout = layout.resolveCanvasLayout(viewportWidth = 840.dp)
+
+        assertEquals(1240.dp, canvasLayout.width)
+        assertEquals(0.dp, canvasLayout.offsetX)
+        assertEquals(400.dp, canvasLayout.horizontalInset)
     }
 }

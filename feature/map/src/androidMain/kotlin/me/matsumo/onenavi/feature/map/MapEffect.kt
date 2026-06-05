@@ -40,6 +40,7 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
  * @param topAppBarHeightPx ルート選択 callout が避ける上部バー高さ
  * @param bottomSheetPeekHeight ルート選択 callout が避ける bottom sheet 高さ
  * @param navigationCardHeightPx 案内中 callout が避ける下部カード高さ
+ * @param horizontalViewportPadding callout が避ける左右の画面外・UI 帯 padding
  * @param onRouteSelected ルート候補が選択された時の callback
  * @param modifier callout overlay 用 modifier
  */
@@ -55,6 +56,7 @@ internal fun MapEffect(
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
     navigationCardHeightPx: Int,
+    horizontalViewportPadding: Dp,
     onRouteSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -86,6 +88,7 @@ internal fun MapEffect(
                 googleMap = googleMap,
                 topAppBarHeightPx = topAppBarHeightPx,
                 bottomSheetPeekHeight = bottomSheetPeekHeight,
+                horizontalViewportPadding = horizontalViewportPadding,
                 onRouteSelected = onRouteSelected,
             )
         }
@@ -105,6 +108,7 @@ internal fun MapEffect(
                 cameraZoom = cameraState.cameraState.zoom,
                 topAppBarHeightPx = topAppBarHeightPx,
                 bottomSheetPeekHeight = bottomSheetPeekHeight,
+                horizontalViewportPadding = horizontalViewportPadding,
                 shouldSuppressGuidanceRouteOverlay = shouldSuppressGuidanceRouteOverlay,
                 shouldSuppressGuidanceWaypointMarkers = shouldSuppressGuidanceWaypointMarkers,
                 shouldSuppressGuidanceEndPointMarkers = shouldShowNavigationAlternativesRoutes,
@@ -157,6 +161,7 @@ internal fun MapEffect(
             googleMap = googleMap,
             topAppBarHeightPx = topAppBarHeightPx,
             bottomCardHeight = navigationCardHeight,
+            horizontalViewportPadding = horizontalViewportPadding,
         )
     }
 
@@ -227,6 +232,7 @@ private fun AddWaypointSelectedEffect(
  * @param googleMap overlay 描画先の GoogleMap
  * @param topAppBarHeightPx callout が避ける上部バー高さ
  * @param bottomCardHeight callout が避ける下部カード高さ
+ * @param horizontalViewportPadding callout が避ける左右の画面外・UI 帯 padding
  * @param modifier callout overlay 用 modifier
  */
 @Composable
@@ -235,6 +241,7 @@ private fun NavigationAlternativesEffect(
     googleMap: GoogleMap,
     topAppBarHeightPx: Int,
     bottomCardHeight: Dp,
+    horizontalViewportPadding: Dp,
     modifier: Modifier = Modifier,
 ) {
     val selectedRoute = routePreviewState.selectedRoute
@@ -273,6 +280,7 @@ private fun NavigationAlternativesEffect(
         routePreviewState = routePreviewState,
         topAppBarHeightPx = topAppBarHeightPx,
         bottomSheetPeekHeight = bottomCardHeight,
+        horizontalViewportPadding = horizontalViewportPadding,
         onRouteSelected = {},
     )
 }
@@ -368,6 +376,7 @@ private fun RouteIntermediateWaypointMarkersEffect(
  * @param googleMap overlay 描画先の GoogleMap
  * @param topAppBarHeightPx callout が避ける上部バー高さ
  * @param bottomSheetPeekHeight callout が避ける bottom sheet 高さ
+ * @param horizontalViewportPadding callout が避ける左右の画面外・UI 帯 padding
  * @param onRouteSelected ルート候補が選択された時の callback
  * @param modifier callout overlay 用 modifier
  */
@@ -378,6 +387,7 @@ private fun RoutePreviewEffect(
     googleMap: GoogleMap,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
+    horizontalViewportPadding: Dp,
     onRouteSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -431,6 +441,7 @@ private fun RoutePreviewEffect(
         routePreviewState = routePreviewState as? RoutePreviewState.Ready,
         topAppBarHeightPx = topAppBarHeightPx,
         bottomSheetPeekHeight = bottomSheetPeekHeight,
+        horizontalViewportPadding = horizontalViewportPadding,
         onRouteSelected = onRouteSelected,
     )
 }
@@ -443,6 +454,7 @@ private fun RoutePreviewEffect(
  * @param cameraZoom 現在の GoogleMap zoom
  * @param topAppBarHeightPx callout が避ける上部バー高さ
  * @param bottomSheetPeekHeight callout が避ける bottom sheet 高さ
+ * @param horizontalViewportPadding callout が避ける左右の画面外・UI 帯 padding
  * @param shouldSuppressGuidanceRouteOverlay 案内中 route overlay を一時的に非表示にするか
  * @param shouldSuppressGuidanceWaypointMarkers 案内中 waypoint marker を一時的に非表示にするか
  * @param shouldSuppressGuidanceEndPointMarkers 案内中の出発地・目的地 marker を一時的に非表示にするか
@@ -455,6 +467,7 @@ private fun NavigationEffect(
     cameraZoom: Float,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
+    horizontalViewportPadding: Dp,
     shouldSuppressGuidanceRouteOverlay: Boolean,
     shouldSuppressGuidanceWaypointMarkers: Boolean,
     shouldSuppressGuidanceEndPointMarkers: Boolean,
@@ -509,6 +522,7 @@ private fun NavigationEffect(
             guidanceState = guidanceState,
             topAppBarHeightPx = topAppBarHeightPx,
             bottomSheetPeekHeight = bottomSheetPeekHeight,
+            horizontalViewportPadding = horizontalViewportPadding,
         )
     }
 }

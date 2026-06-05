@@ -187,10 +187,11 @@ internal class MapCameraState internal constructor() {
     /**
      * 現在のモードに応じた描画 padding を GoogleMap へ適用する。
      *
-     * GoogleMap は camera target を「padding を除いた可視領域の中心」に置く。横方向は UI 帯を end
-     * padding に含め、分割レイアウトでも MapView 自体は全画面のまま左側地図領域へ camera target を
-     * 寄せる。案内中追従の縦方向は、その中心が Compact では下部カード基準、分割レイアウトでは
-     * [guidanceAnchorFraction] 基準に一致するよう上 padding を算出する。案内中以外は実 padding を使う。
+     * GoogleMap は camera target を「padding を除いた可視領域の中心」に置く。分割レイアウトでは
+     * MapView の実 viewport を UI 帯幅ぶん広げ、左右対称 padding で padded center と 3D 投影中心を
+     * 地図領域の中心へ一致させる。案内中追従の縦方向は、その中心が Compact では下部カード基準、
+     * 分割レイアウトでは [guidanceAnchorFraction] 基準に一致するよう上 padding を算出する。
+     * 案内中以外の split 縦方向は上下対称 padding にして、camera target と 3D 投影中心を一致させる。
      */
     private fun applyCameraPadding() {
         val map = googleMap ?: return

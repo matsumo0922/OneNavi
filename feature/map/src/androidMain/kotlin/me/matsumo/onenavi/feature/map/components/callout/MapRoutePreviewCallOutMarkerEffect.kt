@@ -34,6 +34,7 @@ internal fun MapRoutePreviewCallOutMarkerEffect(
     routePreviewState: RoutePreviewState.Ready?,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
+    horizontalViewportPadding: Dp,
     onRouteSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable (
@@ -75,9 +76,9 @@ internal fun MapRoutePreviewCallOutMarkerEffect(
         googleMap = googleMap,
         requests = requests,
         viewportPadding = PaddingValues(
-            start = 12.dp,
+            start = horizontalViewportPadding + 12.dp,
             top = topPadding,
-            end = 12.dp,
+            end = horizontalViewportPadding + 12.dp,
             bottom = bottomSheetPeekHeight + 12.dp,
         ),
         onCallOutClick = { index, _ ->

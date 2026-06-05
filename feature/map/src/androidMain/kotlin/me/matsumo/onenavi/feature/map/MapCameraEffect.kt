@@ -163,13 +163,19 @@ internal fun MapCameraEffect(
             basePaddingPx = horizontalBasePaddingPx,
             panelWidthPx = panelWidthPx,
         )
+        val statusBarHeightPaddingPx = with(density) { statusBarHeightPadding.toPx() }.toInt()
+        val navigationBarBottomPaddingPx = with(density) { navigationBarBottomPadding.toPx() }.toInt()
+        val splitVerticalPaddingPx = maxOf(
+            statusBarHeightPaddingPx,
+            navigationBarBottomPaddingPx,
+        )
         val topPaddingPx = if (panelLayout.isSplit) {
-            with(density) { statusBarHeightPadding.toPx() }.toInt()
+            splitVerticalPaddingPx
         } else {
-            (uiState.topAppBarHeight + with(density) { statusBarHeightPadding.toPx() }).toInt()
+            uiState.topAppBarHeight + statusBarHeightPaddingPx
         }
         val bottomPaddingPx = if (panelLayout.isSplit) {
-            with(density) { navigationBarBottomPadding.toPx() }.toInt()
+            splitVerticalPaddingPx
         } else {
             resolveCompactBottomPaddingPx(
                 hasSheetOverlay = hasSheetOverlay,

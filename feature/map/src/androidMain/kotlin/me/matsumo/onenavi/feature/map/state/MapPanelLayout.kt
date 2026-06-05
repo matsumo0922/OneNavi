@@ -25,8 +25,8 @@ internal data class MapPanelLayout(
     /**
      * GoogleMap に渡す左右 padding を返す。
      *
-     * 分割レイアウトでは MapView を全画面表示のまま UI 帯側の padding を増やし、
-     * camera target が地図領域側の padded center に来るようにする。
+     * 分割レイアウトでは MapView の実 viewport を UI 帯幅ぶん横へ広げるため、
+     * 左右に同じ inset を足して padded center と 3D 投影中心を一致させる。
      *
      * @param basePaddingPx 左右に常に確保する基本 padding（px）
      * @param panelWidthPx UI 帯の幅（px）
@@ -40,12 +40,52 @@ internal data class MapPanelLayout(
             return basePaddingPx to basePaddingPx
         }
 
-        return when (panelSide) {
-            MapPanelSide.LEFT -> basePaddingPx + panelWidthPx to basePaddingPx
-            MapPanelSide.RIGHT -> basePaddingPx to basePaddingPx + panelWidthPx
+        val splitPaddingPx = basePaddingPx + panelWidthPx
+        return splitPaddingPx to splitPaddingPx
+    }
+
+    /**
+     * MapView の実 viewport 配置を返す。
+     *
+     * 分割レイアウトでは実 MapView を画面より UI 帯幅ぶん広くし、UI 帯と反対側へはみ出させる。
+     * これにより画面全域を MapView で覆ったまま、実 viewport の中心を地図領域の中心へ置く。
+     *
+     * @param viewportWidth 画面に表示される地図コンテナ幅
+     * @return MapView の実幅・オフセット・padding 用 inset
+     */
+    fun resolveCanvasLayout(viewportWidth: Dp): MapCanvasLayout {
+        if (!isSplit) {
+            return MapCanvasLayout(
+                width = viewportWidth,
+                offsetX = 0.dp,
+                horizontalInset = 0.dp,
+            )
         }
+
+        return MapCanvasLayout(
+            width = viewportWidth + panelWidth,
+            offsetX = when (panelSide) {
+                MapPanelSide.LEFT -> 0.dp
+                MapPanelSide.RIGHT -> -panelWidth
+            },
+            horizontalInset = panelWidth,
+        )
     }
 }
+
+/**
+ * MapView の実 viewport 配置。
+ *
+ * @param width MapView に与える実幅
+ * @param offsetX 画面上に配置する X オフセット
+ * @param horizontalInset 画面外にはみ出した領域と UI 帯を避けるため左右 padding に足す幅
+ */
+@Immutable
+internal data class MapCanvasLayout(
+    val width: Dp,
+    val offsetX: Dp,
+    val horizontalInset: Dp,
+)
 
 /** 地図画面のレイアウト分岐に使う幅クラス。 */
 internal enum class MapWidthSizeClass {
