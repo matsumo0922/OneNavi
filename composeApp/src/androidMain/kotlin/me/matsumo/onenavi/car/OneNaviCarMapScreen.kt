@@ -39,12 +39,7 @@ class OneNaviCarMapScreen(
         return NavigationTemplate.Builder()
             .setActionStrip(
                 ActionStrip.Builder()
-                    .addAction(
-                        Action.Builder()
-                            .setTitle("OneNavi")
-                            .setOnClickListener { /* no-op */ }
-                            .build(),
-                    )
+                    .addAction(Action.PAN)
                     .build(),
             )
             .setMapActionStrip(
