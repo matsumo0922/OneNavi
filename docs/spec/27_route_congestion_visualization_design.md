@@ -16,7 +16,7 @@
 
 | # | ユースケース | 描画 / 出力先 | 依存 |
 |---|---|---|---|
-| UC1 | ルートプレビューの polyline 渋滞色分け | feature/home の RoutePreview Mapbox | spec 26 P1 完了 |
+| UC1 | ルートプレビューの polyline 渋滞色分け | feature/map の RoutePreview overlay | spec 26 P1 完了 |
 | UC2 | 渋滞 1 直線ストリップ UI（横帯） | feature/home の RoutePreview 下部パネル | spec 26 P1 完了 |
 | UC3 | ナビ中の地図 polyline 渋滞色分け | feature/navigation の地図 | UC1 + ナビ機能本体 |
 | UC4 | 渋滞の音声案内 | TTS（Cloud TTS Chirp 3 HD or Android TTS） | ナビ機能本体 |
@@ -59,7 +59,7 @@ internal object CongestionPalette {
 
 ### 1.2 渋滞区間の polyline 切り出しヘルパ
 
-UC1 / UC3 が共通で使う純関数。`CongestionSegment` の累積距離からルート全長に対する比率を作り、Mapbox の `line-gradient` 式の stop 列に変換する:
+UC1 / UC3 が共通で使う純関数。`CongestionSegment` の累積距離からルート全長に対する比率を作り、地図 overlay 用の stop 列に変換する:
 
 ```kotlin
 @Immutable
@@ -103,7 +103,7 @@ internal fun buildCongestionGradientStops(
 
 > ライブラリ側 `RouteGuidance.totalDistanceMeters` が無ければ Phase 1 で同時露出する。
 
-### 1.4 Mapbox の line-gradient 式に必要な前提
+### 1.4 地図 overlay の gradient 表現に必要な前提
 
 - `LineLayer` の `lineMetrics = true` を立てる（既定 false。立てないと `lineGradient` が機能しない）。
 - 既存の `MapPolylineStyle` を拡張して「渋滞色分け mode」を追加する。
@@ -123,7 +123,7 @@ internal fun buildCongestionGradientStops(
 2. `home/.../map/MapEffect`（or 等価）で `RouteItem.congestionSegments` から `buildCongestionGradientStops` を呼んで `MapPolylineStyle.congestionStops` に詰める。
 3. `MapEffect` 内の `LineLayer` 構築で `lineMetrics(true)` + `lineGradient(<expression>)` を組み立てる。stop 列は `interpolate(linear, lineProgress, [stops])` 形式。
 
-### 2.3 擬似コード（Mapbox style 構築）
+### 2.3 擬似コード（地図 overlay 構築）
 
 ```kotlin
 val gradient = interpolate {

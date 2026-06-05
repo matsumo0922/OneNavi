@@ -59,12 +59,15 @@ OneNavi は Android 向けカーナビアプリ。Google Maps 等から intent s
 - `01_project_overview.md` — コンセプト・目標
 - `02_requirements.md` — 機能/非機能要件
 - `03_technology_evaluation.md` — 技術選定・判断理由
-- `04_api_test_results.md` — Mapbox API テスト結果
 - `05_architecture.md` — システムアーキテクチャ
 - `06_pricing_analysis.md` — コスト分析
 - `07_phased_roadmap.md` — フェーズ別ロードマップ
 - `08_open_questions.md` — 未解決事項・意思決定ログ
 - `09_etc_card_detection.md` — ETC カード検出 API 調査
+- `18_external_nav_api_migration_plan.md` — 外部ナビ API 移行計画
+- `19_drive_supporter_api_integration_plan.md` — 外部ナビ API 統合計画
+- `23_route_compare_dev_tool.md` — ルート比較 dev tool
+- `28_navigating_state_and_guidance_progress_design.md` — ナビ中状態・案内進捗設計
 
 ## Tech Stack
 
@@ -77,7 +80,7 @@ OneNavi は Android 向けカーナビアプリ。Google Maps 等から intent s
 - **Navigation**: Navigation3 (androidx.navigation3)
 - **Build**: Gradle 9.4 + build-logic (Convention Plugins)
 - **Lint**: detekt + Twitter Compose Rules
-- **Map/Navigation**: Mapbox Maps SDK + Navigation SDK (未統合)
+- **Map/Navigation**: Google Maps SDK + Google Routes API + 外部ナビ API ライブラリ
 - **TTS**: Google Cloud TTS Chirp 3 HD (Laomedeia) + Android 内蔵 TTS (未統合)
 - **Toll**: Google Routes API (未統合)
 

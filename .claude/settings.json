@@ -1,7 +1,5 @@
 {
-  "enabledPlugins": {
-    "mapbox@mapbox-agent-skills": true
-  },
+  "enabledPlugins": {},
   "permissions": {
     "allow": [
       "Bash(./gradlew *compileDebugKotlinAndroid*)",
@@ -40,8 +38,6 @@
       "Bash(jar tf *)",
       "mcp__plugin_context7_context7__query-docs",
       "mcp__plugin_context7_context7__resolve-library-id",
-      "mcp__plugin_mapbox_mapbox-docs__search_mapbox_docs_tool",
-      "mcp__plugin_mapbox_mapbox-docs__get_document_tool",
       "Bash(rtk git *)",
       "Bash(rtk proxy git *)",
       "Bash(./gradlew *kspCommonMainKotlinMetadata*)",
