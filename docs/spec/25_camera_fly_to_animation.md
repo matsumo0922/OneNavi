@@ -124,7 +124,7 @@ function zoom(p0, p1) {
 
 - `t ∈ [0, 1]` を渡すと `[u_x(t), u_y(t), w(t)]` が返る。`t=0` で start、`t=1` で end。
 - `i.duration` が「自然な所要時間 (ms)」。d3 は \(S \cdot 1000 \cdot \rho / \sqrt 2\) を使う。
-  Mapbox は代わりに `speed`（screenfuls/sec）から `duration = 1000 \cdot S / speed`（概念上）を出す。
+  一部の地図 SDK は代わりに `speed`（screenfuls/sec）から `duration = 1000 \cdot S / speed`（概念上）を出す。
 - 一般ケースでは \(w(t)\) が途中で \(w_0, w_1\) より大きくなり得る = ズームアウトの弧。`d2` が小さければ
   弧はほぼ平らになり、引きが消える。`w1 - w0`（ズーム差）も `b0, b1` に効くので「現在/目標ズーム両方を見る」も満たす。
 
@@ -133,8 +133,7 @@ function zoom(p0, p1) {
 | 実装 | アルゴリズム | \(\rho\)（curve） | 速度・所要時間 |
 |---|---|---|---|
 | d3-interpolate `interpolateZoom` | van Wijk–Nuij そのまま | \(\sqrt 2 \approx 1.414\)（`.rho()` で変更可） | `S * 1000 * ρ / √2` ms |
-| Mapbox GL JS `map.flyTo` | van Wijk–Nuij（公式に明記） | `curve` = 1.42 | `speed` = 1.2 screenfuls/sec、`screenSpeed`・`minZoom`・`maxDuration` で上限制御 |
-| MapLibre GL JS / maplibre-native `flyTo` | 同上（Mapbox GL JS フォーク由来） | 1.42 | 同上 |
+| MapLibre GL JS / maplibre-native `flyTo` | van Wijk–Nuij 系 | 1.42 | `speed` 等で上限制御 |
 | deck.gl `FlyToInterpolator` | 同上 | 1.5（`curve` 引数） | `speed` 引数 |
 
 ## 3. 「Google が本当に van Wijk を使っているか」の調査結果
@@ -147,7 +146,7 @@ function zoom(p0, p1) {
   （遠距離 = 引いてから寄る / 近距離 = 引きなし / 現在 zoom と目標 zoom 両方に依存）。
 - 「画面内の見かけ速度を一定に保つ」という発想自体は van Wijk が初出ではなく、Furnas & Bederson
   の "space-scale diagrams" (1995) などにも近い議論がある。van Wijk–Nuij はその**解析解を閉形式で**
-  与えた点が価値で、以後 Mapbox / d3 / MapLibre / deck.gl などが軒並みこれを採用している。
+  与えた点が価値で、以後 d3 / MapLibre / deck.gl などがこの系統の実装を採用している。
 - Google の 3D 系 API（Photorealistic 3D Maps の `flyCameraTo` / `flyCameraAround`）は別物（3D 軌道）で、
   本件（2D `animateCamera`）とは無関係。
 
@@ -194,7 +193,7 @@ fly-to の全体所要時間に合わせて動かす（必要なら `DecelerateI
 ### 4.3 所要時間
 
 - `S`（弧長）が出るので、`durationMs = (S * 1000 * ρ / √2) * SPEED_SCALE` を基本にする。
-  - `SPEED_SCALE` を companion 定数にして体感調整できるようにする（Mapbox の `speed` 相当）。
+  - `SPEED_SCALE` を companion 定数にして体感調整できるようにする。
 - 上限 `MAX_FLY_TO_DURATION_MS` でクランプ（地球の裏側へ飛ぶときに何秒も待たされないように）。
 - 既存の `panDurationMs` / `zoomDurationMs` 個別指定とは設計が変わる（fly-to は 1 本の経路）。
   `showRouteOverview` のような「明示 duration」は `durationMs` 指定で `S` ベースを上書きできるようにする。
@@ -265,7 +264,7 @@ private fun flyCameraTo(
 
 | 定数 | 意味 | 初期値の目安 |
 |---|---|---|
-| `CAMERA_FLY_TO_RHO` | \(\rho\)。引きの大胆さ。小さい = 引かない、大きい = 大胆に引く | `1.42`（Mapbox 既定） |
+| `CAMERA_FLY_TO_RHO` | \(\rho\)。引きの大胆さ。小さい = 引かない、大きい = 大胆に引く | `1.42` |
 | `CAMERA_FLY_TO_SPEED_SCALE` | `S` 由来の所要時間に掛ける係数。大きい = ゆっくり | `1.0` 付近 |
 | `MAX_FLY_TO_DURATION_MS` | 所要時間の上限 | `2000`〜`3000` |
 | `CAMERA_FLY_TO_MIN_DISTANCE_PX` | これ未満の `d`（zoom0 worldpx）は退化ケース扱い | 小さい正の値 |
@@ -292,5 +291,4 @@ GoogleMap の体感に寄せる手順: まず `CAMERA_FLY_TO_RHO = 1.42` / `SPEE
 - van Wijk, Nuij. *A model for smooth viewing and navigation of large 2D information spaces.* IEEE TVCG 2004 — <https://vanwijk.win.tue.nl/zptvcg.pdf>
 - Mike Bostock, "Van Wijk & Nuij Zooming" (gist) — <https://gist.github.com/mbostock/600164>
 - d3-interpolate `interpolateZoom` 実装 — <https://github.com/d3/d3-interpolate/blob/main/src/zoom.js>
-- Mapbox GL JS `map.flyTo`（van Wijk 採用を明記）— <https://docs.mapbox.com/mapbox-gl-js/api/map/#map#flyto>
 - MapLibre GL JS `flyTo` — <https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#flyto>

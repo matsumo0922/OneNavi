@@ -358,7 +358,7 @@ data class GuidanceManeuverInfo(
 )
 ```
 
-- `ManeuverType` / `ManeuverModifier` は `core/model` に既存（Mapbox 時代の遺物）。不足分のみ追記し再利用する
+- `ManeuverType` / `ManeuverModifier` は `core/model` に既存（旧実装時代の型）。不足分のみ追記し再利用する
 - `guidancePointIndex` は発話既出マーク（`spoken.add((gpIndex, category, distance))`）のキーに使う
 
 ### 2.3 `LaneGuidance` / `DirectionSign` / `HighwayPanel`
@@ -504,7 +504,7 @@ core/model/src/androidMain/kotlin/me/matsumo/onenavi/core/model/
 └── (既存) ManeuverType / ManeuverModifier / RoadClass / RoutePoint  ← 再利用
 ```
 
-`core/model` の旧型（Mapbox 時代の `GuidanceEvent` / `DistanceBucket` 等）はこの仕様では参照しない。
+`core/model` の旧型（旧実装時代の `GuidanceEvent` / `DistanceBucket` 等）はこの仕様では参照しない。
 互換維持のため残っていても、`Navigating` の状態計算には使わない。
 
 ### 3.2 `CurrentLocationDataSource`

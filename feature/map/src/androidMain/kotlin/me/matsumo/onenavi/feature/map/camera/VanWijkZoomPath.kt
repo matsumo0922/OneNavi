@@ -52,7 +52,7 @@ internal class VanWijkZoomPath private constructor(
     fun naturalDurationMs(): Double = abs(arcLength) * MILLIS_PER_SECOND * rho / SQRT_2
 
     companion object {
-        /** ρ の既定値。Mapbox GL JS の `flyTo` の `curve` と同じ 1.42。 */
+        /** ρ の既定値。van Wijk–Nuij 系の fly-to 実装で広く使われる 1.42。 */
         const val DEFAULT_RHO = 1.42
 
         /** 始点と終点の水平距離の二乗がこれ未満なら退化ケース（純粋な指数ズーム）として扱う。 */

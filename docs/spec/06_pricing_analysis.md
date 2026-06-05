@@ -2,116 +2,48 @@
 
 ## Premise
 
-OneNavi は OSS として公開し、各ユーザーが自分の API キーを設定する前提。よって、各ユーザーが個別に無料枠を消費する。本分析は「1人のユーザーが個人利用する場合」の試算。
+OneNavi は OSS として公開し、Google API キーや外部ナビ API の認証情報は各ユーザーが自分で用意する前提。公開 repo は共通の認証情報を持たない。
 
 ## Service-by-Service Analysis
 
-### 1. Mapbox Maps SDK
+### 1. Google Maps SDK
 
 | Item | Value |
 |---|---|
-| Free Tier | **25,000 MAU/month** |
-| Billing Unit | Monthly Active User |
-| Individual Usage | **1 MAU** |
-| Verdict | **完全に無料枠内** |
+| Usage | 地図表示、camera、overlay |
+| Billing Unit | Google Cloud の Maps Platform 課金体系に従う |
+| Individual Usage | 個人利用の通常起動・ナビ表示 |
+| Notes | API key はユーザー側で設定する |
 
-MAU は「月に 1 回でもアプリを起動したデバイス」= 1。個人利用なら 1 MAU で固定。
-
-### 2. Mapbox Navigation SDK
+### 2. Google Routes API
 
 | Item | Value |
 |---|---|
-| Free Tier | **100 MAU / 1,000 trips per month** |
-| Billing Unit | MAU + Trips |
-| Individual Usage | 1 MAU, 月 30-60 trips（毎日 1-2 回ナビ利用として） |
-| Verdict | **完全に無料枠内** |
-
-**重要: ナビセッション中の Directions API 呼び出し（リルート等）は無料。** セッション外の Directions API 呼び出しのみ別カウント。
-
-### 3. Mapbox Directions API (セッション外)
-
-| Item | Value |
-|---|---|
-| Free Tier | **100,000 requests/month** |
+| Usage | 料金取得、route-compare 検証、補助的な route reproduction |
 | Billing Unit | Request |
-| Individual Usage | 月 100-200 requests（ルートプレビュー、検索時のルート計算） |
-| Verdict | **完全に無料枠内** |
+| Individual Usage | ルート検索・ナビ開始時の必要回数だけ |
+| Notes | turn-by-turn 案内の primary source にはしない |
 
-### 4. Mapbox Geocoding API
-
-| Item | Value |
-|---|---|
-| Free Tier | **100,000 requests/month** |
-| Billing Unit | Request |
-| Individual Usage | 月 50-100 requests（intent share がメインなので検索頻度は低い） |
-| Verdict | **完全に無料枠内** |
-
-### 5. Google Cloud TTS (Chirp 3: HD)
+### 3. Google Cloud TTS
 
 | Item | Value |
 |---|---|
-| Free Tier | **1,000,000 characters/month** (Chirp 3: HD) |
+| Usage | 高品質な日本語音声案内 |
 | Billing Unit | Characters |
-| Paid Rate | $30 / 1M characters |
-| Individual Usage Estimate | 下記参照 |
+| Fallback | Android 内蔵 TTS |
+| Notes | 定型フレーズ cache で呼び出し量を抑える |
 
-**使用量試算:**
-- 1 回のナビで平均 20 回の音声案内
-- 1 回の案内テキスト: 平均 30 文字
-- 1 回のナビ: 20 × 30 = 600 文字
-- 月 60 回ナビ: 60 × 600 = **36,000 文字/月**
-- 無料枠の **3.6%** しか使わない
-
-| Verdict | **完全に無料枠内** |
-
-**メリット:** Google Places API と同じ Google Cloud プロジェクト・API キーを共用可能。OSS ユーザーの設定負担が軽減される。
-**注意:** ストリーミング API で ~200ms のレイテンシ。対策:
-- よく使う定型フレーズ（「右折です」「直進です」等）はキャッシュ
-- ネットワーク不通時は Android 内蔵 TTS にフォールバック
-
-### 6. Google Routes API (料金計算用)
+### 4. 外部ナビ API ライブラリ
 
 | Item | Value |
 |---|---|
-| Free Tier | **$200 credit/month** (約 40,000 route requests 相当) |
-| Billing Unit | Request |
-| Individual Usage | 月 30-60 requests（ナビ開始時に 1 回料金取得） |
-| Verdict | **完全に無料枠内** |
-
-### 7. OSM Data / MLIT Data
-
-| Item | Value |
-|---|---|
-| Cost | **完全無料** |
-| License | ODbL (OSM), CC BY 4.0 (MLIT) |
-| Verdict | ライセンス表記のみ必要 |
-
-## Total Cost Summary (Individual User)
-
-| Service | Monthly Cost |
-|---|---|
-| Mapbox Maps SDK | **$0** |
-| Mapbox Navigation SDK | **$0** |
-| Mapbox Directions API | **$0** |
-| Mapbox Geocoding API | **$0** |
-| Google Cloud TTS (Chirp 3: HD) | **$0** |
-| Google Routes API | **$0** |
-| OSM / MLIT Data | **$0** |
-| **Total** | **$0/month** |
-
-**結論: 個人利用であれば全サービスが無料枠内に収まる。**
-
-## Scaling Considerations (OSS として多数ユーザーが使う場合)
-
-各ユーザーが自分の API キーを使うため、ユーザー数が増えてもプロジェクト側のコストは増えない。各ユーザーの無料枠内で個人利用は賄える。
-
-ただし、以下の場合はユーザー側で有料プランが必要になる可能性:
-- Mapbox Navigation SDK: 月 1,000 trips を超えるヘビーユーザー（配送業者等）
-- Google Cloud TTS: 月 1M 文字を超える長距離トラックドライバー等（通常は到達しない）
+| Usage | ルート検索、turn-by-turn 案内、渋滞、案内画像 |
+| Billing Unit | 別管理の private 実装・利用条件に従う |
+| Notes | 認証情報、provider 実名、製品名は公開 repo に含めない |
 
 ## Cost Optimization Strategies
 
-1. **TTS キャッシュ**: 定型フレーズをローカルにキャッシュして API 呼び出し削減
-2. **Android 内蔵 TTS フォールバック**: Google Cloud TTS 枠を節約したいユーザー向けオプション
-3. **Directions API 呼び出し最適化**: セッション外のプレビュー呼び出しを最小限に
-4. **Google Routes API は料金計算時のみ**: 不要な呼び出しを避ける
+1. Cloud TTS の定型フレーズを cache する。
+2. Android 内蔵 TTS fallback を常に維持する。
+3. Google Routes API は料金取得や検証など必要な用途に限定する。
+4. dev tool の API 呼び出しは明示操作時だけにする。

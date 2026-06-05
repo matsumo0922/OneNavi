@@ -347,7 +347,7 @@ ExtNavGuidanceTracker.onLocation(location)
 | T24 | `NavigationUpdatesService` を常駐通知 only に書き換え（feed publish 削除） | T09 | 0.5d |
 | T25 | 既存の `GuidancePlannerTest` / `SpeechDispatcherTest` 廃止。`ExtNavGuidanceTrackerTest` / `ExtNavAnnouncementSchedulerTest` / `PhonemeConverterTest` 追加 | — (並列) | 1d |
 | T26 | 実機テスト（都内→千葉 / 都内→宇都宮 の 2 ルートで golden path 確認） | 上記全部 | 1d |
-| T27 | Mapbox 関連コード・`MAPBOX_TOKEN` / `MAPBOX_DOWNLOADS_TOKEN` 撤去 | T26 | 0.5d |
+| T27 | 旧 provider 関連コード・旧 provider token 撤去 | T26 | 0.5d |
 
 **合計目安: 約 20 営業日（4 週間）**。18 番の「4〜6 週間」見積りと一致。
 
