@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.absolutePadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,27 +22,50 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.home_map_control_compass
+import me.matsumo.onenavi.core.resource.home_map_control_current_location
+import me.matsumo.onenavi.core.resource.home_map_control_zoom_in
+import me.matsumo.onenavi.core.resource.home_map_control_zoom_out
 import me.matsumo.onenavi.feature.map.state.MapCameraState
+import me.matsumo.onenavi.feature.map.state.MapPanelLayout
+import me.matsumo.onenavi.feature.map.state.MapPanelSide
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun MapControls(
     cameraState: MapCameraState,
     vehicleLocationState: VehicleLocationState?,
+    panelLayout: MapPanelLayout,
+    bottomPadding: Dp,
     isNavigating: Boolean,
     onNavigationRoutePreviewDismissed: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val compassContentDescription = stringResource(Res.string.home_map_control_compass)
+    val zoomInContentDescription = stringResource(Res.string.home_map_control_zoom_in)
+    val zoomOutContentDescription = stringResource(Res.string.home_map_control_zoom_out)
+    val currentLocationContentDescription = stringResource(Res.string.home_map_control_current_location)
+
     Box(
-        modifier = modifier.padding(16.dp),
-        contentAlignment = Alignment.BottomEnd,
+        modifier = modifier
+            .fillMaxSize()
+            .then(panelLayout.toMapAreaModifier())
+            .padding(bottom = bottomPadding)
+            .padding(16.dp),
+        contentAlignment = AbsoluteAlignment.BottomRight,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -49,11 +74,14 @@ internal fun MapControls(
             MapCompass(
                 modifier = Modifier.size(48.dp),
                 bearing = cameraState.cameraState.bearing,
+                contentDescription = compassContentDescription,
                 onClicked = cameraState::toggleCompassPerspective,
             )
 
             MapZoomButtons(
                 modifier = Modifier.width(48.dp),
+                zoomInContentDescription = zoomInContentDescription,
+                zoomOutContentDescription = zoomOutContentDescription,
                 onZoomInClicked = cameraState::zoomIn,
                 onZoomOutClicked = cameraState::zoomOut,
             )
@@ -75,7 +103,7 @@ internal fun MapControls(
                     } else {
                         Icons.Default.LocationSearching
                     },
-                    contentDescription = null,
+                    contentDescription = currentLocationContentDescription,
                 )
             }
         }
@@ -84,6 +112,8 @@ internal fun MapControls(
 
 @Composable
 private fun MapZoomButtons(
+    zoomInContentDescription: String,
+    zoomOutContentDescription: String,
     onZoomInClicked: () -> Unit,
     onZoomOutClicked: () -> Unit,
     modifier: Modifier = Modifier,
@@ -106,7 +136,7 @@ private fun MapZoomButtons(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = null,
+                    contentDescription = zoomInContentDescription,
                 )
             }
 
@@ -123,7 +153,7 @@ private fun MapZoomButtons(
             ) {
                 Icon(
                     imageVector = Icons.Default.Remove,
-                    contentDescription = null,
+                    contentDescription = zoomOutContentDescription,
                 )
             }
         }
@@ -137,6 +167,7 @@ private const val COMPASS_NEEDLE_INSET_RATIO = 0.03f
 @Composable
 private fun MapCompass(
     bearing: Double,
+    contentDescription: String,
     onClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -147,7 +178,9 @@ private fun MapCompass(
     val surfaceColor = MaterialTheme.colorScheme.surfaceContainerHigh
 
     Surface(
-        modifier = modifier,
+        modifier = modifier.semantics {
+            this.contentDescription = contentDescription
+        },
         shape = CircleShape,
         color = surfaceColor,
         tonalElevation = 6.dp,
@@ -194,5 +227,16 @@ private fun MapCompass(
                 )
             }
         }
+    }
+}
+
+private fun MapPanelLayout.toMapAreaModifier(): Modifier {
+    if (!isSplit) {
+        return Modifier
+    }
+
+    return when (panelSide) {
+        MapPanelSide.LEFT -> Modifier.absolutePadding(left = panelWidth)
+        MapPanelSide.RIGHT -> Modifier.absolutePadding(right = panelWidth)
     }
 }

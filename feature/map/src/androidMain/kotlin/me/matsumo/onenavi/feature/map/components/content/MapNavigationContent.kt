@@ -37,6 +37,7 @@ import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSearchR
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSelectedWaypointCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationWaypointEditorCard
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
+import me.matsumo.onenavi.feature.map.state.MapPanelLayout
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.NavigationGuideImage
 import org.jetbrains.compose.resources.stringResource
@@ -53,6 +54,7 @@ internal fun MapNavigationContent(
     navigationGuideImage: NavigationGuideImage?,
     overlayState: MapOverlayState,
     hazeState: HazeState,
+    panelLayout: MapPanelLayout,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -109,7 +111,11 @@ internal fun MapNavigationContent(
         modifier = modifier,
         contentAlignment = Alignment.TopCenter,
     ) {
-        val bottomFloatingCardHeight = maxHeight / 3f
+        val bottomFloatingCardHeight = if (panelLayout.isSplit) {
+            (maxHeight / 2f).coerceAtLeast(MAP_NAVIGATION_SPLIT_BOTTOM_CARD_MIN_HEIGHT)
+        } else {
+            maxHeight / 3f
+        }
         val topPanelModifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
@@ -264,6 +270,9 @@ internal fun MapNavigationContent(
         )
     }
 }
+
+/** 分割レイアウトで下部 overlay カードへ最低限確保する高さ。 */
+private val MAP_NAVIGATION_SPLIT_BOTTOM_CARD_MIN_HEIGHT = 240.dp
 
 @Composable
 private fun MapNavigationCancelDialog(

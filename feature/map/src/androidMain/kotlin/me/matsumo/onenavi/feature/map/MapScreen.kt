@@ -1,13 +1,17 @@
 package me.matsumo.onenavi.feature.map
 
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.BottomSheetScaffoldState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetScaffoldState
@@ -19,15 +23,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.PointOfInterest
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.rememberHazeState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
@@ -46,10 +55,14 @@ import me.matsumo.onenavi.feature.map.components.content.MapRoutePreviewContent
 import me.matsumo.onenavi.feature.map.components.topappbar.MapWaypointSearchScreen
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
+import me.matsumo.onenavi.feature.map.state.MapPanelLayout
+import me.matsumo.onenavi.feature.map.state.MapPanelSide
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
+import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 import me.matsumo.onenavi.feature.map.state.rememberMapCameraState
+import me.matsumo.onenavi.feature.map.state.resolveMapPanelLayout
 import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,16 +102,6 @@ fun MapScreen(modifier: Modifier = Modifier) {
     val isAddWaypointSearchOverlay = uiState.overlayState is MapOverlayState.AddWaypointSearch
     val shouldShowWaypointSearchOverlay = isAddWaypointSearchOverlay || waypointSearchOverlay != null
 
-    val controlsBottomPadding by animateDpAsState(
-        targetValue = when {
-            hasSheetOverlay -> uiState.bottomSheetPeekHeight
-            isNavigating -> navigationCardHeightDp.coerceAtLeast(navigationBarHeightDp)
-            shouldShowSheet -> uiState.bottomSheetPeekHeight
-            else -> navigationBarHeightDp
-        },
-        label = "ControlsBottomPadding",
-    )
-
     val hazeState = rememberHazeState()
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     val cameraState = rememberMapCameraState()
@@ -134,111 +137,108 @@ fun MapScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    if (googleMap != null) {
-        MapCameraEffect(
-            uiState = uiState,
-            screenState = screenState,
-            routePreviewState = routePreviewState,
-            overlayState = uiState.overlayState,
-            guidanceState = guidanceState,
-            vehicleLocationState = vehicleLocationState,
-            cameraState = cameraState,
-        )
-    }
-
-    Box(
-        modifier = modifier,
+    BoxWithConstraints(
+        modifier = modifier.fillMaxSize(),
     ) {
-        BottomSheetScaffold(
-            modifier = Modifier.fillMaxSize(),
-            scaffoldState = scaffoldState,
-            sheetPeekHeight = uiState.bottomSheetPeekHeight,
-            sheetContent = {
-                MapScreenBottomSheetContent(
-                    modifier = Modifier.fillMaxSize(),
-                    screenState = screenState,
-                    overlayState = uiState.overlayState,
-                    routePreviewState = routePreviewState,
-                    cameraState = cameraState,
-                    onUiEvent = viewModel::onUiEvent,
-                )
-            },
-        ) {
-            Box(
+        val panelLayout = remember(maxWidth) {
+            resolveMapPanelLayout(maxWidth = maxWidth)
+        }
+        val viewportWidthPx = with(density) { maxWidth.roundToPx() }
+        val viewportHeightPx = with(density) { maxHeight.roundToPx() }
+        val controlsBottomPadding by animateDpAsState(
+            targetValue = resolveMapControlsBottomPadding(
+                hasSheetOverlay = hasSheetOverlay,
+                isNavigating = isNavigating,
+                shouldShowSheet = shouldShowSheet,
+                isSplit = panelLayout.isSplit,
+                bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
+                navigationCardHeight = navigationCardHeightDp,
+                navigationBarHeight = navigationBarHeightDp,
+            ),
+            label = "ControlsBottomPadding",
+        )
+
+        googleMap?.let {
+            MapCameraEffect(
+                uiState = uiState,
+                screenState = screenState,
+                routePreviewState = routePreviewState,
+                overlayState = uiState.overlayState,
+                guidanceState = guidanceState,
+                vehicleLocationState = vehicleLocationState,
+                cameraState = cameraState,
+                panelLayout = panelLayout,
+                viewportWidthPx = viewportWidthPx,
+                viewportHeightPx = viewportHeightPx,
+            )
+        }
+
+        if (panelLayout.isSplit) {
+            MapScreenSplitLayout(
                 modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                MapItem(
-                    modifier = Modifier.fillMaxSize(),
-                    googleMap = googleMap,
-                    cameraState = cameraState,
-                    hazeState = hazeState,
-                    isDarkMode = isMapDarkMode,
-                    onMapUpdate = { googleMap = it },
-                    onPointOfInterestClicked = { pointOfInterest ->
-                        viewModel.onUiEvent(
-                            MapUiEvent.OnMapPointOfInterestSelected(
-                                placeId = pointOfInterest.placeId.orEmpty(),
-                                name = pointOfInterest.name.orEmpty(),
-                                latitude = pointOfInterest.latLng.latitude,
-                                longitude = pointOfInterest.latLng.longitude,
-                            ),
-                        )
-                    },
-                    onMapLongClicked = { latLng ->
-                        viewModel.onUiEvent(
-                            MapUiEvent.OnMapLongPressed(
-                                latitude = latLng.latitude,
-                                longitude = latLng.longitude,
-                            ),
-                        )
-                    },
-                )
-
-                googleMap?.let {
-                    MapEffect(
-                        modifier = Modifier.fillMaxSize(),
-                        screenState = screenState,
-                        routePreviewState = routePreviewState,
-                        overlayState = uiState.overlayState,
-                        guidanceState = guidanceState,
-                        vehicleLocationState = vehicleLocationState,
-                        googleMap = it,
-                        cameraState = cameraState,
-                        topAppBarHeightPx = uiState.topAppBarHeight,
-                        bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
-                        navigationCardHeightPx = uiState.navigationCardHeight,
-                        onRouteSelected = { index ->
-                            viewModel.onUiEvent(MapUiEvent.OnRouteIndexChanged(index))
-                        },
-                    )
-                }
-
-                MapScreenContent(
-                    modifier = Modifier.fillMaxSize(),
-                    uiState = uiState,
-                    screenState = screenState,
-                    guidanceState = guidanceState,
-                    cameraState = cameraState,
-                    hazeState = hazeState,
-                    onUiEvent = viewModel::onUiEvent,
-                    onSettingClicked = {
-                        navBackStack.add(Destination.Setting.Root)
-                    },
-                )
-
-                MapControls(
-                    modifier = Modifier
-                        .padding(bottom = controlsBottomPadding)
-                        .fillMaxSize(),
-                    cameraState = cameraState,
-                    vehicleLocationState = vehicleLocationState,
-                    isNavigating = isNavigating,
-                    onNavigationRoutePreviewDismissed = {
-                        viewModel.onUiEvent(MapUiEvent.OnNavigationRoutePreviewDismissed)
-                    },
-                )
-            }
+                uiState = uiState,
+                screenState = screenState,
+                routePreviewState = routePreviewState,
+                guidanceState = guidanceState,
+                vehicleLocationState = vehicleLocationState,
+                googleMap = googleMap,
+                cameraState = cameraState,
+                hazeState = hazeState,
+                panelLayout = panelLayout,
+                isMapDarkMode = isMapDarkMode,
+                controlsBottomPadding = controlsBottomPadding,
+                scaffoldState = scaffoldState,
+                onMapUpdate = { googleMap = it },
+                onPointOfInterestClicked = { pointOfInterest ->
+                    viewModel.onUiEvent(pointOfInterest.toMapPointOfInterestSelectedEvent())
+                },
+                onMapLongClicked = { latLng ->
+                    viewModel.onUiEvent(latLng.toMapLongPressedEvent())
+                },
+                onRouteSelected = { index ->
+                    viewModel.onUiEvent(MapUiEvent.OnRouteIndexChanged(index))
+                },
+                onUiEvent = viewModel::onUiEvent,
+                onSettingClicked = {
+                    navBackStack.add(Destination.Setting.Root)
+                },
+                onNavigationRoutePreviewDismissed = {
+                    viewModel.onUiEvent(MapUiEvent.OnNavigationRoutePreviewDismissed)
+                },
+            )
+        } else {
+            MapScreenCompactLayout(
+                modifier = Modifier.fillMaxSize(),
+                uiState = uiState,
+                screenState = screenState,
+                routePreviewState = routePreviewState,
+                guidanceState = guidanceState,
+                vehicleLocationState = vehicleLocationState,
+                googleMap = googleMap,
+                cameraState = cameraState,
+                hazeState = hazeState,
+                panelLayout = panelLayout,
+                isMapDarkMode = isMapDarkMode,
+                controlsBottomPadding = controlsBottomPadding,
+                scaffoldState = scaffoldState,
+                onMapUpdate = { googleMap = it },
+                onPointOfInterestClicked = { pointOfInterest ->
+                    viewModel.onUiEvent(pointOfInterest.toMapPointOfInterestSelectedEvent())
+                },
+                onMapLongClicked = { latLng ->
+                    viewModel.onUiEvent(latLng.toMapLongPressedEvent())
+                },
+                onRouteSelected = { index ->
+                    viewModel.onUiEvent(MapUiEvent.OnRouteIndexChanged(index))
+                },
+                onUiEvent = viewModel::onUiEvent,
+                onSettingClicked = {
+                    navBackStack.add(Destination.Setting.Root)
+                },
+                onNavigationRoutePreviewDismissed = {
+                    viewModel.onUiEvent(MapUiEvent.OnNavigationRoutePreviewDismissed)
+                },
+            )
         }
 
         MapWaypointSearchScreen(
@@ -275,6 +275,237 @@ fun MapScreen(modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MapScreenCompactLayout(
+    uiState: MapUiState,
+    screenState: MapScreenState,
+    routePreviewState: RoutePreviewState,
+    guidanceState: GuidanceState,
+    vehicleLocationState: VehicleLocationState?,
+    googleMap: GoogleMap?,
+    cameraState: MapCameraState,
+    hazeState: HazeState,
+    panelLayout: MapPanelLayout,
+    isMapDarkMode: Boolean,
+    controlsBottomPadding: Dp,
+    scaffoldState: BottomSheetScaffoldState,
+    onMapUpdate: (GoogleMap?) -> Unit,
+    onPointOfInterestClicked: (PointOfInterest) -> Unit,
+    onMapLongClicked: (LatLng) -> Unit,
+    onRouteSelected: (Int) -> Unit,
+    onUiEvent: (MapUiEvent) -> Unit,
+    onSettingClicked: () -> Unit,
+    onNavigationRoutePreviewDismissed: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BottomSheetScaffold(
+        modifier = modifier,
+        scaffoldState = scaffoldState,
+        sheetPeekHeight = uiState.bottomSheetPeekHeight,
+        sheetContent = {
+            MapScreenBottomSheetContent(
+                modifier = Modifier.fillMaxSize(),
+                screenState = screenState,
+                overlayState = uiState.overlayState,
+                routePreviewState = routePreviewState,
+                cameraState = cameraState,
+                onUiEvent = onUiEvent,
+            )
+        },
+    ) { _ ->
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            MapScreenMapLayer(
+                modifier = Modifier.fillMaxSize(),
+                uiState = uiState,
+                screenState = screenState,
+                routePreviewState = routePreviewState,
+                guidanceState = guidanceState,
+                vehicleLocationState = vehicleLocationState,
+                googleMap = googleMap,
+                cameraState = cameraState,
+                hazeState = hazeState,
+                isMapDarkMode = isMapDarkMode,
+                onMapUpdate = onMapUpdate,
+                onPointOfInterestClicked = onPointOfInterestClicked,
+                onMapLongClicked = onMapLongClicked,
+                onRouteSelected = onRouteSelected,
+            )
+
+            MapScreenContent(
+                modifier = Modifier.fillMaxSize(),
+                uiState = uiState,
+                screenState = screenState,
+                guidanceState = guidanceState,
+                cameraState = cameraState,
+                hazeState = hazeState,
+                panelLayout = panelLayout,
+                onUiEvent = onUiEvent,
+                onSettingClicked = onSettingClicked,
+            )
+
+            MapControls(
+                modifier = Modifier.fillMaxSize(),
+                cameraState = cameraState,
+                vehicleLocationState = vehicleLocationState,
+                panelLayout = panelLayout,
+                bottomPadding = controlsBottomPadding,
+                isNavigating = screenState is MapScreenState.Navigating,
+                onNavigationRoutePreviewDismissed = onNavigationRoutePreviewDismissed,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MapScreenSplitLayout(
+    uiState: MapUiState,
+    screenState: MapScreenState,
+    routePreviewState: RoutePreviewState,
+    guidanceState: GuidanceState,
+    vehicleLocationState: VehicleLocationState?,
+    googleMap: GoogleMap?,
+    cameraState: MapCameraState,
+    hazeState: HazeState,
+    panelLayout: MapPanelLayout,
+    isMapDarkMode: Boolean,
+    controlsBottomPadding: Dp,
+    scaffoldState: BottomSheetScaffoldState,
+    onMapUpdate: (GoogleMap?) -> Unit,
+    onPointOfInterestClicked: (PointOfInterest) -> Unit,
+    onMapLongClicked: (LatLng) -> Unit,
+    onRouteSelected: (Int) -> Unit,
+    onUiEvent: (MapUiEvent) -> Unit,
+    onSettingClicked: () -> Unit,
+    onNavigationRoutePreviewDismissed: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier,
+    ) {
+        MapScreenMapLayer(
+            modifier = Modifier.fillMaxSize(),
+            uiState = uiState,
+            screenState = screenState,
+            routePreviewState = routePreviewState,
+            guidanceState = guidanceState,
+            vehicleLocationState = vehicleLocationState,
+            googleMap = googleMap,
+            cameraState = cameraState,
+            hazeState = hazeState,
+            isMapDarkMode = isMapDarkMode,
+            onMapUpdate = onMapUpdate,
+            onPointOfInterestClicked = onPointOfInterestClicked,
+            onMapLongClicked = onMapLongClicked,
+            onRouteSelected = onRouteSelected,
+        )
+
+        MapControls(
+            modifier = Modifier.fillMaxSize(),
+            cameraState = cameraState,
+            vehicleLocationState = vehicleLocationState,
+            panelLayout = panelLayout,
+            bottomPadding = controlsBottomPadding,
+            isNavigating = screenState is MapScreenState.Navigating,
+            onNavigationRoutePreviewDismissed = onNavigationRoutePreviewDismissed,
+        )
+
+        BottomSheetScaffold(
+            modifier = Modifier
+                .width(panelLayout.panelWidth)
+                .fillMaxHeight()
+                .align(panelLayout.toPanelAlignment()),
+            scaffoldState = scaffoldState,
+            sheetPeekHeight = uiState.bottomSheetPeekHeight,
+            containerColor = Color.Transparent,
+            sheetContent = {
+                MapScreenBottomSheetContent(
+                    modifier = Modifier.fillMaxSize(),
+                    screenState = screenState,
+                    overlayState = uiState.overlayState,
+                    routePreviewState = routePreviewState,
+                    cameraState = cameraState,
+                    onUiEvent = onUiEvent,
+                )
+            },
+        ) { _ ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Transparent),
+                contentAlignment = Alignment.Center,
+            ) {
+                MapScreenContent(
+                    modifier = Modifier.fillMaxSize(),
+                    uiState = uiState,
+                    screenState = screenState,
+                    guidanceState = guidanceState,
+                    cameraState = cameraState,
+                    hazeState = hazeState,
+                    panelLayout = panelLayout,
+                    onUiEvent = onUiEvent,
+                    onSettingClicked = onSettingClicked,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapScreenMapLayer(
+    uiState: MapUiState,
+    screenState: MapScreenState,
+    routePreviewState: RoutePreviewState,
+    guidanceState: GuidanceState,
+    vehicleLocationState: VehicleLocationState?,
+    googleMap: GoogleMap?,
+    cameraState: MapCameraState,
+    hazeState: HazeState,
+    isMapDarkMode: Boolean,
+    onMapUpdate: (GoogleMap?) -> Unit,
+    onPointOfInterestClicked: (PointOfInterest) -> Unit,
+    onMapLongClicked: (LatLng) -> Unit,
+    onRouteSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        MapItem(
+            modifier = Modifier.fillMaxSize(),
+            googleMap = googleMap,
+            cameraState = cameraState,
+            hazeState = hazeState,
+            isDarkMode = isMapDarkMode,
+            onMapUpdate = onMapUpdate,
+            onPointOfInterestClicked = onPointOfInterestClicked,
+            onMapLongClicked = onMapLongClicked,
+        )
+
+        googleMap?.let {
+            MapEffect(
+                modifier = Modifier.fillMaxSize(),
+                screenState = screenState,
+                routePreviewState = routePreviewState,
+                overlayState = uiState.overlayState,
+                guidanceState = guidanceState,
+                vehicleLocationState = vehicleLocationState,
+                googleMap = it,
+                cameraState = cameraState,
+                topAppBarHeightPx = uiState.topAppBarHeight,
+                bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
+                navigationCardHeightPx = uiState.navigationCardHeight,
+                onRouteSelected = onRouteSelected,
+            )
+        }
+    }
+}
+
 @Composable
 private fun MapScreenContent(
     uiState: MapUiState,
@@ -282,6 +513,7 @@ private fun MapScreenContent(
     guidanceState: GuidanceState,
     cameraState: MapCameraState,
     hazeState: HazeState,
+    panelLayout: MapPanelLayout,
     onUiEvent: (MapUiEvent) -> Unit,
     onSettingClicked: () -> Unit,
     modifier: Modifier = Modifier,
@@ -318,6 +550,7 @@ private fun MapScreenContent(
                 navigationGuideImage = uiState.navigationGuideImage,
                 overlayState = uiState.overlayState,
                 hazeState = hazeState,
+                panelLayout = panelLayout,
                 onUiEvent = onUiEvent,
             )
         }
@@ -411,6 +644,50 @@ private fun MapScreenBottomSheetContent(
         is MapScreenState.Navigating -> Unit
         is MapScreenState.Arrived -> Unit
     }
+}
+
+private fun resolveMapControlsBottomPadding(
+    hasSheetOverlay: Boolean,
+    isNavigating: Boolean,
+    shouldShowSheet: Boolean,
+    isSplit: Boolean,
+    bottomSheetPeekHeight: Dp,
+    navigationCardHeight: Dp,
+    navigationBarHeight: Dp,
+): Dp {
+    if (isSplit) {
+        return navigationBarHeight
+    }
+
+    return when {
+        hasSheetOverlay -> bottomSheetPeekHeight
+        isNavigating -> navigationCardHeight.coerceAtLeast(navigationBarHeight)
+        shouldShowSheet -> bottomSheetPeekHeight
+        else -> navigationBarHeight
+    }
+}
+
+private fun MapPanelLayout.toPanelAlignment(): Alignment {
+    return when (panelSide) {
+        MapPanelSide.LEFT -> AbsoluteAlignment.CenterLeft
+        MapPanelSide.RIGHT -> AbsoluteAlignment.CenterRight
+    }
+}
+
+private fun PointOfInterest.toMapPointOfInterestSelectedEvent(): MapUiEvent {
+    return MapUiEvent.OnMapPointOfInterestSelected(
+        placeId = placeId.orEmpty(),
+        name = name.orEmpty(),
+        latitude = latLng.latitude,
+        longitude = latLng.longitude,
+    )
+}
+
+private fun LatLng.toMapLongPressedEvent(): MapUiEvent {
+    return MapUiEvent.OnMapLongPressed(
+        latitude = latitude,
+        longitude = longitude,
+    )
 }
 
 private val SHEET_VISIBLE_STATES = listOf(
