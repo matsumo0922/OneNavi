@@ -3,20 +3,20 @@ package me.matsumo.onenavi.feature.map.state
 /**
  * 案内中追従カメラの描画 padding を解決する純粋ロジック。
  *
- * GoogleMap は camera target を「padding を除いた可視領域の中心」に置く。案内中追従では、その中心が
- * 下部カード上端から [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上へ来るよう上 padding を算出することで、
- * 自車（camera target）を画面下部の固定位置へアンカーする。
+ * GoogleMap は camera target を「padding を除いた可視領域の中心」に置く。案内中追従では、
+ * Compact は下部カード上端から [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上、分割レイアウトは
+ * 画面下端から指定割合の位置へ padded center が来るよう上 padding を算出する。
  */
 internal object GuidanceCameraPadding {
 
     /**
      * 適用する上 padding（px）を返す。
      *
-     * 案内中追従では `padded中心 = カード上端 - margin` となる上 padding を返す。導出は
-     * `padded中心 = (H + top - bottom) / 2 = H - bottom - margin` を top について解いて
-     * `top = H - bottom - 2*margin`。アンカーは下端（[mapViewHeightPx] と下 padding）基準なので、
-     * 上部マニューバパネルの展開で実 top padding が変わっても自車位置は動かない。案内中追従でない場合や
-     * ビューの高さが未確定の場合は、実 top padding をそのまま返す。
+     * Compact 案内中追従では `padded中心 = カード上端 - margin` となる上 padding を返す。
+     * 導出は `padded中心 = (H + top - bottom) / 2 = H - bottom - margin` を top について解いて
+     * `top = H - bottom - 2*margin`。分割レイアウトでは [anchorFractionFromBottom] が指定され、
+     * `padded中心 = H - H*anchorFractionFromBottom` となる上 padding を返す。
+     * 案内中追従でない場合やビューの高さが未確定の場合は、実 top padding をそのまま返す。
      *
      * @param isGuidanceFollowActive 案内中追従として下端アンカーを使う場合 true
      * @param mapViewHeightPx 地図ビューの高さ（px）

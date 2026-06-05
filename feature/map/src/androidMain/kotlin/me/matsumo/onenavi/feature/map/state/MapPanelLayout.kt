@@ -21,6 +21,30 @@ internal data class MapPanelLayout(
     /** UI 帯を使う分割レイアウトが有効か。 */
     val isSplit: Boolean
         get() = widthSizeClass == MapWidthSizeClass.EXPANDED && panelWidth > 0.dp
+
+    /**
+     * GoogleMap に渡す左右 padding を返す。
+     *
+     * 分割レイアウトでは MapView を全画面表示のまま UI 帯側の padding を増やし、
+     * camera target が地図領域側の padded center に来るようにする。
+     *
+     * @param basePaddingPx 左右に常に確保する基本 padding（px）
+     * @param panelWidthPx UI 帯の幅（px）
+     * @return start padding と end padding
+     */
+    fun resolveHorizontalCameraPaddingPx(
+        basePaddingPx: Int,
+        panelWidthPx: Int,
+    ): Pair<Int, Int> {
+        if (!isSplit) {
+            return basePaddingPx to basePaddingPx
+        }
+
+        return when (panelSide) {
+            MapPanelSide.LEFT -> basePaddingPx + panelWidthPx to basePaddingPx
+            MapPanelSide.RIGHT -> basePaddingPx to basePaddingPx + panelWidthPx
+        }
+    }
 }
 
 /** 地図画面のレイアウト分岐に使う幅クラス。 */

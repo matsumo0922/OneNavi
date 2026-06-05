@@ -56,7 +56,6 @@ internal class MapCameraState internal constructor() {
     private var startPaddingPx: Int = 0
     private var endPaddingPx: Int = 0
     private var guidanceAnchorFraction: Float? = null
-    private var shouldAnchorFollowCameraToViewport: Boolean = false
     private var isGuidanceCameraActive: Boolean = false
     private var density: Float = DEFAULT_DENSITY
     private var lastVehiclePose: VehiclePose? = null
@@ -136,8 +135,7 @@ internal class MapCameraState internal constructor() {
      * @param bottom 下端 padding（px）
      * @param start 左端 padding（px）
      * @param end 右端 padding（px）
-     * @param guidanceAnchorFraction 案内中の自車アンカー割合。null の場合は Compact 用のカード基準を使う
-     * @param shouldAnchorFollowCameraToViewport 自車追従を projection 上の padded center へ寄せる場合 true
+     * @param guidanceAnchorFraction 案内中に自車を画面下端から置く割合。null の場合は Compact 用のカード基準を使う
      */
     fun updatePadding(
         top: Int,
@@ -145,14 +143,12 @@ internal class MapCameraState internal constructor() {
         start: Int,
         end: Int,
         guidanceAnchorFraction: Float? = null,
-        shouldAnchorFollowCameraToViewport: Boolean = false,
     ) {
         rawTopPaddingPx = top
         rawBottomPaddingPx = bottom
         startPaddingPx = start
         endPaddingPx = end
         this.guidanceAnchorFraction = guidanceAnchorFraction
-        this.shouldAnchorFollowCameraToViewport = shouldAnchorFollowCameraToViewport
         applyCameraPadding()
         moveFollowCameraIfNeeded()
     }
@@ -174,9 +170,11 @@ internal class MapCameraState internal constructor() {
     /**
      * 案内中カメラとして扱うかを更新する。
      *
-     * 案内中は自車を「下部カード上端から [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上」へ固定するため、
-     * follow 専用の下端基準 padding を使う（[applyCameraPadding]）。それ以外は実際の obstruction
-     * padding をそのまま使い、自車を可視領域の中心へ置く。モードが変わるたびに padding を再適用する。
+     * 案内中は自車を padding center へ置く。Compact では下部カード上端から
+     * [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上、分割レイアウトでは画面下端から
+     * [guidanceAnchorFraction] の位置に来るよう [applyCameraPadding] で上 padding を調整する。
+     * それ以外は実際の obstruction padding をそのまま使い、自車を可視領域の中心へ置く。
+     * モードが変わるたびに padding を再適用する。
      *
      * @param isActive 案内中カメラとして扱う場合 true
      */
@@ -189,11 +187,10 @@ internal class MapCameraState internal constructor() {
     /**
      * 現在のモードに応じた描画 padding を GoogleMap へ適用する。
      *
-     * 案内中追従では、自車（camera target）を下部カード上端から
-     * [VEHICLE_ANCHOR_MARGIN_FROM_BOTTOM_DP] 上へ置きたい。GoogleMap は camera target を
-     * 「padding を除いた可視領域の中心」に置くので、その中心がアンカー位置に一致するよう上 padding を
-     * 算出する。アンカーは下端基準なので、上部マニューバパネルの展開で実 top padding が変わっても
-     * 自車位置は動かない（tilt も SDK が padded-center 不変則で正しく扱う）。案内中以外は実 padding を使う。
+     * GoogleMap は camera target を「padding を除いた可視領域の中心」に置く。横方向は UI 帯を end
+     * padding に含め、分割レイアウトでも MapView 自体は全画面のまま左側地図領域へ camera target を
+     * 寄せる。案内中追従の縦方向は、その中心が Compact では下部カード基準、分割レイアウトでは
+     * [guidanceAnchorFraction] 基準に一致するよう上 padding を算出する。案内中以外は実 padding を使う。
      */
     private fun applyCameraPadding() {
         val map = googleMap ?: return
@@ -826,7 +823,7 @@ internal class MapCameraState internal constructor() {
     }
 
     /**
-     * 自車を camera target 中心へ置く追従カメラ位置を作る。下端アンカーは projection で別途与える。
+     * 自車を camera target へ置く追従カメラ位置を作る。画面上の表示位置は GoogleMap の padding で与える。
      *
      * @param vehiclePose frame 時点の自車 pose
      * @param current 現在のカメラ位置
@@ -929,54 +926,6 @@ internal class MapCameraState internal constructor() {
     private fun moveVehicleCamera(cameraPosition: CameraPosition) {
         val map = googleMap ?: return
         map.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
-        moveVehicleToViewportAnchorIfNeeded(
-            map = map,
-            vehicleTarget = cameraPosition.target,
-        )
-    }
-
-    /**
-     * GoogleMap が `newCameraPosition` では padding center へ target を寄せない端末でも、
-     * 自車追従だけは projection 上のアンカーへ合わせる。
-     *
-     * @param map 操作対象の GoogleMap
-     * @param vehicleTarget camera position が持つ自車 target
-     */
-    private fun moveVehicleToViewportAnchorIfNeeded(
-        map: GoogleMap,
-        vehicleTarget: LatLng,
-    ) {
-        val anchorPoint = resolveFollowViewportAnchorPoint() ?: return
-        val vehicleScreenPoint = map.projection
-            .toScreenLocation(vehicleTarget)
-            .toMapCameraScreenPoint()
-        val scrollDelta = MapCameraViewportAnchor.resolveScrollDelta(
-            vehicleScreenPoint = vehicleScreenPoint,
-            anchorPoint = anchorPoint,
-        )
-
-        if (scrollDelta.shouldApply) {
-            map.moveCamera(CameraUpdateFactory.scrollBy(scrollDelta.xPx, scrollDelta.yPx))
-        }
-    }
-
-    /**
-     * 分割レイアウトで自車追従に使う viewport アンカーを返す。
-     *
-     * @return アンカー補正が有効で viewport が確定済みならアンカー座標、そうでなければ null
-     */
-    private fun resolveFollowViewportAnchorPoint(): MapCameraScreenPoint? {
-        val hasViewportSize = mapViewWidthPx > 0 && mapViewHeightPx > 0
-        if (!shouldAnchorFollowCameraToViewport || !hasViewportSize) return null
-
-        return MapCameraViewportAnchor.resolveAnchorPoint(
-            viewportWidthPx = mapViewWidthPx,
-            viewportHeightPx = mapViewHeightPx,
-            startPaddingPx = startPaddingPx,
-            endPaddingPx = endPaddingPx,
-            topPaddingPx = resolveTopPaddingPx(),
-            bottomPaddingPx = rawBottomPaddingPx,
-        )
     }
 
     /**
@@ -987,46 +936,12 @@ internal class MapCameraState internal constructor() {
      */
     private fun isCameraTargetAwayFromVehicle(cameraPosition: CameraPosition): Boolean {
         val vehiclePose = lastVehiclePose ?: return false
-        val vehicleAwayFromAnchor = isVehicleAwayFromFollowAnchor(vehiclePose)
-        if (vehicleAwayFromAnchor != null) {
-            return vehicleAwayFromAnchor
-        }
 
         return vehicleCameraPositionFactory.isCameraTargetAwayFromVehicle(
             cameraPosition = cameraPosition,
             vehiclePose = vehiclePose,
         )
     }
-
-    /**
-     * 分割 follow 中の自車 projection がアンカーから離れているかを返す。
-     *
-     * @param vehiclePose frame 時点の自車 pose
-     * @return アンカー判定ができる場合は判定結果、通常 target 判定へ委譲すべき場合は null
-     */
-    private fun isVehicleAwayFromFollowAnchor(vehiclePose: VehiclePose): Boolean? {
-        val map = googleMap ?: return null
-        val anchorPoint = resolveFollowViewportAnchorPoint() ?: return null
-        val vehicleScreenPoint = map.projection
-            .toScreenLocation(LatLng(vehiclePose.location.latitude, vehiclePose.location.longitude))
-            .toMapCameraScreenPoint()
-
-        return MapCameraViewportAnchor.isVehicleAwayFromAnchor(
-            vehicleScreenPoint = vehicleScreenPoint,
-            anchorPoint = anchorPoint,
-            viewportHeightPx = mapViewHeightPx,
-        )
-    }
-
-    /**
-     * Android SDK の screen point をカメラアンカー計算用の値 object へ変換する。
-     *
-     * @return projection 上の screen point
-     */
-    private fun android.graphics.Point.toMapCameraScreenPoint(): MapCameraScreenPoint = MapCameraScreenPoint(
-        xPx = x.toFloat(),
-        yPx = y.toFloat(),
-    )
 
     /**
      * カメラを [target] へ van Wijk–Nuij "Smooth and efficient zooming and panning" の経路で移動させる。

@@ -27,4 +27,46 @@ class MapPanelLayoutTest {
         assertEquals(MapPanelSide.RIGHT, layout.panelSide)
         assertTrue(layout.isSplit)
     }
+
+    @Test
+    fun `Compact では左右に基本 padding だけを返す`() {
+        val layout = resolveMapPanelLayout(maxWidth = 839.dp)
+
+        val horizontalPadding = layout.resolveHorizontalCameraPaddingPx(
+            basePaddingPx = 24,
+            panelWidthPx = 400,
+        )
+
+        assertEquals(24 to 24, horizontalPadding)
+    }
+
+    @Test
+    fun `右 UI 帯では end padding に UI 帯幅を加算する`() {
+        val layout = resolveMapPanelLayout(
+            maxWidth = 840.dp,
+            panelSide = MapPanelSide.RIGHT,
+        )
+
+        val horizontalPadding = layout.resolveHorizontalCameraPaddingPx(
+            basePaddingPx = 24,
+            panelWidthPx = 400,
+        )
+
+        assertEquals(24 to 424, horizontalPadding)
+    }
+
+    @Test
+    fun `左 UI 帯では start padding に UI 帯幅を加算する`() {
+        val layout = resolveMapPanelLayout(
+            maxWidth = 840.dp,
+            panelSide = MapPanelSide.LEFT,
+        )
+
+        val horizontalPadding = layout.resolveHorizontalCameraPaddingPx(
+            basePaddingPx = 24,
+            panelWidthPx = 400,
+        )
+
+        assertEquals(424 to 24, horizontalPadding)
+    }
 }

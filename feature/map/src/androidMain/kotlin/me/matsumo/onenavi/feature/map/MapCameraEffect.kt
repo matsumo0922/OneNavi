@@ -21,7 +21,6 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapPanelLayout
-import me.matsumo.onenavi.feature.map.state.MapPanelSide
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.RouteMeterIndex
@@ -190,7 +189,6 @@ internal fun MapCameraEffect(
             } else {
                 null
             },
-            shouldAnchorFollowCameraToViewport = panelLayout.isSplit,
         )
     }
 
@@ -382,20 +380,6 @@ private fun MapCameraState.showSearchResultsOverview(results: List<SearchResultI
         )
 
         else -> showRouteOverview(points)
-    }
-}
-
-private fun MapPanelLayout.resolveHorizontalCameraPaddingPx(
-    basePaddingPx: Int,
-    panelWidthPx: Int,
-): Pair<Int, Int> {
-    if (!isSplit) {
-        return basePaddingPx to basePaddingPx
-    }
-
-    return when (panelSide) {
-        MapPanelSide.LEFT -> basePaddingPx + panelWidthPx to basePaddingPx
-        MapPanelSide.RIGHT -> basePaddingPx to basePaddingPx + panelWidthPx
     }
 }
 
