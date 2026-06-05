@@ -57,7 +57,7 @@ import sh.calvin.reorderable.ReorderableColumn
 /**
  * ナビゲーション中の未通過 waypoint を並び替え・削除するカード。
  *
- * 現在地は固定表示し、編集対象リストの最後の地点を目的地として扱う。
+ * 現在地は並び替え対象外とし、編集対象リストの最後の地点を目的地として扱う。
  */
 @Composable
 internal fun MapNavigationWaypointEditorCard(
@@ -94,8 +94,13 @@ internal fun MapNavigationWaypointEditorCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp)
-                    .padding(top = 12.dp),
+                    .padding(
+                        top = 12.dp,
+                        bottom = 12.dp,
+                    ),
             ) {
                 MapNavigationWaypointEditorOriginRow(
                     modifier = Modifier
@@ -107,16 +112,7 @@ internal fun MapNavigationWaypointEditorCard(
                 HomeMapRouteWaypointDivider(
                     modifier = Modifier.height(WaypointEditorDividerHeight),
                 )
-            }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 12.dp),
-            ) {
                 ReorderableColumn(
                     list = editingWaypoints,
                     onSettle = { fromIndex, toIndex ->

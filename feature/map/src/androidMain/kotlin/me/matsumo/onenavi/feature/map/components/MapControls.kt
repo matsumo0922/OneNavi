@@ -219,7 +219,7 @@ private fun MapCompass(
         onClick = onClicked,
     ) {
         Box(
-            modifier = Modifier.padding(4.dp),
+            modifier = Modifier.padding(6.dp),
             contentAlignment = Alignment.Center,
         ) {
             Image(
