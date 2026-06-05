@@ -155,7 +155,7 @@ internal fun MapNavigationContent(
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
                         .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                        .padding(horizontal = 16.dp)
                         .height(bottomFloatingCardHeight),
                     place = addWaypointSelected.place,
                     routePreviewState = addWaypointSelected.routePreviewState,
@@ -178,7 +178,7 @@ internal fun MapNavigationContent(
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
                         .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                        .padding(horizontal = 16.dp)
                         .height(bottomFloatingCardHeight),
                     query = addWaypointSearchResults.query,
                     results = addWaypointSearchResults.results,
@@ -198,7 +198,7 @@ internal fun MapNavigationContent(
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
                         .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                        .padding(horizontal = 16.dp)
                         .height(bottomFloatingCardHeight),
                     routePreviewState = alternativesRoutePreviewState,
                     onCloseClicked = {
@@ -217,7 +217,7 @@ internal fun MapNavigationContent(
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
                         .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                        .padding(horizontal = 16.dp)
                         .height(bottomFloatingCardHeight),
                     originWaypoint = navigationWaypointEditor.originWaypoint,
                     waypoints = navigationWaypointEditor.waypoints,
@@ -238,7 +238,7 @@ internal fun MapNavigationContent(
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
                         .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                        .padding(horizontal = 16.dp),
                     progress = etaProgress,
                     geometry = etaRoute.geometry,
                     roadClassSegments = etaRoute.roadClassSegments,
