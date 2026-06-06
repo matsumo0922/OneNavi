@@ -13,9 +13,11 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
  * - ゲートA: `ltz`(GH.ParkedNativeAppCheck)の boolean 判定(`a()`/`b()`)を true 固定。
  * - ゲートC: framework API `VirtualDeviceParams.Builder.setAllowedActivities(Set)` に OneNavi の
  *   CarActivity component を注入し、VDM の activity policy(デフォルト block)を回避。
+ * - ゲートE: `GH.ParkedAppMgr`(`lxn`)の reactive observer `lxl.eJ()` を no-op 化し、走行開始
+ *   (isParked=false)時の parked-app 蹴り出しを止めて走行中も維持する(`docs/spec/32` D34)。
  *
- * 走行維持(ゲートE)は別途 trace が必要なため含めない(停車中 PoC = STEP1a 用)。
- * 個人利用・自己責任に限る。診断のため XposedBridge と logcat の両方へログする。
+ * 個人利用・自己責任に限る。ゲートE は走行制限(注意散漫防止ガード)を意図的に無効化する内容。
+ * 診断のため XposedBridge と logcat の両方へログする。
  */
 class CarUnlockHook : IXposedHookLoadPackage {
 
@@ -27,6 +29,7 @@ class CarUnlockHook : IXposedHookLoadPackage {
         hookParkedNativeAppCheck(lpparam.classLoader)
         hookPackageListOptIn(lpparam.classLoader)
         hookAllowedActivities(lpparam.classLoader)
+        hookParkedAppDrivingEviction(lpparam.classLoader)
     }
 
     /**
@@ -86,6 +89,36 @@ class CarUnlockHook : IXposedHookLoadPackage {
         }
     }
 
+    /**
+     * ゲートE: `GH.ParkedAppMgr`(`lxn`)の reactive observer `lxl.eJ(Object)` を no-op 化する。
+     *
+     * `lxl.eJ()` は `(carToken, 起動中アプリ Map, isParked[500ms debounce])` の合成ストリームを購読し、
+     * `isParked=false`(走行開始)で isParkedOnly アプリを dashboard / 代替 Activity で押し出す本体。
+     * これを丸ごと素通しにすると parked-app は走行中も維持される。自端末は parked-app が OneNavi のみ
+     * のため全停止で実害なし(`docs/spec/32` D19/D34)。
+     *
+     * OneNavi だけ免除したい場合は外科的案として、`eJ` の引数 `lxk`(`ParkedAppState`)の Map から
+     * OneNavi の region を除外した新 `lxk` を構築して通す手もあるが、`lxk`/`mkw` の reflection が
+     * 増えもろくなるため本実装では採らない。
+     */
+    private fun hookParkedAppDrivingEviction(classLoader: ClassLoader) {
+        runCatching {
+            val evictionClass = classLoader.loadClass(PARKED_APP_EVICTION_CLASS)
+            val evictionMethods = evictionClass.declaredMethods.filter { method ->
+                method.name == PARKED_APP_EVICTION_METHOD
+            }
+            for (method in evictionMethods) {
+                XposedBridge.hookMethod(method, SkipDrivingEviction)
+                log("hooked $PARKED_APP_EVICTION_CLASS.${method.name}(${method.parameterTypes.size} args) -> no-op")
+            }
+            if (evictionMethods.isEmpty()) {
+                log("WARN: no $PARKED_APP_EVICTION_METHOD() on $PARKED_APP_EVICTION_CLASS")
+            }
+        }.onFailure {
+            log("lxl.eJ hook FAILED: $it")
+        }
+    }
+
     /** `ltz` の判定を true 固定しつつ、呼ばれたことをログする hook。 */
     private object ForceTrue : XC_MethodHook() {
         override fun beforeHookedMethod(param: MethodHookParam) {
@@ -119,6 +152,14 @@ class CarUnlockHook : IXposedHookLoadPackage {
         }
     }
 
+    /** `lxl.eJ()` を実行させず、走行開始時の parked-app 蹴り出しを止める hook。 */
+    private object SkipDrivingEviction : XC_MethodHook() {
+        override fun beforeHookedMethod(param: MethodHookParam) {
+            param.result = null
+            log("SkipDrivingEviction: ${param.method.name} -> no-op (parked app kept while driving)")
+        }
+    }
+
     private companion object {
         /** Android Auto 本体のパッケージ名。 */
         const val GEARHEAD_PACKAGE = "com.google.android.projection.gearhead"
@@ -131,6 +172,12 @@ class CarUnlockHook : IXposedHookLoadPackage {
 
         /** VDM の Activity policy を構築する framework クラス。 */
         const val VDM_BUILDER_CLASS = "android.companion.virtual.VirtualDeviceParams\$Builder"
+
+        /** 走行開始時に parked-app を蹴り出す GH.ParkedAppMgr の reactive observer(難読化名)。 */
+        const val PARKED_APP_EVICTION_CLASS = "lxl"
+
+        /** `lxl` が実装する `epu` の observer コールバックメソッド名。 */
+        const val PARKED_APP_EVICTION_METHOD = "eJ"
 
         /** OneNavi の車用 Activity の完全修飾クラス名(applicationId 接尾辞に依存しない)。 */
         const val ONENAVI_CAR_ACTIVITY = "me.matsumo.onenavi.car.CarActivity"
