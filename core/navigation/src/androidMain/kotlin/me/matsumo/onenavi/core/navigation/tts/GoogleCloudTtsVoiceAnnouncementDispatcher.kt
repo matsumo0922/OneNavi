@@ -16,6 +16,7 @@ import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispat
  * @property audioPlayer PCM 再生プレイヤー
  * @property chimePlayer ローカル案内効果音プレイヤー
  * @property audioFocusManager 発話中の AudioFocus 管理
+ * @property audioChannelResolver 発話ごとの出力チャンネル決定
  * @property apiKey 空なら一切合成を試みない (no-op)
  */
 internal class GoogleCloudTtsVoiceAnnouncementDispatcher(
@@ -23,6 +24,7 @@ internal class GoogleCloudTtsVoiceAnnouncementDispatcher(
     private val audioPlayer: PcmAudioPlayer,
     private val chimePlayer: GuidanceChimePlayer,
     private val audioFocusManager: TtsAudioFocusManager,
+    private val audioChannelResolver: NavigationAudioChannelResolver,
     private val apiKey: String,
 ) : VoiceAnnouncementDispatcher {
 
@@ -35,11 +37,12 @@ internal class GoogleCloudTtsVoiceAnnouncementDispatcher(
         val speechAudio = synthesize(content.ssml)
         if (content.cue == null && speechAudio == null) return
 
-        audioFocusManager.request()
+        val channel = audioChannelResolver.resolve()
+        audioFocusManager.request(channel)
 
         try {
-            content.cue?.let { cue -> chimePlayer.playAndAwait(cue) }
-            speechAudio?.let { audio -> audioPlayer.playAndAwait(audio) }
+            content.cue?.let { cue -> chimePlayer.playAndAwait(cue, channel) }
+            speechAudio?.let { audio -> audioPlayer.playAndAwait(audio, channel = channel) }
         } finally {
             audioFocusManager.abandon()
         }

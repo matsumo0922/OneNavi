@@ -26,12 +26,17 @@ internal class GuidanceChimePlayer(
      * 指定された案内効果音を再生し、完了まで suspend する。
      *
      * @param cue 再生する案内効果音
+     * @param channel 出力する音声チャンネル (usage)。発話と揃えて duck を一貫させる。
      */
-    suspend fun playAndAwait(cue: VoiceAnnouncementCue) {
+    suspend fun playAndAwait(
+        cue: VoiceAnnouncementCue,
+        channel: NavigationAudioChannel,
+    ) {
         when (cue) {
             VoiceAnnouncementCue.CHIME -> audioPlayer.playAndAwait(
                 audio = guidanceChimeAudio,
                 contentType = AudioAttributes.CONTENT_TYPE_SONIFICATION,
+                channel = channel,
             )
         }
     }

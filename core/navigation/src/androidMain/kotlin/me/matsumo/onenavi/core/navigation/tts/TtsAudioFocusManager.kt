@@ -19,10 +19,14 @@ internal class TtsAudioFocusManager(
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var focusRequest: AudioFocusRequest? = null
 
-    /** AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK で focus を要求する。 */
-    fun request() {
+    /**
+     * AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK で focus を要求する。
+     *
+     * @param channel 発話に使う音声チャンネル。focus 要求の usage も揃えて他アプリを duck させる。
+     */
+    fun request(channel: NavigationAudioChannel) {
         val attributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+            .setUsage(channel.usage)
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
             .build()
 

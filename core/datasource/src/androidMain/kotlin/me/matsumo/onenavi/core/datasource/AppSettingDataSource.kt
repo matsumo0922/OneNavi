@@ -96,6 +96,14 @@ class AppSettingDataSource(
         }
     }
 
+    suspend fun setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar: Boolean) = withContext(ioDispatcher) {
+        if (setting.first().useMediaAudioChannelOnCar == useMediaAudioChannelOnCar) return@withContext
+
+        preference.edit {
+            it[booleanPreferencesKey(AppSetting::useMediaAudioChannelOnCar.name)] = useMediaAudioChannelOnCar
+        }
+    }
+
     suspend fun getOrCreateExtNavDeviceUuid(): String = withContext(ioDispatcher) {
         val current = setting.first().extNavDeviceUuid
         if (current.matches(EXT_NAV_DEVICE_UUID_REGEX)) return@withContext current
