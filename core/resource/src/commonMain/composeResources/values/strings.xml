@@ -208,7 +208,7 @@
     <!-- TTS Session -->
     <string name="tts_navigation_started">音声案内を開始します。</string>
     <string name="tts_follow_traffic_rules">実際の交通規制に従って走行してください。</string>
-    <string name="tts_navigation_finished">お疲れ様でした。</string>
+    <string name="tts_navigation_finished">運転、お疲れ様でした。</string>
 
     <!-- TTS Depart (出発時の方角案内。セッション中 1 回のみ) -->
     <string name="tts_depart_north">北に進みます。</string>
