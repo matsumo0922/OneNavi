@@ -756,7 +756,7 @@ private fun resolveMapControlsBottomPadding(
     navigationBarHeight: Dp,
 ): Dp {
     if (isSplit) {
-        return navigationBarHeight
+        return if (navigationBarHeight != 0.dp) navigationBarHeight else 8.dp
     }
 
     return when {

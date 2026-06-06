@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.AlertDialog
@@ -30,6 +29,7 @@ import me.matsumo.onenavi.core.resource.common_cancel
 import me.matsumo.onenavi.core.resource.common_ok
 import me.matsumo.onenavi.core.resource.home_map_navigation_cancel_dialog_message
 import me.matsumo.onenavi.core.resource.home_map_navigation_cancel_dialog_title
+import me.matsumo.onenavi.core.ui.utils.navigationBarsBottomPaddingOrDefault
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationAlternativesCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationEtaCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationManeuverPanel
@@ -165,7 +165,7 @@ internal fun MapNavigationContent(
                         .onGloballyPositioned { coordinates ->
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
-                        .navigationBarsPadding()
+                        .navigationBarsBottomPaddingOrDefault()
                         .padding(horizontal = horizontalContentPadding)
                         .height(bottomFloatingCardHeight),
                     place = addWaypointSelected.place,
@@ -188,7 +188,7 @@ internal fun MapNavigationContent(
                         .onGloballyPositioned { coordinates ->
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
-                        .navigationBarsPadding()
+                        .navigationBarsBottomPaddingOrDefault()
                         .padding(horizontal = horizontalContentPadding)
                         .height(bottomFloatingCardHeight),
                     query = addWaypointSearchResults.query,
@@ -208,7 +208,7 @@ internal fun MapNavigationContent(
                         .onGloballyPositioned { coordinates ->
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
-                        .navigationBarsPadding()
+                        .navigationBarsBottomPaddingOrDefault()
                         .padding(horizontal = horizontalContentPadding)
                         .height(bottomFloatingCardHeight),
                     routePreviewState = alternativesRoutePreviewState,
@@ -227,7 +227,7 @@ internal fun MapNavigationContent(
                         .onGloballyPositioned { coordinates ->
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
-                        .navigationBarsPadding()
+                        .navigationBarsBottomPaddingOrDefault()
                         .padding(horizontal = horizontalContentPadding)
                         .height(bottomFloatingCardHeight),
                     originWaypoint = navigationWaypointEditor.originWaypoint,
@@ -248,7 +248,7 @@ internal fun MapNavigationContent(
                         .onGloballyPositioned { coordinates ->
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
-                        .navigationBarsPadding()
+                        .navigationBarsBottomPaddingOrDefault()
                         .padding(horizontal = horizontalContentPadding),
                     progress = etaProgress,
                     geometry = etaRoute.geometry,

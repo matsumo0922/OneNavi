@@ -40,6 +40,7 @@ internal fun MapRoutePreviewContent(
                 .fillMaxWidth()
                 .statusBarsPadding()
                 .padding(horizontal = horizontalPadding)
+                .padding(top = 8.dp)
                 .onGloballyPositioned {
                     onUiEvent(MapUiEvent.OnTopAppBarHeightChanged(it.size.height))
                 },
