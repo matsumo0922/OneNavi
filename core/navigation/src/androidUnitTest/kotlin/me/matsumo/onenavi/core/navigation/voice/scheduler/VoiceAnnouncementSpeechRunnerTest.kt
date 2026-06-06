@@ -142,9 +142,7 @@ class VoiceAnnouncementSpeechRunnerTest {
         advanceUntilIdle()
         assertEquals(listOf(OPENING_SSML), dispatcher.spoken)
 
-        dispatcher.releaseNext() // 開始アナウンス完了
-        advanceUntilIdle()
-        runner.submit(tickOf(current = 850.0)) // 完了後の tick で案内発話
+        dispatcher.releaseNext() // 開始アナウンス完了 → 保留した最新 tick を再投入せず自動で再評価
         advanceUntilIdle()
         runner.detach()
 
@@ -170,9 +168,11 @@ class VoiceAnnouncementSpeechRunnerTest {
         advanceUntilIdle()
         assertEquals(listOf(spokenSsml("m800"), WAYPOINT_SSML), dispatcher.spoken)
 
-        dispatcher.releaseNext() // 経由地通過アナウンス完了 → 案内 tick の保留解除
+        runner.submit(tickOf(current = 1_850.0)) // アナウンス中に進んだ tick は保留される
         advanceUntilIdle()
-        runner.submit(tickOf(current = 1_850.0)) // 次の案内発話を再開できる
+        assertEquals(listOf(spokenSsml("m800"), WAYPOINT_SSML), dispatcher.spoken)
+
+        dispatcher.releaseNext() // 経由地通過アナウンス完了 → 保留した最新 tick を再投入せず自動で再評価
         advanceUntilIdle()
         runner.detach()
 

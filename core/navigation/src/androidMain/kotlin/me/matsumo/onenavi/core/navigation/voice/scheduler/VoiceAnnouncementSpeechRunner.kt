@@ -50,6 +50,7 @@ internal class VoiceAnnouncementSpeechRunner(
     private var speechJob: Job? = null
     private var finalAnnouncementJob: Job? = null
     private var awaitingExclusive = false
+    private var pendingTick: VoiceTick? = null
 
     /**
      * 発話プランを attach し、event ループを開始する。進行中のセッションがあれば破棄してから始める。
@@ -112,6 +113,7 @@ internal class VoiceAnnouncementSpeechRunner(
         loopJob = null
         speechJob = null
         awaitingExclusive = false
+        pendingTick = null
         scheduler.detach()
     }
 
@@ -123,19 +125,28 @@ internal class VoiceAnnouncementSpeechRunner(
     }
 
     /**
-     * event を 1 件処理する。排他アナウンス (開始 / 経由地通過) 中は案内 tick を保留し、案内発話と重ならないようにする。
-     * tick は level トリガのため、保留しても排他アナウンス完了後の tick で再評価される。
+     * event を 1 件処理する。排他アナウンス (開始 / 経由地通過) 中は最新の案内 tick だけを [pendingTick] に保持して
+     * 案内発話と重ならないようにし、アナウンス完了 ([SpeechEvent.ExclusiveFinished]) 時にその最新 tick を再評価する。
+     * これにより排他中に発話窓へ入った案内を、新しい GPS tick を待たずに完了直後へ持ち越せる。
      */
     private fun handleEvent(event: SpeechEvent, channel: Channel<SpeechEvent>) {
         when (event) {
             is SpeechEvent.ExclusiveFinished -> {
                 awaitingExclusive = false
                 speechJob = null
+                drainPendingTick(channel)
             }
             is SpeechEvent.WaypointMilestone -> startWaypointMilestone(channel)
-            is SpeechEvent.Tick -> if (!awaitingExclusive) execute(resolveCommand(event), channel)
+            is SpeechEvent.Tick -> if (awaitingExclusive) pendingTick = event.tick else execute(resolveCommand(event), channel)
             is SpeechEvent.SpeechFinished -> execute(resolveCommand(event), channel)
         }
+    }
+
+    /** 排他アナウンス中に保持した最新 tick があれば、完了後に 1 件だけ再評価する。 */
+    private fun drainPendingTick(channel: Channel<SpeechEvent>) {
+        val tick = pendingTick ?: return
+        pendingTick = null
+        execute(resolveCommand(SpeechEvent.Tick(tick)), channel)
     }
 
     /** event をコアに渡して発話実行指示を得る。 */
