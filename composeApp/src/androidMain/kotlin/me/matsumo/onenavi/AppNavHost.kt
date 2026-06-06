@@ -13,6 +13,7 @@ import me.matsumo.onenavi.feature.billing.paywallEntry
 import me.matsumo.onenavi.feature.map.mapEntry
 import me.matsumo.onenavi.feature.setting.oss.settingLicenseEntry
 import me.matsumo.onenavi.feature.setting.settingEntry
+import me.matsumo.onenavi.feature.setting.settingVoiceCategoryEntry
 
 @Composable
 internal fun AppNavHost(
@@ -32,6 +33,7 @@ internal fun AppNavHost(
                 paywallEntry()
                 settingEntry()
                 settingLicenseEntry()
+                settingVoiceCategoryEntry()
             },
             transitionSpec = { NavigationTransitions.forwardTransition },
             popTransitionSpec = { NavigationTransitions.backwardTransition },

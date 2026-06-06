@@ -20,8 +20,8 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun SettingSwitchItem(
-    title: StringResource,
-    description: StringResource?,
+    title: String,
+    description: String?,
     value: Boolean,
     onValueChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -62,7 +62,7 @@ fun SettingSwitchItem(
         ) {
             Text(
                 modifier = Modifier.fillMaxWidth(),
-                text = stringResource(title),
+                text = title,
                 style = MaterialTheme.typography.bodyLarge,
                 color = titleColor,
             )
@@ -70,7 +70,7 @@ fun SettingSwitchItem(
             if (description != null) {
                 Text(
                     modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(description),
+                    text = description,
                     style = MaterialTheme.typography.bodyMedium,
                     color = descriptionColor,
                 )
@@ -83,4 +83,23 @@ fun SettingSwitchItem(
             onCheckedChange = { onValueChanged.invoke(it) },
         )
     }
+}
+
+@Composable
+fun SettingSwitchItem(
+    title: StringResource,
+    description: StringResource?,
+    value: Boolean,
+    onValueChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    isEnabled: Boolean = true,
+) {
+    SettingSwitchItem(
+        modifier = modifier,
+        title = stringResource(title),
+        description = description?.let { stringResource(it) },
+        value = value,
+        onValueChanged = onValueChanged,
+        isEnabled = isEnabled,
+    )
 }

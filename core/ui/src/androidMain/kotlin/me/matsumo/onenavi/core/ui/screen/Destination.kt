@@ -26,6 +26,9 @@ sealed interface Destination : NavKey {
 
         @Serializable
         data object License : Setting
+
+        @Serializable
+        data object VoiceCategory : Setting
     }
 
     companion object {
@@ -37,6 +40,7 @@ sealed interface Destination : NavKey {
                     subclass(Paywall::class, Paywall.serializer())
                     subclass(Setting.Root::class, Setting.Root.serializer())
                     subclass(Setting.License::class, Setting.License.serializer())
+                    subclass(Setting.VoiceCategory::class, Setting.VoiceCategory.serializer())
                 }
             }
         }

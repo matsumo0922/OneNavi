@@ -14,6 +14,8 @@ data class AppSetting(
     val plusMode: Boolean,
     val developerMode: Boolean,
     val useMediaAudioChannelOnCar: Boolean,
+    /** 発話を OFF にした案内カテゴリの識別子集合 (外部ナビ API の category 名)。未登録カテゴリは ON 扱い。 */
+    val disabledGuidanceCategories: Set<String>,
     val extNavDeviceUuid: String,
 ) {
     val hasPrivilege get() = plusMode || developerMode
@@ -27,6 +29,8 @@ data class AppSetting(
             plusMode = false,
             developerMode = false,
             useMediaAudioChannelOnCar = false,
+            // 走行に必須でない既定 OFF カテゴリ。VoiceAnnouncementCategoryGate.OneNaviDefault と揃えること。
+            disabledGuidanceCategories = setOf("Curve", "Scenic", "AccidentBlackSpot", "Merge"),
             extNavDeviceUuid = "",
         )
     }

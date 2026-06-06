@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.SetSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
 import me.matsumo.onenavi.core.datasource.helper.deserialize
@@ -102,6 +104,25 @@ class AppSettingDataSource(
         preference.edit {
             it[booleanPreferencesKey(AppSetting::useMediaAudioChannelOnCar.name)] = useMediaAudioChannelOnCar
         }
+    }
+
+    suspend fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) = withContext(ioDispatcher) {
+        val preferenceKey = stringPreferencesKey(AppSetting::disabledGuidanceCategories.name)
+        // edit ブロックは単一 writer で直列実行されるため、現在の永続値を読んで add/remove することで
+        // 連続タップでも read-modify-write が原子的になり、後勝ちで更新が失われない。
+        preference.edit { preferences ->
+            val current = decodeDisabledGuidanceCategories(preferences[preferenceKey])
+            val updated = if (isEnabled) current - categoryKey else current + categoryKey
+            preferences[preferenceKey] = formatter.encodeToString(SetSerializer(String.serializer()), updated)
+        }
+    }
+
+    /** 永続化された OFF カテゴリ集合をデコードする。未保存・破損時は既定値にフォールバックする。 */
+    private fun decodeDisabledGuidanceCategories(encoded: String?): Set<String> {
+        if (encoded == null) return AppSetting.DEFAULT.disabledGuidanceCategories
+        return runCatching {
+            formatter.decodeFromString(SetSerializer(String.serializer()), encoded)
+        }.getOrDefault(AppSetting.DEFAULT.disabledGuidanceCategories)
     }
 
     suspend fun getOrCreateExtNavDeviceUuid(): String = withContext(ioDispatcher) {

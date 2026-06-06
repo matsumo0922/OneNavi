@@ -41,4 +41,10 @@ class SettingViewModel(
             repository.setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar)
         }
     }
+
+    fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) {
+        viewModelScope.launch {
+            repository.setGuidanceCategoryEnabled(categoryKey, isEnabled)
+        }
+    }
 }

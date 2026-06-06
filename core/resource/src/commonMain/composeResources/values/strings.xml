@@ -164,6 +164,49 @@
     <string name="setting_sound">音声案内</string>
     <string name="setting_sound_media_channel">メディア枠で再生する</string>
     <string name="setting_sound_media_channel_description">Android Auto 接続中、ナビ音声を通知ではなくメディア枠で再生します。車種によっては高音質化処理が適用されます。再生中の音楽は小さく流れ続けます。</string>
+    <string name="setting_sound_category">案内カテゴリ別の発話</string>
+    <string name="setting_sound_category_description">案内の種類ごとに、発話する・しないを選べます。</string>
+
+    <!-- Setting Voice Category -->
+    <string name="setting_voice_category_title">案内カテゴリ別の発話</string>
+    <string name="setting_voice_category_intersection_guide">「次の信号を右です」など、曲がる場所をお知らせします。</string>
+    <string name="setting_voice_category_intersection_guide_soon">曲がる直前に「まもなく右です」ともう一度教えます。</string>
+    <string name="setting_voice_category_speed_adjustment">制限速度が変わるときにお知らせします。</string>
+    <string name="setting_voice_category_accident_black_spot">事故の多い場所にさしかかると注意を呼びかけます。</string>
+    <string name="setting_voice_category_wrong_way_driving">逆走しているおそれがあるときに警告します。</string>
+    <string name="setting_voice_category_highway_recommended_lane">高速の分岐手前で、寄っておくとよい車線をお知らせします。</string>
+    <string name="setting_voice_category_highway_recommended_lane_jam_aware">渋滞を考えて、高速の分岐手前で走るとよい車線をお知らせします。</string>
+    <string name="setting_voice_category_landmark">「〇〇を目印に右です」と、目印になる建物などで案内します。</string>
+    <string name="setting_voice_category_road_name">これから走る道路の名前をお知らせします。</string>
+    <string name="setting_voice_category_turn_attention">見落としやすい曲がり角や狭い交差点で注意を促します。</string>
+    <string name="setting_voice_category_local_road_direction">「〇〇方面」と、進む方向をお知らせします。</string>
+    <string name="setting_voice_category_traffic_light">「次の信号を」など、信号を目印に案内します。</string>
+    <string name="setting_voice_category_wrong_entry">入れない場所に進みそうなときに警告します。</string>
+    <string name="setting_voice_category_auto_expressway_entry">料金所や IC で高速に入るときに前もってお知らせします。</string>
+    <string name="setting_voice_category_orbis">オービス (速度の自動取締機) が近いときにお知らせします。</string>
+    <string name="setting_voice_category_scenic">景色のよい観光地や名所のそばでお知らせします。</string>
+    <string name="setting_voice_category_local_lane_exclusive">バスや路面電車などの専用レーンに注意を促します。</string>
+    <string name="setting_voice_category_merge">この先で合流があることを前もってお知らせします。</string>
+    <string name="setting_voice_category_traffic_jam">「この先〇km 渋滞」など、渋滞の情報をお知らせします。</string>
+    <string name="setting_voice_category_regulation">通行止めや車線規制、工事などの規制をお知らせします。</string>
+    <string name="setting_voice_category_flood">雨のときなど、冠水しやすい場所で注意を呼びかけます。</string>
+    <string name="setting_voice_category_zone30">生活道路の 30km/h 規制エリア (ゾーン30) をお知らせします。</string>
+    <string name="setting_voice_category_railway_crossing">「この先、踏切です」と踏切を案内します。</string>
+    <string name="setting_voice_category_police_trap">速度の取締りが行われやすい場所でお知らせします。</string>
+    <string name="setting_voice_category_merge_attention">合流する車が多い区間で、いつもより強めに注意を促します。</string>
+    <string name="setting_voice_category_highway_construction_pr">長く続く高速の工事区間を前もってお知らせします。</string>
+    <string name="setting_voice_category_regulation_break">規制区間を抜けたときにお知らせします。</string>
+    <string name="setting_voice_category_highway_lane_reduction">「この先、車線が減少します」と高速の車線減少を案内します。</string>
+    <string name="setting_voice_category_stop_line">「一時停止です」と一時停止をお知らせします。</string>
+    <string name="setting_voice_category_narrow_street">狭い生活道路に入るときに注意を促します。</string>
+    <string name="setting_voice_category_oncoming_car">狭い道での対向車とのすれ違いに注意を促します。</string>
+    <string name="setting_voice_category_vehicle_height">低い高架や道幅の狭い区間で注意を呼びかけます。</string>
+    <string name="setting_voice_category_curve">急なカーブの手前で注意を促します。</string>
+    <string name="setting_voice_category_sag_part">渋滞の起点になりやすい谷状の区間 (サグ部) で注意を促します。</string>
+    <string name="setting_voice_category_tunnel_branch">トンネル内の分岐を前もってお知らせします。</string>
+    <string name="setting_voice_category_pedestrian_crossing">横断歩道や歩行者の多い場所で注意を促します。</string>
+    <string name="setting_voice_category_jam_scale_trend">「渋滞が伸びています」など、渋滞の変化をお知らせします。</string>
+    <string name="setting_voice_category_uphill_lane">登坂車線があるときにお知らせします。</string>
 
     <!-- Setting Paywall -->
     <string name="setting_paywall_title">Pro</string>

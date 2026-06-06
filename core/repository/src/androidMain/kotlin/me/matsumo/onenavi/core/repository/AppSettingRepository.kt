@@ -27,4 +27,7 @@ class AppSettingRepository(
 
     suspend fun setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar: Boolean) =
         dataSource.setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar)
+
+    suspend fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) =
+        dataSource.setGuidanceCategoryEnabled(categoryKey, isEnabled)
 }

@@ -27,6 +27,7 @@ import me.matsumo.onenavi.core.navigation.tts.NavigationAudioChannelResolver
 import me.matsumo.onenavi.core.navigation.tts.PcmAudioPlayer
 import me.matsumo.onenavi.core.navigation.tts.TtsAudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.TtsSigningCertificate
+import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementCategoryGateResolver
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispatcher
@@ -71,9 +72,11 @@ val navigationModule: Module = module {
             apiKey = appConfig.googleCloudTtsApiKey,
         )
     }
+    single { VoiceAnnouncementCategoryGateResolver(appSettingRepository = get()) }
     single {
+        val gateResolver = get<VoiceAnnouncementCategoryGateResolver>()
         VoiceAnnouncementContentRenderer(
-            categoryGate = get<VoiceAnnouncementConfig>().categoryGates,
+            categoryGateProvider = gateResolver::resolve,
         )
     }
     single {
