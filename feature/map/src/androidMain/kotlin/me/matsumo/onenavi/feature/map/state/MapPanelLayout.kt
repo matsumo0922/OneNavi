@@ -3,12 +3,14 @@ package me.matsumo.onenavi.feature.map.state
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import me.matsumo.onenavi.feature.map.components.MapControlButtonSize
+import me.matsumo.onenavi.feature.map.components.MapControlsHorizontalPadding
 
 /**
  * 地図画面の幅クラスと UI 帯の寸法・配置側。
  *
  * @param widthSizeClass 地図画面の幅クラス
- * @param panelWidth UI 帯の幅。Compact では 0dp
+ * @param panelWidth UI 帯の幅。Compact では 0dp。Expanded では上限 [MAP_PANEL_MAX_WIDTH] でクランプ
  * @param panelSide UI 帯を置く物理側
  */
 @Immutable
@@ -136,7 +138,8 @@ internal fun resolveMapPanelLayout(
     maxWidth: Dp,
     panelSide: MapPanelSide = MapPanelSide.RIGHT,
 ): MapPanelLayout {
-    val widthSizeClass = if (maxWidth >= MAP_PANEL_EXPANDED_MIN_WIDTH) {
+    val isExpanded = maxWidth >= MAP_PANEL_EXPANDED_MIN_WIDTH
+    val widthSizeClass = if (isExpanded) {
         MapWidthSizeClass.EXPANDED
     } else {
         MapWidthSizeClass.COMPACT
@@ -144,23 +147,37 @@ internal fun resolveMapPanelLayout(
 
     return MapPanelLayout(
         widthSizeClass = widthSizeClass,
-        panelWidth = if (widthSizeClass == MapWidthSizeClass.EXPANDED) {
-            MAP_PANEL_WIDTH
-        } else {
-            0.dp
-        },
+        panelWidth = if (isExpanded) resolvePanelWidth(maxWidth) else 0.dp,
         panelSide = panelSide,
     )
 }
 
-/** 分割レイアウトへ切り替える画面幅。 */
-internal val MAP_PANEL_EXPANDED_MIN_WIDTH = 840.dp
+/**
+ * 分割レイアウトでの UI 帯幅を解決する。
+ *
+ * 可視地図領域が常に画面幅の [MAP_VISIBLE_MIN_WIDTH_RATIO] 以上を保てるよう、UI 帯と
+ * map controls カラム（[MAP_CONTROLS_COLUMN_WIDTH]）の合計を残りの比率以下に収める。
+ * 算出値の上限は [MAP_PANEL_MAX_WIDTH] で、画面が十分広いときはこの固定上限で頭打ちになる。
+ *
+ * @param maxWidth 地図画面に与えられた最大幅
+ * @return 上限 [MAP_PANEL_MAX_WIDTH] でクランプした UI 帯幅
+ */
+private fun resolvePanelWidth(maxWidth: Dp): Dp {
+    val panelSideMaxWidth = maxWidth * (1f - MAP_VISIBLE_MIN_WIDTH_RATIO) - MAP_CONTROLS_COLUMN_WIDTH
+    return panelSideMaxWidth.coerceIn(0.dp, MAP_PANEL_MAX_WIDTH)
+}
 
-/** 分割レイアウトで使う UI 帯の固定幅。 */
-internal val MAP_PANEL_WIDTH = 400.dp
+/** 分割レイアウトへ切り替える画面幅。 */
+internal val MAP_PANEL_EXPANDED_MIN_WIDTH = 560.dp
+
+/** 分割レイアウトで使う UI 帯の最大幅。実際の幅は画面幅に応じてこれ以下に縮みうる。 */
+internal val MAP_PANEL_MAX_WIDTH = 400.dp
+
+/** 分割レイアウトで可視地図領域に最低限確保する画面幅比率。 */
+private const val MAP_VISIBLE_MIN_WIDTH_RATIO = 0.45f
 
 /**
  * 分割レイアウトで UI 帯側に確保する map controls カラムの占有幅。
- * controls UI（FAB 56dp + 画面端 16dp）。
+ * 丸ボタン（[MapControlButtonSize]）と画面端からの左右 padding（[MapControlsHorizontalPadding]）の合計。
  */
-internal val MAP_CONTROLS_COLUMN_WIDTH = 88.dp
+internal val MAP_CONTROLS_COLUMN_WIDTH = MapControlButtonSize + MapControlsHorizontalPadding * 2
