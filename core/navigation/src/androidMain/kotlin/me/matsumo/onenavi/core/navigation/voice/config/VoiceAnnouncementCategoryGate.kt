@@ -38,12 +38,16 @@ internal data class VoiceAnnouncementCategoryGate(
         /**
          * N 社のナビアプリのデフォルト発話 ON/OFF に揃えたゲート。
          *
-         * 現状は issue #41 §Q4 で OFF 例として挙がっている [GuidanceCategory.Curve] のみを
-         * 暫定で OFF にしている。完全なデフォルト表 (外部ナビ API 側の発話オプション) との
-         * 突き合わせは Phase 4 で確定する。
+         * issue #41 §Q4 で OFF 例として挙がっている [GuidanceCategory.Curve] に加え、
+         * 走行に必須でない [GuidanceCategory.Scenic] / [GuidanceCategory.AccidentBlackSpot] /
+         * [GuidanceCategory.Merge] を暫定で OFF にしている。完全なデフォルト表
+         * (外部ナビ API 側の発話オプション) との突き合わせは Phase 4 で確定する。
          */
         val OneNaviDefault = of(
             GuidanceCategory.Curve to false,
+            GuidanceCategory.Scenic to false,
+            GuidanceCategory.AccidentBlackSpot to false,
+            GuidanceCategory.Merge to false,
         )
 
         /**
