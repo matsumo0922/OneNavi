@@ -84,6 +84,7 @@ internal fun MapPlaceDetailSheet(
     val navigationBarHeightDp = WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
+        .takeIf { it > 0.dp } ?: 8.dp
 
     val plusCode = remember(selectedResult) {
         OpenLocationCode.encode(selectedResult.latitude, selectedResult.longitude)

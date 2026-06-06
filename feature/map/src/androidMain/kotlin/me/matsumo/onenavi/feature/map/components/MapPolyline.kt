@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.Polyline
@@ -26,25 +27,28 @@ import me.matsumo.onenavi.core.ui.theme.RouteColors
  * 渋滞区間 (`congestionSegments`) は本体の上に赤 / オレンジのオーバーレイを重ねるため
  * 枠線の濃色はそのまま透けて見える。
  *
+ * 線幅は dp で保持し、描画先 display の density で px へ換算する（`Polyline.width` は screen px 指定の
+ * ため、密度の異なる display（スマホ / 車 display）でも見かけの太さを揃える）。
+ *
  * @param borderColor 枠線（外側）の色。道路種別で塗り分ける場合は使われない。
  * @param bodyColor 本体（内側）の色。道路種別で塗り分ける場合は使われない。
- * @param bodyWidthPx 本体の線幅 (px)
- * @param borderWidthPx 枠線の線幅 (px)
+ * @param bodyWidthDp 本体の線幅 (dp)
+ * @param borderWidthDp 枠線の線幅 (dp)
  * @param zIndex 描画順。値が大きいほど前面に描画される
  */
 internal enum class MapPolylineStyle(
     val borderColor: Color,
     val bodyColor: Color,
-    val bodyWidthPx: Float,
-    val borderWidthPx: Float,
+    val bodyWidthDp: Float,
+    val borderWidthDp: Float,
     val zIndex: Float,
 ) {
     /** 選択中ルート: 濃い青の枠線 + 最前面に描画。道路種別があれば種別ごとに塗り分ける。 */
     Selected(
         borderColor = Color(0xFF1A56C7),
         bodyColor = Color(0xFF4DA6F7),
-        bodyWidthPx = 16f,
-        borderWidthPx = 24f,
+        bodyWidthDp = 6.4f,
+        borderWidthDp = 9.6f,
         zIndex = 10f,
     ),
 
@@ -52,8 +56,8 @@ internal enum class MapPolylineStyle(
     Unselected(
         borderColor = Color(0xFF59698C),
         bodyColor = Color(0xFF9DACC8),
-        bodyWidthPx = 12f,
-        borderWidthPx = 18f,
+        bodyWidthDp = 4.8f,
+        borderWidthDp = 7.2f,
         zIndex = 0f,
     ),
 }
@@ -79,7 +83,11 @@ internal fun MapPolyline(
     roadClassSegments: ImmutableList<RoadClassSegment> = persistentListOf(),
     congestionSegments: ImmutableList<CongestionSegment> = persistentListOf(),
 ) {
-    DisposableEffect(googleMap, points, style, roadClassSegments, congestionSegments) {
+    val density = LocalDensity.current.density
+    val bodyWidthPx = style.bodyWidthDp * density
+    val borderWidthPx = style.borderWidthDp * density
+
+    DisposableEffect(googleMap, points, style, roadClassSegments, congestionSegments, density) {
         val latLngPoints = points.map { LatLng(it.latitude, it.longitude) }
         val polylines = mutableListOf<Polyline>()
 
@@ -95,14 +103,14 @@ internal fun MapPolyline(
                 PolylineOptions()
                     .addAll(latLngPoints)
                     .color(style.borderColor.toArgb())
-                    .width(style.borderWidthPx)
+                    .width(borderWidthPx)
                     .zIndex(style.zIndex),
             )
             polylines += googleMap.addPolyline(
                 PolylineOptions()
                     .addAll(latLngPoints)
                     .color(style.bodyColor.toArgb())
-                    .width(style.bodyWidthPx)
+                    .width(bodyWidthPx)
                     .zIndex(style.zIndex + ROUTE_BODY_Z_OFFSET),
             )
         } else {
@@ -113,7 +121,7 @@ internal fun MapPolyline(
                     PolylineOptions()
                         .addAll(latLngPoints.subList(segment.startPointIndex, segment.endPointIndex + 1))
                         .color(RouteColors.polyline(segment.roadClass).border.toArgb())
-                        .width(style.borderWidthPx)
+                        .width(borderWidthPx)
                         .zIndex(style.zIndex),
                 )
             }
@@ -122,7 +130,7 @@ internal fun MapPolyline(
                     PolylineOptions()
                         .addAll(latLngPoints.subList(segment.startPointIndex, segment.endPointIndex + 1))
                         .color(RouteColors.polyline(segment.roadClass).body.toArgb())
-                        .width(style.bodyWidthPx)
+                        .width(bodyWidthPx)
                         .zIndex(style.zIndex + ROUTE_BODY_Z_OFFSET),
                 )
             }
@@ -151,7 +159,7 @@ internal fun MapPolyline(
                 PolylineOptions()
                     .addAll(latLngPoints.subList(startIndex, endIndex + 1))
                     .color(overlayColor.toArgb())
-                    .width(style.bodyWidthPx)
+                    .width(bodyWidthPx)
                     .zIndex(style.zIndex + CONGESTION_OVERLAY_Z_OFFSET),
             )
         }

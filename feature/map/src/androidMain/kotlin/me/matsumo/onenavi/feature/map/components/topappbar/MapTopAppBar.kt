@@ -2,6 +2,7 @@ package me.matsumo.onenavi.feature.map.components.topappbar
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -154,6 +155,7 @@ internal fun MapTopAppBar(
                 appBarContainerColor = Color.Transparent,
                 searchBarColors = SearchBarDefaults.colors(MaterialTheme.colorScheme.surfaceContainerLow),
             ),
+            contentPadding = PaddingValues(top = 4.dp),
             windowInsets = WindowInsets(0),
         )
 

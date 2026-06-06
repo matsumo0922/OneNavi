@@ -66,6 +66,7 @@ internal fun MapRoutePreviewSheet(
     val navigationBarHeightDp = WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
+        .takeIf { it > 0.dp } ?: 8.dp
 
     Column(
         modifier = modifier.onGloballyPositioned { coordinates ->
