@@ -44,18 +44,7 @@ class SettingViewModel(
 
     fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) {
         viewModelScope.launch {
-            val current = repository.setting.value.disabledGuidanceCategories
-            val updated = nextDisabledCategories(current, categoryKey, isEnabled)
-            repository.setDisabledGuidanceCategories(updated)
+            repository.setGuidanceCategoryEnabled(categoryKey, isEnabled)
         }
-    }
-
-    /** ON なら OFF 集合から除外し、OFF なら追加した新しい OFF 集合を返す。 */
-    private fun nextDisabledCategories(
-        current: Set<String>,
-        categoryKey: String,
-        isEnabled: Boolean,
-    ): Set<String> {
-        return if (isEnabled) current - categoryKey else current + categoryKey
     }
 }
