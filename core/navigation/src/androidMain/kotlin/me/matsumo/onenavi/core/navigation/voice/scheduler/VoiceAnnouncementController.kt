@@ -59,6 +59,16 @@ internal class VoiceAnnouncementController(
         speechRunner.submit(tickFactory.from(snapshot))
     }
 
+    /** 経由地通過アナウンスを発話する。進行中の案内発話へ割り込んでから発話する。 */
+    fun announceWaypointApproach() {
+        speechRunner.announceWaypointApproach()
+    }
+
+    /** 目的地到達アナウンスを発話する。案内 session 終了と同時でも鳴り切る。 */
+    fun announceDestinationReached() {
+        speechRunner.announceDestinationReached()
+    }
+
     /** 音声案内を停止し、発話プランと進行中の発話を破棄する。 */
     fun stop() {
         speechRunner.detach()

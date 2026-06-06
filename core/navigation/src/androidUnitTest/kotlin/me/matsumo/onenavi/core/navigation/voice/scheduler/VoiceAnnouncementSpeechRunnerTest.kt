@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
+import me.matsumo.onenavi.core.navigation.tts.MilestoneAnnouncementProvider
 import me.matsumo.onenavi.core.navigation.tts.OpeningAnnouncementProvider
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementCategoryGate
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
@@ -150,6 +151,53 @@ class VoiceAnnouncementSpeechRunnerTest {
         assertEquals(listOf(OPENING_SSML, spokenSsml("m800")), dispatcher.spoken)
     }
 
+    @Test
+    fun `経由地通過アナウンスは進行中の案内発話へ割り込み、完了後に案内発話を再開する`() = runTest {
+        val dispatcher = GatingDispatcher()
+        val runner = runnerOf(dispatcher, this)
+        runner.attach(
+            planOf(
+                targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0)),
+                targetOf(index = 1, geometryMeters = 2_000.0, middleStage("m1800", 1_800.0)),
+            ),
+        )
+
+        runner.submit(tickOf(current = 850.0)) // m800 を発話開始 (gate で保留)
+        advanceUntilIdle()
+        assertEquals(listOf(spokenSsml("m800")), dispatcher.spoken)
+
+        runner.announceWaypointApproach() // 割り込み → m800 を中断し経由地通過を発話
+        advanceUntilIdle()
+        assertEquals(listOf(spokenSsml("m800"), WAYPOINT_SSML), dispatcher.spoken)
+
+        dispatcher.releaseNext() // 経由地通過アナウンス完了 → 案内 tick の保留解除
+        advanceUntilIdle()
+        runner.submit(tickOf(current = 1_850.0)) // 次の案内発話を再開できる
+        advanceUntilIdle()
+        runner.detach()
+
+        assertEquals(listOf(spokenSsml("m800"), WAYPOINT_SSML, spokenSsml("m1800")), dispatcher.spoken)
+    }
+
+    @Test
+    fun `目的地到達アナウンスは案内発話へ割り込み、detach されても鳴り切る`() = runTest {
+        val dispatcher = GatingDispatcher()
+        val runner = runnerOf(dispatcher, this)
+        runner.attach(planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0))))
+
+        runner.submit(tickOf(current = 850.0)) // m800 を発話開始 (gate で保留)
+        advanceUntilIdle()
+        assertEquals(listOf(spokenSsml("m800")), dispatcher.spoken)
+
+        runner.announceDestinationReached() // 進行中発話へ割り込み、session 非依存で再生
+        runner.detach() // 案内 session 終了。目的地到達アナウンスは止めない
+        advanceUntilIdle()
+        assertEquals(listOf(spokenSsml("m800"), DESTINATION_SSML), dispatcher.spoken)
+
+        dispatcher.releaseNext() // 後始末: 目的地到達アナウンス完了
+        advanceUntilIdle()
+    }
+
     private fun runnerOf(
         dispatcher: VoiceAnnouncementDispatcher,
         scope: CoroutineScope,
@@ -163,8 +211,19 @@ class VoiceAnnouncementSpeechRunnerTest {
         openingAnnouncementProvider = OpeningAnnouncementProvider {
             VoiceAnnouncementContent(ssml = OPENING_SSML, cue = null)
         },
+        milestoneAnnouncementProvider = FakeMilestoneAnnouncementProvider,
         scope = scope,
     )
+
+    /** 経由地通過 / 目的地到達のマイルストーン発話を固定 SSML で返すテスト用 provider。 */
+    private object FakeMilestoneAnnouncementProvider : MilestoneAnnouncementProvider {
+
+        override suspend fun waypointApproach(): VoiceAnnouncementContent =
+            VoiceAnnouncementContent(ssml = WAYPOINT_SSML, cue = null)
+
+        override suspend fun destinationReached(): VoiceAnnouncementContent =
+            VoiceAnnouncementContent(ssml = DESTINATION_SSML, cue = null)
+    }
 
     /**
      * 発話を CompletableDeferred で保留できる dispatcher。順番に [releaseNext] で完了させる。
@@ -178,7 +237,11 @@ class VoiceAnnouncementSpeechRunnerTest {
             spoken += requireNotNull(content.ssml)
             val gate = CompletableDeferred<Unit>()
             gates.addLast(gate)
-            gate.await()
+            try {
+                gate.await()
+            } finally {
+                gates.remove(gate)
+            }
         }
 
         fun releaseNext() {
@@ -263,5 +326,11 @@ class VoiceAnnouncementSpeechRunnerTest {
 
         /** テスト用の開始アナウンス SSML。 */
         const val OPENING_SSML = "<speak>opening</speak>"
+
+        /** テスト用の経由地通過アナウンス SSML。 */
+        const val WAYPOINT_SSML = "<speak>waypoint</speak>"
+
+        /** テスト用の目的地到達アナウンス SSML。 */
+        const val DESTINATION_SSML = "<speak>destination</speak>"
     }
 }

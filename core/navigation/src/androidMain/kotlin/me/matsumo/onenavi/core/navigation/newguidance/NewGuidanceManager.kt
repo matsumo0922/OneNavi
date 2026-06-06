@@ -301,8 +301,10 @@ class NewGuidanceManager internal constructor(
             currentCumulativeMeters = snapshot.currentCumulativeMeters,
         )
         if (updatedRoute != activeRoute) {
+            val didPassWaypoint = updatedRoute.intermediateWaypoints.size < activeRoute.intermediateWaypoints.size
             currentRoute = updatedRoute
             rerouteDetector?.updateRoute(updatedRoute)
+            if (didPassWaypoint) voiceController?.announceWaypointApproach()
         }
 
         _state.value = GuidanceState.Guiding(
@@ -333,6 +335,7 @@ class NewGuidanceManager internal constructor(
      */
     private fun completeDestinationGuidance(route: RouteDetail) {
         Napier.i(tag = TAG) { "Destination reached: routeId=${route.id}" }
+        voiceController?.announceDestinationReached()
         rerouteJob?.cancel()
         rerouteJob = null
         stopGuidanceSession(detachTracker = isSessionActive)

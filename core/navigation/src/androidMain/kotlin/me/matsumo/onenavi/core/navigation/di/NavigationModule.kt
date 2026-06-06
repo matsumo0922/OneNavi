@@ -18,6 +18,7 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
+import me.matsumo.onenavi.core.navigation.tts.DefaultMilestoneAnnouncementProvider
 import me.matsumo.onenavi.core.navigation.tts.DefaultOpeningAnnouncementProvider
 import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsApi
 import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsVoiceAnnouncementDispatcher
@@ -87,6 +88,7 @@ val navigationModule: Module = module {
             scheduler = get(),
             dispatcher = get(),
             openingAnnouncementProvider = DefaultOpeningAnnouncementProvider(),
+            milestoneAnnouncementProvider = DefaultMilestoneAnnouncementProvider(),
         )
     }
     single { VoiceTickFactory() }
