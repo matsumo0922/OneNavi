@@ -15,6 +15,7 @@ import me.matsumo.onenavi.feature.setting.components.SettingTopAppBar
 import me.matsumo.onenavi.feature.setting.components.section.SettingInfoSection
 import me.matsumo.onenavi.feature.setting.components.section.SettingOthersSection
 import me.matsumo.onenavi.feature.setting.components.section.SettingPaywallSection
+import me.matsumo.onenavi.feature.setting.components.section.SettingSoundSection
 import me.matsumo.onenavi.feature.setting.components.section.SettingThemeSection
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -56,6 +57,14 @@ internal fun SettingScreen(
                     onThemeChanged = viewModel::setTheme,
                     onUseDynamicColorChanged = viewModel::setUseDynamicColor,
                     onSeedColorChanged = viewModel::setSeedColor,
+                )
+            }
+
+            item {
+                SettingSoundSection(
+                    modifier = Modifier.fillMaxWidth(),
+                    setting = setting,
+                    onUseMediaAudioChannelOnCarChanged = viewModel::setUseMediaAudioChannelOnCar,
                 )
             }
 

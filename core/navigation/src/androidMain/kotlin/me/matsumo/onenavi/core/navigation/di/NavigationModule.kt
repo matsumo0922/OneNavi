@@ -18,9 +18,12 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
+import me.matsumo.onenavi.core.navigation.tts.DefaultMilestoneAnnouncementProvider
+import me.matsumo.onenavi.core.navigation.tts.DefaultOpeningAnnouncementProvider
 import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsApi
 import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsVoiceAnnouncementDispatcher
 import me.matsumo.onenavi.core.navigation.tts.GuidanceChimePlayer
+import me.matsumo.onenavi.core.navigation.tts.NavigationAudioChannelResolver
 import me.matsumo.onenavi.core.navigation.tts.PcmAudioPlayer
 import me.matsumo.onenavi.core.navigation.tts.TtsAudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.TtsSigningCertificate
@@ -64,6 +67,7 @@ val navigationModule: Module = module {
                 audioPlayer = audioPlayer,
             ),
             audioFocusManager = TtsAudioFocusManager(context),
+            audioChannelResolver = NavigationAudioChannelResolver(appSettingRepository = get()),
             apiKey = appConfig.googleCloudTtsApiKey,
         )
     }
@@ -83,6 +87,8 @@ val navigationModule: Module = module {
         VoiceAnnouncementSpeechRunner(
             scheduler = get(),
             dispatcher = get(),
+            openingAnnouncementProvider = DefaultOpeningAnnouncementProvider(),
+            milestoneAnnouncementProvider = DefaultMilestoneAnnouncementProvider(),
         )
     }
     single { VoiceTickFactory() }

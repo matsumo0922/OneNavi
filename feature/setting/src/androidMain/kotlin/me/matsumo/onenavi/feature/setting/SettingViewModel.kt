@@ -35,4 +35,10 @@ class SettingViewModel(
             repository.setDeveloperMode(developerMode)
         }
     }
+
+    fun setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar: Boolean) {
+        viewModelScope.launch {
+            repository.setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar)
+        }
+    }
 }

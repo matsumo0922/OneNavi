@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.matsumo.onenavi.MainViewModel
 import me.matsumo.onenavi.OneNaviApp
+import me.matsumo.onenavi.core.common.car.CarDisplayState
 import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
@@ -35,6 +36,7 @@ class CarActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CarDisplayState.setOnCar(true)
         enableEdgeToEdge()
         setContent {
             val userData by viewModel.setting.collectAsStateWithLifecycle(null)
@@ -60,6 +62,11 @@ class CarActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        CarDisplayState.setOnCar(false)
+        super.onDestroy()
     }
 
     private fun hasRequiredPermissions(): Boolean {

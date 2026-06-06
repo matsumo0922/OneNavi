@@ -60,4 +60,12 @@ internal data class VoiceAnnouncementSpeechState(
 
         return copy(speaking = null)
     }
+
+    /**
+     * 発話中マークを無条件で解除した状態を返す。
+     *
+     * マイルストーン発話 (経由地通過 / 目的地到達) が進行中の案内発話へ割り込む際に使う。割り込まれた段は
+     * 既に [firedStageIds] 入りで再選択されないため、発話中マークだけ解除すれば案内発話を再開できる。
+     */
+    fun withSpeakingCleared(): VoiceAnnouncementSpeechState = copy(speaking = null)
 }

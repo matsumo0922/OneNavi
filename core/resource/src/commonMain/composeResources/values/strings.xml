@@ -160,6 +160,11 @@
     <string name="setting_other_developer_mode_pin_invalid">Invalid PIN</string>
     <string name="setting_other_developer_mode_submit">Submit</string>
 
+    <!-- Setting Sound -->
+    <string name="setting_sound">音声案内</string>
+    <string name="setting_sound_media_channel">メディア枠で再生する</string>
+    <string name="setting_sound_media_channel_description">Android Auto 接続中、ナビ音声を通知ではなくメディア枠で再生します。車種によっては高音質化処理が適用されます。再生中の音楽は小さく流れ続けます。</string>
+
     <!-- Setting Paywall -->
     <string name="setting_paywall_title">Pro</string>
     <string name="setting_paywall_upgrade">OneNavi Pro にアップグレード</string>
@@ -203,7 +208,7 @@
     <!-- TTS Session -->
     <string name="tts_navigation_started">音声案内を開始します。</string>
     <string name="tts_follow_traffic_rules">実際の交通規制に従って走行してください。</string>
-    <string name="tts_navigation_finished">お疲れ様でした。</string>
+    <string name="tts_navigation_finished">運転、お疲れ様でした。</string>
 
     <!-- TTS Depart (出発時の方角案内。セッション中 1 回のみ) -->
     <string name="tts_depart_north">北に進みます。</string>

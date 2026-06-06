@@ -88,6 +88,16 @@ internal class VoiceAnnouncementScheduler(
         return dispatchNextFromQueue()
     }
 
+    /**
+     * マイルストーン発話 (経由地通過 / 目的地到達) が進行中の案内発話へ割り込んだことをコアへ通知する。
+     *
+     * 発話中マークを解除し、割り込み後の tick で案内発話を再開できるようにする。割り込まれた段は既に処理確定済みのため
+     * 再選択されない。
+     */
+    fun onMilestoneInterrupted() {
+        state = state.withSpeakingCleared()
+    }
+
     /** 通過し終えた案内地点を状態へ畳み込む。記録側が冪等に union するため毎 tick 全件渡してよい。 */
     private fun recordPassedTargets(plan: VoiceAnnouncementPlan, tick: VoiceTick) {
         val passedIndices = selector.passedTargetIndices(plan, tick)

@@ -24,4 +24,7 @@ class AppSettingRepository(
     suspend fun setPlusMode(plusMode: Boolean) = dataSource.setPlusMode(plusMode)
 
     suspend fun setDeveloperMode(developerMode: Boolean) = dataSource.setDeveloperMode(developerMode)
+
+    suspend fun setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar: Boolean) =
+        dataSource.setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar)
 }

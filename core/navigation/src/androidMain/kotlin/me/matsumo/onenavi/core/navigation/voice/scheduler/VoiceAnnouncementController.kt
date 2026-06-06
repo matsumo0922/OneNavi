@@ -34,15 +34,20 @@ internal class VoiceAnnouncementController(
      *
      * @param payload 案内対象の payload (guidancePoints / announcementBlocks を含む)
      * @param distanceContext tracker attach 時と同一の source→geometry 距離変換 context
+     * @param announceOpening true なら案内発話に先立って開始アナウンスを発話する (初回開始時のみ true、リルート貼り直しは false)
      */
-    fun start(payload: ExtNavRoutePayload, distanceContext: ExtNavRouteDistanceContext) {
+    fun start(
+        payload: ExtNavRoutePayload,
+        distanceContext: ExtNavRouteDistanceContext,
+        announceOpening: Boolean,
+    ) {
         val plan = planBuilder.build(
             payload = payload,
             distanceContext = distanceContext,
             config = config,
         )
         logPlan(plan)
-        speechRunner.attach(plan)
+        speechRunner.attach(plan, announceOpening = announceOpening)
     }
 
     /**
@@ -52,6 +57,16 @@ internal class VoiceAnnouncementController(
      */
     fun onSnapshot(snapshot: ExtNavProgressSnapshot) {
         speechRunner.submit(tickFactory.from(snapshot))
+    }
+
+    /** 経由地通過アナウンスを発話する。進行中の案内発話へ割り込んでから発話する。 */
+    fun announceWaypointApproach() {
+        speechRunner.announceWaypointApproach()
+    }
+
+    /** 目的地到達アナウンスを発話する。案内 session 終了と同時でも鳴り切る。 */
+    fun announceDestinationReached() {
+        speechRunner.announceDestinationReached()
     }
 
     /** 音声案内を停止し、発話プランと進行中の発話を破棄する。 */

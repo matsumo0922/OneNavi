@@ -18,17 +18,19 @@ internal class PcmAudioPlayer {
      *
      * @param audio WAV ヘッダ付きの PCM バイト列
      * @param contentType 再生する音の種別
+     * @param channel 出力する音声チャンネル (usage)
      */
     suspend fun playAndAwait(
         audio: ByteArray,
         contentType: Int = AudioAttributes.CONTENT_TYPE_SPEECH,
+        channel: NavigationAudioChannel = NavigationAudioChannel.Guidance,
     ) {
         val wavAudio = WavPcm16Audio.parse(audio).getOrElse { return }
 
         val track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                    .setUsage(channel.usage)
                     .setContentType(contentType)
                     .build(),
             )
