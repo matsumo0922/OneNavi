@@ -108,7 +108,7 @@ class NewGuidanceManager internal constructor(
         Napier.i(tag = TAG) { "Guidance started: routeId=${route.id}" }
         currentRoute = route
         val sessionId = consumeNextSessionId()
-        val trackerSnapshot = startTrackerForRoute(route)
+        val trackerSnapshot = startTrackerForRoute(route, announceOpening = resetReroute)
         activeSessionId = sessionId
         isSessionActive = true
         _state.value = guidingStateFrom(route = route, snapshot = trackerSnapshot)
@@ -173,9 +173,13 @@ class NewGuidanceManager internal constructor(
      * 位置情報 data source から初回 tick が来るまで UI を空にしないため、ここで同期的に初期 snapshot を作る。
      *
      * @param route 案内対象ルート
+     * @param announceOpening 音声案内に開始アナウンスを付けるか (初回開始時のみ true)
      * @return tracker が作った初期 snapshot。作れない場合は null
      */
-    private fun startTrackerForRoute(route: RouteDetail): ExtNavProgressSnapshot? {
+    private fun startTrackerForRoute(
+        route: RouteDetail,
+        announceOpening: Boolean,
+    ): ExtNavProgressSnapshot? {
         val registry = routeRegistry
         val tracker = guidanceTracker
         if (registry == null || tracker == null) {
@@ -190,7 +194,11 @@ class NewGuidanceManager internal constructor(
         }
 
         val attachment = tracker.attach(payload = payload, route = route)
-        voiceController?.start(payload = payload, distanceContext = attachment.distanceContext)
+        voiceController?.start(
+            payload = payload,
+            distanceContext = attachment.distanceContext,
+            announceOpening = announceOpening,
+        )
         rerouteDetector?.attach(route)
         tracker.onLocation(route.toOriginUserLocation())
 

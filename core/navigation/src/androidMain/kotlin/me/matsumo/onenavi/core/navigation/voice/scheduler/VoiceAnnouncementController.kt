@@ -34,15 +34,20 @@ internal class VoiceAnnouncementController(
      *
      * @param payload 案内対象の payload (guidancePoints / announcementBlocks を含む)
      * @param distanceContext tracker attach 時と同一の source→geometry 距離変換 context
+     * @param announceOpening true なら案内発話に先立って開始アナウンスを発話する (初回開始時のみ true、リルート貼り直しは false)
      */
-    fun start(payload: ExtNavRoutePayload, distanceContext: ExtNavRouteDistanceContext) {
+    fun start(
+        payload: ExtNavRoutePayload,
+        distanceContext: ExtNavRouteDistanceContext,
+        announceOpening: Boolean,
+    ) {
         val plan = planBuilder.build(
             payload = payload,
             distanceContext = distanceContext,
             config = config,
         )
         logPlan(plan)
-        speechRunner.attach(plan)
+        speechRunner.attach(plan, announceOpening = announceOpening)
     }
 
     /**

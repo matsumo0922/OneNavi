@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
+import me.matsumo.onenavi.core.navigation.tts.OpeningAnnouncementProvider
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementCategoryGate
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContent
@@ -124,6 +125,31 @@ class VoiceAnnouncementSpeechRunnerTest {
         assertEquals(listOf(spokenSsml("b")), dispatcher.spoken)
     }
 
+    @Test
+    fun `announceOpening 時は開始アナウンスを案内発話より先に再生し、その完了まで tick を保留する`() = runTest {
+        val dispatcher = GatingDispatcher()
+        val runner = runnerOf(dispatcher, this)
+        runner.attach(
+            planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0))),
+            announceOpening = true,
+        )
+
+        advanceUntilIdle()
+        assertEquals(listOf(OPENING_SSML), dispatcher.spoken) // 開始アナウンスのみ再生中
+
+        runner.submit(tickOf(current = 850.0)) // アナウンス中の tick は保留される
+        advanceUntilIdle()
+        assertEquals(listOf(OPENING_SSML), dispatcher.spoken)
+
+        dispatcher.releaseNext() // 開始アナウンス完了
+        advanceUntilIdle()
+        runner.submit(tickOf(current = 850.0)) // 完了後の tick で案内発話
+        advanceUntilIdle()
+        runner.detach()
+
+        assertEquals(listOf(OPENING_SSML, spokenSsml("m800")), dispatcher.spoken)
+    }
+
     private fun runnerOf(
         dispatcher: VoiceAnnouncementDispatcher,
         scope: CoroutineScope,
@@ -134,6 +160,9 @@ class VoiceAnnouncementSpeechRunnerTest {
             contentRenderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn),
         ),
         dispatcher = dispatcher,
+        openingAnnouncementProvider = OpeningAnnouncementProvider {
+            VoiceAnnouncementContent(ssml = OPENING_SSML, cue = null)
+        },
         scope = scope,
     )
 
@@ -229,4 +258,10 @@ class VoiceAnnouncementSpeechRunnerTest {
         speedMetersPerSecond = null,
         isRouteUsable = true,
     )
+
+    private companion object {
+
+        /** テスト用の開始アナウンス SSML。 */
+        const val OPENING_SSML = "<speak>opening</speak>"
+    }
 }
