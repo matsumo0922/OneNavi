@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Vector/LSPosed が読み込む対象パッケージ(Android Auto 本体)。 -->
+    <string-array name="xposed_scope">
+        <item>com.google.android.projection.gearhead</item>
+    </string-array>
+</resources>

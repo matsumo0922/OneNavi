@@ -50,6 +50,21 @@
             </intent-filter>
         </activity>
 
+        <!-- STEP1a: parked-app(NATIVE_APP)経路で車 display に起動される CarActivity。
+             gearhead(lxp)が CAR_LAUNCHER カテゴリで native app を発見する。 -->
+        <activity
+            android:name=".car.CarActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|uiMode"
+            android:theme="@style/Theme.Matsumo">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.CAR_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="${ADMOB_ANDROID_APP_ID}" />

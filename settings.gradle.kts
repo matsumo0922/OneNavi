@@ -18,6 +18,9 @@ dependencyResolutionManagement {
         mavenCentral()
         maven("https://storage.googleapis.com/r8-releases/raw")
         maven("https://jitpack.io")
+        maven("https://api.xposed.info/") {
+            content { includeGroup("de.robv.android.xposed") }
+        }
     }
 }
 
@@ -34,5 +37,6 @@ include(":feature:home")
 include(":feature:map")
 include(":feature:setting")
 include(":feature:billing")
+include(":xposed-carunlock")
 
 includeBuild("drive-supporter-api")
