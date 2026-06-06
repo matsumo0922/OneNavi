@@ -65,8 +65,8 @@ internal fun MapControls(
             .padding(top = topPadding, bottom = bottomPadding)
             .padding(
                 top = if (panelLayout.isSplit) 8.dp else 16.dp,
-                start = 16.dp,
-                end = 16.dp,
+                start = MapControlsHorizontalPadding,
+                end = MapControlsHorizontalPadding,
                 bottom = if (panelLayout.isSplit) 0.dp else 16.dp,
             ),
     ) {
@@ -199,7 +199,10 @@ private fun MapZoomButtons(
 }
 
 /** 地図コントロールの丸ボタンサイズ。 */
-private val MapControlButtonSize = 56.dp
+internal val MapControlButtonSize = 40.dp
+
+/** 地図コントロールの左右 padding。画面端からの inset と、分割時に隣接する UI 帯との隙間を兼ねる。 */
+internal val MapControlsHorizontalPadding = 8.dp
 
 @Composable
 private fun MapCompass(
