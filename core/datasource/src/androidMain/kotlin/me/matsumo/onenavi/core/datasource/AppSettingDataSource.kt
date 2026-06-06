@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.SetSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
 import me.matsumo.onenavi.core.datasource.helper.deserialize
@@ -101,6 +103,15 @@ class AppSettingDataSource(
 
         preference.edit {
             it[booleanPreferencesKey(AppSetting::useMediaAudioChannelOnCar.name)] = useMediaAudioChannelOnCar
+        }
+    }
+
+    suspend fun setDisabledGuidanceCategories(disabledGuidanceCategories: Set<String>) = withContext(ioDispatcher) {
+        if (setting.first().disabledGuidanceCategories == disabledGuidanceCategories) return@withContext
+
+        val encoded = formatter.encodeToString(SetSerializer(String.serializer()), disabledGuidanceCategories)
+        preference.edit {
+            it[stringPreferencesKey(AppSetting::disabledGuidanceCategories.name)] = encoded
         }
     }
 

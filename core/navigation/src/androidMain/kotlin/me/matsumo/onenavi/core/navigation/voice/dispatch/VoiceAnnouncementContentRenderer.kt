@@ -19,8 +19,11 @@ import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
  * 文中ポーズの読点を使う。前の素片が既に句読点で終わっている場合は重複させない (「。、」「、、」を避ける)。
  */
 internal class VoiceAnnouncementContentRenderer(
-    private val categoryGate: VoiceAnnouncementCategoryGate,
+    private val categoryGateProvider: () -> VoiceAnnouncementCategoryGate,
 ) {
+
+    /** 固定 gate で生成する。テスト・静的構成用。 */
+    constructor(categoryGate: VoiceAnnouncementCategoryGate) : this({ categoryGate })
 
     /**
      * 距離段を読み上げ内容に変換する。発話すべき素片が無い (全 OFF) 場合は null。
@@ -29,6 +32,7 @@ internal class VoiceAnnouncementContentRenderer(
      * @return TTS 用 SSML とローカル効果音指定。発話するものが無ければ null
      */
     fun render(stage: AnnouncementStage): VoiceAnnouncementContent? {
+        val categoryGate = categoryGateProvider()
         val enabledPieces = stage.pieces.filter { piece -> categoryGate.isEnabled(piece.category) }
         if (enabledPieces.isEmpty()) return null
 

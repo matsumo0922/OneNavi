@@ -58,5 +58,20 @@ internal data class VoiceAnnouncementCategoryGate(
          */
         fun of(vararg pairs: Pair<GuidanceCategory, Boolean>): VoiceAnnouncementCategoryGate =
             VoiceAnnouncementCategoryGate(pairs.toMap().toImmutableMap())
+
+        /**
+         * OFF にする category 名 ([GuidanceCategory.name]) 集合から gate を作る。設定画面の永続値から
+         * 実行時の gate を組むための入口。名前に一致しない要素は無視し、一致した category のみ OFF にする。
+         *
+         * @param disabledNames OFF にする category の名前集合
+         * @return 指定 category を OFF、それ以外を ON とする gate
+         */
+        fun ofDisabledNames(disabledNames: Set<String>): VoiceAnnouncementCategoryGate {
+            val gates = GuidanceCategory.entries
+                .filter { category -> category.name in disabledNames }
+                .associateWith { false }
+                .toImmutableMap()
+            return VoiceAnnouncementCategoryGate(gates)
+        }
     }
 }
