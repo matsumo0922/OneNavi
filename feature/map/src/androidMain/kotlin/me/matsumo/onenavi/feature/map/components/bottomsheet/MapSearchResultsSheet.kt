@@ -47,6 +47,8 @@ internal fun MapSearchResultsSheet(
     val navigationBarHeightDp = WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
+        .takeIf { it > 0.dp } ?: 8.dp
+
     val visibleItemCount = results.size.coerceIn(
         minimumValue = 1,
         maximumValue = SEARCH_RESULTS_PEEK_ITEM_COUNT,
