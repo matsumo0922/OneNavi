@@ -3,7 +3,6 @@ package me.matsumo.onenavi.car
 import android.Manifest.permission
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -37,10 +36,6 @@ class CarActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        val resolvedDisplayId = display?.displayId ?: -1
-        Log.i(TAG, "onCreate: displayId=$resolvedDisplayId, displayName=${display?.name}")
-
         setContent {
             val userData by viewModel.setting.collectAsStateWithLifecycle(null)
 
@@ -65,11 +60,6 @@ class CarActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        Log.i(TAG, "onResume: displayId=${display?.displayId}")
     }
 
     private fun hasRequiredPermissions(): Boolean {
