@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.core.graphics.createBitmap
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.BitmapDescriptor
@@ -316,24 +317,34 @@ internal fun MapGuidanceManeuverArrowEffect(
             fallbackRoadClass = guidanceState.progress.currentRoadClass,
         )
     }
+    val density = LocalDensity.current.density
+    val borderWidthPx = GUIDANCE_ARROW_BORDER_WIDTH_DP * density
+    val bodyWidthPx = GUIDANCE_ARROW_BODY_WIDTH_DP * density
     val headScale = guidanceArrowHeadScaleForZoom(cameraZoom)
     val highwayBorderHeadIcon = rememberGuidanceManeuverArrowHeadIcon(
         color = RouteColors.maneuver(RoadClass.HIGHWAY).primary,
         insetPx = 0f,
         headScale = headScale,
+        borderWidthPx = borderWidthPx,
     )
     val ordinaryBorderHeadIcon = rememberGuidanceManeuverArrowHeadIcon(
         color = RouteColors.maneuver(RoadClass.ORDINARY).primary,
         insetPx = 0f,
         headScale = headScale,
+        borderWidthPx = borderWidthPx,
     )
     val bodyHeadIcon = rememberGuidanceManeuverArrowHeadIcon(
         color = Color.White,
-        insetPx = guidanceArrowHeadInsetPx(headScale = headScale),
+        insetPx = guidanceArrowHeadInsetPx(
+            headScale = headScale,
+            borderWidthPx = borderWidthPx,
+            bodyWidthPx = bodyWidthPx,
+        ),
         headScale = headScale,
+        borderWidthPx = borderWidthPx,
     )
 
-    DisposableEffect(googleMap, specs, highwayBorderHeadIcon, ordinaryBorderHeadIcon, bodyHeadIcon) {
+    DisposableEffect(googleMap, specs, highwayBorderHeadIcon, ordinaryBorderHeadIcon, bodyHeadIcon, borderWidthPx, bodyWidthPx) {
         val polylines = mutableListOf<Polyline>()
 
         for ((specIndex, spec) in specs.withIndex()) {
@@ -350,21 +361,21 @@ internal fun MapGuidanceManeuverArrowEffect(
                 PolylineOptions()
                     .addAll(latLngPoints)
                     .color(borderColor.toArgb())
-                    .width(GUIDANCE_ARROW_BORDER_WIDTH_PX)
+                    .width(borderWidthPx)
                     .zIndex(zIndex)
                     .jointType(JointType.ROUND)
                     .startCap(RoundCap())
-                    .endCap(CustomCap(borderHeadIcon, GUIDANCE_ARROW_BORDER_WIDTH_PX)),
+                    .endCap(CustomCap(borderHeadIcon, borderWidthPx)),
             )
             polylines += googleMap.addPolyline(
                 PolylineOptions()
                     .addAll(latLngPoints)
                     .color(Color.White.toArgb())
-                    .width(GUIDANCE_ARROW_BODY_WIDTH_PX)
+                    .width(bodyWidthPx)
                     .zIndex(zIndex + GUIDANCE_ARROW_BODY_Z_OFFSET)
                     .jointType(JointType.ROUND)
                     .startCap(RoundCap())
-                    .endCap(CustomCap(bodyHeadIcon, GUIDANCE_ARROW_BODY_WIDTH_PX)),
+                    .endCap(CustomCap(bodyHeadIcon, bodyWidthPx)),
             )
         }
 
@@ -383,15 +394,17 @@ private fun rememberGuidanceManeuverArrowHeadIcon(
     color: Color,
     insetPx: Float,
     headScale: Float,
+    borderWidthPx: Float,
 ): BitmapDescriptor {
     val colorArgb = color.toArgb()
 
-    return remember(colorArgb, insetPx, headScale) {
+    return remember(colorArgb, insetPx, headScale, borderWidthPx) {
         BitmapDescriptorFactory.fromBitmap(
             createGuidanceManeuverArrowHeadBitmap(
                 colorArgb = colorArgb,
                 insetPx = insetPx,
                 headScale = headScale,
+                borderWidthPx = borderWidthPx,
             ),
         )
     }
@@ -401,11 +414,12 @@ private fun createGuidanceManeuverArrowHeadBitmap(
     colorArgb: Int,
     insetPx: Float,
     headScale: Float,
+    borderWidthPx: Float,
 ): Bitmap {
-    val headWidthPx = (GUIDANCE_ARROW_BORDER_WIDTH_PX * GUIDANCE_ARROW_HEAD_WIDTH_RATIO * headScale)
+    val headWidthPx = (borderWidthPx * GUIDANCE_ARROW_HEAD_WIDTH_RATIO * headScale)
         .toInt()
         .coerceAtLeast(MIN_GUIDANCE_ARROW_HEAD_SIZE_PX)
-    val headHeightPx = (GUIDANCE_ARROW_BORDER_WIDTH_PX * GUIDANCE_ARROW_HEAD_HEIGHT_RATIO * headScale)
+    val headHeightPx = (borderWidthPx * GUIDANCE_ARROW_HEAD_HEIGHT_RATIO * headScale)
         .toInt()
         .coerceAtLeast(MIN_GUIDANCE_ARROW_HEAD_SIZE_PX)
     val bitmap = createBitmap(
@@ -481,8 +495,12 @@ internal fun guidanceArrowHeadScaleForZoom(zoom: Float): Float {
     )
 }
 
-private fun guidanceArrowHeadInsetPx(headScale: Float): Float {
-    return (GUIDANCE_ARROW_BORDER_WIDTH_PX - GUIDANCE_ARROW_BODY_WIDTH_PX) / 2f * headScale
+private fun guidanceArrowHeadInsetPx(
+    headScale: Float,
+    borderWidthPx: Float,
+    bodyWidthPx: Float,
+): Float {
+    return (borderWidthPx - bodyWidthPx) / 2f * headScale
 }
 
 /** 地図上に同時表示する案内地点矢印の最大数。CallOut と同じく次 / その次までにする。 */
@@ -507,11 +525,17 @@ private const val GUIDANCE_ARROW_ROUTE_LENGTH_METERS =
 /** 枠線色に使う道路種別を、案内地点直後の区間から判定するための先読み距離。 */
 private const val GUIDANCE_ARROW_ROAD_CLASS_LOOKAHEAD_METERS = 8.0
 
-/** 矢印外側の道路種別色 polyline 幅。 */
-private const val GUIDANCE_ARROW_BORDER_WIDTH_PX = 30f
+/**
+ * 矢印外側の道路種別色 polyline 幅 (dp)。
+ * `Polyline.width` は screen px 指定のため、描画時に表示先 display の density で px へ換算する。
+ */
+private const val GUIDANCE_ARROW_BORDER_WIDTH_DP = 12f
 
-/** 矢印内側の白背景 polyline 幅。 */
-private const val GUIDANCE_ARROW_BODY_WIDTH_PX = 20f
+/**
+ * 矢印内側の白背景 polyline 幅 (dp)。
+ * `Polyline.width` は screen px 指定のため、描画時に表示先 display の density で px へ換算する。
+ */
+private const val GUIDANCE_ARROW_BODY_WIDTH_DP = 8f
 
 /** 矢印外側 polyline の zIndex。route 本体より前、自車や CallOut より後ろに置く。 */
 private const val GUIDANCE_ARROW_Z_INDEX_BASE = 40f
