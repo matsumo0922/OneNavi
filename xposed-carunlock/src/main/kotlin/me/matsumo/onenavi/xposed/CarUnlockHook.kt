@@ -36,6 +36,8 @@ class CarUnlockHook : IXposedHookLoadPackage {
         hookAllowedActivities(lpparam.classLoader)
         hookParkedAppDrivingEviction(lpparam.classLoader)
         hookParkedAppLaunchBlock(lpparam.classLoader)
+        // 【実験専用】projection 経路での Coolwalk split 同居可否を割る probe(docs/spec/32 経路B)。確認後に削除。
+        ProjectionSplitProbe.install(lpparam.classLoader)
     }
 
     /**
