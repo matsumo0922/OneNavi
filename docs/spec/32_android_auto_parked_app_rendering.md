@@ -51,6 +51,7 @@
 | D32 | Xposed ランタイム/API | device ランタイム = **Vector**(JingMatrix、Zygisk)。モジュールは **legacy `de.robv.android.xposed:api:82`(`api.xposed.info` maven、compileOnly)**でビルド(Vector 互換)。modern libxposed API は public maven 非公開のため不採用。モジュール = `xposed-carunlock`(repo 直下、D23) | 2026-06-06 |
 | D33 | Gate C hook 方式 | 難読化 `bwn` ではなく **framework API `VirtualDeviceParams$Builder.setAllowedActivities(Set)` を hook** し OneNavi component を注入(AA 更新に強い)。Gate A は `ltz` の boolean a()/b() を true 固定 | 2026-06-06 |
 | D34 | Gate E 入口 | **走行 stop の実行元 = `GH.ParkedAppMgr`(`lxn`)の reactive 購読 `lxl.eJ()`**(trace で特定)。`iet`/`qno`(UXR/センサ)でも `lzt`/速度系でもない。hook 本命 = **`lxl.eJ` を no-op**。`qhi` は後段 cleanup で hook 点ではないと確定 | 2026-06-07 |
+| D35 | Gate E 第2経路 | E-1(`lxl.eJ`)だけでは不足。トースト `parked_manager_close_app` を逆引きし、`GH.IntentInterceptor` "ParkedApp" = **`lxi.b(Intent)`** が走行中の起動/継続をブロック+閉じる第2経路と判明。**`lxi.b` を OneNavi 限定 false**(E-2)で対応。`mjo` 他サブクラス `lhz`=Media は無関係 | 2026-06-07 |
 
 ### ⚠️ D3 × D4 のリスク(許容済)
 
@@ -224,7 +225,24 @@ for (各リージョンの起動中アプリ mkwVar) {
 
 **バージョン追従アンカー**(D5):クラス = `"GH.ParkedAppMgr"`(`lxn`)、蹴り出し = `"Stopping %s. Showing dashboard instead"` / `"Stopping %s. Starting %s instead"`。
 
-**残る未確認**: UXR 系(`iet`/`ieu` の "always restricted")は**別系統のコンテンツ制限**(完全 stop でなく UI ブランク/操作制限)の可能性。今回の「アプリ終了」は `GH.ParkedAppMgr` で説明可能だが、Gate E hook 後に「落ちないが操作不可/暗転」が残れば `iet` 側を別途 trace する(未着手)。
+#### 第2経路 `lxi`(2026-06-07 追加特定)— Gate E は2経路
+
+`lxl.eJ`(E-1)を no-op 化しただけでは**実車で "運転中は使用できません" トーストが出てアプリが閉じた**。原因をトースト文字列から逆引きして判明:
+
+- トースト = string `parked_manager_close_app`(id `0x7f150790`、"Not available while driving" / 日本語版「運転中は使用できません」)。これを出すのは `lxn.b(nmf)`(`context.getText(0x7f150790)`)。
+- `lxn.b()` の呼び出し元は **`lxl.eJ`(line 376)だけでなく `lxi` もある**(`grep Llxn;->b(` で2箇所)。
+- **`lxi`** = `GH.IntentInterceptor`(`mjo`)の "ParkedApp" 実装。`lxi.b(Intent)` が「走行中この起動/継続 intent を parked-only としてブロックすべきか」を判定(`mkw.c`=isParkedOnly かつ走行中で true)、true なら `lxi.a(Intent)` が `lxn.b()` でトースト+閉じ。constructor で `ldv.b().a()`(isParked)を購読。
+
+∴ **Gate E は2経路**:
+
+| 経路 | 役割 | hook |
+|---|---|---|
+| **E-1** `lxl.eJ`(GH.ParkedAppMgr) | 既に**表示中**のを走行開始で dashboard/代替 Activity へ置換 | `eJ` を no-op |
+| **E-2** `lxi`(GH.IntentInterceptor "ParkedApp") | 走行中の**起動/継続 intent をブロック**しトースト+閉じ | `lxi.b(Intent)` を OneNavi 限定 false(他 package 素通し) |
+
+E-1 を no-op にしても継続 intent が E-2(`lxi`)で再ブロックされるため、**両方塞いで初めて走行維持が成立**。`mjo` のもう一つのサブクラス `lhz` は "Media"(メディアアプリのリダイレクト)で走行制限とは無関係 → 漏れなし。IntentInterceptor を回す実行点は `mjy`。
+
+**残る未確認**: UXR 系(`iet`/`ieu` の "always restricted")は別系統のコンテンツ制限(完全 stop でなく UI ブランク/操作制限)の可能性。E-1/E-2 hook 後も「落ちないが操作不可/暗転」が残れば `iet` 側を別途 trace する(未着手)。
 
 > ⚠️ 注: 本 trace は jadx デコンパイル + smali で `lxn`/`lxl`/`lxk`/`mkw`/`ldv`/`lxm`/`qpy`/`qhi` を直接確認済(gearhead 16.8.661854)。難読化名はこの版前提(D11 で版固定)。
 
@@ -355,7 +373,7 @@ VirtualDeviceParams.Builder.setAllowedActivities(v1)   # bwn:1294。これ以外
 - **走行 stop の実行元 = `GH.ParkedAppMgr`(難読化 `lxn`)の reactive 購読 `lxl.eJ()`**(冒頭「🎯 Gate E 入口特定」ブロックに詳細)。`lxn.fz()` で `(carToken, 起動中アプリ Map, isParked[500ms debounce])` の合成ストリームに `lxl` を購読。`isParked=false`(走行)発火時に、isParkedOnly(`mkw.c`)アプリを **dashboard(`nln.b().a().i()`)/ 代替 Activity(`mjy.a().k(...)`)で押し出す**。
 - `qhi`("removing active app for the region")は押し出し後 cleanup(結果観測点、`qpy.g` の lifecycle stopped 通知が起点)。`iet`("No driving status, always restricted")/`qno`=CAR.SENSOR は別系統の UXR コンテンツ制限(完全 stop ではない可能性、未 trace)。
 - **`ldw`/`lek`→0(=lzt/スマホ系)では効かない**ことが裏付けられた(走行 stop は速度系でなく ParkedAppMgr の reactive 購読経由)。∴ D2 の「速度0グローバル」は E に無効で確定。
-- **hook 本命 = `lxl.eJ` を no-op**(他案・アンカーは冒頭ブロックの表参照)。
+- **Gate E は2経路**(冒頭「第2経路 `lxi`」ブロック参照): E-1 = `lxl.eJ` を no-op、E-2 = `lxi.b(Intent)`(`GH.IntentInterceptor` "ParkedApp")を OneNavi 限定 false。E-1 単独では継続 intent が `lxi` で再ブロックされ閉じるため両方必須。
 
 ### 3.7 hook 運用(D5/D10/D11/D18)
 
@@ -437,11 +455,14 @@ C VDM activity policy（trace 確定）:
 D car launch:
   iij（hook 不要。A/B/C が通れば iij が setLaunchDisplayId(car) で起動）
 
-E runtime driving（走行維持。入口特定済 2026-06-07）:
-  実行元 = GH.ParkedAppMgr(lxn)の reactive 購読 lxl.eJ()。isParked=false で isParkedOnly アプリを dashboard/代替 Activity で押し出す
-  本命: lxl.eJ(Object) を no-op（即 return）
-  代替: lxl.eJ で lxk.b(Map)から OneNavi region を除外して通す（外科的）/ lxn.fz() で購読スキップ（副作用注意）
-  アンカー: "GH.ParkedAppMgr" / "Stopping %s. Showing dashboard instead" / "Stopping %s. Starting %s instead"
+E runtime driving（走行維持。入口特定済 2026-06-07。2経路）:
+  E-1 = GH.ParkedAppMgr(lxn)の reactive 購読 lxl.eJ()。isParked=false で表示中の isParkedOnly アプリを dashboard/代替 Activity で押し出す
+        → lxl.eJ(Object) を no-op（即 return）
+  E-2 = GH.IntentInterceptor(mjo)"ParkedApp"=lxi.b(Intent)。走行中の起動/継続を parked-only としてブロックし lxn.b() でトースト+閉じ
+        → lxi.b(Intent) を OneNavi 限定 false（component package が OneNavi なら false、他は素通し）。b()=false なら a()(トースト)も呼ばれない
+  ※ E-1 だけでは継続 intent が E-2 で再ブロックされ閉じる。両方必須
+  ※ mjo の他サブクラス lhz="Media" は走行制限と無関係（漏れなし）
+  アンカー: "GH.ParkedAppMgr" / "Stopping %s. Showing dashboard instead" / "Starting %s instead" / string parked_manager_close_app(0x7f150790)
   ※ qhi は stopped 後 cleanup（結果観測点）で hook 点ではない（確定）
   ※ ldw/lek→0 / ldv の isParked グローバル直叩きは影響過大で非推奨
 

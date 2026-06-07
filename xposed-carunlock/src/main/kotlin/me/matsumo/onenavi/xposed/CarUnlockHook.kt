@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.xposed
 
 import android.content.ComponentName
+import android.content.Intent
 import android.util.Log
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
@@ -13,8 +14,12 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
  * - ゲートA: `ltz`(GH.ParkedNativeAppCheck)の boolean 判定(`a()`/`b()`)を true 固定。
  * - ゲートC: framework API `VirtualDeviceParams.Builder.setAllowedActivities(Set)` に OneNavi の
  *   CarActivity component を注入し、VDM の activity policy(デフォルト block)を回避。
- * - ゲートE: `GH.ParkedAppMgr`(`lxn`)の reactive observer `lxl.eJ()` を no-op 化し、走行開始
- *   (isParked=false)時の parked-app 蹴り出しを止めて走行中も維持する(`docs/spec/32` D34)。
+ * - ゲートE-1: `GH.ParkedAppMgr`(`lxn`)の reactive observer `lxl.eJ()` を no-op 化し、走行開始
+ *   (isParked=false)時の**表示中** parked-app 蹴り出し(dashboard/代替 Activity 置換)を止める。
+ * - ゲートE-2: `GH.IntentInterceptor`(`mjo`)の "ParkedApp" 実装 `lxi.b(Intent)` を OneNavi 限定で
+ *   false 固定し、走行中の parked-only アプリの**起動/継続ブロック**(+"運転中は使用できません"
+ *   トースト)を回避する。E-1 だけでは継続 intent が `lxi` で再ブロックされ閉じてしまうため必須
+ *   (`docs/spec/32` D34/D35)。
  *
  * 個人利用・自己責任に限る。ゲートE は走行制限(注意散漫防止ガード)を意図的に無効化する内容。
  * 診断のため XposedBridge と logcat の両方へログする。
@@ -30,6 +35,7 @@ class CarUnlockHook : IXposedHookLoadPackage {
         hookPackageListOptIn(lpparam.classLoader)
         hookAllowedActivities(lpparam.classLoader)
         hookParkedAppDrivingEviction(lpparam.classLoader)
+        hookParkedAppLaunchBlock(lpparam.classLoader)
     }
 
     /**
@@ -119,6 +125,26 @@ class CarUnlockHook : IXposedHookLoadPackage {
         }
     }
 
+    /**
+     * ゲートE-2: `GH.IntentInterceptor`(`mjo`)の "ParkedApp" 実装 `lxi.b(Intent)` を hook し、
+     * OneNavi の component に対してのみ false(=ブロックしない)を返させる。
+     *
+     * `lxi.b()` は「走行中、この起動/継続 intent を parked-only としてブロックすべきか」を返し、
+     * true のとき `lxi.a()` が `lxn.b()` 経由で "運転中は使用できません"(`parked_manager_close_app`)
+     * トーストを出してアプリを閉じる。OneNavi に対し false を返せば `a()` は呼ばれず、走行中も
+     * 起動/継続が通る。他 package は素通しで安全挙動を維持する。
+     */
+    private fun hookParkedAppLaunchBlock(classLoader: ClassLoader) {
+        runCatching {
+            val interceptorClass = classLoader.loadClass(PARKED_APP_INTERCEPTOR_CLASS)
+            val method = interceptorClass.getDeclaredMethod("b", Intent::class.java)
+            XposedBridge.hookMethod(method, ParkedLaunchAllow)
+            log("hooked $PARKED_APP_INTERCEPTOR_CLASS.b(Intent)")
+        }.onFailure {
+            log("lxi.b hook FAILED: $it")
+        }
+    }
+
     /** `ltz` の判定を true 固定しつつ、呼ばれたことをログする hook。 */
     private object ForceTrue : XC_MethodHook() {
         override fun beforeHookedMethod(param: MethodHookParam) {
@@ -160,6 +186,18 @@ class CarUnlockHook : IXposedHookLoadPackage {
         }
     }
 
+    /** `lxi.b(Intent)` を OneNavi の component に対してのみ false(ブロックしない)に固定する hook。 */
+    private object ParkedLaunchAllow : XC_MethodHook() {
+        override fun beforeHookedMethod(param: MethodHookParam) {
+            val intent = param.args.getOrNull(0) as? Intent ?: return
+            val pkg = intent.component?.packageName ?: return
+            if (pkg in ONENAVI_PACKAGES) {
+                param.result = false
+                log("ParkedLaunchAllow: $pkg -> not blocked while driving")
+            }
+        }
+    }
+
     private companion object {
         /** Android Auto 本体のパッケージ名。 */
         const val GEARHEAD_PACKAGE = "com.google.android.projection.gearhead"
@@ -178,6 +216,9 @@ class CarUnlockHook : IXposedHookLoadPackage {
 
         /** `lxl` が実装する `epu` の observer コールバックメソッド名。 */
         const val PARKED_APP_EVICTION_METHOD = "eJ"
+
+        /** parked-only アプリの起動/継続を走行中ブロックする IntentInterceptor(mjo "ParkedApp" の難読化名)。 */
+        const val PARKED_APP_INTERCEPTOR_CLASS = "lxi"
 
         /** OneNavi の車用 Activity の完全修飾クラス名(applicationId 接尾辞に依存しない)。 */
         const val ONENAVI_CAR_ACTIVITY = "me.matsumo.onenavi.car.CarActivity"
