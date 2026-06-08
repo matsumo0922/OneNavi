@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
 import android.os.Looper
+import android.os.SystemClock
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -12,24 +13,37 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import me.matsumo.onenavi.core.datasource.AppSettingDataSource
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 端末の現在地を [UserLocation] として提供する data source。
  *
  * このクラスは位置情報 API の callback / task を coroutine で扱いやすい形に変換するだけに責務を絞る。
  * 位置権限の確認や権限要求 UI は呼び出し側で済ませてから利用する。
+ * 開発モード中は実端末の現在地を読まず、東京駅の固定位置を返す。
  *
  * @param context 位置情報クライアントを作るための Android context
+ * @param appSettingDataSource 開発モード設定を読む data source
  */
 @Suppress("unused")
-class CurrentLocationDataSource(context: Context) {
+class CurrentLocationDataSource(
+    context: Context,
+    private val appSettingDataSource: AppSettingDataSource,
+) {
 
     private val locationProviderClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
@@ -44,6 +58,10 @@ class CurrentLocationDataSource(context: Context) {
      */
     @SuppressLint("MissingPermission")
     suspend fun lastKnown(): UserLocation? {
+        if (appSettingDataSource.setting.value.developerMode) {
+            return createDevelopmentUserLocation()
+        }
+
         return try {
             locationProviderClient.lastLocation.await()?.toUserLocation()
         } catch (cancellation: CancellationException) {
@@ -73,6 +91,7 @@ class CurrentLocationDataSource(context: Context) {
      * @param minDistanceMeters 更新を受け取る最小移動距離。0 以上の値を指定する
      * @return [UserLocation] の連続更新 Flow
      */
+    @OptIn(ExperimentalCoroutinesApi::class)
     @SuppressLint("MissingPermission")
     fun locationUpdates(
         intervalMillis: Long = DEFAULT_INTERVAL_MILLIS,
@@ -81,6 +100,34 @@ class CurrentLocationDataSource(context: Context) {
         require(intervalMillis > 0L) { "intervalMillis must be greater than 0." }
         require(minDistanceMeters >= 0f) { "minDistanceMeters must be greater than or equal to 0." }
 
+        return appSettingDataSource.setting
+            .map { setting -> setting.developerMode }
+            .distinctUntilChanged()
+            .flatMapLatest { isDeveloperMode ->
+                if (isDeveloperMode) {
+                    developmentLocationUpdates(intervalMillis = intervalMillis)
+                } else {
+                    rawLocationUpdates(
+                        intervalMillis = intervalMillis,
+                        minDistanceMeters = minDistanceMeters,
+                    )
+                }
+            }
+            .buffer(Channel.CONFLATED)
+    }
+
+    /**
+     * 端末の位置情報 API から現在地の連続更新を読む。
+     *
+     * @param intervalMillis 位置更新の希望間隔
+     * @param minDistanceMeters 更新を受け取る最小移動距離
+     * @return 実端末位置の連続更新 Flow
+     */
+    @SuppressLint("MissingPermission")
+    private fun rawLocationUpdates(
+        intervalMillis: Long,
+        minDistanceMeters: Float,
+    ): Flow<UserLocation> {
         return callbackFlow {
             val request = buildLocationRequest(
                 intervalMillis = intervalMillis,
@@ -99,6 +146,19 @@ class CurrentLocationDataSource(context: Context) {
                 locationProviderClient.removeLocationUpdates(callback)
             }
         }.buffer(Channel.CONFLATED)
+    }
+
+    /**
+     * 開発モード用に東京駅の固定位置を定期的に流す。
+     *
+     * @param intervalMillis 位置 tick を流す間隔
+     * @return 東京駅に固定された位置更新 Flow
+     */
+    private fun developmentLocationUpdates(intervalMillis: Long): Flow<UserLocation> = flow {
+        while (true) {
+            emit(createDevelopmentUserLocation())
+            delay(intervalMillis.milliseconds)
+        }
     }
 
     /**
@@ -152,6 +212,21 @@ class CurrentLocationDataSource(context: Context) {
 }
 
 /**
+ * 開発モード用に東京駅の固定位置を作る。
+ *
+ * @return 東京駅に固定された現在地 tick
+ */
+private fun createDevelopmentUserLocation(): UserLocation = UserLocation(
+    latitude = DEVELOPMENT_TOKYO_STATION_LATITUDE,
+    longitude = DEVELOPMENT_TOKYO_STATION_LONGITUDE,
+    bearingDegrees = null,
+    speedMps = null,
+    accuracyMeters = DEVELOPMENT_LOCATION_ACCURACY_METERS,
+    timestampMillis = System.currentTimeMillis(),
+    elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+)
+
+/**
  * Android の [Location] を案内ロジック用の [UserLocation] に変換する。
  *
  * 緯度経度が有限値でない location は破棄する。bearing / speed / accuracy は端末が提供している場合だけ採用し、
@@ -178,3 +253,12 @@ private fun Location.toUserLocation(): UserLocation? {
 
 /** 水平精度が端末から返らなかった場合に使う保守的な精度値。 */
 private const val UNKNOWN_ACCURACY_METERS = 1_000f
+
+/** 開発モードで自車位置として使う東京駅の緯度。 */
+private const val DEVELOPMENT_TOKYO_STATION_LATITUDE = 35.681236
+
+/** 開発モードで自車位置として使う東京駅の経度。 */
+private const val DEVELOPMENT_TOKYO_STATION_LONGITUDE = 139.767125
+
+/** 開発モード固定位置の水平精度。 */
+private const val DEVELOPMENT_LOCATION_ACCURACY_METERS = 0f

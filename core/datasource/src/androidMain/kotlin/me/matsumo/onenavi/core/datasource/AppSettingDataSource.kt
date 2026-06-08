@@ -24,6 +24,13 @@ import java.security.SecureRandom
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
+/**
+ * アプリ設定を DataStore から読み書きする data source。
+ *
+ * @param preferenceHelper DataStore を作成する helper
+ * @param formatter 設定値の JSON 変換に使う formatter
+ * @param ioDispatcher DataStore の読み書きに使う dispatcher
+ */
 class AppSettingDataSource(
     private val preferenceHelper: PreferenceHelper,
     private val formatter: Json,
