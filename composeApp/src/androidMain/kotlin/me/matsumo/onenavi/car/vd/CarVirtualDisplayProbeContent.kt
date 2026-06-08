@@ -58,8 +58,11 @@ internal fun CarVirtualDisplayProbeContent(
         "Rect(${viewport.visibleLeft},0 - ${viewport.visibleRight},${viewport.surfaceHeight})"
     val hostStableLabel = "host stable=${viewport.stableWidth}x${viewport.stableHeight} " +
         "${viewport.stableAreaLabel}"
+    val hostInputPointLabel = "hostInput=${inputState.hostInputPointLabel}"
     val surfacePointLabel = "pt surface=${inputState.surfacePointLabel} " +
         "surfaceIn=${inputState.insideSurfaceLabel}"
+    val observedFramePointLabel = "observed=${inputState.observedFramePointLabel} " +
+        "observedIn=${inputState.insideObservedFrameLabel}"
     val hostVisiblePointLabel = "hostVisible=${inputState.hostVisiblePointLabel} " +
         "hostVisibleIn=${inputState.insideHostVisibleAreaLabel}"
     val gestureLabel = "d=${inputState.distanceLabel} v=${inputState.velocityLabel} " +
@@ -99,7 +102,9 @@ internal fun CarVirtualDisplayProbeContent(
                     observedFrameLabel = observedFrameLabel,
                     hostSlotFrameLabel = hostSlotFrameLabel,
                     hostStableLabel = hostStableLabel,
+                    hostInputPointLabel = hostInputPointLabel,
                     surfacePointLabel = surfacePointLabel,
+                    observedFramePointLabel = observedFramePointLabel,
                     hostVisiblePointLabel = hostVisiblePointLabel,
                     gestureLabel = gestureLabel,
                 )
@@ -178,7 +183,9 @@ private fun CarVirtualDisplayProbeDiagnosticsOverlay(
     observedFrameLabel: String,
     hostSlotFrameLabel: String,
     hostStableLabel: String,
+    hostInputPointLabel: String,
     surfacePointLabel: String,
+    observedFramePointLabel: String,
     hostVisiblePointLabel: String,
     gestureLabel: String,
     modifier: Modifier = Modifier,
@@ -227,7 +234,17 @@ private fun CarVirtualDisplayProbeDiagnosticsOverlay(
             fontSize = 12.sp,
         )
         Text(
+            text = hostInputPointLabel,
+            color = Color(0xFFFDE68A),
+            fontSize = 12.sp,
+        )
+        Text(
             text = surfacePointLabel,
+            color = Color(0xFFFDE68A),
+            fontSize = 12.sp,
+        )
+        Text(
+            text = observedFramePointLabel,
             color = Color(0xFFFDE68A),
             fontSize = 12.sp,
         )

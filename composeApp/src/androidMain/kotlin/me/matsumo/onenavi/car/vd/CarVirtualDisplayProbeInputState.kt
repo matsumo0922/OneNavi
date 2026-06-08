@@ -31,9 +31,14 @@ data class CarVirtualDisplayProbeInputState(
     val sequence: Long,
     val kind: CarVirtualDisplayProbeInputKind,
     val isInPanMode: Boolean,
+    val hostInputX: Float?,
+    val hostInputY: Float?,
     val surfaceX: Float?,
     val surfaceY: Float?,
     val isInsideSurface: Boolean?,
+    val observedFrameX: Float?,
+    val observedFrameY: Float?,
+    val isInsideObservedFrame: Boolean?,
     val hostVisibleX: Float?,
     val hostVisibleY: Float?,
     val isInsideHostVisibleArea: Boolean?,
@@ -47,6 +52,12 @@ data class CarVirtualDisplayProbeInputState(
     val panModeLabel: String
         get() = if (isInPanMode) "on" else "off"
 
+    val hostInputPointLabel: String
+        get() = createPointLabel(
+            pointX = hostInputX,
+            pointY = hostInputY,
+        )
+
     val surfacePointLabel: String
         get() = createPointLabel(
             pointX = surfaceX,
@@ -55,6 +66,15 @@ data class CarVirtualDisplayProbeInputState(
 
     val insideSurfaceLabel: String
         get() = isInsideSurface?.toString() ?: "n/a"
+
+    val observedFramePointLabel: String
+        get() = createPointLabel(
+            pointX = observedFrameX,
+            pointY = observedFrameY,
+        )
+
+    val insideObservedFrameLabel: String
+        get() = isInsideObservedFrame?.toString() ?: "n/a"
 
     val hostVisiblePointLabel: String
         get() = createPointLabel(
@@ -82,11 +102,14 @@ data class CarVirtualDisplayProbeInputState(
 
     val logLabel: String
         get() {
+            val hostInputLabel = "hostInput=$hostInputPointLabel"
             val surfaceLabel = "surface=$surfacePointLabel, surfaceIn=$insideSurfaceLabel"
+            val observedFrameLabel = "observed=$observedFramePointLabel, observedIn=$insideObservedFrameLabel"
             val hostVisibleLabel = "hostVisible=$hostVisiblePointLabel, hostVisibleIn=$insideHostVisibleAreaLabel"
             val gestureLabel = "distance=$distanceLabel, velocity=$velocityLabel, scale=$scaleFactorLabel"
 
-            return "kind=${kind.label}, pan=$panModeLabel, $surfaceLabel, $hostVisibleLabel, $gestureLabel"
+            return "kind=${kind.label}, pan=$panModeLabel, $hostInputLabel, $surfaceLabel, $observedFrameLabel, " +
+                "$hostVisibleLabel, $gestureLabel"
         }
 }
 
@@ -95,9 +118,14 @@ internal fun createInitialCarVirtualDisplayProbeInputState(): CarVirtualDisplayP
         sequence = 0L,
         kind = CarVirtualDisplayProbeInputKind.None,
         isInPanMode = false,
+        hostInputX = null,
+        hostInputY = null,
         surfaceX = null,
         surfaceY = null,
         isInsideSurface = null,
+        observedFrameX = null,
+        observedFrameY = null,
+        isInsideObservedFrame = null,
         hostVisibleX = null,
         hostVisibleY = null,
         isInsideHostVisibleArea = null,
@@ -206,43 +234,27 @@ private fun createPositionedCarVirtualDisplayProbeInputState(
     surfaceY: Float,
     isInPanMode: Boolean,
 ): CarVirtualDisplayProbeInputState {
+    val inputCoordinate = viewport.resolveInputCoordinate(
+        hostInputX = surfaceX,
+        hostInputY = surfaceY,
+    )
+
     return createInitialCarVirtualDisplayProbeInputState().copy(
         sequence = sequence,
         kind = kind,
         isInPanMode = isInPanMode,
-        surfaceX = surfaceX,
-        surfaceY = surfaceY,
-        isInsideSurface = viewport.containsSurfacePoint(
-            surfaceX = surfaceX,
-            surfaceY = surfaceY,
-        ),
-        hostVisibleX = surfaceX - viewport.visibleLeft,
-        hostVisibleY = surfaceY - viewport.visibleTop,
-        isInsideHostVisibleArea = viewport.containsHostVisiblePoint(
-            surfaceX = surfaceX,
-            surfaceY = surfaceY,
-        ),
+        hostInputX = inputCoordinate.hostInputX,
+        hostInputY = inputCoordinate.hostInputY,
+        surfaceX = inputCoordinate.surfaceX,
+        surfaceY = inputCoordinate.surfaceY,
+        isInsideSurface = inputCoordinate.isInsideSurface,
+        observedFrameX = inputCoordinate.observedFrameX,
+        observedFrameY = inputCoordinate.observedFrameY,
+        isInsideObservedFrame = inputCoordinate.isInsideObservedFrame,
+        hostVisibleX = inputCoordinate.hostVisibleX,
+        hostVisibleY = inputCoordinate.hostVisibleY,
+        isInsideHostVisibleArea = inputCoordinate.isInsideHostVisibleArea,
     )
-}
-
-private fun CarVirtualDisplayProbeViewport.containsSurfacePoint(
-    surfaceX: Float,
-    surfaceY: Float,
-): Boolean {
-    val isInsideHorizontalBounds = surfaceX >= 0f && surfaceX <= surfaceWidth.toFloat()
-    val isInsideVerticalBounds = surfaceY >= 0f && surfaceY <= surfaceHeight.toFloat()
-
-    return isInsideHorizontalBounds && isInsideVerticalBounds
-}
-
-private fun CarVirtualDisplayProbeViewport.containsHostVisiblePoint(
-    surfaceX: Float,
-    surfaceY: Float,
-): Boolean {
-    val isInsideHorizontalBounds = surfaceX >= visibleLeft && surfaceX <= visibleRight
-    val isInsideVerticalBounds = surfaceY >= visibleTop && surfaceY <= visibleBottom
-
-    return isInsideHorizontalBounds && isInsideVerticalBounds
 }
 
 private fun createPointLabel(
