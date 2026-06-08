@@ -29,21 +29,18 @@ internal fun CarVirtualDisplayProbeContent(
     displayId: Int,
     expectedDisplayId: Int,
     rendererLabel: String,
-    viewport: CarVirtualDisplayProbeViewport,
+    viewport: CarVirtualDisplayViewport,
     inputState: CarVirtualDisplayProbeInputState,
     modifier: Modifier = Modifier,
 ) {
-    val contentHorizontalPadding = viewport.contentHorizontalPaddingValues(
+    val observedFrame = viewport.observedFrame
+    val observedFramePadding = viewport.observedFramePaddingValues(
         density = LocalDensity.current,
     )
-    val observedFrameLeft = viewport.observedFrameLeft
-    val observedFrameRight = viewport.observedFrameRight
     val hostSlotRightInset = viewport.surfaceWidth - viewport.visibleRight
-    val observedFrameWidth = observedFrameRight - observedFrameLeft
-    val observedFrameRightInset = viewport.surfaceWidth - observedFrameRight
-    val observedFrameLabel = "blue frame=${observedFrameWidth}x${viewport.surfaceHeight} " +
-        "L=$observedFrameLeft R=$observedFrameRightInset " +
-        "Rect($observedFrameLeft,0 - $observedFrameRight,${viewport.surfaceHeight})"
+    val observedFrameLabel = "blue frame=${observedFrame.width}x${observedFrame.height} " +
+        "L=${observedFrame.left} R=${viewport.observedFrameRightInset} " +
+        observedFrame.frameLabel
     val hostSlotFrameLabel = "pale frame=${viewport.visibleWidth}x${viewport.surfaceHeight} " +
         "L=${viewport.visibleLeft} R=$hostSlotRightInset " +
         "Rect(${viewport.visibleLeft},0 - ${viewport.visibleRight},${viewport.surfaceHeight})"
@@ -70,7 +67,7 @@ internal fun CarVirtualDisplayProbeContent(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(contentHorizontalPadding),
+                    .padding(observedFramePadding),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(
@@ -142,7 +139,7 @@ internal fun CarVirtualDisplayProbeContent(
 
 @Composable
 private fun CarVirtualDisplayProbeViewportOverlay(
-    viewport: CarVirtualDisplayProbeViewport,
+    viewport: CarVirtualDisplayViewport,
     modifier: Modifier = Modifier,
 ) {
     Canvas(
@@ -152,13 +149,15 @@ private fun CarVirtualDisplayProbeViewportOverlay(
     }
 }
 
-private fun DrawScope.drawProbeViewportFrames(viewport: CarVirtualDisplayProbeViewport) {
+private fun DrawScope.drawProbeViewportFrames(viewport: CarVirtualDisplayViewport) {
+    val observedFrame = viewport.observedFrame
+
     drawProbeFrame(
         color = Color(0xCC60A5FA),
-        left = viewport.observedFrameLeft,
-        top = 0,
-        right = viewport.observedFrameRight,
-        bottom = viewport.surfaceHeight,
+        left = observedFrame.left,
+        top = observedFrame.top,
+        right = observedFrame.right,
+        bottom = observedFrame.bottom,
         strokeWidth = OBSERVED_FRAME_STROKE_WIDTH,
     )
     drawProbeFrame(
@@ -199,28 +198,18 @@ private fun DrawScope.drawProbeFrame(
     )
 }
 
-private fun CarVirtualDisplayProbeViewport.contentHorizontalPaddingValues(
+private fun CarVirtualDisplayViewport.observedFramePaddingValues(
     density: Density,
 ): PaddingValues {
+    val viewportObservedFrame = observedFrame
+
     return with(density) {
         PaddingValues(
-            start = visibleLeft.toDp(),
-            end = (surfaceWidth - visibleRight).toDp(),
+            start = viewportObservedFrame.left.toDp(),
+            end = (surfaceWidth - viewportObservedFrame.right).toDp(),
         )
     }
 }
-
-private val CarVirtualDisplayProbeViewport.horizontalSafetyInset: Int
-    get() = minOf(
-        visibleLeft,
-        surfaceWidth - visibleRight,
-    ).coerceAtLeast(0)
-
-private val CarVirtualDisplayProbeViewport.observedFrameLeft: Int
-    get() = (visibleLeft - horizontalSafetyInset).coerceIn(0, surfaceWidth)
-
-private val CarVirtualDisplayProbeViewport.observedFrameRight: Int
-    get() = (visibleRight + horizontalSafetyInset).coerceIn(observedFrameLeft, surfaceWidth)
 
 /** host 上で OneNavi として観測できる描画枠を示す線幅。 */
 private const val OBSERVED_FRAME_STROKE_WIDTH = 2f

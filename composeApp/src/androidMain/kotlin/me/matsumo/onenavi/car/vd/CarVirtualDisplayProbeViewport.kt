@@ -3,9 +3,9 @@ package me.matsumo.onenavi.car.vd
 import android.graphics.Rect
 import androidx.compose.runtime.Immutable
 
-/** Android Auto host Surface 上でアプリ描画に使える viewport 情報。 */
+/** Android Auto host Surface 上でアプリ描画に使える共通 viewport 情報。 */
 @Immutable
-data class CarVirtualDisplayProbeViewport(
+data class CarVirtualDisplayViewport(
     val surfaceWidth: Int,
     val surfaceHeight: Int,
     val densityDpi: Int,
@@ -36,6 +36,50 @@ data class CarVirtualDisplayProbeViewport(
 
     val stableAreaLabel: String
         get() = "Rect($stableLeft, $stableTop - $stableRight, $stableBottom)"
+
+    val horizontalSafetyInset: Int
+        get() = minOf(
+            visibleLeft,
+            surfaceWidth - visibleRight,
+        ).coerceAtLeast(0)
+
+    val observedFrame: CarVirtualDisplayObservedFrame
+        get() {
+            val observedLeft = (visibleLeft - horizontalSafetyInset).coerceIn(0, surfaceWidth)
+            val observedRight = (visibleRight + horizontalSafetyInset).coerceIn(observedLeft, surfaceWidth)
+
+            return CarVirtualDisplayObservedFrame(
+                left = observedLeft,
+                top = 0,
+                right = observedRight,
+                bottom = surfaceHeight,
+            )
+        }
+
+    val observedFrameRightInset: Int
+        get() = surfaceWidth - observedFrame.right
+}
+
+/** probe 実装から既存名で参照するための viewport 型。 */
+internal typealias CarVirtualDisplayProbeViewport = CarVirtualDisplayViewport
+
+/** Android Auto host Surface 上で OneNaviApp を実際に描画する領域。 */
+@Immutable
+data class CarVirtualDisplayObservedFrame(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+) {
+
+    val width: Int
+        get() = right - left
+
+    val height: Int
+        get() = bottom - top
+
+    val frameLabel: String
+        get() = "Rect($left,$top - $right,$bottom)"
 }
 
 internal fun createCarVirtualDisplayProbeViewport(
