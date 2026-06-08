@@ -23,8 +23,8 @@ scripts/publish_ext_nav_api_to_local_repo.sh /path/to/external-nav-api-library
 ./gradlew :composeApp:assembleDebug
 ```
 
-依存 version は既定で `0.0.1`。変更する場合は `extNavApiVersion` または
-`EXT_NAV_API_VERSION` を指定する。
+依存 version は既定でローカル repository の Maven metadata に含まれる `latest.release`
+を使う。固定したい場合は `extNavApiVersion` または `EXT_NAV_API_VERSION` を指定する。
 
 ## ソース編集時
 

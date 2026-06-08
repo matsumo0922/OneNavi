@@ -16,7 +16,7 @@ kotlin {
             val extNavApiVersion = providers
                 .gradleProperty("extNavApiVersion")
                 .orElse(providers.environmentVariable("EXT_NAV_API_VERSION"))
-                .orElse("0.0.1")
+                .orElse("latest.release")
 
             implementation(project(":core:common"))
             implementation(project(":core:model"))
