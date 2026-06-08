@@ -2,6 +2,23 @@
 
 rootProject.name = "OneNavi"
 
+fun optionalGradleOrEnvironmentProperty(name: String, environmentName: String): String? =
+    providers
+        .gradleProperty(name)
+        .orElse(providers.environmentVariable(environmentName))
+        .orNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+
+val extNavApiPath = optionalGradleOrEnvironmentProperty(
+    name = "extNavApiPath",
+    environmentName = "EXT_NAV_API_PATH",
+)
+val extNavApiRepositoryPath = optionalGradleOrEnvironmentProperty(
+    name = "extNavApiRepositoryPath",
+    environmentName = "EXT_NAV_API_REPOSITORY_PATH",
+) ?: "${System.getProperty("user.home")}/.gradle/local-repos/ext-nav-api"
+
 pluginManagement {
     includeBuild("build-logic")
     repositories {
@@ -21,6 +38,11 @@ dependencyResolutionManagement {
         maven("https://api.xposed.info/") {
             content { includeGroup("de.robv.android.xposed") }
         }
+        maven {
+            name = "externalNavApi"
+            url = uri(extNavApiRepositoryPath)
+            content { includeGroup("me.matsumo.drive.supporter") }
+        }
     }
 }
 
@@ -39,4 +61,6 @@ include(":feature:setting")
 include(":feature:billing")
 include(":xposed-carunlock")
 
-includeBuild("drive-supporter-api")
+extNavApiPath?.let { path ->
+    includeBuild(path)
+}

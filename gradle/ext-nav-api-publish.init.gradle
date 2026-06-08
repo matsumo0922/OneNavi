@@ -1,0 +1,39 @@
+import org.gradle.api.publish.maven.MavenPublication
+
+def configuredRepositoryPath = gradle.startParameter.projectProperties["extNavApiRepositoryPath"]
+    ?: System.getenv("EXT_NAV_API_REPOSITORY_PATH")
+def repositoryPath = configuredRepositoryPath
+    ?: "${System.getProperty("user.home")}/.gradle/local-repos/ext-nav-api"
+
+allprojects {
+    plugins.withId("com.android.library") {
+        pluginManager.apply("maven-publish")
+
+        android {
+            publishing {
+                singleVariant("release") {
+                    withSourcesJar()
+                }
+            }
+        }
+
+        afterEvaluate {
+            publishing {
+                publications {
+                    release(MavenPublication) {
+                        from components.release
+                        groupId = project.group.toString()
+                        artifactId = project.name
+                        version = project.version.toString()
+                    }
+                }
+                repositories {
+                    maven {
+                        name = "externalNavApi"
+                        url = uri(repositoryPath)
+                    }
+                }
+            }
+        }
+    }
+}
