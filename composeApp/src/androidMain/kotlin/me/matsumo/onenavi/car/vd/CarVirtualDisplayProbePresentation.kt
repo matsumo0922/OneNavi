@@ -12,17 +12,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.lifecycle.setViewTreeViewModelStoreOwner
-import androidx.savedstate.SavedStateRegistry
-import androidx.savedstate.SavedStateRegistryController
-import androidx.savedstate.SavedStateRegistryOwner
-import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import me.matsumo.onenavi.R
 
 /** VD 上へ ComposeView を出す検証用 Presentation。 */
@@ -31,25 +20,11 @@ class CarVirtualDisplayProbePresentation(
     display: Display,
     initialViewport: CarVirtualDisplayProbeViewport,
     initialInputState: CarVirtualDisplayProbeInputState,
-) : Presentation(outerContext, display, R.style.Theme_Matsumo),
-    LifecycleOwner,
-    SavedStateRegistryOwner,
-    ViewModelStoreOwner {
+) : Presentation(outerContext, display, R.style.Theme_Matsumo) {
 
-    private val lifecycleRegistry = LifecycleRegistry(this)
-    private val savedStateRegistryController = SavedStateRegistryController.create(this)
-    private val presentationViewModelStore = ViewModelStore()
+    private val runtime = CarVirtualDisplayRuntime()
     private var viewport by mutableStateOf(initialViewport)
     private var inputState by mutableStateOf(initialInputState)
-
-    override val lifecycle: Lifecycle
-        get() = lifecycleRegistry
-
-    override val savedStateRegistry: SavedStateRegistry
-        get() = savedStateRegistryController.savedStateRegistry
-
-    override val viewModelStore: ViewModelStore
-        get() = presentationViewModelStore
 
     fun updateViewport(viewport: CarVirtualDisplayProbeViewport) {
         this.viewport = viewport
@@ -61,29 +36,28 @@ class CarVirtualDisplayProbePresentation(
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        savedStateRegistryController.performRestore(savedInstanceState)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
-        installViewTreeOwners()
-        setContentView(createComposeView())
+        runtime.create(savedInstanceState = savedInstanceState)
+
+        val composeView = createComposeView()
+        installViewTreeOwners(composeView = composeView)
+        setContentView(composeView)
+        installComposeContent(composeView = composeView)
     }
 
     override fun onStart() {
         super.onStart()
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        runtime.start()
+        runtime.resume()
     }
 
     override fun onStop() {
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
-        presentationViewModelStore.clear()
+        runtime.destroy()
         super.onStop()
     }
 
     override fun onSaveInstanceState(): Bundle {
         val bundle = super.onSaveInstanceState()
-        savedStateRegistryController.performSave(bundle)
+        runtime.save(outState = bundle)
         return bundle
     }
 
@@ -97,26 +71,28 @@ class CarVirtualDisplayProbePresentation(
         super.onDisplayChanged()
     }
 
-    private fun installViewTreeOwners() {
+    private fun installViewTreeOwners(composeView: ComposeView) {
         val decorView = requireNotNull(window).decorView
-        decorView.setViewTreeLifecycleOwner(this)
-        decorView.setViewTreeSavedStateRegistryOwner(this)
-        decorView.setViewTreeViewModelStoreOwner(this)
+        runtime.installViewTreeOwners(view = decorView)
+        runtime.installViewTreeOwners(view = composeView)
     }
 
     private fun createComposeView(): ComposeView {
         return ComposeView(context).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-            setContent {
-                CarVirtualDisplayProbeContent(
-                    modifier = Modifier.fillMaxSize(),
-                    displayId = display.displayId,
-                    expectedDisplayId = display.displayId,
-                    rendererLabel = "Presentation",
-                    viewport = viewport,
-                    inputState = inputState,
-                )
-            }
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        }
+    }
+
+    private fun installComposeContent(composeView: ComposeView) {
+        composeView.setContent {
+            CarVirtualDisplayProbeContent(
+                modifier = Modifier.fillMaxSize(),
+                displayId = display.displayId,
+                expectedDisplayId = display.displayId,
+                rendererLabel = "Presentation",
+                viewport = viewport,
+                inputState = inputState,
+            )
         }
     }
 
