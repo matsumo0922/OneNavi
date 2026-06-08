@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +36,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.matsumo.onenavi.MainViewModel
 import me.matsumo.onenavi.OneNaviApp
+import me.matsumo.onenavi.core.ui.theme.LocalSupportsPlatformDialogWindow
 import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -135,10 +137,14 @@ private fun CarVirtualDisplayProbeAppHost(
         }
 
         hasLocationPermission -> {
-            OneNaviApp(
-                modifier = modifier,
-                setting = appSetting,
-            )
+            CompositionLocalProvider(
+                LocalSupportsPlatformDialogWindow provides false,
+            ) {
+                OneNaviApp(
+                    modifier = modifier,
+                    setting = appSetting,
+                )
+            }
         }
 
         else -> {

@@ -151,16 +151,16 @@ internal fun createCarVirtualDisplayProbePanModeInputState(
 internal fun createCarVirtualDisplayProbeClickInputState(
     sequence: Long,
     viewport: CarVirtualDisplayProbeViewport,
-    surfaceX: Float,
-    surfaceY: Float,
+    hostInputX: Float,
+    hostInputY: Float,
     isInPanMode: Boolean,
 ): CarVirtualDisplayProbeInputState {
     return createPositionedCarVirtualDisplayProbeInputState(
         sequence = sequence,
         kind = CarVirtualDisplayProbeInputKind.Click,
         viewport = viewport,
-        surfaceX = surfaceX,
-        surfaceY = surfaceY,
+        hostInputX = hostInputX,
+        hostInputY = hostInputY,
         isInPanMode = isInPanMode,
     )
 }
@@ -209,8 +209,8 @@ internal fun createCarVirtualDisplayProbeScaleInputState(
             sequence = sequence,
             kind = CarVirtualDisplayProbeInputKind.Scale,
             viewport = viewport,
-            surfaceX = focusX,
-            surfaceY = focusY,
+            hostInputX = focusX,
+            hostInputY = focusY,
             isInPanMode = isInPanMode,
         )
     } else {
@@ -230,13 +230,13 @@ private fun createPositionedCarVirtualDisplayProbeInputState(
     sequence: Long,
     kind: CarVirtualDisplayProbeInputKind,
     viewport: CarVirtualDisplayProbeViewport,
-    surfaceX: Float,
-    surfaceY: Float,
+    hostInputX: Float,
+    hostInputY: Float,
     isInPanMode: Boolean,
 ): CarVirtualDisplayProbeInputState {
     val inputCoordinate = viewport.resolveInputCoordinate(
-        hostInputX = surfaceX,
-        hostInputY = surfaceY,
+        hostInputX = hostInputX,
+        hostInputY = hostInputY,
     )
 
     return createInitialCarVirtualDisplayProbeInputState().copy(

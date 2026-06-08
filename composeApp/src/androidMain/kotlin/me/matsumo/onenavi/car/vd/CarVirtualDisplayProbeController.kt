@@ -81,20 +81,21 @@ class CarVirtualDisplayProbeController(
         )
     }
 
-    fun updateClickInput(surfaceX: Float, surfaceY: Float) {
+    fun updateClickInput(hostInputX: Float, hostInputY: Float) {
         val viewport = findViewportForInput(
             inputLabel = "click",
         ) ?: return
 
-        publishInputState(
-            inputState = createCarVirtualDisplayProbeClickInputState(
-                sequence = nextInputSequence(),
-                viewport = viewport,
-                surfaceX = surfaceX,
-                surfaceY = surfaceY,
-                isInPanMode = isInPanMode,
-            ),
+        val inputState = createCarVirtualDisplayProbeClickInputState(
+            sequence = nextInputSequence(),
+            viewport = viewport,
+            hostInputX = hostInputX,
+            hostInputY = hostInputY,
+            isInPanMode = isInPanMode,
         )
+
+        publishInputState(inputState = inputState)
+        dispatchClickInput(inputState = inputState)
     }
 
     fun updateScrollInput(distanceX: Float, distanceY: Float) {
@@ -231,6 +232,24 @@ class CarVirtualDisplayProbeController(
         Log.e(TAG, "VirtualDisplay creation failed.", throwable)
     }
 
+    private fun dispatchClickInput(inputState: CarVirtualDisplayProbeInputState) {
+        val shouldDispatchClick = inputState.isInsideObservedFrame == true
+
+        if (!shouldDispatchClick) {
+            Log.i(TAG, "Click injection skipped. ${inputState.logLabel}")
+            return
+        }
+
+        val didDispatchClick = presentation?.dispatchClickInput(
+            inputState = inputState,
+        ) ?: false
+
+        Log.i(
+            TAG,
+            "Click injection applied. dispatched=$didDispatchClick ${inputState.logLabel}",
+        )
+    }
+
     private fun findViewportForInput(inputLabel: String): CarVirtualDisplayProbeViewport? {
         val viewport = currentViewport
 
@@ -245,7 +264,6 @@ class CarVirtualDisplayProbeController(
     private fun publishInputState(inputState: CarVirtualDisplayProbeInputState) {
         currentInputState = inputState
         presentation?.updateInputState(inputState = inputState)
-        Log.i(TAG, "Input applied. ${inputState.logLabel}")
     }
 
     private fun nextInputSequence(): Long {

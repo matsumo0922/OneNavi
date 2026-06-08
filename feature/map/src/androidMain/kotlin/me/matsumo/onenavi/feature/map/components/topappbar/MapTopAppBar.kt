@@ -1,10 +1,13 @@
 package me.matsumo.onenavi.feature.map.components.topappbar
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -48,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
@@ -59,6 +63,7 @@ import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_search_bar_placeholder
 import me.matsumo.onenavi.core.resource.setting_title
+import me.matsumo.onenavi.core.ui.theme.LocalSupportsPlatformDialogWindow
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import org.jetbrains.compose.resources.stringResource
@@ -74,11 +79,13 @@ internal fun MapTopAppBar(
     showSettingAction: Boolean,
     onUiEvent: (MapUiEvent) -> Unit,
     onSettingClicked: () -> Unit,
+    onTopAppBarHeightChanged: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
     val searchBarState = rememberSearchBarState()
     val textFieldState = rememberTextFieldState()
+    val supportsPlatformDialogWindow = LocalSupportsPlatformDialogWindow.current
 
     var showSearchResult by rememberSaveable { mutableStateOf(false) }
     var canFocus by remember { mutableStateOf(false) }
@@ -96,6 +103,29 @@ internal fun MapTopAppBar(
                 longitude = cameraState.myLocationLongitude,
             ),
         )
+    }
+
+    suspend fun collapseSearchAfterItemSelected() {
+        showSearchResult = true
+        searchBarState.animateToCollapsed()
+    }
+
+    fun requestSearchCollapseAfterItemSelected() {
+        scope.launch {
+            collapseSearchAfterItemSelected()
+        }
+    }
+
+    fun onHistorySelected(history: SearchHistory) {
+        textFieldState.setTextAndPlaceCursorAtEnd(history.name)
+        onUiEvent(MapUiEvent.OnHistorySelected(history))
+        requestSearchCollapseAfterItemSelected()
+    }
+
+    fun onSuggestionSelected(suggestion: SearchSuggestionItem) {
+        textFieldState.setTextAndPlaceCursorAtEnd(suggestion.name)
+        onUiEvent(MapUiEvent.OnSuggestionSelected(suggestion))
+        requestSearchCollapseAfterItemSelected()
     }
 
     LaunchedEffect(Unit) {
@@ -124,90 +154,176 @@ internal fun MapTopAppBar(
             }
     }
 
-    Column(
+    Box(
         modifier = modifier,
     ) {
         val isSearchBarCollapsed = searchBarState.currentValue == SearchBarValue.Collapsed
         val isSearchBarTargetCollapsed = searchBarState.targetValue == SearchBarValue.Collapsed
         val shouldShowSettingAction = showSettingAction && isSearchBarCollapsed && isSearchBarTargetCollapsed
 
-        AppBarWithSearch(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            state = searchBarState,
-            inputField = {
-                HomeMapSearchInputField(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusProperties {
-                            this.canFocus = canFocus
-                        },
-                    searchBarState = searchBarState,
-                    textFieldState = textFieldState,
-                    showSearchResult = showSearchResult,
-                    showSettingAction = shouldShowSettingAction,
-                    onSearch = ::onSearchAction,
-                    onBackClicked = ::onBackClicked,
-                    onSettingClicked = onSettingClicked,
-                )
-            },
-            shadowElevation = 4.dp,
-            colors = SearchBarDefaults.appBarWithSearchColors(
-                appBarContainerColor = Color.Transparent,
-                searchBarColors = SearchBarDefaults.colors(MaterialTheme.colorScheme.surfaceContainerLow),
-            ),
-            contentPadding = PaddingValues(top = 4.dp),
-            windowInsets = WindowInsets(0),
-        )
-
-        ExpandedFullScreenSearchBar(
-            state = searchBarState,
-            inputField = {
-                HomeMapSearchInputField(
-                    searchBarState = searchBarState,
-                    textFieldState = textFieldState,
-                    showSearchResult = showSearchResult,
-                    showSettingAction = false,
-                    onSearch = ::onSearchAction,
-                    onBackClicked = ::onBackClicked,
-                    onSettingClicked = onSettingClicked,
-                )
-            },
-            colors = SearchBarDefaults.colors(MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
-            val query = textFieldState.text.toString()
-
-            if (query.isBlank()) {
-                HomeMapSearchHistoryList(
-                    histories = histories,
-                    onHistorySelected = { history ->
-                        textFieldState.setTextAndPlaceCursorAtEnd(history.name)
-                        onUiEvent(MapUiEvent.OnHistorySelected(history))
-
-                        scope.launch {
-                            showSearchResult = true
-                            searchBarState.animateToCollapsed()
-                        }
+            AppBarWithSearch(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned {
+                        onTopAppBarHeightChanged(it.size.height)
                     },
-                    onRemoveHistory = {
-                        onUiEvent(MapUiEvent.OnRemoveHistory(it))
-                    },
-                )
-            } else {
-                HomeMapSearchSuggestionList(
-                    suggestions = suggestions,
-                    onSuggestionSelected = { suggestion ->
-                        textFieldState.setTextAndPlaceCursorAtEnd(suggestion.name)
-                        onUiEvent(MapUiEvent.OnSuggestionSelected(suggestion))
+                state = searchBarState,
+                inputField = {
+                    HomeMapSearchInputField(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusProperties {
+                                this.canFocus = canFocus
+                            },
+                        searchBarState = searchBarState,
+                        textFieldState = textFieldState,
+                        showSearchResult = showSearchResult,
+                        showSettingAction = shouldShowSettingAction,
+                        onSearch = ::onSearchAction,
+                        onBackClicked = ::onBackClicked,
+                        onSettingClicked = onSettingClicked,
+                    )
+                },
+                shadowElevation = 4.dp,
+                colors = SearchBarDefaults.appBarWithSearchColors(
+                    appBarContainerColor = Color.Transparent,
+                    searchBarColors = SearchBarDefaults.colors(MaterialTheme.colorScheme.surfaceContainerLow),
+                ),
+                contentPadding = PaddingValues(top = 4.dp),
+                windowInsets = WindowInsets(0),
+            )
 
-                        scope.launch {
-                            showSearchResult = true
-                            searchBarState.animateToCollapsed()
-                        }
+            if (supportsPlatformDialogWindow) {
+                ExpandedFullScreenSearchBar(
+                    state = searchBarState,
+                    inputField = {
+                        HomeMapSearchInputField(
+                            searchBarState = searchBarState,
+                            textFieldState = textFieldState,
+                            showSearchResult = showSearchResult,
+                            showSettingAction = false,
+                            onSearch = ::onSearchAction,
+                            onBackClicked = ::onBackClicked,
+                            onSettingClicked = onSettingClicked,
+                        )
                     },
-                )
+                    colors = SearchBarDefaults.colors(MaterialTheme.colorScheme.surfaceContainerLow),
+                ) {
+                    MapTopAppBarSearchContent(
+                        query = textFieldState.text.toString(),
+                        suggestions = suggestions,
+                        histories = histories,
+                        onHistorySelected = ::onHistorySelected,
+                        onRemoveHistory = { onUiEvent(MapUiEvent.OnRemoveHistory(it)) },
+                        onSuggestionSelected = ::onSuggestionSelected,
+                    )
+                }
             }
         }
+
+        if (!supportsPlatformDialogWindow) {
+            MapTopAppBarEmbeddedSearchOverlay(
+                modifier = Modifier.fillMaxSize(),
+                isVisible = searchBarState.isExpandedOrExpanding(),
+                searchBarState = searchBarState,
+                textFieldState = textFieldState,
+                query = textFieldState.text.toString(),
+                suggestions = suggestions,
+                histories = histories,
+                showSearchResult = showSearchResult,
+                onSearch = ::onSearchAction,
+                onBackClicked = ::onBackClicked,
+                onSettingClicked = onSettingClicked,
+                onHistorySelected = ::onHistorySelected,
+                onRemoveHistory = { onUiEvent(MapUiEvent.OnRemoveHistory(it)) },
+                onSuggestionSelected = ::onSuggestionSelected,
+            )
+        }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MapTopAppBarEmbeddedSearchOverlay(
+    isVisible: Boolean,
+    searchBarState: SearchBarState,
+    textFieldState: TextFieldState,
+    query: String,
+    suggestions: ImmutableList<SearchSuggestionItem>,
+    histories: ImmutableList<SearchHistory>,
+    showSearchResult: Boolean,
+    onSearch: (String) -> Unit,
+    onBackClicked: () -> Unit,
+    onSettingClicked: () -> Unit,
+    onHistorySelected: (SearchHistory) -> Unit,
+    onRemoveHistory: (String) -> Unit,
+    onSuggestionSelected: (SearchSuggestionItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (!isVisible) {
+        return
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface),
+    ) {
+        HomeMapSearchInputField(
+            modifier = Modifier.fillMaxWidth(),
+            searchBarState = searchBarState,
+            textFieldState = textFieldState,
+            showSearchResult = showSearchResult,
+            showSettingAction = false,
+            onSearch = onSearch,
+            onBackClicked = onBackClicked,
+            onSettingClicked = onSettingClicked,
+        )
+
+        MapTopAppBarSearchContent(
+            modifier = Modifier.weight(1f),
+            query = query,
+            suggestions = suggestions,
+            histories = histories,
+            onHistorySelected = onHistorySelected,
+            onRemoveHistory = onRemoveHistory,
+            onSuggestionSelected = onSuggestionSelected,
+        )
+    }
+}
+
+@Composable
+private fun MapTopAppBarSearchContent(
+    query: String,
+    suggestions: ImmutableList<SearchSuggestionItem>,
+    histories: ImmutableList<SearchHistory>,
+    onHistorySelected: (SearchHistory) -> Unit,
+    onRemoveHistory: (String) -> Unit,
+    onSuggestionSelected: (SearchSuggestionItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (query.isBlank()) {
+        HomeMapSearchHistoryList(
+            modifier = modifier,
+            histories = histories,
+            onHistorySelected = onHistorySelected,
+            onRemoveHistory = onRemoveHistory,
+        )
+    } else {
+        HomeMapSearchSuggestionList(
+            modifier = modifier,
+            suggestions = suggestions,
+            onSuggestionSelected = onSuggestionSelected,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+private fun SearchBarState.isExpandedOrExpanding(): Boolean {
+    return currentValue == SearchBarValue.Expanded || targetValue == SearchBarValue.Expanded
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
