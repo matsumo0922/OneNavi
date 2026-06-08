@@ -21,6 +21,9 @@ class CarVirtualDisplayProbeController(
     private var virtualDisplay: VirtualDisplay? = null
     private var presentation: CarVirtualDisplayProbePresentation? = null
     private var currentViewport: CarVirtualDisplayProbeViewport? = null
+    private var inputSequence = 0L
+    private var isInPanMode = false
+    private var currentInputState = createInitialCarVirtualDisplayProbeInputState()
 
     fun attachSurface(surfaceContainer: SurfaceContainer) {
         val hostSurface = surfaceContainer.surface
@@ -66,6 +69,71 @@ class CarVirtualDisplayProbeController(
         currentViewport = updatedViewport
         presentation?.updateViewport(viewport = updatedViewport)
         Log.i(TAG, "Viewport stable applied. stable=${updatedViewport.stableAreaLabel}")
+    }
+
+    fun updatePanMode(isInPanMode: Boolean) {
+        this.isInPanMode = isInPanMode
+        publishInputState(
+            inputState = createCarVirtualDisplayProbePanModeInputState(
+                sequence = nextInputSequence(),
+                isInPanMode = isInPanMode,
+            ),
+        )
+    }
+
+    fun updateClickInput(surfaceX: Float, surfaceY: Float) {
+        val viewport = findViewportForInput(
+            inputLabel = "click",
+        ) ?: return
+
+        publishInputState(
+            inputState = createCarVirtualDisplayProbeClickInputState(
+                sequence = nextInputSequence(),
+                viewport = viewport,
+                surfaceX = surfaceX,
+                surfaceY = surfaceY,
+                isInPanMode = isInPanMode,
+            ),
+        )
+    }
+
+    fun updateScrollInput(distanceX: Float, distanceY: Float) {
+        publishInputState(
+            inputState = createCarVirtualDisplayProbeScrollInputState(
+                sequence = nextInputSequence(),
+                distanceX = distanceX,
+                distanceY = distanceY,
+                isInPanMode = isInPanMode,
+            ),
+        )
+    }
+
+    fun updateFlingInput(velocityX: Float, velocityY: Float) {
+        publishInputState(
+            inputState = createCarVirtualDisplayProbeFlingInputState(
+                sequence = nextInputSequence(),
+                velocityX = velocityX,
+                velocityY = velocityY,
+                isInPanMode = isInPanMode,
+            ),
+        )
+    }
+
+    fun updateScaleInput(focusX: Float, focusY: Float, scaleFactor: Float) {
+        val viewport = findViewportForInput(
+            inputLabel = "scale",
+        ) ?: return
+
+        publishInputState(
+            inputState = createCarVirtualDisplayProbeScaleInputState(
+                sequence = nextInputSequence(),
+                viewport = viewport,
+                focusX = focusX,
+                focusY = focusY,
+                scaleFactor = scaleFactor,
+                isInPanMode = isInPanMode,
+            ),
+        )
     }
 
     fun release() {
@@ -126,6 +194,7 @@ class CarVirtualDisplayProbeController(
                 outerContext = appContext,
                 display = display,
                 initialViewport = viewport,
+                initialInputState = currentInputState,
             ).also { probePresentation ->
                 probePresentation.show()
             }
@@ -160,6 +229,28 @@ class CarVirtualDisplayProbeController(
 
     private fun logVirtualDisplayFailure(throwable: Throwable) {
         Log.e(TAG, "VirtualDisplay creation failed.", throwable)
+    }
+
+    private fun findViewportForInput(inputLabel: String): CarVirtualDisplayProbeViewport? {
+        val viewport = currentViewport
+
+        if (viewport == null) {
+            Log.w(TAG, "Input ignored before viewport is ready. input=$inputLabel")
+            return null
+        }
+
+        return viewport
+    }
+
+    private fun publishInputState(inputState: CarVirtualDisplayProbeInputState) {
+        currentInputState = inputState
+        presentation?.updateInputState(inputState = inputState)
+        Log.i(TAG, "Input applied. ${inputState.logLabel}")
+    }
+
+    private fun nextInputSequence(): Long {
+        inputSequence += 1
+        return inputSequence
     }
 
     private fun dismissProbePresentation() {

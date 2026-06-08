@@ -30,6 +30,7 @@ class CarVirtualDisplayProbePresentation(
     outerContext: Context,
     display: Display,
     initialViewport: CarVirtualDisplayProbeViewport,
+    initialInputState: CarVirtualDisplayProbeInputState,
 ) : Presentation(outerContext, display, R.style.Theme_Matsumo),
     LifecycleOwner,
     SavedStateRegistryOwner,
@@ -39,6 +40,7 @@ class CarVirtualDisplayProbePresentation(
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
     private val presentationViewModelStore = ViewModelStore()
     private var viewport by mutableStateOf(initialViewport)
+    private var inputState by mutableStateOf(initialInputState)
 
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
@@ -51,6 +53,10 @@ class CarVirtualDisplayProbePresentation(
 
     fun updateViewport(viewport: CarVirtualDisplayProbeViewport) {
         this.viewport = viewport
+    }
+
+    fun updateInputState(inputState: CarVirtualDisplayProbeInputState) {
+        this.inputState = inputState
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -108,6 +114,7 @@ class CarVirtualDisplayProbePresentation(
                     expectedDisplayId = display.displayId,
                     rendererLabel = "Presentation",
                     viewport = viewport,
+                    inputState = inputState,
                 )
             }
         }

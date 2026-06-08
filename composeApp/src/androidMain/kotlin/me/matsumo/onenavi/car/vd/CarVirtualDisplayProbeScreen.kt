@@ -80,6 +80,7 @@ class CarVirtualDisplayProbeScreen(
 
     private fun handlePanModeChanged(isInPanMode: Boolean) {
         Log.i(TAG, "Pan mode changed. isInPanMode=$isInPanMode")
+        controller.updatePanMode(isInPanMode = isInPanMode)
     }
 
     private companion object {

@@ -25,27 +25,38 @@ internal fun CarVirtualDisplayProbeContent(
     expectedDisplayId: Int,
     rendererLabel: String,
     viewport: CarVirtualDisplayProbeViewport,
+    inputState: CarVirtualDisplayProbeInputState,
     modifier: Modifier = Modifier,
 ) {
-    val visiblePadding = viewport.visiblePaddingValues(
+    val contentHorizontalPadding = viewport.contentHorizontalPaddingValues(
         density = LocalDensity.current,
     )
+    val hostVisibleLabel = "draw=surface contentX=${viewport.visibleWidth} " +
+        "${viewport.visibleAreaLabel}"
+    val hostStableLabel = "host stable=${viewport.stableWidth}x${viewport.stableHeight} " +
+        "${viewport.stableAreaLabel}"
+    val surfacePointLabel = "pt surface=${inputState.surfacePointLabel} " +
+        "surfaceIn=${inputState.insideSurfaceLabel}"
+    val hostVisiblePointLabel = "hostVisible=${inputState.hostVisiblePointLabel} " +
+        "hostVisibleIn=${inputState.insideHostVisibleAreaLabel}"
+    val gestureLabel = "d=${inputState.distanceLabel} v=${inputState.velocityLabel} " +
+        "scale=${inputState.scaleFactorLabel}"
 
     MaterialTheme {
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .background(Color(0xFF020617)),
+                .background(Color(0xFF111827)),
+            contentAlignment = Alignment.Center,
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(visiblePadding)
-                    .background(Color(0xFF111827))
-                    .padding(32.dp),
+                    .padding(contentHorizontalPadding),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(
+                    modifier = Modifier.padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -61,13 +72,38 @@ internal fun CarVirtualDisplayProbeContent(
                         fontSize = 18.sp,
                     )
                     Text(
-                        text = "visible=${viewport.visibleWidth}x${viewport.visibleHeight} ${viewport.visibleAreaLabel}",
+                        text = "surface=${viewport.surfaceWidth}x${viewport.surfaceHeight} dpi=${viewport.densityDpi}",
                         color = Color(0xFFE5E7EB),
                         fontSize = 14.sp,
                     )
                     Text(
-                        text = "stable=${viewport.stableWidth}x${viewport.stableHeight} ${viewport.stableAreaLabel}",
+                        text = hostVisibleLabel,
+                        color = Color(0xFFE5E7EB),
+                        fontSize = 14.sp,
+                    )
+                    Text(
+                        text = hostStableLabel,
                         color = Color(0xFFC7D2FE),
+                        fontSize = 14.sp,
+                    )
+                    Text(
+                        text = "input #${inputState.sequence} ${inputState.kind.label} pan=${inputState.panModeLabel}",
+                        color = Color(0xFFFDE68A),
+                        fontSize = 14.sp,
+                    )
+                    Text(
+                        text = surfacePointLabel,
+                        color = Color(0xFFFDE68A),
+                        fontSize = 14.sp,
+                    )
+                    Text(
+                        text = hostVisiblePointLabel,
+                        color = Color(0xFFFDE68A),
+                        fontSize = 14.sp,
+                    )
+                    Text(
+                        text = gestureLabel,
+                        color = Color(0xFFFDE68A),
                         fontSize = 14.sp,
                     )
                     Text(
@@ -81,15 +117,13 @@ internal fun CarVirtualDisplayProbeContent(
     }
 }
 
-private fun CarVirtualDisplayProbeViewport.visiblePaddingValues(
+private fun CarVirtualDisplayProbeViewport.contentHorizontalPaddingValues(
     density: Density,
 ): PaddingValues {
     return with(density) {
         PaddingValues(
             start = visibleLeft.toDp(),
-            top = visibleTop.toDp(),
             end = (surfaceWidth - visibleRight).toDp(),
-            bottom = (surfaceHeight - visibleBottom).toDp(),
         )
     }
 }
