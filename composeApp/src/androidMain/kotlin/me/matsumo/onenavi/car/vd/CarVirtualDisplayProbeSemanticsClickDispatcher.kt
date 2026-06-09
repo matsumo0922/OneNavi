@@ -26,14 +26,64 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
         composeView: ComposeView,
         surfaceX: Float,
         surfaceY: Float,
-    ): Boolean {
-        val rootForTest = composeView.getChildAt(0) as? ViewRootForTest ?: return false
-        val touchPoint = Offset(
-            x = surfaceX,
-            y = surfaceY,
+        observedFrameX: Float?,
+        observedFrameY: Float?,
+    ): String? {
+        val rootForTest = composeView.getChildAt(0) as? ViewRootForTest ?: return null
+        val touchPoints = createTouchPointCandidates(
+            surfaceX = surfaceX,
+            surfaceY = surfaceY,
+            observedFrameX = observedFrameX,
+            observedFrameY = observedFrameY,
         )
-        val targetNode = rootForTest.semanticsOwner
-            .getAllSemanticsNodes(mergingEnabled = true)
+
+        return touchPoints.firstNotNullOfOrNull { touchPoint ->
+            dispatchClick(
+                rootForTest = rootForTest,
+                touchPoint = touchPoint,
+            )
+        }
+    }
+
+    private fun dispatchClick(
+        rootForTest: ViewRootForTest,
+        touchPoint: Pair<String, Offset>,
+    ): String? {
+        val targetNode = findClickableTargetNode(
+            rootForTest = rootForTest,
+            touchPoint = touchPoint.second,
+        ) ?: return null
+
+        val clickAction = targetNode.config.getOrNull(SemanticsActions.OnClick)
+        val didHandleClick = clickAction?.action?.let { action ->
+            runCatching { action() }.getOrDefault(false)
+        } == true
+
+        return if (didHandleClick) touchPoint.first else null
+    }
+
+    private fun findClickableTargetNode(
+        rootForTest: ViewRootForTest,
+        touchPoint: Offset,
+    ): SemanticsNode? {
+        return findClickableTargetNode(
+            rootForTest = rootForTest,
+            touchPoint = touchPoint,
+            mergingEnabled = true,
+        ) ?: findClickableTargetNode(
+            rootForTest = rootForTest,
+            touchPoint = touchPoint,
+            mergingEnabled = false,
+        )
+    }
+
+    private fun findClickableTargetNode(
+        rootForTest: ViewRootForTest,
+        touchPoint: Offset,
+        mergingEnabled: Boolean,
+    ): SemanticsNode? {
+        return rootForTest.semanticsOwner
+            .getAllSemanticsNodes(mergingEnabled = mergingEnabled)
             .asSequence()
             .filter { semanticsNode ->
                 semanticsNode.isClickableTarget(touchPoint = touchPoint)
@@ -43,12 +93,46 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
                     semanticsNode.touchArea
                 },
             )
-            ?: return false
+    }
 
-        val clickAction = targetNode.config.getOrNull(SemanticsActions.OnClick)
-        return clickAction?.action?.let { action ->
-            runCatching { action() }.getOrDefault(false)
-        } == true
+    private fun createTouchPointCandidates(
+        surfaceX: Float,
+        surfaceY: Float,
+        observedFrameX: Float?,
+        observedFrameY: Float?,
+    ): List<Pair<String, Offset>> {
+        val surfacePoint = Offset(
+            x = surfaceX,
+            y = surfaceY,
+        )
+        val observedFramePoint = createObservedFrameTouchPoint(
+            observedFrameX = observedFrameX,
+            observedFrameY = observedFrameY,
+        )
+        val surfaceCandidate = "surface" to surfacePoint
+
+        if (observedFramePoint == null || observedFramePoint == surfacePoint) {
+            return listOf(surfaceCandidate)
+        }
+
+        return listOf(
+            "observed" to observedFramePoint,
+            surfaceCandidate,
+        )
+    }
+
+    private fun createObservedFrameTouchPoint(
+        observedFrameX: Float?,
+        observedFrameY: Float?,
+    ): Offset? {
+        if (observedFrameX == null || observedFrameY == null) {
+            return null
+        }
+
+        return Offset(
+            x = observedFrameX,
+            y = observedFrameY,
+        )
     }
 
     private fun SemanticsNode.isClickableTarget(touchPoint: Offset): Boolean {

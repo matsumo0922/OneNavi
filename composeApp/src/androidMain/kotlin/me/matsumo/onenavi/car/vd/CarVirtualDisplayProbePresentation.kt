@@ -53,10 +53,7 @@ class CarVirtualDisplayProbePresentation(
             return false
         }
 
-        return dispatchClickMotionEvents(
-            surfaceX = eventX,
-            surfaceY = eventY,
-        )
+        return dispatchClickMotionEvents(inputState = inputState)
     }
 
     fun dispatchScrollInput(inputState: CarVirtualDisplayProbeInputState): Boolean {
@@ -146,23 +143,35 @@ class CarVirtualDisplayProbePresentation(
         }
     }
 
-    private fun dispatchClickMotionEvents(surfaceX: Float, surfaceY: Float): Boolean {
+    private fun dispatchClickMotionEvents(inputState: CarVirtualDisplayProbeInputState): Boolean {
         val targetComposeView = composeView
-        val didHandleSemanticsClick = targetComposeView?.let { composeView ->
+        val surfaceX = inputState.surfaceX ?: return false
+        val surfaceY = inputState.surfaceY ?: return false
+        val semanticsCoordinateSpace = targetComposeView?.let { composeView ->
             semanticsClickDispatcher.dispatchClick(
                 composeView = composeView,
                 surfaceX = surfaceX,
                 surfaceY = surfaceY,
+                observedFrameX = inputState.observedFrameX,
+                observedFrameY = inputState.observedFrameY,
             )
-        } == true
+        }
 
-        if (didHandleSemanticsClick) {
+        if (semanticsCoordinateSpace != null) {
             Log.i(
                 TAG,
-                "Click semantics applied. surface=${surfaceX.toInt()},${surfaceY.toInt()}",
+                "Click semantics applied. coordinate=$semanticsCoordinateSpace " +
+                    "surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
+                    "observed=${inputState.observedFramePointLabel}",
             )
             return true
         }
+
+        Log.i(
+            TAG,
+            "Click semantics missed. surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
+                "observed=${inputState.observedFramePointLabel}",
+        )
 
         val didHandleClick = gestureDispatcher.dispatchClick(
             surfaceX = surfaceX,
