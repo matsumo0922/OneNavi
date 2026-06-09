@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,6 +40,7 @@ import me.matsumo.onenavi.OneNaviApp
 import me.matsumo.onenavi.core.model.AppSetting
 import me.matsumo.onenavi.core.ui.theme.LocalSupportsPlatformDialogWindow
 import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
+import me.matsumo.onenavi.feature.map.MapRenderDensityDiagnostics
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -76,6 +78,9 @@ internal fun CarVirtualDisplayProbeContent(
         "scale=${inputState.scaleFactorLabel}"
     val clickCoordinateLabel = clickCoordinateResult.toClickCoordinateLabel()
     val clickCandidateLabel = inputState.toClickCandidateLabel(viewport)
+    val composeDensity = LocalDensity.current.density
+    val mapDensityLabel = MapRenderDensityDiagnostics.label
+        ?: "mapDensity eff=n/a compose=$composeDensity"
 
     MaterialTheme {
         Box(
@@ -122,6 +127,7 @@ internal fun CarVirtualDisplayProbeContent(
                         gestureLabel = gestureLabel,
                         clickCoordinateLabel = clickCoordinateLabel,
                         clickCandidateLabel = clickCandidateLabel,
+                        mapDensityLabel = mapDensityLabel,
                     )
                 }
             }
@@ -208,6 +214,7 @@ private fun CarVirtualDisplayProbeDiagnosticsOverlay(
     gestureLabel: String,
     clickCoordinateLabel: String,
     clickCandidateLabel: String,
+    mapDensityLabel: String,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -286,6 +293,11 @@ private fun CarVirtualDisplayProbeDiagnosticsOverlay(
         Text(
             text = clickCandidateLabel,
             color = Color(0xFFA7F3D0),
+            fontSize = 12.sp,
+        )
+        Text(
+            text = mapDensityLabel,
+            color = Color(0xFFF9A8D4),
             fontSize = 12.sp,
         )
     }

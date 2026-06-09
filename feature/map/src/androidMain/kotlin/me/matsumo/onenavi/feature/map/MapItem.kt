@@ -2,6 +2,9 @@ package me.matsumo.onenavi.feature.map
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.res.Configuration
+import android.content.res.Resources
 import android.graphics.Rect
 import android.os.Bundle
 import android.util.DisplayMetrics
@@ -38,6 +41,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapColorScheme
 import com.google.android.gms.maps.model.PointOfInterest
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.delay
 import me.matsumo.onenavi.feature.map.state.MapCameraDefaults
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
@@ -78,6 +82,14 @@ internal fun MapItem(
 
         LaunchedEffect(it) {
             cameraState.attachMap(it)
+        }
+
+        if (shouldLogDiagnostics) {
+            MapRenderDensityDiagnosticsEffect(
+                googleMap = it,
+                composeDensity = density.density,
+                mapView = mapView,
+            )
         }
     }
 
@@ -339,6 +351,9 @@ private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"
 /** MapView 内部 View の探索深さ上限。 */
 private const val MAP_VIEW_DIAGNOSTIC_MAX_DEPTH = 6
 
+/** 描画 density 計測のポーリング間隔 (ms)。 */
+private const val MAP_RENDER_DENSITY_SAMPLE_INTERVAL_MS = 1000L
+
 @Composable
 private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
     val context = LocalContext.current
@@ -356,10 +371,59 @@ private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
             .compassEnabled(false)
             .mapToolbarEnabled(false)
 
-        MapView(context, mapOptions).apply {
+        MapView(context.withDisplayMatchedApplicationContext(), mapOptions).apply {
             onCreate(Bundle())
         }
     }
+}
+
+/**
+ * MapView へ渡す context の applicationContext を、この context が乗っているディスプレイの density に揃える。
+ *
+ * GoogleMap SDK は地図描画スケールを applicationContext の resources density から取得する。
+ * VirtualDisplay / Presentation 上では applicationContext がプライマリディスプレイ（端末本体）の
+ * density のままになり、地図だけが拡大表示される。表示先ディスプレイと applicationContext の density が
+ * 食い違う場合のみ、density を合わせた applicationContext を返す wrapper を被せる。
+ *
+ * 通常端末・タブレットでは両 density が一致するため [this] をそのまま返す（no-op）。
+ */
+private fun Context.withDisplayMatchedApplicationContext(): Context {
+    val displayDensityDpi = resources.configuration.densityDpi
+    val applicationDensityDpi = applicationContext.resources.configuration.densityDpi
+
+    if (displayDensityDpi == applicationDensityDpi) {
+        return this
+    }
+
+    val matchedApplicationContext = DisplayDensityApplicationContext(
+        applicationContext = applicationContext,
+        targetDensityDpi = displayDensityDpi,
+    )
+
+    return object : ContextWrapper(this) {
+        override fun getApplicationContext(): Context = matchedApplicationContext
+    }
+}
+
+/**
+ * 表示先ディスプレイ density に揃えた resources を返す applicationContext wrapper。
+ *
+ * GoogleMap SDK の applicationContext 検証を通すため、[getApplicationContext] は自身を返す（冪等）。
+ */
+private class DisplayDensityApplicationContext(
+    applicationContext: Context,
+    targetDensityDpi: Int,
+) : ContextWrapper(applicationContext.createDensityConfigurationContext(targetDensityDpi)) {
+
+    override fun getApplicationContext(): Context = this
+}
+
+private fun Context.createDensityConfigurationContext(targetDensityDpi: Int): Context {
+    val densityConfiguration = Configuration(resources.configuration).apply {
+        densityDpi = targetDensityDpi
+    }
+
+    return createConfigurationContext(densityConfiguration)
 }
 
 /**
@@ -426,6 +490,52 @@ private fun GoogleMapEffect(
 
 private fun Boolean.toMapColorScheme(): Int {
     return if (this) MapColorScheme.DARK else MapColorScheme.LIGHT
+}
+
+/**
+ * GoogleMap の描画実効 density をカメラ静止ごとに計測し、logcat と overlay へ反映する診断 Effect。
+ *
+ * VirtualDisplay 上で地図が拡大表示される問題の原因切り分け用。debug 診断時のみ呼ぶ。
+ */
+@Composable
+private fun MapRenderDensityDiagnosticsEffect(googleMap: GoogleMap, composeDensity: Float, mapView: MapView) {
+    DisposableEffect(googleMap, composeDensity) {
+        onDispose {
+            MapRenderDensityDiagnostics.clear()
+        }
+    }
+
+    LaunchedEffect(googleMap, composeDensity) {
+        var lastLabel: String? = null
+
+        while (true) {
+            val measurement = googleMap.measureRenderDensity()
+            val label = measurement?.toDiagnosticLabel(composeDensity)
+
+            if (label != null && label != lastLabel) {
+                lastLabel = label
+                MapRenderDensityDiagnostics.update(label)
+                Napier.i(tag = MAP_CAMERA_LOG_TAG) {
+                    "MapView render density. $label ${mapView.densitySourceLabel()}"
+                }
+            }
+
+            delay(MAP_RENDER_DENSITY_SAMPLE_INTERVAL_MS)
+        }
+    }
+}
+
+/** GoogleMap が描画 density を引きうる候補を横並びでログ化し、eff と一致する源を切り分ける。 */
+@Suppress("DEPRECATION")
+private fun MapView.densitySourceLabel(): String {
+    val viewContextDpi = context.resources.displayMetrics.densityDpi
+    val appContextDpi = context.applicationContext.resources.displayMetrics.densityDpi
+    val systemDpi = Resources.getSystem().displayMetrics.densityDpi
+    val displayDpi = display?.let { mapDisplay ->
+        DisplayMetrics().also { metrics -> mapDisplay.getRealMetrics(metrics) }.densityDpi
+    } ?: -1
+
+    return "densitySrc[viewCtx=$viewContextDpi appCtx=$appContextDpi system=$systemDpi display=$displayDpi]"
 }
 
 @Composable
