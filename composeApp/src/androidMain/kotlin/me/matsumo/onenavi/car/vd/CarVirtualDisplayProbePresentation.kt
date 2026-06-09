@@ -3,7 +3,6 @@ package me.matsumo.onenavi.car.vd
 import android.app.Presentation
 import android.content.Context
 import android.os.Bundle
-import android.util.Log
 import android.view.Display
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
@@ -12,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.R
 
 /** VD 上へ ComposeView を出す検証用 Presentation。 */
@@ -46,7 +46,7 @@ class CarVirtualDisplayProbePresentation(
         val targetComposeView = composeView
 
         if (targetComposeView == null) {
-            Log.w(TAG, "Click injection skipped. ComposeView is not ready.")
+            Napier.w(tag = TAG) { "Click injection skipped. ComposeView is not ready." }
             return false
         }
 
@@ -54,7 +54,7 @@ class CarVirtualDisplayProbePresentation(
         val eventY = inputState.surfaceY
 
         if (eventX == null || eventY == null) {
-            Log.w(TAG, "Click injection skipped. surface point is missing.")
+            Napier.w(tag = TAG) { "Click injection skipped. surface point is missing." }
             return false
         }
 
@@ -105,12 +105,12 @@ class CarVirtualDisplayProbePresentation(
     }
 
     override fun onDisplayRemoved() {
-        Log.i(TAG, "Presentation display removed. displayId=${display.displayId}")
+        Napier.i(tag = TAG) { "Presentation display removed. displayId=${display.displayId}" }
         super.onDisplayRemoved()
     }
 
     override fun onDisplayChanged() {
-        Log.i(TAG, "Presentation display changed. displayId=${display.displayId}")
+        Napier.i(tag = TAG) { "Presentation display changed. displayId=${display.displayId}" }
         super.onDisplayChanged()
     }
 

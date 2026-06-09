@@ -5,10 +5,10 @@ import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.util.DisplayMetrics
-import android.util.Log
 import android.view.Display
 import android.view.Surface
 import androidx.car.app.SurfaceContainer
+import io.github.aakira.napier.Napier
 
 /** Android Auto host Surface の上に Presentation 描画用 VirtualDisplay を構築する検証 controller。 */
 class CarVirtualDisplayProbeController(
@@ -31,13 +31,13 @@ class CarVirtualDisplayProbeController(
         val hostSurface = surfaceContainer.surface
 
         if (hostSurface == null) {
-            Log.w(TAG, "Host surface is null. container=$surfaceContainer")
+            Napier.w(tag = TAG) { "Host surface is null. container=$surfaceContainer" }
             release()
             return
         }
 
         if (!hostSurface.isValid) {
-            Log.w(TAG, "Host surface is invalid. container=$surfaceContainer")
+            Napier.w(tag = TAG) { "Host surface is invalid. container=$surfaceContainer" }
             currentViewport = null
             releaseVirtualDisplay()
             releaseCurrentHostSurface(exceptSurface = hostSurface)
@@ -64,7 +64,7 @@ class CarVirtualDisplayProbeController(
 
         currentViewport = updatedViewport
         presentation?.updateViewport(updatedViewport)
-        Log.i(TAG, "Viewport visible applied. visible=${updatedViewport.visibleAreaLabel}")
+        Napier.i(tag = TAG) { "Viewport visible applied. visible=${updatedViewport.visibleAreaLabel}" }
     }
 
     fun updateStableArea(stableArea: Rect) {
@@ -72,7 +72,7 @@ class CarVirtualDisplayProbeController(
 
         currentViewport = updatedViewport
         presentation?.updateViewport(updatedViewport)
-        Log.i(TAG, "Viewport stable applied. stable=${updatedViewport.stableAreaLabel}")
+        Napier.i(tag = TAG) { "Viewport stable applied. stable=${updatedViewport.stableAreaLabel}" }
     }
 
     fun updatePanMode(isInPanMode: Boolean) {
@@ -188,7 +188,7 @@ class CarVirtualDisplayProbeController(
         virtualDisplay = createdVirtualDisplay
 
         val displayId = createdVirtualDisplay.display.displayId
-        Log.i(TAG, "VirtualDisplay created. displayId=$displayId display=${createdVirtualDisplay.display}")
+        Napier.i(tag = TAG) { "VirtualDisplay created. displayId=$displayId display=${createdVirtualDisplay.display}" }
         showProbePresentation(createdVirtualDisplay.display, viewport)
     }
 
@@ -208,10 +208,12 @@ class CarVirtualDisplayProbeController(
 
         presentationResult.onSuccess { probePresentation ->
             presentation = probePresentation
-            Log.i(TAG, "Probe presentation shown. displayId=${display.displayId}")
+            Napier.i(tag = TAG) { "Probe presentation shown. displayId=${display.displayId}" }
         }
         presentationResult.onFailure { throwable ->
-            Log.e(TAG, "Probe presentation show failed. displayId=${display.displayId}", throwable)
+            Napier.e(tag = TAG, throwable = throwable) {
+                "Probe presentation show failed. displayId=${display.displayId}"
+            }
         }
     }
 
@@ -226,10 +228,10 @@ class CarVirtualDisplayProbeController(
         }
 
         releaseResult.onSuccess {
-            Log.i(TAG, "VirtualDisplay released.")
+            Napier.i(tag = TAG) { "VirtualDisplay released." }
         }
         releaseResult.onFailure { throwable ->
-            Log.e(TAG, "VirtualDisplay release failed.", throwable)
+            Napier.e(tag = TAG, throwable = throwable) { "VirtualDisplay release failed." }
         }
     }
 
@@ -254,24 +256,23 @@ class CarVirtualDisplayProbeController(
         }
 
         releaseResult.onSuccess {
-            Log.i(TAG, "Host Surface released.")
+            Napier.i(tag = TAG) { "Host Surface released." }
         }
         releaseResult.onFailure { throwable ->
-            Log.e(TAG, "Host Surface release failed.", throwable)
+            Napier.e(tag = TAG, throwable = throwable) { "Host Surface release failed." }
         }
     }
 
     private fun logVirtualDisplayFailure(throwable: Throwable) {
-        Log.e(TAG, "VirtualDisplay creation failed.", throwable)
+        Napier.e(tag = TAG, throwable = throwable) { "VirtualDisplay creation failed." }
     }
 
     private fun logVirtualDisplayRequest(surfaceContainer: SurfaceContainer, viewport: CarVirtualDisplayProbeViewport) {
-        Log.i(
-            TAG,
+        Napier.i(tag = TAG) {
             "VirtualDisplay request. surface=${viewport.surfaceWidth}x${viewport.surfaceHeight} " +
                 "requestedDpi=${viewport.densityDpi} containerDpi=${surfaceContainer.dpi} " +
-                "appMetrics=${appContext.resources.displayMetrics.toLogLabel()}",
-        )
+                "appMetrics=${appContext.resources.displayMetrics.toLogLabel()}"
+        }
     }
 
     private fun DisplayMetrics.toLogLabel(): String {
@@ -323,14 +324,14 @@ class CarVirtualDisplayProbeController(
     }
 
     private fun logInputSkipped(inputLabel: String, inputState: CarVirtualDisplayProbeInputState) {
-        Log.i(TAG, "$inputLabel injection skipped. ${inputState.logLabel}")
+        Napier.i(tag = TAG) { "$inputLabel injection skipped. ${inputState.logLabel}" }
     }
 
     private fun findViewportForInput(inputLabel: String): CarVirtualDisplayProbeViewport? {
         val viewport = currentViewport
 
         if (viewport == null) {
-            Log.w(TAG, "Input ignored before viewport is ready. input=$inputLabel")
+            Napier.w(tag = TAG) { "Input ignored before viewport is ready. input=$inputLabel" }
             return null
         }
 
@@ -356,10 +357,10 @@ class CarVirtualDisplayProbeController(
         }
 
         dismissResult.onSuccess {
-            Log.i(TAG, "Probe presentation dismissed.")
+            Napier.i(tag = TAG) { "Probe presentation dismissed." }
         }
         dismissResult.onFailure { throwable ->
-            Log.e(TAG, "Probe presentation dismiss failed.", throwable)
+            Napier.e(tag = TAG, throwable = throwable) { "Probe presentation dismiss failed." }
         }
     }
 

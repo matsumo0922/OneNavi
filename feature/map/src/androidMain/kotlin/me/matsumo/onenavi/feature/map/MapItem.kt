@@ -5,7 +5,6 @@ import android.content.Context
 import android.graphics.Rect
 import android.os.Bundle
 import android.util.DisplayMetrics
-import android.util.Log
 import android.view.Display
 import android.view.SurfaceView
 import android.view.TextureView
@@ -38,6 +37,7 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapColorScheme
 import com.google.android.gms.maps.model.PointOfInterest
+import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.feature.map.state.MapCameraDefaults
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
@@ -93,11 +93,10 @@ internal fun MapItem(
             heightPx = viewportSize.height,
         )
         if (shouldLogDiagnostics) {
-            Log.i(
-                MAP_CAMERA_LOG_TAG,
+            Napier.i(tag = MAP_CAMERA_LOG_TAG) {
                 "MapView layout updated. viewport=${viewportSize.width}x${viewportSize.height} " +
-                    "canvas=${canvasWidthPx}x${viewportSize.height} offsetX=$canvasOffsetXPx",
-            )
+                    "canvas=${canvasWidthPx}x${viewportSize.height} offsetX=$canvasOffsetXPx"
+            }
         }
     }
 
@@ -250,13 +249,12 @@ private fun FrameLayout.logMapViewDiagnostics(
     if (diagnosticSignature == diagnosticState.lastSignature) return
 
     diagnosticState.lastSignature = diagnosticSignature
-    Log.i(
-        MAP_CAMERA_LOG_TAG,
+    Napier.i(tag = MAP_CAMERA_LOG_TAG) {
         "MapView diagnostics. reason=$reason display=${mapView.display?.displayId} " +
             "contextMetrics={$contextMetricsLabel} displayMetrics={$displayMetricsLabel} " +
             "container={$containerLabel} mapView={$mapViewLabel} " +
-            "children=[$childLabel] renderers=[$rendererLabel]",
-    )
+            "children=[$childLabel] renderers=[$rendererLabel]"
+    }
 }
 
 private fun ViewGroup.directChildrenDiagnosticLabel(): String {

@@ -1,7 +1,6 @@
 package me.matsumo.onenavi.feature.map.state
 
 import android.animation.TimeInterpolator
-import android.util.Log
 import android.view.animation.DecelerateInterpolator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -19,6 +18,7 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
+import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.Saver
@@ -696,25 +696,22 @@ internal class MapCameraState internal constructor(
             logProjectionDiagnostics(reason = "route-overview-target")
             map.cameraPosition
         }.onFailure { throwable ->
-            Log.w(
-                MAP_CAMERA_LOG_TAG,
-                "Route overview target failed. points=${routePoints.size} padding=$paddingPx",
-                throwable,
-            )
+            Napier.w(tag = MAP_CAMERA_LOG_TAG, throwable = throwable) {
+                "Route overview target failed. points=${routePoints.size} padding=$paddingPx"
+            }
         }.getOrNull()
 
         map.moveCamera(CameraUpdateFactory.newCameraPosition(current))
 
         if (target != null) {
             if (shouldLogDiagnostics) {
-                Log.i(
-                    MAP_CAMERA_LOG_TAG,
+                Napier.i(tag = MAP_CAMERA_LOG_TAG) {
                     "Route overview target resolved. points=${routePoints.size} padding=$paddingPx " +
                         "bounds=${bounds.southwest.latitude},${bounds.southwest.longitude}.." +
                         "${bounds.northeast.latitude},${bounds.northeast.longitude} " +
                         "currentZoom=${current.zoom} targetZoom=${target.zoom} " +
-                        "target=${target.target.latitude},${target.target.longitude}",
-                )
+                        "target=${target.target.latitude},${target.target.longitude}"
+                }
             }
             flyCameraTo(
                 target = target,
@@ -756,8 +753,7 @@ internal class MapCameraState internal constructor(
         if (diagnosticSignature == lastProjectionDiagnosticSignature) return
 
         lastProjectionDiagnosticSignature = diagnosticSignature
-        Log.i(
-            MAP_CAMERA_LOG_TAG,
+        Napier.i(tag = MAP_CAMERA_LOG_TAG) {
             "Projection diagnostics. reason=$reason viewport=${mapViewWidthPx}x$mapViewHeightPx " +
                 "padding=$startPaddingPx,$resolvedTopPaddingPx,$endPaddingPx,$rawBottomPaddingPx " +
                 "cameraZoom=${cameraPosition.zoom} target=${cameraPosition.target.latitude}," +
@@ -768,8 +764,8 @@ internal class MapCameraState internal constructor(
                 "${visibleRegion.nearRight.longitude} farLeft=${visibleRegion.farLeft.latitude}," +
                 "${visibleRegion.farLeft.longitude} farRight=${visibleRegion.farRight.latitude}," +
                 "${visibleRegion.farRight.longitude} bounds=${bounds.southwest.latitude}," +
-                "${bounds.southwest.longitude}..${bounds.northeast.latitude},${bounds.northeast.longitude}",
-        )
+                "${bounds.southwest.longitude}..${bounds.northeast.latitude},${bounds.northeast.longitude}"
+        }
     }
 
     /**

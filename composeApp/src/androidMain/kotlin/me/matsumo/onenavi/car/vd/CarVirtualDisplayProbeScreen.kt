@@ -1,6 +1,5 @@
 package me.matsumo.onenavi.car.vd
 
-import android.util.Log
 import androidx.car.app.AppManager
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
@@ -10,6 +9,7 @@ import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import io.github.aakira.napier.Napier
 
 /** Android Auto template 画面として Surface callback を登録する検証 Screen。 */
 class CarVirtualDisplayProbeScreen(
@@ -75,7 +75,7 @@ class CarVirtualDisplayProbeScreen(
     }
 
     private fun handlePanModeChanged(isInPanMode: Boolean) {
-        Log.i(TAG, "Pan mode changed. isInPanMode=$isInPanMode")
+        Napier.i(tag = TAG) { "Pan mode changed. isInPanMode=$isInPanMode" }
         controller.updatePanMode(isInPanMode)
     }
 

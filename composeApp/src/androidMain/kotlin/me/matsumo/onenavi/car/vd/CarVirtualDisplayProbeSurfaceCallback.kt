@@ -1,9 +1,9 @@
 package me.matsumo.onenavi.car.vd
 
 import android.graphics.Rect
-import android.util.Log
 import androidx.car.app.SurfaceCallback
 import androidx.car.app.SurfaceContainer
+import io.github.aakira.napier.Napier
 
 /** Android Auto host Surface の lifecycle と入力イベントを VD controller に渡す callback。 */
 class CarVirtualDisplayProbeSurfaceCallback(
@@ -11,17 +11,17 @@ class CarVirtualDisplayProbeSurfaceCallback(
 ) : SurfaceCallback {
 
     override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
-        Log.i(TAG, "Surface available. container=$surfaceContainer")
+        Napier.i(tag = TAG) { "Surface available. container=$surfaceContainer" }
         controller.attachSurface(surfaceContainer)
     }
 
     override fun onVisibleAreaChanged(visibleArea: Rect) {
-        Log.i(TAG, "Visible area changed. visibleArea=$visibleArea")
+        Napier.i(tag = TAG) { "Visible area changed. visibleArea=$visibleArea" }
         controller.updateVisibleArea(visibleArea)
     }
 
     override fun onStableAreaChanged(stableArea: Rect) {
-        Log.i(TAG, "Stable area changed. stableArea=$stableArea")
+        Napier.i(tag = TAG) { "Stable area changed. stableArea=$stableArea" }
         controller.updateStableArea(stableArea)
     }
 
@@ -55,7 +55,7 @@ class CarVirtualDisplayProbeSurfaceCallback(
     }
 
     override fun onSurfaceDestroyed(surfaceContainer: SurfaceContainer) {
-        Log.i(TAG, "Surface destroyed. container=$surfaceContainer")
+        Napier.i(tag = TAG) { "Surface destroyed. container=$surfaceContainer" }
         controller.release()
     }
 

@@ -1,6 +1,5 @@
 package me.matsumo.onenavi.feature.map
 
-import android.util.Log
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
@@ -13,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
+import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -207,14 +207,13 @@ internal fun MapCameraEffect(
             },
         )
         if (shouldLogDiagnostics) {
-            Log.i(
-                MAP_CAMERA_LOG_TAG,
+            Napier.i(tag = MAP_CAMERA_LOG_TAG) {
                 "Camera padding updated. screen=${screenState.javaClass.simpleName} " +
                     "split=${panelLayout.isSplit} side=${panelLayout.panelSide} " +
                     "viewport=${viewportWidthPx}x$viewportHeightPx panelWidth=$panelWidthPx " +
                     "splitInset=$splitInsetPx visibleMapWidth=$visibleMapWidthPx " +
-                    "padding=$startPaddingPx,$topPaddingPx,$endPaddingPx,$bottomPaddingPx",
-            )
+                    "padding=$startPaddingPx,$topPaddingPx,$endPaddingPx,$bottomPaddingPx"
+            }
         }
     }
 
@@ -306,13 +305,12 @@ internal fun MapCameraEffect(
     ) {
         val points = routeOverviewPoints ?: return@LaunchedEffect
         if (shouldLogDiagnostics) {
-            Log.i(
-                MAP_CAMERA_LOG_TAG,
+            Napier.i(tag = MAP_CAMERA_LOG_TAG) {
                 "Route overview requested. screen=${screenState.javaClass.simpleName} " +
                     "points=${points.size} viewport=${viewportWidthPx}x$viewportHeightPx " +
                     "topKey=$routeOverviewTopPaddingKey bottomKey=$routeOverviewBottomPaddingKey " +
-                    "navCardKey=$routeOverviewNavigationCardHeightKey",
-            )
+                    "navCardKey=$routeOverviewNavigationCardHeightKey"
+            }
         }
         cameraState.showRouteOverview(points)
     }
