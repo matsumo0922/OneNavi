@@ -178,6 +178,10 @@ class CarVirtualDisplayProbePresentation(
                 "hostVisible=${inputState.hostVisiblePointLabel}",
         )
 
+        if (inputState.isInsideObservedFrame != true) {
+            return false
+        }
+
         val didHandleClick = gestureDispatcher.dispatchClick(
             surfaceX = surfaceX,
             surfaceY = surfaceY,

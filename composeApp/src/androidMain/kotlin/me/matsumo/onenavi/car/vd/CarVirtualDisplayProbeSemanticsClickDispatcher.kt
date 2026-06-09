@@ -125,6 +125,11 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
             hostVisibleX = hostVisibleX,
             hostVisibleY = hostVisibleY,
         )
+        val visibleOffsetPoint = createVisibleOffsetTouchPoint(
+            viewport = viewport,
+            surfaceX = surfaceX,
+            surfaceY = surfaceY,
+        )
         val visibleScaledPoint = createVisibleScaledTouchPoint(
             viewport = viewport,
             surfaceX = surfaceX,
@@ -132,6 +137,10 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
         )
         val candidatePoints = mutableListOf<Pair<String, Offset>>()
 
+        candidatePoints.addUniqueTouchPointCandidate(
+            label = "visibleOffset",
+            touchPoint = visibleOffsetPoint,
+        )
         candidatePoints.addUniqueTouchPointCandidate(
             label = "surface",
             touchPoint = surfacePoint,
@@ -177,6 +186,26 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
         return Offset(
             x = hostVisibleX,
             y = hostVisibleY,
+        )
+    }
+
+    private fun createVisibleOffsetTouchPoint(
+        viewport: CarVirtualDisplayProbeViewport,
+        surfaceX: Float,
+        surfaceY: Float,
+    ): Offset? {
+        if (!viewport.hasHorizontalSplitVisibleArea()) {
+            return null
+        }
+
+        val offsetSurfaceX = (viewport.visibleLeft + surfaceX).coerceIn(
+            minimumValue = 0f,
+            maximumValue = viewport.surfaceWidth.toFloat(),
+        )
+
+        return Offset(
+            x = offsetSurfaceX,
+            y = surfaceY,
         )
     }
 

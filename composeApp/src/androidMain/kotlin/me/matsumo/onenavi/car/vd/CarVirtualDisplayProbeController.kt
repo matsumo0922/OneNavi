@@ -297,10 +297,6 @@ class CarVirtualDisplayProbeController(
         inputState: CarVirtualDisplayProbeInputState,
         callbackUptimeMillis: Long,
     ) {
-        if (!canDispatchObservedInput(inputLabel = "Click", inputState = inputState)) {
-            return
-        }
-
         val dispatchStartedAt = SystemClock.uptimeMillis()
         val didStartClick = presentation?.dispatchClickInput(
             inputState = inputState,
