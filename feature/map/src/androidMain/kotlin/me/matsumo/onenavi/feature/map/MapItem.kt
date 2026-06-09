@@ -2,6 +2,8 @@ package me.matsumo.onenavi.feature.map
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.res.Configuration
 import android.graphics.Rect
 import android.os.Bundle
 import android.util.DisplayMetrics
@@ -356,10 +358,59 @@ private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
             .compassEnabled(false)
             .mapToolbarEnabled(false)
 
-        MapView(context, mapOptions).apply {
+        MapView(context.withDisplayMatchedApplicationContext(), mapOptions).apply {
             onCreate(Bundle())
         }
     }
+}
+
+/**
+ * MapView へ渡す context の applicationContext を、この context が乗っているディスプレイの density に揃える。
+ *
+ * GoogleMap SDK は地図描画スケールを applicationContext の resources density から取得する。
+ * VirtualDisplay / Presentation 上では applicationContext がプライマリディスプレイ（端末本体）の
+ * density のままになり、地図だけが拡大表示される。表示先ディスプレイと applicationContext の density が
+ * 食い違う場合のみ、density を合わせた applicationContext を返す wrapper を被せる。
+ *
+ * 通常端末・タブレットでは両 density が一致するため [this] をそのまま返す（no-op）。
+ */
+private fun Context.withDisplayMatchedApplicationContext(): Context {
+    val displayDensityDpi = resources.configuration.densityDpi
+    val applicationDensityDpi = applicationContext.resources.configuration.densityDpi
+
+    if (displayDensityDpi == applicationDensityDpi) {
+        return this
+    }
+
+    val matchedApplicationContext = DisplayDensityApplicationContext(
+        applicationContext = applicationContext,
+        targetDensityDpi = displayDensityDpi,
+    )
+
+    return object : ContextWrapper(this) {
+        override fun getApplicationContext(): Context = matchedApplicationContext
+    }
+}
+
+/**
+ * 表示先ディスプレイ density に揃えた resources を返す applicationContext wrapper。
+ *
+ * GoogleMap SDK の applicationContext 検証を通すため、[getApplicationContext] は自身を返す（冪等）。
+ */
+private class DisplayDensityApplicationContext(
+    applicationContext: Context,
+    targetDensityDpi: Int,
+) : ContextWrapper(applicationContext.createDensityConfigurationContext(targetDensityDpi)) {
+
+    override fun getApplicationContext(): Context = this
+}
+
+private fun Context.createDensityConfigurationContext(targetDensityDpi: Int): Context {
+    val densityConfiguration = Configuration(resources.configuration).apply {
+        densityDpi = targetDensityDpi
+    }
+
+    return createConfigurationContext(densityConfiguration)
 }
 
 /**
