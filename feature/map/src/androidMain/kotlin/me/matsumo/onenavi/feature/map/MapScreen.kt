@@ -1,6 +1,5 @@
 package me.matsumo.onenavi.feature.map
 
-import android.view.Display
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -32,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -103,7 +101,6 @@ fun MapScreen(modifier: Modifier = Modifier) {
     }
 
     val density = LocalDensity.current
-    val display = LocalView.current.display
     val appSetting = LocalAppSetting.current
     val navBackStack = LocalNavBackStack.current
     val isMapDarkMode = shouldUseDarkTheme(appSetting.theme)
@@ -154,22 +151,8 @@ fun MapScreen(modifier: Modifier = Modifier) {
         val panelLayout = remember(maxWidth) {
             resolveMapPanelLayout(maxWidth = maxWidth)
         }
-        val shouldDisableMapCanvasExtension = remember(
-            display?.displayId,
-            display?.name,
-        ) {
-            display.isCarVirtualDisplayProbe()
-        }
-        val mapCanvasLayout = remember(panelLayout, maxWidth, shouldDisableMapCanvasExtension) {
-            if (shouldDisableMapCanvasExtension) {
-                MapCanvasLayout(
-                    width = maxWidth,
-                    offsetX = 0.dp,
-                    horizontalInset = 0.dp,
-                )
-            } else {
-                panelLayout.resolveCanvasLayout(viewportWidth = maxWidth)
-            }
+        val mapCanvasLayout = remember(panelLayout, maxWidth) {
+            panelLayout.resolveCanvasLayout(viewportWidth = maxWidth)
         }
         val viewportWidthPx = with(density) { maxWidth.roundToPx() }
         val viewportHeightPx = with(density) { maxHeight.roundToPx() }
@@ -860,13 +843,6 @@ private fun LatLng.toMapLongPressedEvent(): MapUiEvent {
         longitude = longitude,
     )
 }
-
-private fun Display?.isCarVirtualDisplayProbe(): Boolean {
-    return this?.name?.startsWith(CAR_VIRTUAL_DISPLAY_NAME_PREFIX) == true
-}
-
-/** 車載向け検証用 VirtualDisplay の display name prefix。 */
-private const val CAR_VIRTUAL_DISPLAY_NAME_PREFIX = "OneNaviCarVirtualDisplayProbe"
 
 private val SHEET_VISIBLE_STATES = listOf(
     MapScreenState.SearchResultsList::class,
