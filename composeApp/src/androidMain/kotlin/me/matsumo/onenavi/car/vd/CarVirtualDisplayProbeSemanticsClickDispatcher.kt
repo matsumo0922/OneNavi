@@ -28,6 +28,8 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
         surfaceY: Float,
         observedFrameX: Float?,
         observedFrameY: Float?,
+        hostVisibleX: Float?,
+        hostVisibleY: Float?,
     ): String? {
         val rootForTest = composeView.getChildAt(0) as? ViewRootForTest ?: return null
         val touchPoints = createTouchPointCandidates(
@@ -35,6 +37,8 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
             surfaceY = surfaceY,
             observedFrameX = observedFrameX,
             observedFrameY = observedFrameY,
+            hostVisibleX = hostVisibleX,
+            hostVisibleY = hostVisibleY,
         )
 
         return touchPoints.firstNotNullOfOrNull { touchPoint ->
@@ -100,6 +104,8 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
         surfaceY: Float,
         observedFrameX: Float?,
         observedFrameY: Float?,
+        hostVisibleX: Float?,
+        hostVisibleY: Float?,
     ): List<Pair<String, Offset>> {
         val surfacePoint = Offset(
             x = surfaceX,
@@ -109,16 +115,26 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
             observedFrameX = observedFrameX,
             observedFrameY = observedFrameY,
         )
-        val surfaceCandidate = "surface" to surfacePoint
-
-        if (observedFramePoint == null || observedFramePoint == surfacePoint) {
-            return listOf(surfaceCandidate)
-        }
-
-        return listOf(
-            "observed" to observedFramePoint,
-            surfaceCandidate,
+        val hostVisiblePoint = createHostVisibleTouchPoint(
+            hostVisibleX = hostVisibleX,
+            hostVisibleY = hostVisibleY,
         )
+        val candidatePoints = mutableListOf<Pair<String, Offset>>()
+
+        candidatePoints.addUniqueTouchPointCandidate(
+            label = "surface",
+            touchPoint = surfacePoint,
+        )
+        candidatePoints.addUniqueTouchPointCandidate(
+            label = "observed",
+            touchPoint = observedFramePoint,
+        )
+        candidatePoints.addUniqueTouchPointCandidate(
+            label = "hostVisible",
+            touchPoint = hostVisiblePoint,
+        )
+
+        return candidatePoints
     }
 
     private fun createObservedFrameTouchPoint(
@@ -133,6 +149,39 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
             x = observedFrameX,
             y = observedFrameY,
         )
+    }
+
+    private fun createHostVisibleTouchPoint(
+        hostVisibleX: Float?,
+        hostVisibleY: Float?,
+    ): Offset? {
+        if (hostVisibleX == null || hostVisibleY == null) {
+            return null
+        }
+
+        return Offset(
+            x = hostVisibleX,
+            y = hostVisibleY,
+        )
+    }
+
+    private fun MutableList<Pair<String, Offset>>.addUniqueTouchPointCandidate(
+        label: String,
+        touchPoint: Offset?,
+    ) {
+        if (touchPoint == null) {
+            return
+        }
+
+        val isDuplicate = any { candidate ->
+            candidate.second == touchPoint
+        }
+
+        if (isDuplicate) {
+            return
+        }
+
+        add(label to touchPoint)
     }
 
     private fun SemanticsNode.isClickableTarget(touchPoint: Offset): Boolean {

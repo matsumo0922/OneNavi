@@ -154,6 +154,8 @@ class CarVirtualDisplayProbePresentation(
                 surfaceY = surfaceY,
                 observedFrameX = inputState.observedFrameX,
                 observedFrameY = inputState.observedFrameY,
+                hostVisibleX = inputState.hostVisibleX,
+                hostVisibleY = inputState.hostVisibleY,
             )
         }
 
@@ -162,7 +164,8 @@ class CarVirtualDisplayProbePresentation(
                 TAG,
                 "Click semantics applied. coordinate=$semanticsCoordinateSpace " +
                     "surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
-                    "observed=${inputState.observedFramePointLabel}",
+                    "observed=${inputState.observedFramePointLabel} " +
+                    "hostVisible=${inputState.hostVisiblePointLabel}",
             )
             return true
         }
@@ -170,7 +173,8 @@ class CarVirtualDisplayProbePresentation(
         Log.i(
             TAG,
             "Click semantics missed. surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
-                "observed=${inputState.observedFramePointLabel}",
+                "observed=${inputState.observedFramePointLabel} " +
+                "hostVisible=${inputState.hostVisiblePointLabel}",
         )
 
         val didHandleClick = gestureDispatcher.dispatchClick(
