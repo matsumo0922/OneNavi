@@ -210,7 +210,7 @@ internal const val CLICK_UP_DELAY_MS = 32L
 internal const val DRAG_FINISH_DELAY_MS = 96L
 
 /** pinch 入力が途切れてから pointer up を送るまでの猶予。 */
-internal const val SCALE_FINISH_DELAY_MS = 128L
+internal const val SCALE_FINISH_DELAY_MS = 320L
 
 /** fling 速度を MotionEvent move に変換する際の 1 frame 相当時間。 */
 internal const val FLING_MOVE_INTERVAL_MS = 16L
@@ -233,7 +233,7 @@ internal const val SECOND_POINTER_UP_ACTION = MotionEvent.ACTION_POINTER_UP or
     (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
 
 /** pinch 開始時に observed frame 幅へ掛ける比率。 */
-private const val INITIAL_SCALE_SPAN_RATIO = 0.22f
+private const val INITIAL_SCALE_SPAN_RATIO = 0.55f
 
 /** pinch 中の最大 pointer 間隔として Surface 幅へ掛ける比率。 */
 private const val MAX_SCALE_SPAN_RATIO = 4f
