@@ -36,6 +36,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.matsumo.onenavi.MainViewModel
 import me.matsumo.onenavi.OneNaviApp
+import me.matsumo.onenavi.core.model.AppSetting
 import me.matsumo.onenavi.core.ui.theme.LocalSupportsPlatformDialogWindow
 import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
 import org.koin.compose.viewmodel.koinViewModel
@@ -50,6 +51,9 @@ internal fun CarVirtualDisplayProbeContent(
     clickCoordinateResult: CarVirtualDisplayProbeClickCoordinateResult?,
     modifier: Modifier = Modifier,
 ) {
+    val viewModel = koinViewModel<MainViewModel>()
+    val settings by viewModel.setting.collectAsStateWithLifecycle(null)
+    val shouldShowDebugOverlay = settings?.developerMode == true
     val lifecycleStateLabel = rememberCarVirtualDisplayLifecycleStateLabel()
     val observedFrame = viewport.observedFrame
     val hostSlotRightInset = viewport.surfaceWidth - viewport.visibleRight
@@ -72,8 +76,6 @@ internal fun CarVirtualDisplayProbeContent(
         "scale=${inputState.scaleFactorLabel}"
     val clickCoordinateLabel = clickCoordinateResult.toClickCoordinateLabel()
     val clickCandidateLabel = inputState.toClickCandidateLabel(viewport = viewport)
-    val clickColorLegendLabel = "tap colors actual=red surface=cyan observedOffset=yellow " +
-        "visibleScaled=pink observed=purple hostVisible=green"
 
     MaterialTheme {
         Box(
@@ -88,38 +90,40 @@ internal fun CarVirtualDisplayProbeContent(
             ) {
                 CarVirtualDisplayProbeAppHost(
                     modifier = Modifier.fillMaxSize(),
+                    settings = settings,
                 )
             }
-            CarVirtualDisplayProbeViewportOverlay(
-                modifier = Modifier.fillMaxSize(),
-                viewport = viewport,
-                inputState = inputState,
-                clickCoordinateResult = clickCoordinateResult,
-            )
-            CarVirtualDisplayObservedFrameRoot(
-                modifier = Modifier.fillMaxSize(),
-                viewport = viewport,
-            ) {
-                CarVirtualDisplayProbeDiagnosticsOverlay(
-                    modifier = Modifier.padding(16.dp),
-                    displayId = displayId,
-                    expectedDisplayId = expectedDisplayId,
-                    rendererLabel = rendererLabel,
+            if (shouldShowDebugOverlay) {
+                CarVirtualDisplayProbeViewportOverlay(
+                    modifier = Modifier.fillMaxSize(),
                     viewport = viewport,
                     inputState = inputState,
-                    lifecycleStateLabel = lifecycleStateLabel,
-                    observedFrameLabel = observedFrameLabel,
-                    hostSlotFrameLabel = hostSlotFrameLabel,
-                    hostStableLabel = hostStableLabel,
-                    hostInputPointLabel = hostInputPointLabel,
-                    surfacePointLabel = surfacePointLabel,
-                    observedFramePointLabel = observedFramePointLabel,
-                    hostVisiblePointLabel = hostVisiblePointLabel,
-                    gestureLabel = gestureLabel,
-                    clickCoordinateLabel = clickCoordinateLabel,
-                    clickCandidateLabel = clickCandidateLabel,
-                    clickColorLegendLabel = clickColorLegendLabel,
+                    clickCoordinateResult = clickCoordinateResult,
                 )
+                CarVirtualDisplayObservedFrameRoot(
+                    modifier = Modifier.fillMaxSize(),
+                    viewport = viewport,
+                ) {
+                    CarVirtualDisplayProbeDiagnosticsOverlay(
+                        modifier = Modifier.padding(16.dp),
+                        displayId = displayId,
+                        expectedDisplayId = expectedDisplayId,
+                        rendererLabel = rendererLabel,
+                        viewport = viewport,
+                        inputState = inputState,
+                        lifecycleStateLabel = lifecycleStateLabel,
+                        observedFrameLabel = observedFrameLabel,
+                        hostSlotFrameLabel = hostSlotFrameLabel,
+                        hostStableLabel = hostStableLabel,
+                        hostInputPointLabel = hostInputPointLabel,
+                        surfacePointLabel = surfacePointLabel,
+                        observedFramePointLabel = observedFramePointLabel,
+                        hostVisiblePointLabel = hostVisiblePointLabel,
+                        gestureLabel = gestureLabel,
+                        clickCoordinateLabel = clickCoordinateLabel,
+                        clickCandidateLabel = clickCandidateLabel,
+                    )
+                }
             }
         }
     }
@@ -127,19 +131,17 @@ internal fun CarVirtualDisplayProbeContent(
 
 @Composable
 private fun CarVirtualDisplayProbeAppHost(
+    settings: AppSetting?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val viewModel = koinViewModel<MainViewModel>()
-    val setting by viewModel.setting.collectAsStateWithLifecycle(null)
-    val appSetting = setting
     val hasLocationPermission = ContextCompat.checkSelfPermission(
         context,
         permission.ACCESS_FINE_LOCATION,
     ) == PackageManager.PERMISSION_GRANTED
 
     when {
-        appSetting == null -> {
+        settings == null -> {
             CarVirtualDisplayProbeStatusMessage(
                 modifier = modifier,
                 text = "Loading OneNavi setting...",
@@ -152,14 +154,14 @@ private fun CarVirtualDisplayProbeAppHost(
             ) {
                 OneNaviApp(
                     modifier = modifier,
-                    setting = appSetting,
+                    setting = settings,
                 )
             }
         }
 
         else -> {
             OneNaviTheme(
-                appSetting = appSetting,
+                appSetting = settings,
             ) {
                 CarVirtualDisplayProbeStatusMessage(
                     modifier = modifier,
@@ -206,7 +208,6 @@ private fun CarVirtualDisplayProbeDiagnosticsOverlay(
     gestureLabel: String,
     clickCoordinateLabel: String,
     clickCandidateLabel: String,
-    clickColorLegendLabel: String,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -285,11 +286,6 @@ private fun CarVirtualDisplayProbeDiagnosticsOverlay(
         Text(
             text = clickCandidateLabel,
             color = Color(0xFFA7F3D0),
-            fontSize = 12.sp,
-        )
-        Text(
-            text = clickColorLegendLabel,
-            color = Color(0xFFE5E7EB),
             fontSize = 12.sp,
         )
     }
@@ -456,6 +452,7 @@ private fun Offset.toPointLabel(): String {
     return "${x.toInt()},${y.toInt()}"
 }
 
+/** click 座標候補をデバッグ描画する色。採用座標は赤い円と白い十字で別描画する。 */
 private fun String.toCandidateColor(): Color {
     return when (this) {
         CLICK_COORDINATE_OBSERVED_OFFSET_LABEL -> Color(0xFFF59E0B)
