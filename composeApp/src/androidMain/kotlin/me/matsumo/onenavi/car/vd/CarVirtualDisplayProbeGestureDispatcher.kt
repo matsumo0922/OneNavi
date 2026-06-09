@@ -3,7 +3,6 @@ package me.matsumo.onenavi.car.vd
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.util.Log
 import android.view.MotionEvent
 import androidx.compose.ui.platform.ComposeView
 
@@ -121,7 +120,6 @@ class CarVirtualDisplayProbeGestureDispatcher {
         val targetComposeView = composeView ?: return false
         val velocity = inputState.flingVelocityOrNull ?: return false
         val anchorPoint = inputState.surfacePointOrNull ?: return false
-        val hadActiveDragGesture = dragGestureState != null
 
         finishClickGesture(isCanceled = true)
         finishFlingGesture(isCanceled = true)
@@ -141,13 +139,6 @@ class CarVirtualDisplayProbeGestureDispatcher {
         )
         dragGestureState = null
 
-        Log.i(
-            TAG,
-            "Fling injection started. activeDrag=$hadActiveDragGesture " +
-                "anchor=${anchorPoint.toLogLabel()} start=${currentDragGestureState.currentPoint.toLogLabel()} " +
-                "velocity=${velocity.toLogLabel()}",
-        )
-
         return dispatchFlingMove(
             viewport = viewport,
             velocity = velocity,
@@ -161,17 +152,9 @@ class CarVirtualDisplayProbeGestureDispatcher {
         viewport: CarVirtualDisplayProbeViewport,
     ): Boolean {
         val targetComposeView = composeView ?: return false
-        val rawFocusPoint = inputState.surfacePointOrNull ?: return false
         val scaleFactor = inputState.scaleFactor ?: return false
-        val isPlaceholderFocus = rawFocusPoint.surfaceX == 0f && rawFocusPoint.surfaceY == 0f
-        val isNoopScale = scaleFactor == 1f
 
-        if (isNoopScale) {
-            Log.i(
-                TAG,
-                "Scale move ignored. noopScale=true placeholderFocus=$isPlaceholderFocus " +
-                    "rawFocus=${rawFocusPoint.toLogLabel()}",
-            )
+        if (scaleFactor == 1f) {
             return true
         }
 
@@ -192,7 +175,6 @@ class CarVirtualDisplayProbeGestureDispatcher {
         val rawNextSpan = currentScaleGestureState.currentSpan * scaleFactor
         val nextSpan = rawNextSpan
             .coerceIn(MIN_SCALE_SPAN_PX, viewport.maxScaleSpanPx())
-        val spanWasClamped = nextSpan != rawNextSpan
         val nextScaleGestureState = currentScaleGestureState.copy(
             focusPoint = focusPoint,
             currentSpan = nextSpan,
@@ -205,14 +187,6 @@ class CarVirtualDisplayProbeGestureDispatcher {
                 eventTime = now,
                 action = MotionEvent.ACTION_MOVE,
             ),
-        )
-
-        Log.i(
-            TAG,
-            "Scale move dispatched. handled=$didHandleEvent rawFocus=${rawFocusPoint.toLogLabel()} " +
-                "focus=${focusPoint.toLogLabel()} scale=$scaleFactor " +
-                "span=${currentScaleGestureState.currentSpan.toInt()}->${nextSpan.toInt()} " +
-                "clamped=$spanWasClamped",
         )
 
         scheduleScaleFinish()
@@ -268,7 +242,7 @@ class CarVirtualDisplayProbeGestureDispatcher {
             currentSpan = initialSpan,
         )
 
-        val didHandleStart = targetComposeView.dispatchRecycledEvents(
+        targetComposeView.dispatchRecycledEvents(
             createScaleMotionEvent(
                 scaleGestureState = initialScaleGestureState,
                 eventTime = eventTime,
@@ -280,12 +254,6 @@ class CarVirtualDisplayProbeGestureDispatcher {
                 eventTime = eventTime,
                 action = SECOND_POINTER_DOWN_ACTION,
             ),
-        )
-
-        Log.i(
-            TAG,
-            "Scale gesture started. handled=$didHandleStart focus=${focusPoint.toLogLabel()} " +
-                "span=${initialSpan.toInt()} maxSpan=${viewport.maxScaleSpanPx().toInt()}",
         )
 
         return initialScaleGestureState.also {
@@ -320,12 +288,6 @@ class CarVirtualDisplayProbeGestureDispatcher {
         )
         val nextMoveIndex = moveIndex + 1
 
-        Log.i(
-            TAG,
-            "Fling move dispatched. handled=$didHandleEvent index=$moveIndex " +
-                "delta=${moveDelta.toLogLabel()} point=${nextPoint.toLogLabel()} decay=$decay",
-        )
-
         if (nextMoveIndex >= FLING_MOVE_COUNT) {
             scheduleFlingFinish()
         } else {
@@ -348,19 +310,13 @@ class CarVirtualDisplayProbeGestureDispatcher {
         val targetComposeView = composeView ?: return
         val eventTime = SystemClock.uptimeMillis()
         val action = if (isCanceled) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP
-        val didHandleEvent = targetComposeView.dispatchRecycledEvents(
+        targetComposeView.dispatchRecycledEvents(
             createSinglePointerMotionEvent(
                 downTime = currentClickGestureState.downTime,
                 eventTime = eventTime,
                 action = action,
                 point = currentClickGestureState.downPoint,
             ),
-        )
-
-        Log.i(
-            TAG,
-            "Click finish dispatched. canceled=$isCanceled handled=$didHandleEvent " +
-                "elapsedMs=${eventTime - currentClickGestureState.downTime}",
         )
     }
 
@@ -389,19 +345,13 @@ class CarVirtualDisplayProbeGestureDispatcher {
         val targetComposeView = composeView ?: return
         val eventTime = SystemClock.uptimeMillis()
         val action = if (isCanceled) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP
-        val didHandleEvent = targetComposeView.dispatchRecycledEvents(
+        targetComposeView.dispatchRecycledEvents(
             createSinglePointerMotionEvent(
                 downTime = currentFlingGestureState.downTime,
                 eventTime = eventTime,
                 action = action,
                 point = currentFlingGestureState.currentPoint,
             ),
-        )
-
-        Log.i(
-            TAG,
-            "Fling finish dispatched. canceled=$isCanceled handled=$didHandleEvent " +
-                "elapsedMs=${eventTime - currentFlingGestureState.downTime}",
         )
     }
 
@@ -430,13 +380,7 @@ class CarVirtualDisplayProbeGestureDispatcher {
             listOf(pointerUpEvent, upEvent)
         }
 
-        val didHandleEvent = targetComposeView.dispatchRecycledEvents(events = finalEvents)
-
-        Log.i(
-            TAG,
-            "Scale finish dispatched. canceled=$isCanceled handled=$didHandleEvent " +
-                "elapsedMs=${eventTime - currentScaleGestureState.downTime}",
-        )
+        targetComposeView.dispatchRecycledEvents(events = finalEvents)
     }
 
     private fun cancelActiveGestures() {
@@ -508,10 +452,5 @@ class CarVirtualDisplayProbeGestureDispatcher {
         val removingRunnable = pendingFlingRunnable ?: return
         pendingFlingRunnable = null
         mainHandler.removeCallbacks(removingRunnable)
-    }
-
-    private companion object {
-        /** logcat 抽出用タグ。 */
-        const val TAG = "OneNaviCarVd"
     }
 }

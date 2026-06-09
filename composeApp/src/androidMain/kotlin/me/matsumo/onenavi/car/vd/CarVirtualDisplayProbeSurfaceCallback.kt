@@ -1,7 +1,6 @@
 package me.matsumo.onenavi.car.vd
 
 import android.graphics.Rect
-import android.os.SystemClock
 import android.util.Log
 import androidx.car.app.SurfaceCallback
 import androidx.car.app.SurfaceContainer
@@ -34,10 +33,6 @@ class CarVirtualDisplayProbeSurfaceCallback(
     }
 
     override fun onFling(velocityX: Float, velocityY: Float) {
-        Log.i(
-            TAG,
-            "Fling callback received. velocity=${velocityX.toInt()},${velocityY.toInt()}",
-        )
         controller.updateFlingInput(
             velocityX = velocityX,
             velocityY = velocityY,
@@ -45,10 +40,6 @@ class CarVirtualDisplayProbeSurfaceCallback(
     }
 
     override fun onScale(focusX: Float, focusY: Float, scaleFactor: Float) {
-        Log.i(
-            TAG,
-            "Scale callback received. focus=${focusX.toInt()},${focusY.toInt()} scale=$scaleFactor",
-        )
         controller.updateScaleInput(
             focusX = focusX,
             focusY = focusY,
@@ -57,16 +48,9 @@ class CarVirtualDisplayProbeSurfaceCallback(
     }
 
     override fun onClick(surfaceX: Float, surfaceY: Float) {
-        val callbackUptimeMillis = SystemClock.uptimeMillis()
-        Log.i(
-            TAG,
-            "Click callback received. surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
-                "callbackUptimeMs=$callbackUptimeMillis",
-        )
         controller.updateClickInput(
             hostInputX = surfaceX,
             hostInputY = surfaceY,
-            callbackUptimeMillis = callbackUptimeMillis,
         )
     }
 

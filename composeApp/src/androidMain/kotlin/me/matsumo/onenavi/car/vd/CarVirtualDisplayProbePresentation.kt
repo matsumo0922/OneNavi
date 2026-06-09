@@ -151,29 +151,13 @@ class CarVirtualDisplayProbePresentation(
 
     private fun dispatchClickMotionEvents(inputState: CarVirtualDisplayProbeInputState): Boolean {
         val targetComposeView = composeView
-        val surfaceX = inputState.surfaceX ?: return false
-        val surfaceY = inputState.surfaceY ?: return false
         clickCoordinateResult = null
 
         val dispatchCoordinate = inputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(
             viewport = viewport,
-        )
-
-        if (dispatchCoordinate == null) {
-            Log.i(
-                TAG,
-                "Click injection skipped. dispatch coordinate is missing. " +
-                    "surface=${surfaceX.toInt()},${surfaceY.toInt()}",
-            )
-            return false
-        }
+        ) ?: return false
 
         if (!viewport.containsClickDispatchCoordinate(candidate = dispatchCoordinate)) {
-            Log.i(
-                TAG,
-                "Click injection skipped. coordinate=${dispatchCoordinate.toLogLabel()} " +
-                    "surface=${surfaceX.toInt()},${surfaceY.toInt()} is outside observed frame.",
-            )
             return false
         }
 
@@ -186,23 +170,8 @@ class CarVirtualDisplayProbePresentation(
 
         if (semanticsCoordinateResult != null) {
             clickCoordinateResult = semanticsCoordinateResult
-            Log.i(
-                TAG,
-                "Click semantics applied. coordinate=${semanticsCoordinateResult.toLogLabel()} " +
-                    "surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
-                    "observed=${inputState.observedFramePointLabel} " +
-                    "hostVisible=${inputState.hostVisiblePointLabel}",
-            )
             return true
         }
-
-        Log.i(
-            TAG,
-            "Click semantics missed. coordinate=${dispatchCoordinate.toLogLabel()} " +
-                "surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
-                "observed=${inputState.observedFramePointLabel} " +
-                "hostVisible=${inputState.hostVisiblePointLabel}",
-        )
 
         val didHandleClick = gestureDispatcher.dispatchClick(
             surfaceX = dispatchCoordinate.point.x,
@@ -213,12 +182,6 @@ class CarVirtualDisplayProbePresentation(
             point = dispatchCoordinate.point,
         )
 
-        Log.i(
-            TAG,
-            "Click injection started. coordinate=${dispatchCoordinate.toLogLabel()} " +
-                "surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
-                "handledDown=$didHandleClick",
-        )
         return didHandleClick
     }
 
@@ -226,12 +189,4 @@ class CarVirtualDisplayProbePresentation(
         /** logcat 抽出用タグ。 */
         const val TAG = "OneNaviCarVd"
     }
-}
-
-private fun CarVirtualDisplayProbeClickCoordinateCandidate.toLogLabel(): String {
-    return "$label ${point.x.toInt()},${point.y.toInt()}"
-}
-
-private fun CarVirtualDisplayProbeClickCoordinateResult.toLogLabel(): String {
-    return "$label ${point.x.toInt()},${point.y.toInt()}"
 }
