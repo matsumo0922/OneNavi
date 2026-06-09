@@ -438,9 +438,11 @@ class CarVirtualDisplayProbeController(
         /** Android Auto host Surface に紐づく VirtualDisplay 名。 */
         const val VIRTUAL_DISPLAY_NAME = "OneNaviCarVirtualDisplayProbe"
 
-        /** host Surface へ Presentation を描画しつつ、外部 content の mirror 混入を避ける VD flags。 */
-        const val VIRTUAL_DISPLAY_FLAGS = DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC or
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
+        /**
+         * host Surface へ Presentation を描画する private VD flags。
+         *
+         * public VD は Keyguard の対象になるため、ロック画面の時計が host Surface へ重なる。
+         */
+        const val VIRTUAL_DISPLAY_FLAGS = DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
     }
 }
