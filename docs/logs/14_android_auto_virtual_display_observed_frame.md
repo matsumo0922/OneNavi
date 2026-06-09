@@ -34,17 +34,35 @@ horizontalSafetyInset = min(visibleLeft, surfaceWidth - visibleRight)
 
 ## 入力座標
 
-タッチ座標は raw Surface 座標で届くため、OneNaviApp に渡す時は青枠の左上を原点に変換する。
+DHU split 表示の click callback は、青枠(observed frame)内のローカル座標として扱うと実表示と一致した。
+`Presentation` の root 全体へ `MotionEvent` を投げる時は、青枠の左上を足して Surface 全体の座標へ戻す。
 
 ```
-appX = surfaceX - observedLeft
-appY = surfaceY
+dispatchX = observedLeft + callbackX
+dispatchY = observedTop + callbackY
 ```
 
 host slot の外側かつ青枠の内側のタッチも OneNaviApp 側では有効入力として扱う。
+
+### 2026-06-09 click 座標ずれの実測結果
+
+split 表示で `visibleArea=Rect(444, 88 - 1166, 688)`、青枠が `Rect(420, 0 - 1190, 700)` の時、
+`visibleLeft + callbackX` で click を注入すると実タップがマウスポインターより右へずれた。
+
+実測のずれは約 `24px` で、これは `visibleLeft - observedLeft` と一致する。
+つまり、click fallback / semantics click の dispatch 座標は host visible 起点ではなく、青枠起点で戻す必要がある。
+
+```
+誤: dispatchX = visibleLeft + callbackX
+正: dispatchX = observedLeft + callbackX
+```
+
+実装上は `observedOffset` を split 時の click dispatch 座標として使い、Semantics と MotionEvent fallback の両方へ同じ座標を渡す。
+debug overlay の赤丸は実際に採用した座標、黄色丸は `observedOffset` 候補を示す。
 
 ## 残課題
 
 - DHU 以外の head unit、解像度、DPI、split 比率で `horizontalSafetyInset` が左右対称とみなせるか確認する。
 - 右側 split / media pane 配置差分でも青枠が実際の表示境界に一致するか確認する。
 - 実装時は `visibleArea` 更新ごとに observed frame を再計算し、MapView / ComposeView の bounds と入力変換へ同じ値を使う。
+- 実機 head unit でも click callback が DHU と同じく observed frame ローカルとして扱えるか確認する。
