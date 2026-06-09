@@ -47,6 +47,7 @@ internal fun CarVirtualDisplayProbeContent(
     rendererLabel: String,
     viewport: CarVirtualDisplayViewport,
     inputState: CarVirtualDisplayProbeInputState,
+    clickCoordinateResult: CarVirtualDisplayProbeClickCoordinateResult?,
     modifier: Modifier = Modifier,
 ) {
     val lifecycleStateLabel = rememberCarVirtualDisplayLifecycleStateLabel()
@@ -69,6 +70,8 @@ internal fun CarVirtualDisplayProbeContent(
         "hostVisibleIn=${inputState.insideHostVisibleAreaLabel}"
     val gestureLabel = "d=${inputState.distanceLabel} v=${inputState.velocityLabel} " +
         "scale=${inputState.scaleFactorLabel}"
+    val clickCoordinateLabel = clickCoordinateResult.toClickCoordinateLabel()
+    val clickCandidateLabel = inputState.toClickCandidateLabel(viewport = viewport)
 
     MaterialTheme {
         Box(
@@ -88,6 +91,8 @@ internal fun CarVirtualDisplayProbeContent(
             CarVirtualDisplayProbeViewportOverlay(
                 modifier = Modifier.fillMaxSize(),
                 viewport = viewport,
+                inputState = inputState,
+                clickCoordinateResult = clickCoordinateResult,
             )
             CarVirtualDisplayObservedFrameRoot(
                 modifier = Modifier.fillMaxSize(),
@@ -109,6 +114,8 @@ internal fun CarVirtualDisplayProbeContent(
                     observedFramePointLabel = observedFramePointLabel,
                     hostVisiblePointLabel = hostVisiblePointLabel,
                     gestureLabel = gestureLabel,
+                    clickCoordinateLabel = clickCoordinateLabel,
+                    clickCandidateLabel = clickCandidateLabel,
                 )
             }
         }
@@ -194,6 +201,8 @@ private fun CarVirtualDisplayProbeDiagnosticsOverlay(
     observedFramePointLabel: String,
     hostVisiblePointLabel: String,
     gestureLabel: String,
+    clickCoordinateLabel: String,
+    clickCandidateLabel: String,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -264,6 +273,16 @@ private fun CarVirtualDisplayProbeDiagnosticsOverlay(
             color = Color(0xFFFDE68A),
             fontSize = 12.sp,
         )
+        Text(
+            text = clickCoordinateLabel,
+            color = Color(0xFFFCA5A5),
+            fontSize = 12.sp,
+        )
+        Text(
+            text = clickCandidateLabel,
+            color = Color(0xFFA7F3D0),
+            fontSize = 12.sp,
+        )
     }
 }
 
@@ -291,12 +310,19 @@ private fun rememberCarVirtualDisplayLifecycleStateLabel(): String {
 @Composable
 private fun CarVirtualDisplayProbeViewportOverlay(
     viewport: CarVirtualDisplayViewport,
+    inputState: CarVirtualDisplayProbeInputState,
+    clickCoordinateResult: CarVirtualDisplayProbeClickCoordinateResult?,
     modifier: Modifier = Modifier,
 ) {
     Canvas(
         modifier = modifier,
     ) {
         drawProbeViewportFrames(viewport = viewport)
+        drawProbeClickCoordinates(
+            viewport = viewport,
+            inputState = inputState,
+            clickCoordinateResult = clickCoordinateResult,
+        )
     }
 }
 
@@ -319,6 +345,137 @@ private fun DrawScope.drawProbeViewportFrames(viewport: CarVirtualDisplayViewpor
         bottom = viewport.surfaceHeight,
         strokeWidth = HOST_SLOT_STROKE_WIDTH,
     )
+}
+
+private fun DrawScope.drawProbeClickCoordinates(
+    viewport: CarVirtualDisplayViewport,
+    inputState: CarVirtualDisplayProbeInputState,
+    clickCoordinateResult: CarVirtualDisplayProbeClickCoordinateResult?,
+) {
+    val clickCoordinateCandidates = inputState.clickCoordinateCandidates(viewport = viewport)
+
+    clickCoordinateCandidates.forEachIndexed { candidateIndex, candidate ->
+        drawProbeClickCoordinateCandidate(
+            candidate = candidate,
+            candidateIndex = candidateIndex,
+        )
+    }
+
+    if (clickCoordinateResult != null) {
+        drawProbeClickCoordinateResult(result = clickCoordinateResult)
+    }
+}
+
+private fun DrawScope.drawProbeClickCoordinateCandidate(
+    candidate: CarVirtualDisplayProbeClickCoordinateCandidate,
+    candidateIndex: Int,
+) {
+    val color = candidateIndex.toCandidateColor()
+
+    drawCircle(
+        color = color.copy(alpha = 0.36f),
+        radius = CLICK_CANDIDATE_RADIUS,
+        center = candidate.point,
+    )
+    drawCircle(
+        color = color,
+        radius = CLICK_CANDIDATE_RADIUS,
+        center = candidate.point,
+        style = Stroke(width = CLICK_CANDIDATE_STROKE_WIDTH),
+    )
+}
+
+private fun DrawScope.drawProbeClickCoordinateResult(
+    result: CarVirtualDisplayProbeClickCoordinateResult,
+) {
+    drawCircle(
+        color = Color(0xCCEF4444),
+        radius = CLICK_RESULT_RADIUS,
+        center = result.point,
+    )
+    drawLine(
+        color = Color.White,
+        start = Offset(
+            x = result.point.x - CLICK_RESULT_CROSS_HALF_LENGTH,
+            y = result.point.y,
+        ),
+        end = Offset(
+            x = result.point.x + CLICK_RESULT_CROSS_HALF_LENGTH,
+            y = result.point.y,
+        ),
+        strokeWidth = CLICK_RESULT_CROSS_STROKE_WIDTH,
+    )
+    drawLine(
+        color = Color.White,
+        start = Offset(
+            x = result.point.x,
+            y = result.point.y - CLICK_RESULT_CROSS_HALF_LENGTH,
+        ),
+        end = Offset(
+            x = result.point.x,
+            y = result.point.y + CLICK_RESULT_CROSS_HALF_LENGTH,
+        ),
+        strokeWidth = CLICK_RESULT_CROSS_STROKE_WIDTH,
+    )
+}
+
+private fun CarVirtualDisplayProbeInputState.clickCoordinateCandidates(
+    viewport: CarVirtualDisplayViewport,
+): List<CarVirtualDisplayProbeClickCoordinateCandidate> {
+    val inputSurfaceX = surfaceX ?: return emptyList()
+    val inputSurfaceY = surfaceY ?: return emptyList()
+
+    if (kind != CarVirtualDisplayProbeInputKind.Click) {
+        return emptyList()
+    }
+
+    return createCarVirtualDisplayProbeClickCoordinateCandidates(
+        viewport = viewport,
+        surfaceX = inputSurfaceX,
+        surfaceY = inputSurfaceY,
+        observedFrameX = observedFrameX,
+        observedFrameY = observedFrameY,
+        hostVisibleX = hostVisibleX,
+        hostVisibleY = hostVisibleY,
+    )
+}
+
+private fun CarVirtualDisplayProbeClickCoordinateResult?.toClickCoordinateLabel(): String {
+    if (this == null) {
+        return "tap actual=n/a"
+    }
+
+    return "tap actual=$label ${point.toPointLabel()}"
+}
+
+private fun CarVirtualDisplayProbeInputState.toClickCandidateLabel(
+    viewport: CarVirtualDisplayViewport,
+): String {
+    val candidates = clickCoordinateCandidates(viewport = viewport)
+
+    if (candidates.isEmpty()) {
+        return "tap candidates=n/a"
+    }
+
+    val candidateLabels = candidates.joinToString(separator = " ") { candidate ->
+        "${candidate.label}:${candidate.point.toPointLabel()}"
+    }
+
+    return "tap candidates=$candidateLabels"
+}
+
+private fun Offset.toPointLabel(): String {
+    return "${x.toInt()},${y.toInt()}"
+}
+
+private fun Int.toCandidateColor(): Color {
+    return when (this) {
+        0 -> Color(0xFFF59E0B)
+        1 -> Color(0xFF22D3EE)
+        2 -> Color(0xFFA78BFA)
+        3 -> Color(0xFF34D399)
+        else -> Color(0xFFF472B6)
+    }
 }
 
 private fun DrawScope.drawProbeFrame(
@@ -364,3 +521,18 @@ private const val OBSERVED_FRAME_STROKE_WIDTH = 2f
 
 /** split 後に host が表示している横スロットを示す検証枠の線幅。 */
 private const val HOST_SLOT_STROKE_WIDTH = 2f
+
+/** click 候補位置を示す円の半径。 */
+private const val CLICK_CANDIDATE_RADIUS = 9f
+
+/** click 候補位置を示す円の線幅。 */
+private const val CLICK_CANDIDATE_STROKE_WIDTH = 2f
+
+/** 実際に採用した click 位置を示す円の半径。 */
+private const val CLICK_RESULT_RADIUS = 13f
+
+/** 実際に採用した click 位置を示す十字線の半分の長さ。 */
+private const val CLICK_RESULT_CROSS_HALF_LENGTH = 18f
+
+/** 実際に採用した click 位置を示す十字線の線幅。 */
+private const val CLICK_RESULT_CROSS_STROKE_WIDTH = 3f

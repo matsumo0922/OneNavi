@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import me.matsumo.onenavi.R
@@ -27,6 +28,7 @@ class CarVirtualDisplayProbePresentation(
     private val semanticsClickDispatcher = CarVirtualDisplayProbeSemanticsClickDispatcher()
     private var viewport by mutableStateOf(initialViewport)
     private var inputState by mutableStateOf(initialInputState)
+    private var clickCoordinateResult by mutableStateOf<CarVirtualDisplayProbeClickCoordinateResult?>(null)
     private var composeView: ComposeView? = null
 
     fun updateViewport(viewport: CarVirtualDisplayProbeViewport) {
@@ -35,6 +37,10 @@ class CarVirtualDisplayProbePresentation(
 
     fun updateInputState(inputState: CarVirtualDisplayProbeInputState) {
         this.inputState = inputState
+
+        if (inputState.kind != CarVirtualDisplayProbeInputKind.Click) {
+            clickCoordinateResult = null
+        }
     }
 
     fun dispatchClickInput(inputState: CarVirtualDisplayProbeInputState): Boolean {
@@ -139,6 +145,7 @@ class CarVirtualDisplayProbePresentation(
                 rendererLabel = "Presentation",
                 viewport = viewport,
                 inputState = inputState,
+                clickCoordinateResult = clickCoordinateResult,
             )
         }
     }
@@ -147,7 +154,9 @@ class CarVirtualDisplayProbePresentation(
         val targetComposeView = composeView
         val surfaceX = inputState.surfaceX ?: return false
         val surfaceY = inputState.surfaceY ?: return false
-        val semanticsCoordinateSpace = targetComposeView?.let { composeView ->
+        clickCoordinateResult = null
+
+        val semanticsCoordinateResult = targetComposeView?.let { composeView ->
             semanticsClickDispatcher.dispatchClick(
                 composeView = composeView,
                 viewport = viewport,
@@ -160,10 +169,11 @@ class CarVirtualDisplayProbePresentation(
             )
         }
 
-        if (semanticsCoordinateSpace != null) {
+        if (semanticsCoordinateResult != null) {
+            clickCoordinateResult = semanticsCoordinateResult
             Log.i(
                 TAG,
-                "Click semantics applied. coordinate=$semanticsCoordinateSpace " +
+                "Click semantics applied. coordinate=${semanticsCoordinateResult.label} " +
                     "surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
                     "observed=${inputState.observedFramePointLabel} " +
                     "hostVisible=${inputState.hostVisiblePointLabel}",
@@ -185,6 +195,13 @@ class CarVirtualDisplayProbePresentation(
         val didHandleClick = gestureDispatcher.dispatchClick(
             surfaceX = surfaceX,
             surfaceY = surfaceY,
+        )
+        clickCoordinateResult = CarVirtualDisplayProbeClickCoordinateResult(
+            label = "motionEvent",
+            point = Offset(
+                x = surfaceX,
+                y = surfaceY,
+            ),
         )
 
         Log.i(
