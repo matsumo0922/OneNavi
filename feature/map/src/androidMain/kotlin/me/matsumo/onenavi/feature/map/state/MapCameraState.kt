@@ -70,6 +70,7 @@ internal class MapCameraState internal constructor(
     private var handledGuidanceManeuverFocusIndex: Int? = null
     private var pendingRestoreState: MapCameraRestoreState? = initialRestoreState
     private var pendingManualBrowsingRestore: Boolean = initialRestoreState?.isFollowingMyLocation == false
+    private var lastProjectionDiagnosticSignature: String? = null
 
     var cameraState by mutableStateOf(
         if (initialRestoreState == null) {
@@ -201,6 +202,7 @@ internal class MapCameraState internal constructor(
         mapViewHeightPx = heightPx
         vehicleCameraPositionFactory.updateViewportHeight(heightPx)
         applyCameraPadding()
+        logProjectionDiagnostics(reason = "viewport")
         moveFollowCameraIfNeeded()
     }
 
@@ -234,6 +236,7 @@ internal class MapCameraState internal constructor(
         this.guidanceAnchorFraction = guidanceAnchorFraction
         applyCameraPadding()
         applyPendingRestoreIfReady()
+        logProjectionDiagnostics(reason = "padding")
         moveFollowCameraIfNeeded()
     }
 
@@ -680,6 +683,7 @@ internal class MapCameraState internal constructor(
         val current = map.cameraPosition
         val target = runCatching {
             map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+            logProjectionDiagnostics(reason = "route-overview-target")
             map.cameraPosition
         }.onFailure { throwable ->
             Log.w(
@@ -706,6 +710,37 @@ internal class MapCameraState internal constructor(
                 zoomEasing = DecelerateInterpolator(CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR),
             )
         }
+    }
+
+    private fun logProjectionDiagnostics(reason: String) {
+        val map = googleMap ?: return
+        val visibleRegion = runCatching {
+            map.projection.visibleRegion
+        }.getOrNull() ?: return
+        val cameraPosition = map.cameraPosition
+        val resolvedTopPaddingPx = resolveTopPaddingPx()
+        val bounds = visibleRegion.latLngBounds
+        val diagnosticSignature = "$mapViewWidthPx,$mapViewHeightPx," +
+            "$startPaddingPx,$resolvedTopPaddingPx,$endPaddingPx,$rawBottomPaddingPx," +
+            "${cameraPosition.zoom},${cameraPosition.target.latitude},${cameraPosition.target.longitude}," +
+            "${bounds.southwest.latitude},${bounds.southwest.longitude}," +
+            "${bounds.northeast.latitude},${bounds.northeast.longitude}"
+
+        if (diagnosticSignature == lastProjectionDiagnosticSignature) return
+
+        lastProjectionDiagnosticSignature = diagnosticSignature
+        Log.i(
+            MAP_CAMERA_LOG_TAG,
+            "Projection diagnostics. reason=$reason viewport=${mapViewWidthPx}x$mapViewHeightPx " +
+                "padding=$startPaddingPx,$resolvedTopPaddingPx,$endPaddingPx,$rawBottomPaddingPx " +
+                "cameraZoom=${cameraPosition.zoom} target=${cameraPosition.target.latitude}," +
+                "${cameraPosition.target.longitude} nearLeft=${visibleRegion.nearLeft.latitude}," +
+                "${visibleRegion.nearLeft.longitude} nearRight=${visibleRegion.nearRight.latitude}," +
+                "${visibleRegion.nearRight.longitude} farLeft=${visibleRegion.farLeft.latitude}," +
+                "${visibleRegion.farLeft.longitude} farRight=${visibleRegion.farRight.latitude}," +
+                "${visibleRegion.farRight.longitude} bounds=${bounds.southwest.latitude}," +
+                "${bounds.southwest.longitude}..${bounds.northeast.latitude},${bounds.northeast.longitude}",
+        )
     }
 
     /**

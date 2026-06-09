@@ -2,8 +2,12 @@ package me.matsumo.onenavi.feature.map
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Rect
 import android.os.Bundle
 import android.util.Log
+import android.view.SurfaceView
+import android.view.TextureView
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
@@ -128,6 +132,12 @@ private fun Context.createMapContainer(
         addView(mapView)
         mapView.getMapAsync { map ->
             onMapUpdate(map)
+            post {
+                logMapViewDiagnostics(
+                    mapView = mapView,
+                    reason = "map-ready",
+                )
+            }
         }
     }
 }
@@ -161,14 +171,104 @@ private fun FrameLayout.updateMapViewLayout(
     }
 
     mapView.translationX = canvasOffsetXPx.toFloat()
+    post {
+        logMapViewDiagnostics(
+            mapView = mapView,
+            reason = "layout-updated",
+        )
+    }
 }
 
 private fun IntSize.hasNoArea(): Boolean {
     return width <= 0 || height <= 0
 }
 
+private fun FrameLayout.logMapViewDiagnostics(
+    mapView: MapView,
+    reason: String,
+) {
+    val displayMetrics = mapView.context.resources.displayMetrics
+    val containerLabel = viewDiagnosticLabel()
+    val mapViewLabel = mapView.viewDiagnosticLabel()
+    val childLabel = directChildrenDiagnosticLabel()
+    val rendererLabel = mapView.rendererViewDiagnosticLabels().joinToString(separator = " | ")
+    val diagnosticSignature = "$containerLabel/$mapViewLabel/$childLabel/$rendererLabel"
+
+    if (diagnosticSignature == lastMapViewDiagnosticSignature) return
+
+    lastMapViewDiagnosticSignature = diagnosticSignature
+    Log.i(
+        MAP_CAMERA_LOG_TAG,
+        "MapView diagnostics. reason=$reason display=${mapView.display?.displayId} " +
+            "metrics=${displayMetrics.widthPixels}x${displayMetrics.heightPixels} " +
+            "density=${displayMetrics.density} dpi=${displayMetrics.densityDpi} " +
+            "container={$containerLabel} mapView={$mapViewLabel} " +
+            "children=[$childLabel] renderers=[$rendererLabel]",
+    )
+}
+
+private fun ViewGroup.directChildrenDiagnosticLabel(): String {
+    if (childCount == 0) return "none"
+
+    return (0 until childCount).joinToString(separator = " | ") { childIndex ->
+        val child = getChildAt(childIndex)
+        "#$childIndex ${child.viewDiagnosticLabel()}"
+    }
+}
+
+private fun View.rendererViewDiagnosticLabels(
+    depth: Int = 0,
+): List<String> {
+    if (depth > MAP_VIEW_DIAGNOSTIC_MAX_DEPTH) return emptyList()
+
+    val selfLabel = if (isMapRendererView()) {
+        listOf("depth=$depth ${viewDiagnosticLabel()}")
+    } else {
+        emptyList()
+    }
+
+    if (this !is ViewGroup) return selfLabel
+
+    return buildList {
+        addAll(selfLabel)
+        for (childIndex in 0 until childCount) {
+            addAll(getChildAt(childIndex).rendererViewDiagnosticLabels(depth = depth + 1))
+        }
+    }
+}
+
+private fun View.isMapRendererView(): Boolean {
+    val className = javaClass.name
+    val isSurfaceView = this is SurfaceView
+    val isTextureView = this is TextureView
+    val isGlView = className.contains("GL", ignoreCase = true)
+    val isRendererView = className.contains("Renderer", ignoreCase = true)
+
+    return isSurfaceView || isTextureView || isGlView || isRendererView
+}
+
+private fun View.viewDiagnosticLabel(): String {
+    val screenLocation = IntArray(2)
+    val windowLocation = IntArray(2)
+    val globalVisibleRect = Rect()
+    getLocationOnScreen(screenLocation)
+    getLocationInWindow(windowLocation)
+    getGlobalVisibleRect(globalVisibleRect)
+
+    return "${javaClass.simpleName} " +
+        "size=${width}x$height measured=${measuredWidth}x$measuredHeight " +
+        "pos=$left,$top,$right,$bottom translation=${translationX},$translationY " +
+        "screen=${screenLocation[0]},${screenLocation[1]} " +
+        "window=${windowLocation[0]},${windowLocation[1]} visible=$globalVisibleRect"
+}
+
+private var lastMapViewDiagnosticSignature: String? = null
+
 /** Map camera 周辺の検証ログ用タグ。 */
 private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"
+
+/** MapView 内部 View の探索深さ上限。 */
+private const val MAP_VIEW_DIAGNOSTIC_MAX_DEPTH = 6
 
 @Composable
 private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
