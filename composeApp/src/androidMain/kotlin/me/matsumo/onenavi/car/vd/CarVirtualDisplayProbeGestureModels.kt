@@ -199,6 +199,10 @@ internal fun CarVirtualDisplaySurfaceVector.toLogLabel(): String {
     return "${x.toInt()},${y.toInt()}"
 }
 
+internal fun CarVirtualDisplaySurfaceVector.isZero(): Boolean {
+    return x == 0f && y == 0f
+}
+
 private fun Float.coerceInSafe(minimumValue: Float, maximumValue: Float): Float {
     if (minimumValue <= maximumValue) {
         return coerceIn(minimumValue, maximumValue)

@@ -77,6 +77,13 @@ class CarVirtualDisplayProbeGestureDispatcher {
         val distance = inputState.scrollDistanceOrNull ?: return false
         val anchorPoint = inputState.surfacePointOrNull ?: return false
 
+        if (distance.isZero()) {
+            val hadActiveDragGesture = dragGestureState != null
+            finishDragGesture(isCanceled = false)
+            Log.i(TAG, "Scroll move ignored. zeroDistance=true activeDrag=$hadActiveDragGesture")
+            return true
+        }
+
         finishClickGesture(isCanceled = true)
         finishFlingGesture(isCanceled = true)
         finishScaleGesture(isCanceled = true)
@@ -168,12 +175,13 @@ class CarVirtualDisplayProbeGestureDispatcher {
         val isPlaceholderFocus = rawFocusPoint.surfaceX == 0f && rawFocusPoint.surfaceY == 0f
         val isNoopScale = scaleFactor == 1f
 
-        if (isPlaceholderFocus && isNoopScale) {
+        if (isNoopScale) {
             Log.i(
                 TAG,
-                "Scale move ignored. placeholderFocus=${rawFocusPoint.toLogLabel()} scale=$scaleFactor",
+                "Scale move ignored. noopScale=true placeholderFocus=$isPlaceholderFocus " +
+                    "rawFocus=${rawFocusPoint.toLogLabel()}",
             )
-            return false
+            return true
         }
 
         val focusPoint = inputState.scaleFocusPointOrNull(viewport = viewport) ?: return false
@@ -190,21 +198,29 @@ class CarVirtualDisplayProbeGestureDispatcher {
             focusPoint = focusPoint,
             eventTime = now,
         )
-        val rawNextSpan = currentScaleGestureState.currentSpan * scaleFactor
+        val boundedScaleGestureState = resetScaleGestureAtSpanLimit(
+            targetComposeView = targetComposeView,
+            viewport = viewport,
+            focusPoint = focusPoint,
+            currentScaleGestureState = currentScaleGestureState,
+            scaleFactor = scaleFactor,
+        )
+        val rawNextSpan = boundedScaleGestureState.currentSpan * scaleFactor
         val nextSpan = rawNextSpan
             .coerceIn(MIN_SCALE_SPAN_PX, viewport.maxScaleSpanPx())
         val spanWasClamped = nextSpan != rawNextSpan
-        val nextScaleGestureState = currentScaleGestureState.copy(
+        val nextScaleGestureState = boundedScaleGestureState.copy(
             focusPoint = focusPoint,
             currentSpan = nextSpan,
         )
+        val moveEventTime = SystemClock.uptimeMillis()
         scaleGestureState = nextScaleGestureState
 
         val didHandleEvent = targetComposeView.dispatchRecycledEvents(
             createScaleMotionEvent(
                 scaleGestureState = nextScaleGestureState,
                 viewport = viewport,
-                eventTime = now,
+                eventTime = moveEventTime,
                 action = MotionEvent.ACTION_MOVE,
             ),
         )
@@ -213,11 +229,49 @@ class CarVirtualDisplayProbeGestureDispatcher {
             TAG,
             "Scale move dispatched. handled=$didHandleEvent rawFocus=${rawFocusPoint.toLogLabel()} " +
                 "focus=${focusPoint.toLogLabel()} scale=$scaleFactor " +
-                "span=${currentScaleGestureState.currentSpan.toInt()}->${nextSpan.toInt()} clamped=$spanWasClamped",
+                "span=${boundedScaleGestureState.currentSpan.toInt()}->${nextSpan.toInt()} " +
+                "clamped=$spanWasClamped",
         )
 
         scheduleScaleFinish()
         return didHandleEvent
+    }
+
+    private fun resetScaleGestureAtSpanLimit(
+        targetComposeView: ComposeView,
+        viewport: CarVirtualDisplayProbeViewport,
+        focusPoint: CarVirtualDisplaySurfacePoint,
+        currentScaleGestureState: CarVirtualDisplayScaleGestureState,
+        scaleFactor: Float,
+    ): CarVirtualDisplayScaleGestureState {
+        val maximumSpan = viewport.maxScaleSpanPx()
+        val rawNextSpan = currentScaleGestureState.currentSpan * scaleFactor
+        val isBelowMinimumSpan = rawNextSpan < MIN_SCALE_SPAN_PX
+        val isAboveMaximumSpan = rawNextSpan > maximumSpan
+        val shouldResetScaleGesture = isBelowMinimumSpan || isAboveMaximumSpan
+
+        if (!shouldResetScaleGesture) {
+            return currentScaleGestureState
+        }
+
+        finishScaleGesture(isCanceled = false)
+
+        val restartTime = SystemClock.uptimeMillis()
+        val restartedScaleGestureState = ensureScaleGestureState(
+            targetComposeView = targetComposeView,
+            viewport = viewport,
+            focusPoint = focusPoint,
+            eventTime = restartTime,
+        )
+
+        Log.i(
+            TAG,
+            "Scale gesture restarted. rawSpan=${rawNextSpan.toInt()} " +
+                "bounds=${MIN_SCALE_SPAN_PX.toInt()}..${maximumSpan.toInt()} " +
+                "focus=${focusPoint.toLogLabel()}",
+        )
+
+        return restartedScaleGestureState
     }
 
     private fun ensureDragGestureState(
