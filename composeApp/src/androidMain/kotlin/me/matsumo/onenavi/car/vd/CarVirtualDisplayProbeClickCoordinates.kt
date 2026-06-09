@@ -23,14 +23,14 @@ internal const val CLICK_COORDINATE_MOTION_EVENT_PREFIX = "motionEvent"
 
 /** VD click 注入で試す座標候補。 */
 @Immutable
-data class CarVirtualDisplayProbeClickCoordinateCandidate(
+internal data class CarVirtualDisplayProbeClickCoordinateCandidate(
     val label: String,
     val point: Offset,
 )
 
 /** VD click 注入で実際に採用した座標。 */
 @Immutable
-data class CarVirtualDisplayProbeClickCoordinateResult(
+internal data class CarVirtualDisplayProbeClickCoordinateResult(
     val label: String,
     val point: Offset,
 )

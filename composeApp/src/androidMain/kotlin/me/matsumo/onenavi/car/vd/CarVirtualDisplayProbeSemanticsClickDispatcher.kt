@@ -11,7 +11,7 @@ import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
 
 /** VD のクリックを Compose の clickable semantics へ直接渡す dispatcher。 */
-class CarVirtualDisplayProbeSemanticsClickDispatcher {
+internal class CarVirtualDisplayProbeSemanticsClickDispatcher {
 
     private val SemanticsNode.touchArea: Float
         get() {
