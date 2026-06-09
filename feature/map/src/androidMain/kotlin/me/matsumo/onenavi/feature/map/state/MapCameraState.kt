@@ -71,6 +71,7 @@ internal class MapCameraState internal constructor(
     private var pendingRestoreState: MapCameraRestoreState? = initialRestoreState
     private var pendingManualBrowsingRestore: Boolean = initialRestoreState?.isFollowingMyLocation == false
     private var lastProjectionDiagnosticSignature: String? = null
+    private var shouldLogDiagnostics: Boolean = false
 
     var cameraState by mutableStateOf(
         if (initialRestoreState == null) {
@@ -210,6 +211,15 @@ internal class MapCameraState internal constructor(
     fun updateDensity(density: Float) {
         this.density = density
         vehicleCameraPositionFactory.updateDensity(density)
+    }
+
+    /**
+     * Map camera の診断ログ出力可否を更新する。
+     *
+     * @param isEnabled true の場合のみ projection 診断ログを出す
+     */
+    fun updateDiagnosticsLogging(isEnabled: Boolean) {
+        shouldLogDiagnostics = isEnabled
     }
 
     /**
@@ -696,14 +706,16 @@ internal class MapCameraState internal constructor(
         map.moveCamera(CameraUpdateFactory.newCameraPosition(current))
 
         if (target != null) {
-            Log.i(
-                MAP_CAMERA_LOG_TAG,
-                "Route overview target resolved. points=${routePoints.size} padding=$paddingPx " +
-                    "bounds=${bounds.southwest.latitude},${bounds.southwest.longitude}.." +
-                    "${bounds.northeast.latitude},${bounds.northeast.longitude} " +
-                    "currentZoom=${current.zoom} targetZoom=${target.zoom} " +
-                    "target=${target.target.latitude},${target.target.longitude}",
-            )
+            if (shouldLogDiagnostics) {
+                Log.i(
+                    MAP_CAMERA_LOG_TAG,
+                    "Route overview target resolved. points=${routePoints.size} padding=$paddingPx " +
+                        "bounds=${bounds.southwest.latitude},${bounds.southwest.longitude}.." +
+                        "${bounds.northeast.latitude},${bounds.northeast.longitude} " +
+                        "currentZoom=${current.zoom} targetZoom=${target.zoom} " +
+                        "target=${target.target.latitude},${target.target.longitude}",
+                )
+            }
             flyCameraTo(
                 target = target,
                 durationMs = durationMs,
@@ -713,6 +725,8 @@ internal class MapCameraState internal constructor(
     }
 
     private fun logProjectionDiagnostics(reason: String) {
+        if (!shouldLogDiagnostics) return
+
         val map = googleMap ?: return
         val visibleRegion = runCatching {
             map.projection.visibleRegion

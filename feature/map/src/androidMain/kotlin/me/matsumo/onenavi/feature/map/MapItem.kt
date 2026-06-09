@@ -48,6 +48,7 @@ internal fun MapItem(
     cameraState: MapCameraState,
     isDarkMode: Boolean,
     mapCanvasLayout: MapCanvasLayout,
+    shouldLogDiagnostics: Boolean,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
@@ -55,6 +56,7 @@ internal fun MapItem(
 ) {
     val density = LocalDensity.current
     val mapView = rememberMapViewWithLifecycle(isDarkMode = isDarkMode)
+    val mapViewDiagnosticState = remember { MapViewDiagnosticState() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     val canvasWidthPx = with(density) {
         mapCanvasLayout.width.roundToPx().coerceAtLeast(viewportSize.width)
@@ -90,11 +92,13 @@ internal fun MapItem(
             widthPx = canvasWidthPx,
             heightPx = viewportSize.height,
         )
-        Log.i(
-            MAP_CAMERA_LOG_TAG,
-            "MapView layout updated. viewport=${viewportSize.width}x${viewportSize.height} " +
-                "canvas=${canvasWidthPx}x${viewportSize.height} offsetX=$canvasOffsetXPx",
-        )
+        if (shouldLogDiagnostics) {
+            Log.i(
+                MAP_CAMERA_LOG_TAG,
+                "MapView layout updated. viewport=${viewportSize.width}x${viewportSize.height} " +
+                    "canvas=${canvasWidthPx}x${viewportSize.height} offsetX=$canvasOffsetXPx",
+            )
+        }
     }
 
     Box(
@@ -107,7 +111,12 @@ internal fun MapItem(
                     viewportSize = size
                 },
             factory = {
-                it.createMapContainer(mapView, onMapUpdate)
+                it.createMapContainer(
+                    mapView = mapView,
+                    shouldLogDiagnostics = shouldLogDiagnostics,
+                    diagnosticState = mapViewDiagnosticState,
+                    onMapUpdate = onMapUpdate,
+                )
             },
             update = { container ->
                 container.updateMapViewLayout(
@@ -115,26 +124,66 @@ internal fun MapItem(
                     canvasWidthPx = canvasWidthPx,
                     canvasHeightPx = viewportSize.height,
                     canvasOffsetXPx = canvasOffsetXPx,
+                    shouldLogDiagnostics = shouldLogDiagnostics,
+                    diagnosticState = mapViewDiagnosticState,
                 )
             },
         )
     }
 }
 
-private fun Context.createMapContainer(mapView: MapView, onMapUpdate: (GoogleMap?) -> Unit): FrameLayout {
+private fun Context.createMapContainer(
+    mapView: MapView,
+    shouldLogDiagnostics: Boolean,
+    diagnosticState: MapViewDiagnosticState,
+    onMapUpdate: (GoogleMap?) -> Unit,
+): FrameLayout {
     return FrameLayout(this).apply {
         clipChildren = false
         clipToPadding = false
         addView(mapView)
-        mapView.getMapAsync { map ->
-            onMapUpdate(map)
-            post {
-                logMapViewDiagnostics(
-                    mapView = mapView,
-                    reason = "map-ready",
-                )
-            }
-        }
+        registerMapUpdateCallback(
+            mapView = mapView,
+            shouldLogDiagnostics = shouldLogDiagnostics,
+            diagnosticState = diagnosticState,
+            onMapUpdate = onMapUpdate,
+        )
+    }
+}
+
+private fun FrameLayout.registerMapUpdateCallback(
+    mapView: MapView,
+    shouldLogDiagnostics: Boolean,
+    diagnosticState: MapViewDiagnosticState,
+    onMapUpdate: (GoogleMap?) -> Unit,
+) {
+    mapView.getMapAsync { googleMap ->
+        onMapReady(
+            mapView = mapView,
+            googleMap = googleMap,
+            shouldLogDiagnostics = shouldLogDiagnostics,
+            diagnosticState = diagnosticState,
+            onMapUpdate = onMapUpdate,
+        )
+    }
+}
+
+private fun FrameLayout.onMapReady(
+    mapView: MapView,
+    googleMap: GoogleMap,
+    shouldLogDiagnostics: Boolean,
+    diagnosticState: MapViewDiagnosticState,
+    onMapUpdate: (GoogleMap?) -> Unit,
+) {
+    onMapUpdate(googleMap)
+    if (!shouldLogDiagnostics) return
+
+    post {
+        logMapViewDiagnostics(
+            mapView = mapView,
+            reason = "map-ready",
+            diagnosticState = diagnosticState,
+        )
     }
 }
 
@@ -143,6 +192,8 @@ private fun FrameLayout.updateMapViewLayout(
     canvasWidthPx: Int,
     canvasHeightPx: Int,
     canvasOffsetXPx: Int,
+    shouldLogDiagnostics: Boolean,
+    diagnosticState: MapViewDiagnosticState,
 ) {
     if (canvasWidthPx <= 0 || canvasHeightPx <= 0) return
 
@@ -167,10 +218,13 @@ private fun FrameLayout.updateMapViewLayout(
     }
 
     mapView.translationX = canvasOffsetXPx.toFloat()
+    if (!shouldLogDiagnostics) return
+
     post {
         logMapViewDiagnostics(
             mapView = mapView,
             reason = "layout-updated",
+            diagnosticState = diagnosticState,
         )
     }
 }
@@ -179,7 +233,11 @@ private fun IntSize.hasNoArea(): Boolean {
     return width <= 0 || height <= 0
 }
 
-private fun FrameLayout.logMapViewDiagnostics(mapView: MapView, reason: String) {
+private fun FrameLayout.logMapViewDiagnostics(
+    mapView: MapView,
+    reason: String,
+    diagnosticState: MapViewDiagnosticState,
+) {
     val contextMetricsLabel = mapView.context.resources.displayMetrics.toDiagnosticLabel()
     val displayMetricsLabel = mapView.display.toDiagnosticLabel()
     val containerLabel = viewDiagnosticLabel()
@@ -189,9 +247,9 @@ private fun FrameLayout.logMapViewDiagnostics(mapView: MapView, reason: String) 
     val diagnosticSignature = "$contextMetricsLabel/$displayMetricsLabel/" +
         "$containerLabel/$mapViewLabel/$childLabel/$rendererLabel"
 
-    if (diagnosticSignature == lastMapViewDiagnosticSignature) return
+    if (diagnosticSignature == diagnosticState.lastSignature) return
 
-    lastMapViewDiagnosticSignature = diagnosticSignature
+    diagnosticState.lastSignature = diagnosticSignature
     Log.i(
         MAP_CAMERA_LOG_TAG,
         "MapView diagnostics. reason=$reason display=${mapView.display?.displayId} " +
@@ -272,7 +330,10 @@ private fun DisplayMetrics.toDiagnosticLabel(): String {
     return "${widthPixels}x$heightPixels density=$density dpi=$densityDpi xdpi=$xdpi ydpi=$ydpi"
 }
 
-private var lastMapViewDiagnosticSignature: String? = null
+/** MapView 診断ログの重複出力を MapView 単位で抑える状態。 */
+private class MapViewDiagnosticState {
+    var lastSignature: String? = null
+}
 
 /** Map camera 周辺の検証ログ用タグ。 */
 private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"

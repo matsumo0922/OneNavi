@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -40,6 +41,7 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
  * @param panelLayout 地図 UI 帯の配置情報
  * @param viewportWidthPx 地図 viewport の幅
  * @param viewportHeightPx 地図 viewport の高さ
+ * @param shouldLogDiagnostics MapView / Camera の診断ログを出力するか
  */
 @Composable
 internal fun MapCameraEffect(
@@ -53,6 +55,7 @@ internal fun MapCameraEffect(
     panelLayout: MapPanelLayout,
     viewportWidthPx: Int,
     viewportHeightPx: Int,
+    shouldLogDiagnostics: Boolean,
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
@@ -78,6 +81,10 @@ internal fun MapCameraEffect(
     val hasNavigationRouteOverlay = hasAddWaypointOverlay || hasNavigationAlternativesOverlay
     val hasNavigationPreviewOverlay = hasNavigationRouteOverlay || hasRouteEditOverlay || hasSheetOverlay
     val isGuidanceCameraActive = screenState is MapScreenState.Navigating && !hasNavigationPreviewOverlay
+
+    SideEffect {
+        cameraState.updateDiagnosticsLogging(shouldLogDiagnostics)
+    }
 
     LaunchedEffect(isGuidanceCameraActive) {
         cameraState.setGuidanceCameraActive(isGuidanceCameraActive)
@@ -199,14 +206,16 @@ internal fun MapCameraEffect(
                 null
             },
         )
-        Log.i(
-            MAP_CAMERA_LOG_TAG,
-            "Camera padding updated. screen=${screenState.javaClass.simpleName} " +
-                "split=${panelLayout.isSplit} side=${panelLayout.panelSide} " +
-                "viewport=${viewportWidthPx}x$viewportHeightPx panelWidth=$panelWidthPx " +
-                "splitInset=$splitInsetPx visibleMapWidth=$visibleMapWidthPx " +
-                "padding=$startPaddingPx,$topPaddingPx,$endPaddingPx,$bottomPaddingPx",
-        )
+        if (shouldLogDiagnostics) {
+            Log.i(
+                MAP_CAMERA_LOG_TAG,
+                "Camera padding updated. screen=${screenState.javaClass.simpleName} " +
+                    "split=${panelLayout.isSplit} side=${panelLayout.panelSide} " +
+                    "viewport=${viewportWidthPx}x$viewportHeightPx panelWidth=$panelWidthPx " +
+                    "splitInset=$splitInsetPx visibleMapWidth=$visibleMapWidthPx " +
+                    "padding=$startPaddingPx,$topPaddingPx,$endPaddingPx,$bottomPaddingPx",
+            )
+        }
     }
 
     LaunchedEffect(
@@ -296,13 +305,15 @@ internal fun MapCameraEffect(
         viewportHeightPx,
     ) {
         val points = routeOverviewPoints ?: return@LaunchedEffect
-        Log.i(
-            MAP_CAMERA_LOG_TAG,
-            "Route overview requested. screen=${screenState.javaClass.simpleName} " +
-                "points=${points.size} viewport=${viewportWidthPx}x$viewportHeightPx " +
-                "topKey=$routeOverviewTopPaddingKey bottomKey=$routeOverviewBottomPaddingKey " +
-                "navCardKey=$routeOverviewNavigationCardHeightKey",
-        )
+        if (shouldLogDiagnostics) {
+            Log.i(
+                MAP_CAMERA_LOG_TAG,
+                "Route overview requested. screen=${screenState.javaClass.simpleName} " +
+                    "points=${points.size} viewport=${viewportWidthPx}x$viewportHeightPx " +
+                    "topKey=$routeOverviewTopPaddingKey bottomKey=$routeOverviewBottomPaddingKey " +
+                    "navCardKey=$routeOverviewNavigationCardHeightKey",
+            )
+        }
         cameraState.showRouteOverview(points)
     }
 

@@ -104,6 +104,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
     val appSetting = LocalAppSetting.current
     val navBackStack = LocalNavBackStack.current
     val isMapDarkMode = shouldUseDarkTheme(appSetting.theme)
+    val shouldLogMapDiagnostics = appSetting.developerMode
     val isNavigating = screenState is MapScreenState.Navigating
     val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
     val topAppBarHeightDp = with(density) { uiState.topAppBarHeight.toDp() }
@@ -189,6 +190,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 panelLayout = panelLayout,
                 viewportWidthPx = viewportWidthPx,
                 viewportHeightPx = viewportHeightPx,
+                shouldLogDiagnostics = shouldLogMapDiagnostics,
             )
         }
 
@@ -205,6 +207,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 panelLayout = panelLayout,
                 mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
+                shouldLogDiagnostics = shouldLogMapDiagnostics,
                 controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
                 scaffoldState = scaffoldState,
@@ -236,6 +239,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 panelLayout = panelLayout,
                 mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
+                shouldLogDiagnostics = shouldLogMapDiagnostics,
                 controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
                 scaffoldState = scaffoldState,
@@ -320,6 +324,7 @@ private fun MapScreenCompactLayout(
     panelLayout: MapPanelLayout,
     mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
+    shouldLogDiagnostics: Boolean,
     controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
     scaffoldState: BottomSheetScaffoldState,
@@ -361,6 +366,7 @@ private fun MapScreenCompactLayout(
                 cameraState = cameraState,
                 mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
+                shouldLogDiagnostics = shouldLogDiagnostics,
                 onMapUpdate = onMapUpdate,
                 onPointOfInterestClicked = onPointOfInterestClicked,
                 onMapLongClicked = onMapLongClicked,
@@ -404,6 +410,7 @@ private fun MapScreenSplitLayout(
     panelLayout: MapPanelLayout,
     mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
+    shouldLogDiagnostics: Boolean,
     controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
     scaffoldState: BottomSheetScaffoldState,
@@ -429,6 +436,7 @@ private fun MapScreenSplitLayout(
             cameraState = cameraState,
             mapCanvasLayout = mapCanvasLayout,
             isMapDarkMode = isMapDarkMode,
+            shouldLogDiagnostics = shouldLogDiagnostics,
             onMapUpdate = onMapUpdate,
             onPointOfInterestClicked = onPointOfInterestClicked,
             onMapLongClicked = onMapLongClicked,
@@ -497,6 +505,7 @@ private fun MapScreenMapLayer(
     cameraState: MapCameraState,
     mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
+    shouldLogDiagnostics: Boolean,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
@@ -512,6 +521,7 @@ private fun MapScreenMapLayer(
             cameraState = cameraState,
             isDarkMode = isMapDarkMode,
             mapCanvasLayout = mapCanvasLayout,
+            shouldLogDiagnostics = shouldLogDiagnostics,
             onMapUpdate = onMapUpdate,
             onPointOfInterestClicked = onPointOfInterestClicked,
             onMapLongClicked = onMapLongClicked,
