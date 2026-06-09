@@ -72,7 +72,7 @@ internal fun CarVirtualDisplayProbeContent(
         "scale=${inputState.scaleFactorLabel}"
     val clickCoordinateLabel = clickCoordinateResult.toClickCoordinateLabel()
     val clickCandidateLabel = inputState.toClickCandidateLabel(viewport = viewport)
-    val clickColorLegendLabel = "tap colors actual=red surface=cyan visibleOffset=yellow " +
+    val clickColorLegendLabel = "tap colors actual=red surface=cyan observedOffset=yellow " +
         "visibleScaled=pink observed=purple hostVisible=green"
 
     MaterialTheme {
@@ -458,7 +458,7 @@ private fun Offset.toPointLabel(): String {
 
 private fun String.toCandidateColor(): Color {
     return when (this) {
-        CLICK_COORDINATE_VISIBLE_OFFSET_LABEL -> Color(0xFFF59E0B)
+        CLICK_COORDINATE_OBSERVED_OFFSET_LABEL -> Color(0xFFF59E0B)
         CLICK_COORDINATE_SURFACE_LABEL -> Color(0xFF22D3EE)
         CLICK_COORDINATE_OBSERVED_LABEL -> Color(0xFFA78BFA)
         CLICK_COORDINATE_HOST_VISIBLE_LABEL -> Color(0xFF34D399)

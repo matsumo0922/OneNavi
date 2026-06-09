@@ -6,8 +6,8 @@ import androidx.compose.ui.geometry.Offset
 /** split 表示とみなして visibleArea 横補正候補を追加する最小 inset。 */
 private const val SPLIT_VISIBLE_AREA_MIN_INSET_PX = 120
 
-/** split 時に host visible 起点の X 座標を Surface 全体へ戻す click 候補名。 */
-internal const val CLICK_COORDINATE_VISIBLE_OFFSET_LABEL = "visibleOffset"
+/** split 時に observed frame 起点の座標を Surface 全体へ戻す click 候補名。 */
+internal const val CLICK_COORDINATE_OBSERVED_OFFSET_LABEL = "observedOffset"
 
 /** Android Auto callback から届いた raw Surface 座標の click 候補名。 */
 internal const val CLICK_COORDINATE_SURFACE_LABEL = "surface"
@@ -64,7 +64,7 @@ internal fun CarVirtualDisplayProbeInputState.resolveCarVirtualDisplayProbeClick
 ): CarVirtualDisplayProbeClickCoordinateCandidate? {
     val candidates = createCarVirtualDisplayProbeClickCoordinateCandidates(viewport = viewport)
 
-    return candidates.findClickCoordinate(label = CLICK_COORDINATE_VISIBLE_OFFSET_LABEL)
+    return candidates.findClickCoordinate(label = CLICK_COORDINATE_OBSERVED_OFFSET_LABEL)
         ?: candidates.findClickCoordinate(label = CLICK_COORDINATE_SURFACE_LABEL)
 }
 
@@ -104,7 +104,7 @@ internal fun createCarVirtualDisplayProbeClickCoordinateCandidates(
         pointX = hostVisibleX,
         pointY = hostVisibleY,
     )
-    val visibleOffsetPoint = viewport.createVisibleOffsetTouchPoint(
+    val observedOffsetPoint = viewport.createObservedOffsetTouchPoint(
         surfaceX = surfaceX,
         surfaceY = surfaceY,
     )
@@ -115,8 +115,8 @@ internal fun createCarVirtualDisplayProbeClickCoordinateCandidates(
     val candidatePoints = mutableListOf<CarVirtualDisplayProbeClickCoordinateCandidate>()
 
     candidatePoints.addUniqueClickCoordinateCandidate(
-        label = CLICK_COORDINATE_VISIBLE_OFFSET_LABEL,
-        touchPoint = visibleOffsetPoint,
+        label = CLICK_COORDINATE_OBSERVED_OFFSET_LABEL,
+        touchPoint = observedOffsetPoint,
     )
     candidatePoints.addUniqueClickCoordinateCandidate(
         label = CLICK_COORDINATE_SURFACE_LABEL,
@@ -152,7 +152,7 @@ private fun createNullableOffset(
     )
 }
 
-private fun CarVirtualDisplayProbeViewport.createVisibleOffsetTouchPoint(
+private fun CarVirtualDisplayProbeViewport.createObservedOffsetTouchPoint(
     surfaceX: Float,
     surfaceY: Float,
 ): Offset? {
@@ -160,14 +160,19 @@ private fun CarVirtualDisplayProbeViewport.createVisibleOffsetTouchPoint(
         return null
     }
 
-    val offsetSurfaceX = (visibleLeft + surfaceX).coerceIn(
+    val viewportObservedFrame = observedFrame
+    val offsetSurfaceX = (viewportObservedFrame.left + surfaceX).coerceIn(
         minimumValue = 0f,
         maximumValue = surfaceWidth.toFloat(),
+    )
+    val offsetSurfaceY = (viewportObservedFrame.top + surfaceY).coerceIn(
+        minimumValue = 0f,
+        maximumValue = surfaceHeight.toFloat(),
     )
 
     return Offset(
         x = offsetSurfaceX,
-        y = surfaceY,
+        y = offsetSurfaceY,
     )
 }
 
