@@ -104,11 +104,9 @@ internal val CarVirtualDisplayProbeInputState.flingVelocityOrNull: CarVirtualDis
         )
     }
 
-internal fun CarVirtualDisplayScaleGestureState.pointerPoints(
-    viewport: CarVirtualDisplayProbeViewport?,
-): List<CarVirtualDisplaySurfacePoint> {
+internal fun CarVirtualDisplayScaleGestureState.pointerPoints(): List<CarVirtualDisplaySurfacePoint> {
     val halfSpan = currentSpan / 2f
-    val rawPointerPoints = listOf(
+    return listOf(
         CarVirtualDisplaySurfacePoint(
             surfaceX = focusPoint.surfaceX - halfSpan,
             surfaceY = focusPoint.surfaceY,
@@ -118,12 +116,6 @@ internal fun CarVirtualDisplayScaleGestureState.pointerPoints(
             surfaceY = focusPoint.surfaceY,
         ),
     )
-
-    if (viewport == null) {
-        return rawPointerPoints
-    }
-
-    return rawPointerPoints.map(viewport::coerceObservedSurfacePoint)
 }
 
 internal fun CarVirtualDisplayProbeViewport.initialScaleSpanPx(): Float {
@@ -132,7 +124,7 @@ internal fun CarVirtualDisplayProbeViewport.initialScaleSpanPx(): Float {
 }
 
 internal fun CarVirtualDisplayProbeViewport.maxScaleSpanPx(): Float {
-    return (observedFrame.width * MAX_SCALE_SPAN_RATIO).coerceAtLeast(MIN_SCALE_SPAN_PX)
+    return (surfaceWidth * MAX_SCALE_SPAN_RATIO).coerceAtLeast(MIN_SCALE_SPAN_PX)
 }
 
 internal fun CarVirtualDisplayProbeViewport.coerceObservedSurfacePoint(
@@ -243,11 +235,11 @@ internal const val SECOND_POINTER_UP_ACTION = MotionEvent.ACTION_POINTER_UP or
 /** pinch 開始時に observed frame 幅へ掛ける比率。 */
 private const val INITIAL_SCALE_SPAN_RATIO = 0.22f
 
-/** pinch 中の最大 pointer 間隔として observed frame 幅へ掛ける比率。 */
-private const val MAX_SCALE_SPAN_RATIO = 0.8f
+/** pinch 中の最大 pointer 間隔として Surface 幅へ掛ける比率。 */
+private const val MAX_SCALE_SPAN_RATIO = 4f
 
 /** synthetic pointer を observed frame 端へ貼り付けないための余白。 */
 private const val GESTURE_EDGE_MARGIN_PX = 2f
 
-/** pinch 開始時の最小 pointer 間隔。 */
-internal const val MIN_SCALE_SPAN_PX = 96f
+/** pinch 中に pointer 同士を完全に重ねないための最小間隔。 */
+internal const val MIN_SCALE_SPAN_PX = 24f

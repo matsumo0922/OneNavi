@@ -24,12 +24,11 @@ internal fun createSinglePointerMotionEvent(
 
 internal fun createScaleMotionEvent(
     scaleGestureState: CarVirtualDisplayScaleGestureState,
-    viewport: CarVirtualDisplayProbeViewport?,
     eventTime: Long,
     action: Int,
     pointerCount: Int = 2,
 ): MotionEvent {
-    val pointerPoints = scaleGestureState.pointerPoints(viewport = viewport)
+    val pointerPoints = scaleGestureState.pointerPoints()
     val pointerProperties = createPointerProperties(pointerCount = pointerCount)
     val pointerCoords = createPointerCoords(
         pointerPoints = pointerPoints,

@@ -27,10 +27,6 @@ class CarVirtualDisplayProbeSurfaceCallback(
     }
 
     override fun onScroll(distanceX: Float, distanceY: Float) {
-        Log.i(
-            TAG,
-            "Scroll callback received. distance=${distanceX.toInt()},${distanceY.toInt()}",
-        )
         controller.updateScrollInput(
             distanceX = distanceX,
             distanceY = distanceY,
