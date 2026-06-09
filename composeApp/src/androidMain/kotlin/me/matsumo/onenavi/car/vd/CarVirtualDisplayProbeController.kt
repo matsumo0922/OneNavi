@@ -328,31 +328,11 @@ class CarVirtualDisplayProbeController(
     }
 
     private fun dispatchScaleInput(inputState: CarVirtualDisplayProbeInputState) {
-        if (!canDispatchObservedInput(inputLabel = "Scale", inputState = inputState)) {
-            return
-        }
-
         dispatchPresentationInput(
             inputLabel = "Scale",
             inputState = inputState,
             dispatch = CarVirtualDisplayProbePresentation::dispatchScaleInput,
         )
-    }
-
-    private fun canDispatchObservedInput(
-        inputLabel: String,
-        inputState: CarVirtualDisplayProbeInputState,
-    ): Boolean {
-        val canDispatch = inputState.isInsideObservedFrame == true
-
-        if (!canDispatch) {
-            logInputSkipped(
-                inputLabel = inputLabel,
-                inputState = inputState,
-            )
-        }
-
-        return canDispatch
     }
 
     private fun dispatchPresentationInput(

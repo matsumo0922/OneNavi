@@ -27,6 +27,10 @@ class CarVirtualDisplayProbeSurfaceCallback(
     }
 
     override fun onScroll(distanceX: Float, distanceY: Float) {
+        Log.i(
+            TAG,
+            "Scroll callback received. distance=${distanceX.toInt()},${distanceY.toInt()}",
+        )
         controller.updateScrollInput(
             distanceX = distanceX,
             distanceY = distanceY,
@@ -34,6 +38,10 @@ class CarVirtualDisplayProbeSurfaceCallback(
     }
 
     override fun onFling(velocityX: Float, velocityY: Float) {
+        Log.i(
+            TAG,
+            "Fling callback received. velocity=${velocityX.toInt()},${velocityY.toInt()}",
+        )
         controller.updateFlingInput(
             velocityX = velocityX,
             velocityY = velocityY,
@@ -41,6 +49,10 @@ class CarVirtualDisplayProbeSurfaceCallback(
     }
 
     override fun onScale(focusX: Float, focusY: Float, scaleFactor: Float) {
+        Log.i(
+            TAG,
+            "Scale callback received. focus=${focusX.toInt()},${focusY.toInt()} scale=$scaleFactor",
+        )
         controller.updateScaleInput(
             focusX = focusX,
             focusY = focusY,

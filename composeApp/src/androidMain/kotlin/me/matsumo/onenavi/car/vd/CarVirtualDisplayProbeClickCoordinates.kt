@@ -3,9 +3,6 @@ package me.matsumo.onenavi.car.vd
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.geometry.Offset
 
-/** split 表示とみなして visibleArea 横補正候補を追加する最小 inset。 */
-private const val SPLIT_VISIBLE_AREA_MIN_INSET_PX = 120
-
 /** split 時に observed frame 起点の座標を Surface 全体へ戻す click 候補名。 */
 internal const val CLICK_COORDINATE_OBSERVED_OFFSET_LABEL = "observedOffset"
 
@@ -222,12 +219,4 @@ private fun List<CarVirtualDisplayProbeClickCoordinateCandidate>.findClickCoordi
     return firstOrNull { candidate ->
         candidate.label == label
     }
-}
-
-private fun CarVirtualDisplayProbeViewport.hasHorizontalSplitVisibleArea(): Boolean {
-    val leftInset = visibleLeft
-    val rightInset = surfaceWidth - visibleRight
-    val maxHorizontalInset = maxOf(leftInset, rightInset)
-
-    return surfaceWidth > 0 && visibleWidth > 0 && maxHorizontalInset >= SPLIT_VISIBLE_AREA_MIN_INSET_PX
 }

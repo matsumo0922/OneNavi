@@ -57,6 +57,31 @@ internal val CarVirtualDisplayProbeInputState.surfacePointOrNull: CarVirtualDisp
         )
     }
 
+internal fun CarVirtualDisplayProbeInputState.scaleFocusPointOrNull(
+    viewport: CarVirtualDisplayProbeViewport,
+): CarVirtualDisplaySurfacePoint? {
+    val rawFocusPoint = surfacePointOrNull ?: return null
+
+    if (!viewport.hasHorizontalSplitVisibleArea()) {
+        return rawFocusPoint
+    }
+
+    val viewportObservedFrame = viewport.observedFrame
+    val resolvedFocusX = viewportObservedFrame.left + rawFocusPoint.surfaceX
+    val resolvedFocusY = viewportObservedFrame.top + rawFocusPoint.surfaceY
+
+    return CarVirtualDisplaySurfacePoint(
+        surfaceX = resolvedFocusX.coerceIn(
+            minimumValue = 0f,
+            maximumValue = viewport.surfaceWidth.toFloat(),
+        ),
+        surfaceY = resolvedFocusY.coerceIn(
+            minimumValue = 0f,
+            maximumValue = viewport.surfaceHeight.toFloat(),
+        ),
+    )
+}
+
 internal val CarVirtualDisplayProbeInputState.scrollDistanceOrNull: CarVirtualDisplaySurfaceVector?
     get() {
         val inputDistanceX = distanceX ?: return null
@@ -164,6 +189,14 @@ internal fun CarVirtualDisplaySurfaceVector.toFlingMoveDelta(decay: Float): CarV
         x = x * frameDurationSeconds * decay,
         y = y * frameDurationSeconds * decay,
     )
+}
+
+internal fun CarVirtualDisplaySurfacePoint.toLogLabel(): String {
+    return "${surfaceX.toInt()},${surfaceY.toInt()}"
+}
+
+internal fun CarVirtualDisplaySurfaceVector.toLogLabel(): String {
+    return "${x.toInt()},${y.toInt()}"
 }
 
 private fun Float.coerceInSafe(minimumValue: Float, maximumValue: Float): Float {
