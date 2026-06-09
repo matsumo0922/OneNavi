@@ -153,7 +153,8 @@ class CarVirtualDisplayProbePresentation(
 
         Log.i(
             TAG,
-            "Click injected. surface=${surfaceX.toInt()},${surfaceY.toInt()} handled=$didHandleClick",
+            "Click injection started. surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
+                "handledDown=$didHandleClick",
         )
         return didHandleClick
     }

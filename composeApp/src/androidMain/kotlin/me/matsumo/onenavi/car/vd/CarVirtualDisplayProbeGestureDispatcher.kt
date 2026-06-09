@@ -3,6 +3,7 @@ package me.matsumo.onenavi.car.vd
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.view.MotionEvent
 import androidx.compose.ui.platform.ComposeView
 
@@ -16,48 +17,56 @@ class CarVirtualDisplayProbeGestureDispatcher {
     private val finishScaleRunnable = Runnable {
         finishScaleGesture(isCanceled = false)
     }
+    private val finishClickRunnable = Runnable {
+        finishClickGesture(isCanceled = false)
+    }
 
     private var composeView: ComposeView? = null
+    private var clickGestureState: CarVirtualDisplayClickGestureState? = null
     private var dragGestureState: CarVirtualDisplayDragGestureState? = null
+    private var flingGestureState: CarVirtualDisplayFlingGestureState? = null
     private var scaleGestureState: CarVirtualDisplayScaleGestureState? = null
+    private var pendingFlingRunnable: Runnable? = null
 
     fun attach(composeView: ComposeView) {
         this.composeView = composeView
     }
 
     fun detach() {
+        mainHandler.removeCallbacks(finishClickRunnable)
         mainHandler.removeCallbacks(finishDragRunnable)
         mainHandler.removeCallbacks(finishScaleRunnable)
+        finishClickGesture(isCanceled = true)
         finishDragGesture(isCanceled = true)
+        finishFlingGesture(isCanceled = true)
         finishScaleGesture(isCanceled = true)
         composeView = null
     }
 
     fun dispatchClick(surfaceX: Float, surfaceY: Float): Boolean {
         val targetComposeView = composeView ?: return false
-        cancelActiveContinuousGesture()
+        cancelActiveGestures()
 
         val touchPoint = CarVirtualDisplaySurfacePoint(
             surfaceX = surfaceX,
             surfaceY = surfaceY,
         )
         val downTime = SystemClock.uptimeMillis()
-        val upTime = downTime + CLICK_UP_DELAY_MS
-
-        return targetComposeView.dispatchRecycledEvents(
+        clickGestureState = CarVirtualDisplayClickGestureState(
+            downTime = downTime,
+            downPoint = touchPoint,
+        )
+        val didHandleDown = targetComposeView.dispatchRecycledEvents(
             createSinglePointerMotionEvent(
                 downTime = downTime,
                 eventTime = downTime,
                 action = MotionEvent.ACTION_DOWN,
                 point = touchPoint,
             ),
-            createSinglePointerMotionEvent(
-                downTime = downTime,
-                eventTime = upTime,
-                action = MotionEvent.ACTION_UP,
-                point = touchPoint,
-            ),
         )
+
+        scheduleClickFinish()
+        return didHandleDown
     }
 
     fun dispatchScroll(
@@ -68,6 +77,8 @@ class CarVirtualDisplayProbeGestureDispatcher {
         val distance = inputState.scrollDistanceOrNull ?: return false
         val anchorPoint = inputState.surfacePointOrNull ?: return false
 
+        finishClickGesture(isCanceled = true)
+        finishFlingGesture(isCanceled = true)
         finishScaleGesture(isCanceled = true)
         mainHandler.removeCallbacks(finishDragRunnable)
 
@@ -106,6 +117,8 @@ class CarVirtualDisplayProbeGestureDispatcher {
         val velocity = inputState.flingVelocityOrNull ?: return false
         val anchorPoint = inputState.surfacePointOrNull ?: return false
 
+        finishClickGesture(isCanceled = true)
+        finishFlingGesture(isCanceled = true)
         finishScaleGesture(isCanceled = true)
         mainHandler.removeCallbacks(finishDragRunnable)
 
@@ -116,16 +129,18 @@ class CarVirtualDisplayProbeGestureDispatcher {
             anchorPoint = anchorPoint,
             eventTime = now,
         )
-        val events = createFlingMotionEvents(
-            dragGestureState = currentDragGestureState,
+        flingGestureState = CarVirtualDisplayFlingGestureState(
+            downTime = currentDragGestureState.downTime,
+            currentPoint = currentDragGestureState.currentPoint,
+        )
+        dragGestureState = null
+
+        return dispatchFlingMove(
             viewport = viewport,
             velocity = velocity,
-            startEventTime = now,
+            moveIndex = 0,
+            decay = 1f,
         )
-        val didHandleEvent = targetComposeView.dispatchRecycledEvents(events = events)
-
-        dragGestureState = null
-        return didHandleEvent
     }
 
     fun dispatchScale(
@@ -136,6 +151,8 @@ class CarVirtualDisplayProbeGestureDispatcher {
         val focusPoint = inputState.surfacePointOrNull ?: return false
         val scaleFactor = inputState.scaleFactor ?: return false
 
+        finishClickGesture(isCanceled = true)
+        finishFlingGesture(isCanceled = true)
         finishDragGesture(isCanceled = true)
         mainHandler.removeCallbacks(finishScaleRunnable)
 
@@ -237,40 +254,68 @@ class CarVirtualDisplayProbeGestureDispatcher {
         }
     }
 
-    private fun createFlingMotionEvents(
-        dragGestureState: CarVirtualDisplayDragGestureState,
+    private fun dispatchFlingMove(
         viewport: CarVirtualDisplayProbeViewport,
         velocity: CarVirtualDisplaySurfaceVector,
-        startEventTime: Long,
-    ): List<MotionEvent> {
-        val events = mutableListOf<MotionEvent>()
-        var currentPoint = dragGestureState.currentPoint
-        var decay = 1f
-
-        repeat(FLING_MOVE_COUNT) { moveIndex ->
-            val nextPoint = viewport.coerceObservedSurfacePoint(
-                currentPoint + velocity.toFlingMoveDelta(decay),
-            )
-            val eventTime = startEventTime + FLING_MOVE_INTERVAL_MS * (moveIndex + 1)
-            currentPoint = nextPoint
-            events += createSinglePointerMotionEvent(
-                downTime = dragGestureState.downTime,
+        moveIndex: Int,
+        decay: Float,
+    ): Boolean {
+        val targetComposeView = composeView ?: return false
+        val currentFlingGestureState = flingGestureState ?: return false
+        val nextPoint = viewport.coerceObservedSurfacePoint(
+            currentFlingGestureState.currentPoint + velocity.toFlingMoveDelta(decay),
+        )
+        val eventTime = SystemClock.uptimeMillis()
+        val nextFlingGestureState = currentFlingGestureState.copy(
+            currentPoint = nextPoint,
+        )
+        flingGestureState = nextFlingGestureState
+        val didHandleEvent = targetComposeView.dispatchRecycledEvents(
+            createSinglePointerMotionEvent(
+                downTime = currentFlingGestureState.downTime,
                 eventTime = eventTime,
                 action = MotionEvent.ACTION_MOVE,
-                point = currentPoint,
+                point = nextPoint,
+            ),
+        )
+        val nextMoveIndex = moveIndex + 1
+
+        if (nextMoveIndex >= FLING_MOVE_COUNT) {
+            scheduleFlingFinish()
+        } else {
+            scheduleFlingMove(
+                viewport = viewport,
+                velocity = velocity,
+                moveIndex = nextMoveIndex,
+                decay = decay * FLING_VELOCITY_DECAY,
             )
-            decay *= FLING_VELOCITY_DECAY
         }
 
-        val upEventTime = startEventTime + FLING_MOVE_INTERVAL_MS * (FLING_MOVE_COUNT + 1)
-        events += createSinglePointerMotionEvent(
-            downTime = dragGestureState.downTime,
-            eventTime = upEventTime,
-            action = MotionEvent.ACTION_UP,
-            point = currentPoint,
+        return didHandleEvent
+    }
+
+    private fun finishClickGesture(isCanceled: Boolean) {
+        val currentClickGestureState = clickGestureState ?: return
+        clickGestureState = null
+        mainHandler.removeCallbacks(finishClickRunnable)
+
+        val targetComposeView = composeView ?: return
+        val eventTime = SystemClock.uptimeMillis()
+        val action = if (isCanceled) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP
+        val didHandleEvent = targetComposeView.dispatchRecycledEvents(
+            createSinglePointerMotionEvent(
+                downTime = currentClickGestureState.downTime,
+                eventTime = eventTime,
+                action = action,
+                point = currentClickGestureState.downPoint,
+            ),
         )
 
-        return events
+        Log.i(
+            TAG,
+            "Click finish dispatched. canceled=$isCanceled handled=$didHandleEvent " +
+                "elapsedMs=${eventTime - currentClickGestureState.downTime}",
+        )
     }
 
     private fun finishDragGesture(isCanceled: Boolean) {
@@ -287,6 +332,30 @@ class CarVirtualDisplayProbeGestureDispatcher {
             point = currentDragGestureState.currentPoint,
         )
         targetComposeView.dispatchRecycledEvents(event)
+    }
+
+    private fun finishFlingGesture(isCanceled: Boolean) {
+        val currentFlingGestureState = flingGestureState ?: return
+        flingGestureState = null
+        removePendingFlingRunnable()
+
+        val targetComposeView = composeView ?: return
+        val eventTime = SystemClock.uptimeMillis()
+        val action = if (isCanceled) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP
+        val didHandleEvent = targetComposeView.dispatchRecycledEvents(
+            createSinglePointerMotionEvent(
+                downTime = currentFlingGestureState.downTime,
+                eventTime = eventTime,
+                action = action,
+                point = currentFlingGestureState.currentPoint,
+            ),
+        )
+
+        Log.i(
+            TAG,
+            "Fling finish dispatched. canceled=$isCanceled handled=$didHandleEvent " +
+                "elapsedMs=${eventTime - currentFlingGestureState.downTime}",
+        )
     }
 
     private fun finishScaleGesture(isCanceled: Boolean) {
@@ -309,19 +378,34 @@ class CarVirtualDisplayProbeGestureDispatcher {
             val upEvent = createScaleMotionEvent(
                 scaleGestureState = currentScaleGestureState,
                 viewport = null,
-                eventTime = eventTime + CLICK_UP_DELAY_MS,
+                eventTime = eventTime,
                 action = MotionEvent.ACTION_UP,
                 pointerCount = 1,
             )
             listOf(pointerUpEvent, upEvent)
         }
 
-        targetComposeView.dispatchRecycledEvents(events = finalEvents)
+        val didHandleEvent = targetComposeView.dispatchRecycledEvents(events = finalEvents)
+
+        Log.i(
+            TAG,
+            "Scale finish dispatched. canceled=$isCanceled handled=$didHandleEvent " +
+                "elapsedMs=${eventTime - currentScaleGestureState.downTime}",
+        )
     }
 
-    private fun cancelActiveContinuousGesture() {
+    private fun cancelActiveGestures() {
+        finishClickGesture(isCanceled = true)
         finishDragGesture(isCanceled = true)
+        finishFlingGesture(isCanceled = true)
         finishScaleGesture(isCanceled = true)
+    }
+
+    private fun scheduleClickFinish() {
+        mainHandler.postDelayed(
+            finishClickRunnable,
+            CLICK_UP_DELAY_MS,
+        )
     }
 
     private fun scheduleDragFinish() {
@@ -336,5 +420,53 @@ class CarVirtualDisplayProbeGestureDispatcher {
             finishScaleRunnable,
             SCALE_FINISH_DELAY_MS,
         )
+    }
+
+    private fun scheduleFlingMove(
+        viewport: CarVirtualDisplayProbeViewport,
+        velocity: CarVirtualDisplaySurfaceVector,
+        moveIndex: Int,
+        decay: Float,
+    ) {
+        schedulePendingFlingRunnable(
+            Runnable {
+                pendingFlingRunnable = null
+                dispatchFlingMove(
+                    viewport = viewport,
+                    velocity = velocity,
+                    moveIndex = moveIndex,
+                    decay = decay,
+                )
+            },
+        )
+    }
+
+    private fun scheduleFlingFinish() {
+        schedulePendingFlingRunnable(
+            Runnable {
+                pendingFlingRunnable = null
+                finishFlingGesture(isCanceled = false)
+            },
+        )
+    }
+
+    private fun schedulePendingFlingRunnable(runnable: Runnable) {
+        removePendingFlingRunnable()
+        pendingFlingRunnable = runnable
+        mainHandler.postDelayed(
+            runnable,
+            FLING_MOVE_INTERVAL_MS,
+        )
+    }
+
+    private fun removePendingFlingRunnable() {
+        val removingRunnable = pendingFlingRunnable ?: return
+        pendingFlingRunnable = null
+        mainHandler.removeCallbacks(removingRunnable)
+    }
+
+    private companion object {
+        /** logcat 抽出用タグ。 */
+        const val TAG = "OneNaviCarVd"
     }
 }

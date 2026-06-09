@@ -10,6 +10,20 @@ internal data class CarVirtualDisplayDragGestureState(
     val currentPoint: CarVirtualDisplaySurfacePoint,
 )
 
+/** 合成 click の遅延 ACTION_UP を送るための状態。 */
+@Immutable
+internal data class CarVirtualDisplayClickGestureState(
+    val downTime: Long,
+    val downPoint: CarVirtualDisplaySurfacePoint,
+)
+
+/** 合成 fling の move/up を予約実行するための状態。 */
+@Immutable
+internal data class CarVirtualDisplayFlingGestureState(
+    val downTime: Long,
+    val currentPoint: CarVirtualDisplaySurfacePoint,
+)
+
 /** Synthetic pinch の継続状態。 */
 @Immutable
 internal data class CarVirtualDisplayScaleGestureState(

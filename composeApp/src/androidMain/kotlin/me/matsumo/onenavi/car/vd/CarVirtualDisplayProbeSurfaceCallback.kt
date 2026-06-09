@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.car.vd
 
 import android.graphics.Rect
+import android.os.SystemClock
 import android.util.Log
 import androidx.car.app.SurfaceCallback
 import androidx.car.app.SurfaceContainer
@@ -48,9 +49,16 @@ class CarVirtualDisplayProbeSurfaceCallback(
     }
 
     override fun onClick(surfaceX: Float, surfaceY: Float) {
+        val callbackUptimeMillis = SystemClock.uptimeMillis()
+        Log.i(
+            TAG,
+            "Click callback received. surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
+                "callbackUptimeMs=$callbackUptimeMillis",
+        )
         controller.updateClickInput(
             hostInputX = surfaceX,
             hostInputY = surfaceY,
+            callbackUptimeMillis = callbackUptimeMillis,
         )
     }
 

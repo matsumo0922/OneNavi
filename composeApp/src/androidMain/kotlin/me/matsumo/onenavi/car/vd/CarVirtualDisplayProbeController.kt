@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.os.SystemClock
 import android.util.Log
 import android.view.Display
 import android.view.Surface
@@ -90,7 +91,11 @@ class CarVirtualDisplayProbeController(
         )
     }
 
-    fun updateClickInput(hostInputX: Float, hostInputY: Float) {
+    fun updateClickInput(
+        hostInputX: Float,
+        hostInputY: Float,
+        callbackUptimeMillis: Long = SystemClock.uptimeMillis(),
+    ) {
         val viewport = findViewportForInput(
             inputLabel = "click",
         ) ?: return
@@ -104,7 +109,10 @@ class CarVirtualDisplayProbeController(
         )
 
         publishInputState(inputState = inputState)
-        dispatchClickInput(inputState = inputState)
+        dispatchClickInput(
+            inputState = inputState,
+            callbackUptimeMillis = callbackUptimeMillis,
+        )
     }
 
     fun updateScrollInput(distanceX: Float, distanceY: Float) {
@@ -285,18 +293,25 @@ class CarVirtualDisplayProbeController(
         Log.e(TAG, "VirtualDisplay creation failed.", throwable)
     }
 
-    private fun dispatchClickInput(inputState: CarVirtualDisplayProbeInputState) {
+    private fun dispatchClickInput(
+        inputState: CarVirtualDisplayProbeInputState,
+        callbackUptimeMillis: Long,
+    ) {
         if (!canDispatchObservedInput(inputLabel = "Click", inputState = inputState)) {
             return
         }
 
-        val didDispatchClick = presentation?.dispatchClickInput(
+        val dispatchStartedAt = SystemClock.uptimeMillis()
+        val didStartClick = presentation?.dispatchClickInput(
             inputState = inputState,
         ) ?: false
+        val dispatchFinishedAt = SystemClock.uptimeMillis()
 
         Log.i(
             TAG,
-            "Click injection applied. dispatched=$didDispatchClick ${inputState.logLabel}",
+            "Click injection started. dispatched=$didStartClick " +
+                "callbackToDispatchMs=${dispatchStartedAt - callbackUptimeMillis} " +
+                "dispatchMs=${dispatchFinishedAt - dispatchStartedAt} ${inputState.logLabel}",
         )
     }
 
