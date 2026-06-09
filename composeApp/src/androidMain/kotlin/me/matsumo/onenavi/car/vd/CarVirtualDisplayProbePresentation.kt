@@ -24,6 +24,7 @@ class CarVirtualDisplayProbePresentation(
 
     private val runtime = CarVirtualDisplayRuntime()
     private val gestureDispatcher = CarVirtualDisplayProbeGestureDispatcher()
+    private val semanticsClickDispatcher = CarVirtualDisplayProbeSemanticsClickDispatcher()
     private var viewport by mutableStateOf(initialViewport)
     private var inputState by mutableStateOf(initialInputState)
     private var composeView: ComposeView? = null
@@ -146,6 +147,23 @@ class CarVirtualDisplayProbePresentation(
     }
 
     private fun dispatchClickMotionEvents(surfaceX: Float, surfaceY: Float): Boolean {
+        val targetComposeView = composeView
+        val didHandleSemanticsClick = targetComposeView?.let { composeView ->
+            semanticsClickDispatcher.dispatchClick(
+                composeView = composeView,
+                surfaceX = surfaceX,
+                surfaceY = surfaceY,
+            )
+        } == true
+
+        if (didHandleSemanticsClick) {
+            Log.i(
+                TAG,
+                "Click semantics applied. surface=${surfaceX.toInt()},${surfaceY.toInt()}",
+            )
+            return true
+        }
+
         val didHandleClick = gestureDispatcher.dispatchClick(
             surfaceX = surfaceX,
             surfaceY = surfaceY,

@@ -3,7 +3,6 @@ package me.matsumo.onenavi.feature.map
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
-import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
@@ -35,7 +34,6 @@ import com.google.android.gms.maps.model.PointOfInterest
 import me.matsumo.onenavi.feature.map.state.MapCameraDefaults
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
-import me.matsumo.onenavi.feature.map.state.MapTouchExclusion
 
 @Composable
 internal fun MapItem(
@@ -43,7 +41,6 @@ internal fun MapItem(
     cameraState: MapCameraState,
     isDarkMode: Boolean,
     mapCanvasLayout: MapCanvasLayout,
-    mapTouchExclusion: MapTouchExclusion,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
@@ -109,7 +106,6 @@ internal fun MapItem(
                     canvasHeightPx = viewportSize.height,
                     canvasOffsetXPx = canvasOffsetXPx,
                 )
-                container.mapTouchExclusion = mapTouchExclusion
             },
         )
     }
@@ -118,8 +114,8 @@ internal fun MapItem(
 private fun Context.createMapContainer(
     mapView: MapView,
     onMapUpdate: (GoogleMap?) -> Unit,
-): MapTouchGateFrameLayout {
-    return MapTouchGateFrameLayout(this).apply {
+): FrameLayout {
+    return FrameLayout(this).apply {
         clipChildren = false
         clipToPadding = false
         addView(mapView)
@@ -129,7 +125,7 @@ private fun Context.createMapContainer(
     }
 }
 
-private fun MapTouchGateFrameLayout.updateMapViewLayout(
+private fun FrameLayout.updateMapViewLayout(
     mapView: MapView,
     canvasWidthPx: Int,
     canvasHeightPx: Int,
@@ -158,45 +154,6 @@ private fun MapTouchGateFrameLayout.updateMapViewLayout(
     }
 
     mapView.translationX = canvasOffsetXPx.toFloat()
-}
-
-/** 地図上に重なる Compose UI の領域では MapView への touch dispatch を止める container。 */
-private class MapTouchGateFrameLayout(
-    context: Context,
-) : FrameLayout(context) {
-
-    var mapTouchExclusion: MapTouchExclusion? = null
-    private var isCurrentGestureExcluded = false
-
-    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        updateCurrentGestureExclusion(event = event)
-
-        if (isCurrentGestureExcluded) {
-            return false
-        }
-
-        return super.dispatchTouchEvent(event)
-    }
-
-    private fun updateCurrentGestureExclusion(event: MotionEvent) {
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                val currentMapTouchExclusion = mapTouchExclusion
-                isCurrentGestureExcluded = currentMapTouchExclusion?.contains(
-                    pointX = event.x,
-                    pointY = event.y,
-                    viewportWidth = width,
-                    viewportHeight = height,
-                ) == true
-            }
-
-            MotionEvent.ACTION_UP,
-            MotionEvent.ACTION_CANCEL,
-            -> {
-                isCurrentGestureExcluded = false
-            }
-        }
-    }
 }
 
 private fun IntSize.hasNoArea(): Boolean {
