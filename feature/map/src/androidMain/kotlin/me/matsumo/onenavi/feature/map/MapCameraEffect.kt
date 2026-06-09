@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.feature.map
 
+import android.util.Log
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
@@ -159,6 +160,8 @@ internal fun MapCameraEffect(
         )
         val horizontalBasePaddingPx = with(density) { horizontalBasePadding.toPx() }.toInt()
         val splitInsetPx = with(density) { panelLayout.splitHorizontalInset.toPx() }.toInt()
+        val panelWidthPx = with(density) { panelLayout.panelWidth.roundToPx() }
+        val visibleMapWidthPx = (viewportWidthPx - splitInsetPx).coerceAtLeast(0)
         val (startPaddingPx, endPaddingPx) = panelLayout.resolveHorizontalCameraPaddingPx(
             basePaddingPx = horizontalBasePaddingPx,
             splitInsetPx = splitInsetPx,
@@ -195,6 +198,14 @@ internal fun MapCameraEffect(
             } else {
                 null
             },
+        )
+        Log.i(
+            MAP_CAMERA_LOG_TAG,
+            "Camera padding updated. screen=${screenState.javaClass.simpleName} " +
+                "split=${panelLayout.isSplit} side=${panelLayout.panelSide} " +
+                "viewport=${viewportWidthPx}x$viewportHeightPx panelWidth=$panelWidthPx " +
+                "splitInset=$splitInsetPx visibleMapWidth=$visibleMapWidthPx " +
+                "padding=$startPaddingPx,$topPaddingPx,$endPaddingPx,$bottomPaddingPx",
         )
     }
 
@@ -284,7 +295,15 @@ internal fun MapCameraEffect(
         viewportWidthPx,
         viewportHeightPx,
     ) {
-        routeOverviewPoints?.let { cameraState.showRouteOverview(it) }
+        val points = routeOverviewPoints ?: return@LaunchedEffect
+        Log.i(
+            MAP_CAMERA_LOG_TAG,
+            "Route overview requested. screen=${screenState.javaClass.simpleName} " +
+                "points=${points.size} viewport=${viewportWidthPx}x$viewportHeightPx " +
+                "topKey=$routeOverviewTopPaddingKey bottomKey=$routeOverviewBottomPaddingKey " +
+                "navCardKey=$routeOverviewNavigationCardHeightKey",
+        )
+        cameraState.showRouteOverview(points)
     }
 
     LaunchedEffect(screenState, addWaypointSearchResults, addWaypointSelected, overlayState) {
@@ -457,6 +476,9 @@ private val MAP_CAMERA_HORIZONTAL_BASE_PADDING = 24.dp
 
 /** 分割案内で自車を画面下端から置く割合。 */
 private const val SPLIT_GUIDANCE_ANCHOR_FRACTION_FROM_BOTTOM = 0.25f
+
+/** Map camera 周辺の検証ログ用タグ。 */
+private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"
 
 private fun GuidanceState.routeOverviewKey(): String? = when (this) {
     is GuidanceState.Guiding -> route.id

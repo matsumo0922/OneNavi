@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.feature.map.state
 
 import android.animation.TimeInterpolator
+import android.util.Log
 import android.view.animation.DecelerateInterpolator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -680,11 +681,25 @@ internal class MapCameraState internal constructor(
         val target = runCatching {
             map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
             map.cameraPosition
+        }.onFailure { throwable ->
+            Log.w(
+                MAP_CAMERA_LOG_TAG,
+                "Route overview target failed. points=${routePoints.size} padding=$paddingPx",
+                throwable,
+            )
         }.getOrNull()
 
         map.moveCamera(CameraUpdateFactory.newCameraPosition(current))
 
         if (target != null) {
+            Log.i(
+                MAP_CAMERA_LOG_TAG,
+                "Route overview target resolved. points=${routePoints.size} padding=$paddingPx " +
+                    "bounds=${bounds.southwest.latitude},${bounds.southwest.longitude}.." +
+                    "${bounds.northeast.latitude},${bounds.northeast.longitude} " +
+                    "currentZoom=${current.zoom} targetZoom=${target.zoom} " +
+                    "target=${target.target.latitude},${target.target.longitude}",
+            )
             flyCameraTo(
                 target = target,
                 durationMs = durationMs,
@@ -1156,6 +1171,9 @@ internal class MapCameraState internal constructor(
 
         /** density が未通知の間に使う既定値。 */
         private const val DEFAULT_DENSITY = 1f
+
+        /** Map camera 周辺の検証ログ用タグ。 */
+        private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"
 
         /** コンパス button による 3D heading-up / 2D north-up 切り替え animation 時間（ms）。 */
         private const val COMPASS_PERSPECTIVE_ANIMATION_DURATION_MS = 500L

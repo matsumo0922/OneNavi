@@ -3,6 +3,7 @@ package me.matsumo.onenavi.feature.map
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
@@ -75,12 +76,18 @@ internal fun MapItem(
     LaunchedEffect(
         viewportSize,
         canvasWidthPx,
+        canvasOffsetXPx,
     ) {
         if (viewportSize.hasNoArea()) return@LaunchedEffect
 
         cameraState.updateViewportSize(
             widthPx = canvasWidthPx,
             heightPx = viewportSize.height,
+        )
+        Log.i(
+            MAP_CAMERA_LOG_TAG,
+            "MapView layout updated. viewport=${viewportSize.width}x${viewportSize.height} " +
+                "canvas=${canvasWidthPx}x${viewportSize.height} offsetX=$canvasOffsetXPx",
         )
     }
 
@@ -159,6 +166,9 @@ private fun FrameLayout.updateMapViewLayout(
 private fun IntSize.hasNoArea(): Boolean {
     return width <= 0 || height <= 0
 }
+
+/** Map camera 周辺の検証ログ用タグ。 */
+private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"
 
 @Composable
 private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
