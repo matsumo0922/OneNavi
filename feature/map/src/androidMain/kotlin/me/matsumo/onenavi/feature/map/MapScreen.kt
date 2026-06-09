@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,6 +64,7 @@ import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapPanelLayout
 import me.matsumo.onenavi.feature.map.state.MapPanelSide
 import me.matsumo.onenavi.feature.map.state.MapScreenState
+import me.matsumo.onenavi.feature.map.state.MapTouchExclusion
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
@@ -154,6 +156,33 @@ fun MapScreen(modifier: Modifier = Modifier) {
         val mapCanvasLayout = remember(panelLayout, maxWidth) {
             panelLayout.resolveCanvasLayout(viewportWidth = maxWidth)
         }
+        val mapTouchExclusion = MapTouchExclusion(
+            isFullScreenExcluded = shouldShowWaypointSearchOverlay,
+            panelLayout = panelLayout,
+            splitInsetPx = if (panelLayout.isSplit) {
+                with(density) { panelLayout.splitHorizontalInset.roundToPx() }
+            } else {
+                0
+            },
+            compactTopInsetPx = if (panelLayout.isSplit) {
+                0
+            } else {
+                with(density) { (statusBarHeightDp + topAppBarHeightDp).roundToPx() }
+            },
+            compactBottomInsetPx = resolveCompactMapTouchBottomExclusionPx(
+                density = density,
+                hasSheetOverlay = hasSheetOverlay,
+                isNavigating = isNavigating,
+                shouldShowSheet = shouldShowSheet,
+                bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
+                navigationCardHeight = navigationCardHeightDp,
+            ),
+            compactControlsInsetPx = if (panelLayout.isSplit) {
+                0
+            } else {
+                with(density) { MAP_CONTROLS_COLUMN_WIDTH.roundToPx() }
+            },
+        )
         val viewportWidthPx = with(density) { maxWidth.roundToPx() }
         val viewportHeightPx = with(density) { maxHeight.roundToPx() }
         val controlsBottomPadding by animateDpAsState(
@@ -204,6 +233,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 cameraState = cameraState,
                 panelLayout = panelLayout,
                 mapCanvasLayout = mapCanvasLayout,
+                mapTouchExclusion = mapTouchExclusion,
                 isMapDarkMode = isMapDarkMode,
                 controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
@@ -235,6 +265,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 cameraState = cameraState,
                 panelLayout = panelLayout,
                 mapCanvasLayout = mapCanvasLayout,
+                mapTouchExclusion = mapTouchExclusion,
                 isMapDarkMode = isMapDarkMode,
                 controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
@@ -319,6 +350,7 @@ private fun MapScreenCompactLayout(
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
     mapCanvasLayout: MapCanvasLayout,
+    mapTouchExclusion: MapTouchExclusion,
     isMapDarkMode: Boolean,
     controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
@@ -360,6 +392,7 @@ private fun MapScreenCompactLayout(
                 googleMap = googleMap,
                 cameraState = cameraState,
                 mapCanvasLayout = mapCanvasLayout,
+                mapTouchExclusion = mapTouchExclusion,
                 isMapDarkMode = isMapDarkMode,
                 onMapUpdate = onMapUpdate,
                 onPointOfInterestClicked = onPointOfInterestClicked,
@@ -403,6 +436,7 @@ private fun MapScreenSplitLayout(
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
     mapCanvasLayout: MapCanvasLayout,
+    mapTouchExclusion: MapTouchExclusion,
     isMapDarkMode: Boolean,
     controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
@@ -428,6 +462,7 @@ private fun MapScreenSplitLayout(
             googleMap = googleMap,
             cameraState = cameraState,
             mapCanvasLayout = mapCanvasLayout,
+            mapTouchExclusion = mapTouchExclusion,
             isMapDarkMode = isMapDarkMode,
             onMapUpdate = onMapUpdate,
             onPointOfInterestClicked = onPointOfInterestClicked,
@@ -496,6 +531,7 @@ private fun MapScreenMapLayer(
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
     mapCanvasLayout: MapCanvasLayout,
+    mapTouchExclusion: MapTouchExclusion,
     isMapDarkMode: Boolean,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
@@ -512,6 +548,7 @@ private fun MapScreenMapLayer(
             cameraState = cameraState,
             isDarkMode = isMapDarkMode,
             mapCanvasLayout = mapCanvasLayout,
+            mapTouchExclusion = mapTouchExclusion,
             onMapUpdate = onMapUpdate,
             onPointOfInterestClicked = onPointOfInterestClicked,
             onMapLongClicked = onMapLongClicked,
@@ -719,6 +756,24 @@ private fun MapScreenBottomSheetContent(
         is MapScreenState.Navigating -> Unit
         is MapScreenState.Arrived -> Unit
     }
+}
+
+private fun resolveCompactMapTouchBottomExclusionPx(
+    density: Density,
+    hasSheetOverlay: Boolean,
+    isNavigating: Boolean,
+    shouldShowSheet: Boolean,
+    bottomSheetPeekHeight: Dp,
+    navigationCardHeight: Dp,
+): Int {
+    val bottomExclusionHeight = when {
+        hasSheetOverlay -> bottomSheetPeekHeight
+        shouldShowSheet -> bottomSheetPeekHeight
+        isNavigating -> navigationCardHeight
+        else -> 0.dp
+    }
+
+    return with(density) { bottomExclusionHeight.roundToPx() }
 }
 
 /**
