@@ -29,11 +29,8 @@ internal fun createScaleMotionEvent(
     pointerCount: Int = 2,
 ): MotionEvent {
     val pointerPoints = scaleGestureState.pointerPoints()
-    val pointerProperties = createPointerProperties(pointerCount = pointerCount)
-    val pointerCoords = createPointerCoords(
-        pointerPoints = pointerPoints,
-        pointerCount = pointerCount,
-    )
+    val pointerProperties = createPointerProperties(pointerCount)
+    val pointerCoords = createPointerCoords(pointerPoints, pointerCount)
 
     return MotionEvent.obtain(
         scaleGestureState.downTime,
@@ -57,9 +54,7 @@ internal fun ComposeView.dispatchRecycledEvents(vararg events: MotionEvent): Boo
     return dispatchRecycledEvents(events = events.asList())
 }
 
-internal fun ComposeView.dispatchRecycledEvents(
-    events: List<MotionEvent>,
-): Boolean {
+internal fun ComposeView.dispatchRecycledEvents(events: List<MotionEvent>): Boolean {
     return try {
         var didHandleAnyEvent = false
 
@@ -84,10 +79,7 @@ private fun createPointerProperties(pointerCount: Int): Array<MotionEvent.Pointe
     }
 }
 
-private fun createPointerCoords(
-    pointerPoints: List<CarVirtualDisplaySurfacePoint>,
-    pointerCount: Int,
-): Array<MotionEvent.PointerCoords> {
+private fun createPointerCoords(pointerPoints: List<CarVirtualDisplaySurfacePoint>, pointerCount: Int): Array<MotionEvent.PointerCoords> {
     return Array(pointerCount) { pointerIndex ->
         val pointerPoint = pointerPoints[pointerIndex]
         MotionEvent.PointerCoords().apply {

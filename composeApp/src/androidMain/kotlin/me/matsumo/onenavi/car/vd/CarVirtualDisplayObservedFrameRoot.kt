@@ -18,9 +18,7 @@ internal fun CarVirtualDisplayObservedFrameRoot(
     contentAlignment: Alignment = Alignment.TopStart,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val observedFramePadding = viewport.observedFramePaddingValues(
-        density = LocalDensity.current,
-    )
+    val observedFramePadding = viewport.observedFramePaddingValues(LocalDensity.current)
 
     Box(
         modifier = modifier
@@ -31,9 +29,7 @@ internal fun CarVirtualDisplayObservedFrameRoot(
     )
 }
 
-private fun CarVirtualDisplayViewport.observedFramePaddingValues(
-    density: Density,
-): PaddingValues {
+private fun CarVirtualDisplayViewport.observedFramePaddingValues(density: Density): PaddingValues {
     val viewportObservedFrame = observedFrame
 
     return with(density) {

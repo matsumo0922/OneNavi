@@ -59,6 +59,7 @@ class CarVirtualDisplayProbeSurfaceCallback(
         controller.release()
     }
 
+    /** Surface callback のログタグ。 */
     private companion object {
         /** logcat 抽出用タグ。 */
         const val TAG = "OneNaviCarVd"

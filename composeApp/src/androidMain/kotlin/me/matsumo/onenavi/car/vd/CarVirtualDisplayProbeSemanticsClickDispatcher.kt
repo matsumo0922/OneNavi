@@ -22,26 +22,14 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
     private val Rect.area: Float
         get() = width * height
 
-    fun dispatchClick(
-        composeView: ComposeView,
-        touchPoint: CarVirtualDisplayProbeClickCoordinateCandidate,
-    ): CarVirtualDisplayProbeClickCoordinateResult? {
+    fun dispatchClick(composeView: ComposeView, touchPoint: CarVirtualDisplayProbeClickCoordinateCandidate): CarVirtualDisplayProbeClickCoordinateResult? {
         val rootForTest = composeView.getChildAt(0) as? ViewRootForTest ?: return null
 
-        return dispatchClick(
-            rootForTest = rootForTest,
-            touchPoint = touchPoint,
-        )
+        return dispatchClick(rootForTest, touchPoint)
     }
 
-    private fun dispatchClick(
-        rootForTest: ViewRootForTest,
-        touchPoint: CarVirtualDisplayProbeClickCoordinateCandidate,
-    ): CarVirtualDisplayProbeClickCoordinateResult? {
-        val targetNode = findClickableTargetNode(
-            rootForTest = rootForTest,
-            touchPoint = touchPoint.point,
-        ) ?: return null
+    private fun dispatchClick(rootForTest: ViewRootForTest, touchPoint: CarVirtualDisplayProbeClickCoordinateCandidate): CarVirtualDisplayProbeClickCoordinateResult? {
+        val targetNode = findClickableTargetNode(rootForTest, touchPoint.point) ?: return null
 
         val clickAction = targetNode.config.getOrNull(SemanticsActions.OnClick)
         val didHandleClick = clickAction?.action?.let { action ->
@@ -52,16 +40,10 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
             return null
         }
 
-        return CarVirtualDisplayProbeClickCoordinateResult(
-            label = touchPoint.label,
-            point = touchPoint.point,
-        )
+        return CarVirtualDisplayProbeClickCoordinateResult(touchPoint.label, touchPoint.point)
     }
 
-    private fun findClickableTargetNode(
-        rootForTest: ViewRootForTest,
-        touchPoint: Offset,
-    ): SemanticsNode? {
+    private fun findClickableTargetNode(rootForTest: ViewRootForTest, touchPoint: Offset): SemanticsNode? {
         return findClickableTargetNode(
             rootForTest = rootForTest,
             touchPoint = touchPoint,
@@ -82,7 +64,7 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
             .getAllSemanticsNodes(mergingEnabled = mergingEnabled)
             .asSequence()
             .filter { semanticsNode ->
-                semanticsNode.isClickableTarget(touchPoint = touchPoint)
+                semanticsNode.isClickableTarget(touchPoint)
             }
             .minWithOrNull(
                 comparator = compareBy { semanticsNode ->

@@ -75,7 +75,7 @@ internal fun CarVirtualDisplayProbeContent(
     val gestureLabel = "d=${inputState.distanceLabel} v=${inputState.velocityLabel} " +
         "scale=${inputState.scaleFactorLabel}"
     val clickCoordinateLabel = clickCoordinateResult.toClickCoordinateLabel()
-    val clickCandidateLabel = inputState.toClickCandidateLabel(viewport = viewport)
+    val clickCandidateLabel = inputState.toClickCandidateLabel(viewport)
 
     MaterialTheme {
         Box(
@@ -322,7 +322,7 @@ private fun CarVirtualDisplayProbeViewportOverlay(
     Canvas(
         modifier = modifier,
     ) {
-        drawProbeViewportFrames(viewport = viewport)
+        drawProbeViewportFrames(viewport)
         drawProbeClickCoordinates(
             viewport = viewport,
             inputState = inputState,
@@ -357,24 +357,18 @@ private fun DrawScope.drawProbeClickCoordinates(
     inputState: CarVirtualDisplayProbeInputState,
     clickCoordinateResult: CarVirtualDisplayProbeClickCoordinateResult?,
 ) {
-    val clickCoordinateCandidates = inputState.createCarVirtualDisplayProbeClickCoordinateCandidates(
-        viewport = viewport,
-    )
+    val clickCoordinateCandidates = inputState.createCarVirtualDisplayProbeClickCoordinateCandidates(viewport)
 
     clickCoordinateCandidates.forEach { candidate ->
-        drawProbeClickCoordinateCandidate(
-            candidate = candidate,
-        )
+        drawProbeClickCoordinateCandidate(candidate)
     }
 
     if (clickCoordinateResult != null) {
-        drawProbeClickCoordinateResult(result = clickCoordinateResult)
+        drawProbeClickCoordinateResult(clickCoordinateResult)
     }
 }
 
-private fun DrawScope.drawProbeClickCoordinateCandidate(
-    candidate: CarVirtualDisplayProbeClickCoordinateCandidate,
-) {
+private fun DrawScope.drawProbeClickCoordinateCandidate(candidate: CarVirtualDisplayProbeClickCoordinateCandidate) {
     val color = candidate.label.toCandidateColor()
 
     drawCircle(
@@ -390,9 +384,7 @@ private fun DrawScope.drawProbeClickCoordinateCandidate(
     )
 }
 
-private fun DrawScope.drawProbeClickCoordinateResult(
-    result: CarVirtualDisplayProbeClickCoordinateResult,
-) {
+private fun DrawScope.drawProbeClickCoordinateResult(result: CarVirtualDisplayProbeClickCoordinateResult) {
     drawCircle(
         color = Color(0xCCEF4444),
         radius = CLICK_RESULT_RADIUS,
@@ -432,10 +424,8 @@ private fun CarVirtualDisplayProbeClickCoordinateResult?.toClickCoordinateLabel(
     return "tap actual=$label ${point.toPointLabel()}"
 }
 
-private fun CarVirtualDisplayProbeInputState.toClickCandidateLabel(
-    viewport: CarVirtualDisplayViewport,
-): String {
-    val candidates = createCarVirtualDisplayProbeClickCoordinateCandidates(viewport = viewport)
+private fun CarVirtualDisplayProbeInputState.toClickCandidateLabel(viewport: CarVirtualDisplayViewport): String {
+    val candidates = createCarVirtualDisplayProbeClickCoordinateCandidates(viewport)
 
     if (candidates.isEmpty()) {
         return "tap candidates=n/a"

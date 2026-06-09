@@ -58,40 +58,31 @@ class CarVirtualDisplayProbePresentation(
             return false
         }
 
-        return dispatchClickMotionEvents(inputState = inputState)
+        return dispatchClickMotionEvents(inputState)
     }
 
     fun dispatchScrollInput(inputState: CarVirtualDisplayProbeInputState): Boolean {
-        return gestureDispatcher.dispatchScroll(
-            inputState = inputState,
-            viewport = viewport,
-        )
+        return gestureDispatcher.dispatchScroll(inputState, viewport)
     }
 
     fun dispatchFlingInput(inputState: CarVirtualDisplayProbeInputState): Boolean {
-        return gestureDispatcher.dispatchFling(
-            inputState = inputState,
-            viewport = viewport,
-        )
+        return gestureDispatcher.dispatchFling(inputState, viewport)
     }
 
     fun dispatchScaleInput(inputState: CarVirtualDisplayProbeInputState): Boolean {
-        return gestureDispatcher.dispatchScale(
-            inputState = inputState,
-            viewport = viewport,
-        )
+        return gestureDispatcher.dispatchScale(inputState, viewport)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        runtime.create(savedInstanceState = savedInstanceState)
+        runtime.create(savedInstanceState)
 
         val createdComposeView = createComposeView()
         composeView = createdComposeView
-        gestureDispatcher.attach(composeView = createdComposeView)
-        installViewTreeOwners(composeView = createdComposeView)
+        gestureDispatcher.attach(createdComposeView)
+        installViewTreeOwners(createdComposeView)
         setContentView(createdComposeView)
-        installComposeContent(composeView = createdComposeView)
+        installComposeContent(createdComposeView)
     }
 
     override fun onStart() {
@@ -109,7 +100,7 @@ class CarVirtualDisplayProbePresentation(
 
     override fun onSaveInstanceState(): Bundle {
         val bundle = super.onSaveInstanceState()
-        runtime.save(outState = bundle)
+        runtime.save(bundle)
         return bundle
     }
 
@@ -125,8 +116,8 @@ class CarVirtualDisplayProbePresentation(
 
     private fun installViewTreeOwners(composeView: ComposeView) {
         val decorView = requireNotNull(window).decorView
-        runtime.installViewTreeOwners(view = decorView)
-        runtime.installViewTreeOwners(view = composeView)
+        runtime.installViewTreeOwners(decorView)
+        runtime.installViewTreeOwners(composeView)
     }
 
     private fun createComposeView(): ComposeView {
@@ -153,19 +144,14 @@ class CarVirtualDisplayProbePresentation(
         val targetComposeView = composeView
         clickCoordinateResult = null
 
-        val dispatchCoordinate = inputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(
-            viewport = viewport,
-        ) ?: return false
+        val dispatchCoordinate = inputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(viewport) ?: return false
 
-        if (!viewport.containsClickDispatchCoordinate(candidate = dispatchCoordinate)) {
+        if (!viewport.containsClickDispatchCoordinate(dispatchCoordinate)) {
             return false
         }
 
         val semanticsCoordinateResult = targetComposeView?.let { composeView ->
-            semanticsClickDispatcher.dispatchClick(
-                composeView = composeView,
-                touchPoint = dispatchCoordinate,
-            )
+            semanticsClickDispatcher.dispatchClick(composeView, dispatchCoordinate)
         }
 
         if (semanticsCoordinateResult != null) {
@@ -185,6 +171,7 @@ class CarVirtualDisplayProbePresentation(
         return didHandleClick
     }
 
+    /** Presentation のログタグ。 */
     private companion object {
         /** logcat 抽出用タグ。 */
         const val TAG = "OneNaviCarVd"

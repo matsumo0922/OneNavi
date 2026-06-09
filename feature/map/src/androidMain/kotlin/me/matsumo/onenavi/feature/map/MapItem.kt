@@ -107,10 +107,7 @@ internal fun MapItem(
                     viewportSize = size
                 },
             factory = {
-                it.createMapContainer(
-                    mapView = mapView,
-                    onMapUpdate = onMapUpdate,
-                )
+                it.createMapContainer(mapView, onMapUpdate)
             },
             update = { container ->
                 container.updateMapViewLayout(
@@ -124,10 +121,7 @@ internal fun MapItem(
     }
 }
 
-private fun Context.createMapContainer(
-    mapView: MapView,
-    onMapUpdate: (GoogleMap?) -> Unit,
-): FrameLayout {
+private fun Context.createMapContainer(mapView: MapView, onMapUpdate: (GoogleMap?) -> Unit): FrameLayout {
     return FrameLayout(this).apply {
         clipChildren = false
         clipToPadding = false
@@ -185,10 +179,7 @@ private fun IntSize.hasNoArea(): Boolean {
     return width <= 0 || height <= 0
 }
 
-private fun FrameLayout.logMapViewDiagnostics(
-    mapView: MapView,
-    reason: String,
-) {
+private fun FrameLayout.logMapViewDiagnostics(mapView: MapView, reason: String) {
     val contextMetricsLabel = mapView.context.resources.displayMetrics.toDiagnosticLabel()
     val displayMetricsLabel = mapView.display.toDiagnosticLabel()
     val containerLabel = viewDiagnosticLabel()
@@ -260,7 +251,7 @@ private fun View.viewDiagnosticLabel(): String {
 
     return "${javaClass.simpleName} " +
         "size=${width}x$height measured=${measuredWidth}x$measuredHeight " +
-        "pos=$left,$top,$right,$bottom translation=${translationX},$translationY " +
+        "pos=$left,$top,$right,$bottom translation=$translationX,$translationY " +
         "screen=${screenLocation[0]},${screenLocation[1]} " +
         "window=${windowLocation[0]},${windowLocation[1]} visible=$globalVisibleRect"
 }
@@ -379,10 +370,7 @@ private fun Boolean.toMapColorScheme(): Int {
 }
 
 @Composable
-private fun MapViewLifecycleEffect(
-    mapView: MapView,
-    onClear: () -> Unit,
-) {
+private fun MapViewLifecycleEffect(mapView: MapView, onClear: () -> Unit) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val currentOnClear by rememberUpdatedState(onClear)
 

@@ -58,7 +58,7 @@ class CarVirtualDisplayRuntime :
             return
         }
 
-        restoreStateIfNeeded(savedInstanceState = savedInstanceState)
+        restoreStateIfNeeded(savedInstanceState)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         hasCreated = true
     }

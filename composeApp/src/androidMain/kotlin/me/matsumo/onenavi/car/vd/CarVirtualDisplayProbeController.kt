@@ -41,7 +41,7 @@ class CarVirtualDisplayProbeController(
             currentViewport = null
             releaseVirtualDisplay()
             releaseCurrentHostSurface(exceptSurface = hostSurface)
-            releaseHostSurface(surface = hostSurface)
+            releaseHostSurface(hostSurface)
             return
         }
 
@@ -54,34 +54,24 @@ class CarVirtualDisplayProbeController(
             surfaceHeight = normalizePositiveDimension(surfaceContainer.height, DEFAULT_SURFACE_HEIGHT),
             densityDpi = normalizePositiveDimension(surfaceContainer.dpi, DEFAULT_DENSITY_DPI),
         )
-        logVirtualDisplayRequest(
-            surfaceContainer = surfaceContainer,
-            viewport = initialViewport,
-        )
+        logVirtualDisplayRequest(surfaceContainer, initialViewport)
         currentViewport = initialViewport
-        createVirtualDisplayResult(
-            surface = hostSurface,
-            viewport = initialViewport,
-        )
+        createVirtualDisplayResult(hostSurface, initialViewport)
     }
 
     fun updateVisibleArea(visibleArea: Rect) {
-        val updatedViewport = currentViewport?.withVisibleArea(
-            visibleArea = visibleArea,
-        ) ?: return
+        val updatedViewport = currentViewport?.withVisibleArea(visibleArea) ?: return
 
         currentViewport = updatedViewport
-        presentation?.updateViewport(viewport = updatedViewport)
+        presentation?.updateViewport(updatedViewport)
         Log.i(TAG, "Viewport visible applied. visible=${updatedViewport.visibleAreaLabel}")
     }
 
     fun updateStableArea(stableArea: Rect) {
-        val updatedViewport = currentViewport?.withStableArea(
-            stableArea = stableArea,
-        ) ?: return
+        val updatedViewport = currentViewport?.withStableArea(stableArea) ?: return
 
         currentViewport = updatedViewport
-        presentation?.updateViewport(viewport = updatedViewport)
+        presentation?.updateViewport(updatedViewport)
         Log.i(TAG, "Viewport stable applied. stable=${updatedViewport.stableAreaLabel}")
     }
 
@@ -95,10 +85,7 @@ class CarVirtualDisplayProbeController(
         )
     }
 
-    fun updateClickInput(
-        hostInputX: Float,
-        hostInputY: Float,
-    ) {
+    fun updateClickInput(hostInputX: Float, hostInputY: Float) {
         val viewport = findViewportForInput(
             inputLabel = "click",
         ) ?: return
@@ -111,8 +98,8 @@ class CarVirtualDisplayProbeController(
             isInPanMode = isInPanMode,
         )
 
-        publishInputState(inputState = inputState)
-        dispatchClickInput(inputState = inputState)
+        publishInputState(inputState)
+        dispatchClickInput(inputState)
     }
 
     fun updateScrollInput(distanceX: Float, distanceY: Float) {
@@ -127,8 +114,8 @@ class CarVirtualDisplayProbeController(
             isInPanMode = isInPanMode,
         )
 
-        publishInputState(inputState = inputState)
-        dispatchScrollInput(inputState = inputState)
+        publishInputState(inputState)
+        dispatchScrollInput(inputState)
     }
 
     fun updateFlingInput(velocityX: Float, velocityY: Float) {
@@ -143,8 +130,8 @@ class CarVirtualDisplayProbeController(
             isInPanMode = isInPanMode,
         )
 
-        publishInputState(inputState = inputState)
-        dispatchFlingInput(inputState = inputState)
+        publishInputState(inputState)
+        dispatchFlingInput(inputState)
     }
 
     fun updateScaleInput(focusX: Float, focusY: Float, scaleFactor: Float) {
@@ -161,8 +148,8 @@ class CarVirtualDisplayProbeController(
             isInPanMode = isInPanMode,
         )
 
-        publishInputState(inputState = inputState)
-        dispatchScaleInput(inputState = inputState)
+        publishInputState(inputState)
+        dispatchScaleInput(inputState)
     }
 
     fun release() {
@@ -171,10 +158,7 @@ class CarVirtualDisplayProbeController(
         releaseCurrentHostSurface()
     }
 
-    private fun createVirtualDisplayResult(
-        surface: Surface,
-        viewport: CarVirtualDisplayProbeViewport,
-    ) {
+    private fun createVirtualDisplayResult(surface: Surface, viewport: CarVirtualDisplayProbeViewport) {
         val virtualDisplayResult = runCatching {
             checkNotNull(
                 displayManager.createVirtualDisplay(
@@ -191,10 +175,7 @@ class CarVirtualDisplayProbeController(
         }
 
         virtualDisplayResult.onSuccess { createdVirtualDisplay ->
-            handleVirtualDisplayCreated(
-                createdVirtualDisplay = createdVirtualDisplay,
-                viewport = viewport,
-            )
+            handleVirtualDisplayCreated(createdVirtualDisplay, viewport)
         }
         virtualDisplayResult.onFailure { throwable ->
             currentViewport = null
@@ -203,24 +184,15 @@ class CarVirtualDisplayProbeController(
         }
     }
 
-    private fun handleVirtualDisplayCreated(
-        createdVirtualDisplay: VirtualDisplay,
-        viewport: CarVirtualDisplayProbeViewport,
-    ) {
+    private fun handleVirtualDisplayCreated(createdVirtualDisplay: VirtualDisplay, viewport: CarVirtualDisplayProbeViewport) {
         virtualDisplay = createdVirtualDisplay
 
         val displayId = createdVirtualDisplay.display.displayId
         Log.i(TAG, "VirtualDisplay created. displayId=$displayId display=${createdVirtualDisplay.display}")
-        showProbePresentation(
-            display = createdVirtualDisplay.display,
-            viewport = viewport,
-        )
+        showProbePresentation(createdVirtualDisplay.display, viewport)
     }
 
-    private fun showProbePresentation(
-        display: Display,
-        viewport: CarVirtualDisplayProbeViewport,
-    ) {
+    private fun showProbePresentation(display: Display, viewport: CarVirtualDisplayProbeViewport) {
         dismissProbePresentation()
 
         val presentationResult = runCatching {
@@ -269,7 +241,7 @@ class CarVirtualDisplayProbeController(
         }
 
         currentHostSurface = null
-        releaseHostSurface(surface = releasingHostSurface)
+        releaseHostSurface(releasingHostSurface)
     }
 
     private fun releaseHostSurface(surface: Surface) {
@@ -293,10 +265,7 @@ class CarVirtualDisplayProbeController(
         Log.e(TAG, "VirtualDisplay creation failed.", throwable)
     }
 
-    private fun logVirtualDisplayRequest(
-        surfaceContainer: SurfaceContainer,
-        viewport: CarVirtualDisplayProbeViewport,
-    ) {
+    private fun logVirtualDisplayRequest(surfaceContainer: SurfaceContainer, viewport: CarVirtualDisplayProbeViewport) {
         Log.i(
             TAG,
             "VirtualDisplay request. surface=${viewport.surfaceWidth}x${viewport.surfaceHeight} " +
@@ -349,17 +318,11 @@ class CarVirtualDisplayProbeController(
         val didDispatch = presentation?.dispatch(inputState) ?: false
 
         if (!didDispatch) {
-            logInputSkipped(
-                inputLabel = inputLabel,
-                inputState = inputState,
-            )
+            logInputSkipped(inputLabel, inputState)
         }
     }
 
-    private fun logInputSkipped(
-        inputLabel: String,
-        inputState: CarVirtualDisplayProbeInputState,
-    ) {
+    private fun logInputSkipped(inputLabel: String, inputState: CarVirtualDisplayProbeInputState) {
         Log.i(TAG, "$inputLabel injection skipped. ${inputState.logLabel}")
     }
 
@@ -376,7 +339,7 @@ class CarVirtualDisplayProbeController(
 
     private fun publishInputState(inputState: CarVirtualDisplayProbeInputState) {
         currentInputState = inputState
-        presentation?.updateInputState(inputState = inputState)
+        presentation?.updateInputState(inputState)
     }
 
     private fun nextInputSequence(): Long {
@@ -404,6 +367,7 @@ class CarVirtualDisplayProbeController(
         return value.takeIf { it > 0 } ?: fallback
     }
 
+    /** VD controller のログタグと既定値。 */
     private companion object {
         /** logcat 抽出用タグ。 */
         const val TAG = "OneNaviCarVd"

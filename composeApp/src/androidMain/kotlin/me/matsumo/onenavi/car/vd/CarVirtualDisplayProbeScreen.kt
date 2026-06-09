@@ -16,12 +16,8 @@ class CarVirtualDisplayProbeScreen(
     private val carContext: CarContext,
 ) : Screen(carContext) {
 
-    private val controller = CarVirtualDisplayProbeController(
-        context = carContext.applicationContext,
-    )
-    private val surfaceCallback = CarVirtualDisplayProbeSurfaceCallback(
-        controller = controller,
-    )
+    private val controller = CarVirtualDisplayProbeController(carContext.applicationContext)
+    private val surfaceCallback = CarVirtualDisplayProbeSurfaceCallback(controller)
     private var isSurfaceCallbackRegistered = false
 
     init {
@@ -80,9 +76,10 @@ class CarVirtualDisplayProbeScreen(
 
     private fun handlePanModeChanged(isInPanMode: Boolean) {
         Log.i(TAG, "Pan mode changed. isInPanMode=$isInPanMode")
-        controller.updatePanMode(isInPanMode = isInPanMode)
+        controller.updatePanMode(isInPanMode)
     }
 
+    /** Screen のログタグ。 */
     private companion object {
         /** logcat 抽出用タグ。 */
         const val TAG = "OneNaviCarVd"

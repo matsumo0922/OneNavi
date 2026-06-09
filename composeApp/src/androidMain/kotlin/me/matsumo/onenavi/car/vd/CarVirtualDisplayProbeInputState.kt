@@ -137,10 +137,7 @@ internal fun createInitialCarVirtualDisplayProbeInputState(): CarVirtualDisplayP
     )
 }
 
-internal fun createCarVirtualDisplayProbePanModeInputState(
-    sequence: Long,
-    isInPanMode: Boolean,
-): CarVirtualDisplayProbeInputState {
+internal fun createCarVirtualDisplayProbePanModeInputState(sequence: Long, isInPanMode: Boolean): CarVirtualDisplayProbeInputState {
     return createInitialCarVirtualDisplayProbeInputState().copy(
         sequence = sequence,
         kind = CarVirtualDisplayProbeInputKind.PanMode,
@@ -288,10 +285,7 @@ private fun createPositionedCarVirtualDisplayProbeInputState(
     )
 }
 
-private fun createPointLabel(
-    pointX: Float?,
-    pointY: Float?,
-): String {
+private fun createPointLabel(pointX: Float?, pointY: Float?): String {
     if (pointX == null || pointY == null) {
         return "n/a"
     }

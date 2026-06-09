@@ -35,9 +35,7 @@ data class CarVirtualDisplayProbeClickCoordinateResult(
     val point: Offset,
 )
 
-internal fun CarVirtualDisplayProbeInputState.createCarVirtualDisplayProbeClickCoordinateCandidates(
-    viewport: CarVirtualDisplayProbeViewport,
-): List<CarVirtualDisplayProbeClickCoordinateCandidate> {
+internal fun CarVirtualDisplayProbeInputState.createCarVirtualDisplayProbeClickCoordinateCandidates(viewport: CarVirtualDisplayProbeViewport): List<CarVirtualDisplayProbeClickCoordinateCandidate> {
     val inputSurfaceX = surfaceX ?: return emptyList()
     val inputSurfaceY = surfaceY ?: return emptyList()
 
@@ -56,18 +54,14 @@ internal fun CarVirtualDisplayProbeInputState.createCarVirtualDisplayProbeClickC
     )
 }
 
-internal fun CarVirtualDisplayProbeInputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(
-    viewport: CarVirtualDisplayProbeViewport,
-): CarVirtualDisplayProbeClickCoordinateCandidate? {
-    val candidates = createCarVirtualDisplayProbeClickCoordinateCandidates(viewport = viewport)
+internal fun CarVirtualDisplayProbeInputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(viewport: CarVirtualDisplayProbeViewport): CarVirtualDisplayProbeClickCoordinateCandidate? {
+    val candidates = createCarVirtualDisplayProbeClickCoordinateCandidates(viewport)
 
     return candidates.findClickCoordinate(label = CLICK_COORDINATE_OBSERVED_OFFSET_LABEL)
         ?: candidates.findClickCoordinate(label = CLICK_COORDINATE_SURFACE_LABEL)
 }
 
-internal fun CarVirtualDisplayProbeViewport.containsClickDispatchCoordinate(
-    candidate: CarVirtualDisplayProbeClickCoordinateCandidate,
-): Boolean {
+internal fun CarVirtualDisplayProbeViewport.containsClickDispatchCoordinate(candidate: CarVirtualDisplayProbeClickCoordinateCandidate): Boolean {
     val viewportObservedFrame = observedFrame
     val point = candidate.point
     val isAfterLeft = point.x >= viewportObservedFrame.left.toFloat()
@@ -135,10 +129,7 @@ internal fun createCarVirtualDisplayProbeClickCoordinateCandidates(
     return candidatePoints
 }
 
-private fun createNullableOffset(
-    pointX: Float?,
-    pointY: Float?,
-): Offset? {
+private fun createNullableOffset(pointX: Float?, pointY: Float?): Offset? {
     if (pointX == null || pointY == null) {
         return null
     }
@@ -149,10 +140,7 @@ private fun createNullableOffset(
     )
 }
 
-private fun CarVirtualDisplayProbeViewport.createObservedOffsetTouchPoint(
-    surfaceX: Float,
-    surfaceY: Float,
-): Offset? {
+private fun CarVirtualDisplayProbeViewport.createObservedOffsetTouchPoint(surfaceX: Float, surfaceY: Float): Offset? {
     if (!hasHorizontalSplitVisibleArea()) {
         return null
     }
@@ -173,10 +161,7 @@ private fun CarVirtualDisplayProbeViewport.createObservedOffsetTouchPoint(
     )
 }
 
-private fun CarVirtualDisplayProbeViewport.createVisibleScaledTouchPoint(
-    surfaceX: Float,
-    surfaceY: Float,
-): Offset? {
+private fun CarVirtualDisplayProbeViewport.createVisibleScaledTouchPoint(surfaceX: Float, surfaceY: Float): Offset? {
     if (!hasHorizontalSplitVisibleArea()) {
         return null
     }
@@ -189,10 +174,7 @@ private fun CarVirtualDisplayProbeViewport.createVisibleScaledTouchPoint(
     )
 }
 
-private fun MutableList<CarVirtualDisplayProbeClickCoordinateCandidate>.addUniqueClickCoordinateCandidate(
-    label: String,
-    touchPoint: Offset?,
-) {
+private fun MutableList<CarVirtualDisplayProbeClickCoordinateCandidate>.addUniqueClickCoordinateCandidate(label: String, touchPoint: Offset?) {
     if (touchPoint == null) {
         return
     }
@@ -213,9 +195,7 @@ private fun MutableList<CarVirtualDisplayProbeClickCoordinateCandidate>.addUniqu
     )
 }
 
-private fun List<CarVirtualDisplayProbeClickCoordinateCandidate>.findClickCoordinate(
-    label: String,
-): CarVirtualDisplayProbeClickCoordinateCandidate? {
+private fun List<CarVirtualDisplayProbeClickCoordinateCandidate>.findClickCoordinate(label: String): CarVirtualDisplayProbeClickCoordinateCandidate? {
     return firstOrNull { candidate ->
         candidate.label == label
     }

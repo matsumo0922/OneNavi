@@ -16,9 +16,7 @@ class CarVirtualDisplayProbeClickCoordinateTest {
             surfaceY = 41f,
         )
 
-        val coordinate = inputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(
-            viewport = viewport,
-        )
+        val coordinate = inputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(viewport)
 
         assertEquals(
             expected = CLICK_COORDINATE_SURFACE_LABEL,
@@ -51,9 +49,7 @@ class CarVirtualDisplayProbeClickCoordinateTest {
             surfaceY = 41f,
         )
 
-        val coordinate = inputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(
-            viewport = viewport,
-        )
+        val coordinate = inputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(viewport)
 
         assertEquals(
             expected = CLICK_COORDINATE_OBSERVED_OFFSET_LABEL,
@@ -91,16 +87,12 @@ class CarVirtualDisplayProbeClickCoordinateTest {
             viewport = lowTopViewport,
             surfaceX = 510f,
             surfaceY = 41f,
-        ).resolveCarVirtualDisplayProbeClickDispatchCoordinate(
-            viewport = lowTopViewport,
-        )
+        ).resolveCarVirtualDisplayProbeClickDispatchCoordinate(lowTopViewport)
         val highTopCoordinate = createClickInputState(
             viewport = highTopViewport,
             surfaceX = 510f,
             surfaceY = 41f,
-        ).resolveCarVirtualDisplayProbeClickDispatchCoordinate(
-            viewport = highTopViewport,
-        )
+        ).resolveCarVirtualDisplayProbeClickDispatchCoordinate(highTopViewport)
 
         assertEquals(
             expected = CLICK_COORDINATE_OBSERVED_OFFSET_LABEL,

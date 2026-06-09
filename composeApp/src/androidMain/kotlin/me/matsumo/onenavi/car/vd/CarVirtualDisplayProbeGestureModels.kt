@@ -42,8 +42,8 @@ internal data class CarVirtualDisplaySurfacePoint(
 /** Surface 上の移動量。 */
 @Immutable
 internal data class CarVirtualDisplaySurfaceVector(
-    val x: Float,
-    val y: Float,
+    val componentX: Float,
+    val componentY: Float,
 )
 
 internal val CarVirtualDisplayProbeInputState.surfacePointOrNull: CarVirtualDisplaySurfacePoint?
@@ -57,9 +57,7 @@ internal val CarVirtualDisplayProbeInputState.surfacePointOrNull: CarVirtualDisp
         )
     }
 
-internal fun CarVirtualDisplayProbeInputState.scaleFocusPointOrNull(
-    viewport: CarVirtualDisplayProbeViewport,
-): CarVirtualDisplaySurfacePoint? {
+internal fun CarVirtualDisplayProbeInputState.scaleFocusPointOrNull(viewport: CarVirtualDisplayProbeViewport): CarVirtualDisplaySurfacePoint? {
     val rawFocusPoint = surfacePointOrNull ?: return null
 
     if (!viewport.hasHorizontalSplitVisibleArea()) {
@@ -88,8 +86,8 @@ internal val CarVirtualDisplayProbeInputState.scrollDistanceOrNull: CarVirtualDi
         val inputDistanceY = distanceY ?: return null
 
         return CarVirtualDisplaySurfaceVector(
-            x = inputDistanceX,
-            y = inputDistanceY,
+            componentX = inputDistanceX,
+            componentY = inputDistanceY,
         )
     }
 
@@ -99,8 +97,8 @@ internal val CarVirtualDisplayProbeInputState.flingVelocityOrNull: CarVirtualDis
         val inputVelocityY = velocityY ?: return null
 
         return CarVirtualDisplaySurfaceVector(
-            x = inputVelocityX,
-            y = inputVelocityY,
+            componentX = inputVelocityX,
+            componentY = inputVelocityY,
         )
     }
 
@@ -127,19 +125,14 @@ internal fun CarVirtualDisplayProbeViewport.maxScaleSpanPx(): Float {
     return (surfaceWidth * MAX_SCALE_SPAN_RATIO).coerceAtLeast(MIN_SCALE_SPAN_PX)
 }
 
-internal fun CarVirtualDisplayProbeViewport.coerceObservedSurfacePoint(
-    surfacePoint: CarVirtualDisplaySurfacePoint,
-): CarVirtualDisplaySurfacePoint {
+internal fun CarVirtualDisplayProbeViewport.coerceObservedSurfacePoint(surfacePoint: CarVirtualDisplaySurfacePoint): CarVirtualDisplaySurfacePoint {
     return coerceObservedSurfacePoint(
         surfaceX = surfacePoint.surfaceX,
         surfaceY = surfacePoint.surfaceY,
     )
 }
 
-private fun CarVirtualDisplayProbeViewport.coerceObservedSurfacePoint(
-    surfaceX: Float,
-    surfaceY: Float,
-): CarVirtualDisplaySurfacePoint {
+private fun CarVirtualDisplayProbeViewport.coerceObservedSurfacePoint(surfaceX: Float, surfaceY: Float): CarVirtualDisplaySurfacePoint {
     val viewportObservedFrame = observedFrame
     val coercedSurfaceX = surfaceX.coerceInSafe(
         minimumValue = viewportObservedFrame.left + GESTURE_EDGE_MARGIN_PX,
@@ -156,21 +149,17 @@ private fun CarVirtualDisplayProbeViewport.coerceObservedSurfacePoint(
     )
 }
 
-internal operator fun CarVirtualDisplaySurfacePoint.plus(
-    vector: CarVirtualDisplaySurfaceVector,
-): CarVirtualDisplaySurfacePoint {
+internal operator fun CarVirtualDisplaySurfacePoint.plus(vector: CarVirtualDisplaySurfaceVector): CarVirtualDisplaySurfacePoint {
     return copy(
-        surfaceX = surfaceX + vector.x,
-        surfaceY = surfaceY + vector.y,
+        surfaceX = surfaceX + vector.componentX,
+        surfaceY = surfaceY + vector.componentY,
     )
 }
 
-internal operator fun CarVirtualDisplaySurfacePoint.minus(
-    vector: CarVirtualDisplaySurfaceVector,
-): CarVirtualDisplaySurfacePoint {
+internal operator fun CarVirtualDisplaySurfacePoint.minus(vector: CarVirtualDisplaySurfaceVector): CarVirtualDisplaySurfacePoint {
     return copy(
-        surfaceX = surfaceX - vector.x,
-        surfaceY = surfaceY - vector.y,
+        surfaceX = surfaceX - vector.componentX,
+        surfaceY = surfaceY - vector.componentY,
     )
 }
 
@@ -178,8 +167,8 @@ internal fun CarVirtualDisplaySurfaceVector.toFlingMoveDelta(decay: Float): CarV
     val frameDurationSeconds = FLING_MOVE_INTERVAL_MS / MILLIS_PER_SECOND
 
     return CarVirtualDisplaySurfaceVector(
-        x = x * frameDurationSeconds * decay,
-        y = y * frameDurationSeconds * decay,
+        componentX = componentX * frameDurationSeconds * decay,
+        componentY = componentY * frameDurationSeconds * decay,
     )
 }
 
@@ -188,11 +177,11 @@ internal fun CarVirtualDisplaySurfacePoint.toLogLabel(): String {
 }
 
 internal fun CarVirtualDisplaySurfaceVector.toLogLabel(): String {
-    return "${x.toInt()},${y.toInt()}"
+    return "${componentX.toInt()},${componentY.toInt()}"
 }
 
 internal fun CarVirtualDisplaySurfaceVector.isZero(): Boolean {
-    return x == 0f && y == 0f
+    return componentX == 0f && componentY == 0f
 }
 
 private fun Float.coerceInSafe(minimumValue: Float, maximumValue: Float): Float {

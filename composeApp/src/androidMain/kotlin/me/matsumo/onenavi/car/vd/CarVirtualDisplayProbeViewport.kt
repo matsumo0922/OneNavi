@@ -131,10 +131,7 @@ internal fun CarVirtualDisplayProbeViewport.hasHorizontalSplitVisibleArea(): Boo
     return hasValidSurface && hasSplitInset
 }
 
-internal fun CarVirtualDisplayProbeViewport.resolveInputCoordinate(
-    hostInputX: Float,
-    hostInputY: Float,
-): CarVirtualDisplayInputCoordinate {
+internal fun CarVirtualDisplayProbeViewport.resolveInputCoordinate(hostInputX: Float, hostInputY: Float): CarVirtualDisplayInputCoordinate {
     val viewportObservedFrame = observedFrame
     val resolvedSurfaceX = hostInputX
     val resolvedSurfaceY = hostInputY
@@ -165,9 +162,7 @@ internal fun CarVirtualDisplayProbeViewport.resolveInputCoordinate(
     )
 }
 
-internal fun CarVirtualDisplayProbeViewport.withVisibleArea(
-    visibleArea: Rect,
-): CarVirtualDisplayProbeViewport {
+internal fun CarVirtualDisplayProbeViewport.withVisibleArea(visibleArea: Rect): CarVirtualDisplayProbeViewport {
     val isEmptyVisibleArea = visibleArea.width() <= 0 || visibleArea.height() <= 0
 
     if (isEmptyVisibleArea) {
@@ -187,9 +182,7 @@ internal fun CarVirtualDisplayProbeViewport.withVisibleArea(
     )
 }
 
-internal fun CarVirtualDisplayProbeViewport.withStableArea(
-    stableArea: Rect,
-): CarVirtualDisplayProbeViewport {
+internal fun CarVirtualDisplayProbeViewport.withStableArea(stableArea: Rect): CarVirtualDisplayProbeViewport {
     val coercedArea = stableArea.coerceToSurfaceBounds(
         surfaceWidth = surfaceWidth,
         surfaceHeight = surfaceHeight,
@@ -203,40 +196,28 @@ internal fun CarVirtualDisplayProbeViewport.withStableArea(
     )
 }
 
-private fun CarVirtualDisplayProbeViewport.containsSurfacePoint(
-    surfaceX: Float,
-    surfaceY: Float,
-): Boolean {
+private fun CarVirtualDisplayProbeViewport.containsSurfacePoint(surfaceX: Float, surfaceY: Float): Boolean {
     val isInsideHorizontalBounds = surfaceX >= 0f && surfaceX <= surfaceWidth.toFloat()
     val isInsideVerticalBounds = surfaceY >= 0f && surfaceY <= surfaceHeight.toFloat()
 
     return isInsideHorizontalBounds && isInsideVerticalBounds
 }
 
-private fun CarVirtualDisplayObservedFrame.containsSurfacePoint(
-    surfaceX: Float,
-    surfaceY: Float,
-): Boolean {
+private fun CarVirtualDisplayObservedFrame.containsSurfacePoint(surfaceX: Float, surfaceY: Float): Boolean {
     val isInsideHorizontalBounds = surfaceX >= left.toFloat() && surfaceX <= right.toFloat()
     val isInsideVerticalBounds = surfaceY >= top.toFloat() && surfaceY <= bottom.toFloat()
 
     return isInsideHorizontalBounds && isInsideVerticalBounds
 }
 
-private fun CarVirtualDisplayProbeViewport.containsHostVisiblePoint(
-    surfaceX: Float,
-    surfaceY: Float,
-): Boolean {
+private fun CarVirtualDisplayProbeViewport.containsHostVisiblePoint(surfaceX: Float, surfaceY: Float): Boolean {
     val isInsideHorizontalBounds = surfaceX >= visibleLeft && surfaceX <= visibleRight
     val isInsideVerticalBounds = surfaceY >= visibleTop && surfaceY <= visibleBottom
 
     return isInsideHorizontalBounds && isInsideVerticalBounds
 }
 
-private fun Rect.coerceToSurfaceBounds(
-    surfaceWidth: Int,
-    surfaceHeight: Int,
-): Rect {
+private fun Rect.coerceToSurfaceBounds(surfaceWidth: Int, surfaceHeight: Int): Rect {
     val coercedLeft = left.coerceIn(0, surfaceWidth)
     val coercedTop = top.coerceIn(0, surfaceHeight)
     val coercedRight = right.coerceIn(coercedLeft, surfaceWidth)

@@ -68,10 +68,7 @@ class CarVirtualDisplayProbeGestureDispatcher {
         return didHandleDown
     }
 
-    fun dispatchScroll(
-        inputState: CarVirtualDisplayProbeInputState,
-        viewport: CarVirtualDisplayProbeViewport,
-    ): Boolean {
+    fun dispatchScroll(inputState: CarVirtualDisplayProbeInputState, viewport: CarVirtualDisplayProbeViewport): Boolean {
         val targetComposeView = composeView ?: return false
         val distance = inputState.scrollDistanceOrNull ?: return false
         val anchorPoint = inputState.surfacePointOrNull ?: return false
@@ -94,7 +91,7 @@ class CarVirtualDisplayProbeGestureDispatcher {
             eventTime = now,
         )
         val nextPoint = viewport.coerceObservedSurfacePoint(
-            currentDragGestureState.currentPoint - distance,
+            surfacePoint = currentDragGestureState.currentPoint - distance,
         )
         dragGestureState = currentDragGestureState.copy(
             currentPoint = nextPoint,
@@ -113,10 +110,7 @@ class CarVirtualDisplayProbeGestureDispatcher {
         return didHandleEvent
     }
 
-    fun dispatchFling(
-        inputState: CarVirtualDisplayProbeInputState,
-        viewport: CarVirtualDisplayProbeViewport,
-    ): Boolean {
+    fun dispatchFling(inputState: CarVirtualDisplayProbeInputState, viewport: CarVirtualDisplayProbeViewport): Boolean {
         val targetComposeView = composeView ?: return false
         val velocity = inputState.flingVelocityOrNull ?: return false
         val anchorPoint = inputState.surfacePointOrNull ?: return false
@@ -147,10 +141,7 @@ class CarVirtualDisplayProbeGestureDispatcher {
         )
     }
 
-    fun dispatchScale(
-        inputState: CarVirtualDisplayProbeInputState,
-        viewport: CarVirtualDisplayProbeViewport,
-    ): Boolean {
+    fun dispatchScale(inputState: CarVirtualDisplayProbeInputState, viewport: CarVirtualDisplayProbeViewport): Boolean {
         val targetComposeView = composeView ?: return false
         val scaleFactor = inputState.scaleFactor ?: return false
 
@@ -158,7 +149,7 @@ class CarVirtualDisplayProbeGestureDispatcher {
             return true
         }
 
-        val focusPoint = inputState.scaleFocusPointOrNull(viewport = viewport) ?: return false
+        val focusPoint = inputState.scaleFocusPointOrNull(viewport) ?: return false
 
         finishClickGesture(isCanceled = true)
         finishFlingGesture(isCanceled = true)
@@ -271,7 +262,7 @@ class CarVirtualDisplayProbeGestureDispatcher {
         val currentFlingGestureState = flingGestureState ?: return false
         val moveDelta = velocity.toFlingMoveDelta(decay)
         val nextPoint = viewport.coerceObservedSurfacePoint(
-            currentFlingGestureState.currentPoint + moveDelta,
+            surfacePoint = currentFlingGestureState.currentPoint + moveDelta,
         )
         val eventTime = SystemClock.uptimeMillis()
         val nextFlingGestureState = currentFlingGestureState.copy(

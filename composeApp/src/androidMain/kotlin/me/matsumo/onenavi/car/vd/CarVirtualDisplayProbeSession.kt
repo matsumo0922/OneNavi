@@ -8,8 +8,6 @@ import androidx.car.app.Session
 class CarVirtualDisplayProbeSession : Session() {
 
     override fun onCreateScreen(intent: Intent): Screen {
-        return CarVirtualDisplayProbeScreen(
-            carContext = carContext,
-        )
+        return CarVirtualDisplayProbeScreen(carContext)
     }
 }
