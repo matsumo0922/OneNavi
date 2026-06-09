@@ -114,6 +114,10 @@ kotlin {
             implementation(libs.androidx.car.app)
             implementation(libs.play.services.maps)
         }
+
+        androidUnitTest.dependencies {
+            implementation(kotlin("test"))
+        }
     }
 }
 
