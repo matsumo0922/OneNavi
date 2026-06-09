@@ -123,25 +123,27 @@ internal fun CarVirtualDisplayProbeViewport.resolveInputCoordinate(
     hostInputY: Float,
 ): CarVirtualDisplayInputCoordinate {
     val viewportObservedFrame = observedFrame
-    val resolvedSurfaceX = viewportObservedFrame.left + hostInputX
-    val resolvedSurfaceY = viewportObservedFrame.top + hostInputY
+    val resolvedSurfaceX = hostInputX
+    val resolvedSurfaceY = hostInputY
+    val resolvedObservedFrameX = resolvedSurfaceX - viewportObservedFrame.left
+    val resolvedObservedFrameY = resolvedSurfaceY - viewportObservedFrame.top
 
     return CarVirtualDisplayInputCoordinate(
         hostInputX = hostInputX,
         hostInputY = hostInputY,
         surfaceX = resolvedSurfaceX,
         surfaceY = resolvedSurfaceY,
-        observedFrameX = hostInputX,
-        observedFrameY = hostInputY,
+        observedFrameX = resolvedObservedFrameX,
+        observedFrameY = resolvedObservedFrameY,
         hostVisibleX = resolvedSurfaceX - visibleLeft,
         hostVisibleY = resolvedSurfaceY - visibleTop,
         isInsideSurface = containsSurfacePoint(
             surfaceX = resolvedSurfaceX,
             surfaceY = resolvedSurfaceY,
         ),
-        isInsideObservedFrame = viewportObservedFrame.containsLocalPoint(
-            localX = hostInputX,
-            localY = hostInputY,
+        isInsideObservedFrame = viewportObservedFrame.containsSurfacePoint(
+            surfaceX = resolvedSurfaceX,
+            surfaceY = resolvedSurfaceY,
         ),
         isInsideHostVisibleArea = containsHostVisiblePoint(
             surfaceX = resolvedSurfaceX,
@@ -153,6 +155,12 @@ internal fun CarVirtualDisplayProbeViewport.resolveInputCoordinate(
 internal fun CarVirtualDisplayProbeViewport.withVisibleArea(
     visibleArea: Rect,
 ): CarVirtualDisplayProbeViewport {
+    val isEmptyVisibleArea = visibleArea.width() <= 0 || visibleArea.height() <= 0
+
+    if (isEmptyVisibleArea) {
+        return this
+    }
+
     val coercedArea = visibleArea.coerceToSurfaceBounds(
         surfaceWidth = surfaceWidth,
         surfaceHeight = surfaceHeight,
@@ -192,12 +200,12 @@ private fun CarVirtualDisplayProbeViewport.containsSurfacePoint(
     return isInsideHorizontalBounds && isInsideVerticalBounds
 }
 
-private fun CarVirtualDisplayObservedFrame.containsLocalPoint(
-    localX: Float,
-    localY: Float,
+private fun CarVirtualDisplayObservedFrame.containsSurfacePoint(
+    surfaceX: Float,
+    surfaceY: Float,
 ): Boolean {
-    val isInsideHorizontalBounds = localX >= 0f && localX <= width.toFloat()
-    val isInsideVerticalBounds = localY >= 0f && localY <= height.toFloat()
+    val isInsideHorizontalBounds = surfaceX >= left.toFloat() && surfaceX <= right.toFloat()
+    val isInsideVerticalBounds = surfaceY >= top.toFloat() && surfaceY <= bottom.toFloat()
 
     return isInsideHorizontalBounds && isInsideVerticalBounds
 }

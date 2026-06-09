@@ -20,6 +20,7 @@ class CarVirtualDisplayProbeController(
     }
     private var virtualDisplay: VirtualDisplay? = null
     private var presentation: CarVirtualDisplayProbePresentation? = null
+    private var currentHostSurface: Surface? = null
     private var currentViewport: CarVirtualDisplayProbeViewport? = null
     private var inputSequence = 0L
     private var isInPanMode = false
@@ -30,15 +31,23 @@ class CarVirtualDisplayProbeController(
 
         if (hostSurface == null) {
             Log.w(TAG, "Host surface is null. container=$surfaceContainer")
+            release()
             return
         }
 
         if (!hostSurface.isValid) {
             Log.w(TAG, "Host surface is invalid. container=$surfaceContainer")
+            currentViewport = null
+            releaseVirtualDisplay()
+            releaseCurrentHostSurface(exceptSurface = hostSurface)
+            releaseHostSurface(surface = hostSurface)
             return
         }
 
         releaseVirtualDisplay()
+        releaseCurrentHostSurface(exceptSurface = hostSurface)
+        currentHostSurface = hostSurface
+
         val initialViewport = createCarVirtualDisplayProbeViewport(
             surfaceWidth = normalizePositiveDimension(surfaceContainer.width, DEFAULT_SURFACE_WIDTH),
             surfaceHeight = normalizePositiveDimension(surfaceContainer.height, DEFAULT_SURFACE_HEIGHT),
@@ -99,25 +108,35 @@ class CarVirtualDisplayProbeController(
     }
 
     fun updateScrollInput(distanceX: Float, distanceY: Float) {
-        publishInputState(
-            inputState = createCarVirtualDisplayProbeScrollInputState(
-                sequence = nextInputSequence(),
-                distanceX = distanceX,
-                distanceY = distanceY,
-                isInPanMode = isInPanMode,
-            ),
+        val viewport = findViewportForInput(
+            inputLabel = "scroll",
+        ) ?: return
+        val inputState = createCarVirtualDisplayProbeScrollInputState(
+            sequence = nextInputSequence(),
+            viewport = viewport,
+            distanceX = distanceX,
+            distanceY = distanceY,
+            isInPanMode = isInPanMode,
         )
+
+        publishInputState(inputState = inputState)
+        dispatchScrollInput(inputState = inputState)
     }
 
     fun updateFlingInput(velocityX: Float, velocityY: Float) {
-        publishInputState(
-            inputState = createCarVirtualDisplayProbeFlingInputState(
-                sequence = nextInputSequence(),
-                velocityX = velocityX,
-                velocityY = velocityY,
-                isInPanMode = isInPanMode,
-            ),
+        val viewport = findViewportForInput(
+            inputLabel = "fling",
+        ) ?: return
+        val inputState = createCarVirtualDisplayProbeFlingInputState(
+            sequence = nextInputSequence(),
+            viewport = viewport,
+            velocityX = velocityX,
+            velocityY = velocityY,
+            isInPanMode = isInPanMode,
         )
+
+        publishInputState(inputState = inputState)
+        dispatchFlingInput(inputState = inputState)
     }
 
     fun updateScaleInput(focusX: Float, focusY: Float, scaleFactor: Float) {
@@ -125,21 +144,23 @@ class CarVirtualDisplayProbeController(
             inputLabel = "scale",
         ) ?: return
 
-        publishInputState(
-            inputState = createCarVirtualDisplayProbeScaleInputState(
-                sequence = nextInputSequence(),
-                viewport = viewport,
-                focusX = focusX,
-                focusY = focusY,
-                scaleFactor = scaleFactor,
-                isInPanMode = isInPanMode,
-            ),
+        val inputState = createCarVirtualDisplayProbeScaleInputState(
+            sequence = nextInputSequence(),
+            viewport = viewport,
+            focusX = focusX,
+            focusY = focusY,
+            scaleFactor = scaleFactor,
+            isInPanMode = isInPanMode,
         )
+
+        publishInputState(inputState = inputState)
+        dispatchScaleInput(inputState = inputState)
     }
 
     fun release() {
         currentViewport = null
         releaseVirtualDisplay()
+        releaseCurrentHostSurface()
     }
 
     private fun createVirtualDisplayResult(
@@ -167,7 +188,11 @@ class CarVirtualDisplayProbeController(
                 viewport = viewport,
             )
         }
-        virtualDisplayResult.onFailure(::logVirtualDisplayFailure)
+        virtualDisplayResult.onFailure { throwable ->
+            currentViewport = null
+            logVirtualDisplayFailure(throwable)
+            releaseCurrentHostSurface()
+        }
     }
 
     private fun handleVirtualDisplayCreated(
@@ -228,15 +253,40 @@ class CarVirtualDisplayProbeController(
         }
     }
 
+    private fun releaseCurrentHostSurface(exceptSurface: Surface? = null) {
+        val releasingHostSurface = currentHostSurface ?: return
+
+        if (releasingHostSurface === exceptSurface) {
+            return
+        }
+
+        currentHostSurface = null
+        releaseHostSurface(surface = releasingHostSurface)
+    }
+
+    private fun releaseHostSurface(surface: Surface) {
+        if (currentHostSurface === surface) {
+            currentHostSurface = null
+        }
+
+        val releaseResult = runCatching {
+            surface.release()
+        }
+
+        releaseResult.onSuccess {
+            Log.i(TAG, "Host Surface released.")
+        }
+        releaseResult.onFailure { throwable ->
+            Log.e(TAG, "Host Surface release failed.", throwable)
+        }
+    }
+
     private fun logVirtualDisplayFailure(throwable: Throwable) {
         Log.e(TAG, "VirtualDisplay creation failed.", throwable)
     }
 
     private fun dispatchClickInput(inputState: CarVirtualDisplayProbeInputState) {
-        val shouldDispatchClick = inputState.isInsideObservedFrame == true
-
-        if (!shouldDispatchClick) {
-            Log.i(TAG, "Click injection skipped. ${inputState.logLabel}")
+        if (!canDispatchObservedInput(inputLabel = "Click", inputState = inputState)) {
             return
         }
 
@@ -248,6 +298,72 @@ class CarVirtualDisplayProbeController(
             TAG,
             "Click injection applied. dispatched=$didDispatchClick ${inputState.logLabel}",
         )
+    }
+
+    private fun dispatchScrollInput(inputState: CarVirtualDisplayProbeInputState) {
+        dispatchPresentationInput(
+            inputLabel = "Scroll",
+            inputState = inputState,
+            dispatch = CarVirtualDisplayProbePresentation::dispatchScrollInput,
+        )
+    }
+
+    private fun dispatchFlingInput(inputState: CarVirtualDisplayProbeInputState) {
+        dispatchPresentationInput(
+            inputLabel = "Fling",
+            inputState = inputState,
+            dispatch = CarVirtualDisplayProbePresentation::dispatchFlingInput,
+        )
+    }
+
+    private fun dispatchScaleInput(inputState: CarVirtualDisplayProbeInputState) {
+        if (!canDispatchObservedInput(inputLabel = "Scale", inputState = inputState)) {
+            return
+        }
+
+        dispatchPresentationInput(
+            inputLabel = "Scale",
+            inputState = inputState,
+            dispatch = CarVirtualDisplayProbePresentation::dispatchScaleInput,
+        )
+    }
+
+    private fun canDispatchObservedInput(
+        inputLabel: String,
+        inputState: CarVirtualDisplayProbeInputState,
+    ): Boolean {
+        val canDispatch = inputState.isInsideObservedFrame == true
+
+        if (!canDispatch) {
+            logInputSkipped(
+                inputLabel = inputLabel,
+                inputState = inputState,
+            )
+        }
+
+        return canDispatch
+    }
+
+    private fun dispatchPresentationInput(
+        inputLabel: String,
+        inputState: CarVirtualDisplayProbeInputState,
+        dispatch: CarVirtualDisplayProbePresentation.(CarVirtualDisplayProbeInputState) -> Boolean,
+    ) {
+        val didDispatch = presentation?.dispatch(inputState) ?: false
+
+        if (!didDispatch) {
+            logInputSkipped(
+                inputLabel = inputLabel,
+                inputState = inputState,
+            )
+        }
+    }
+
+    private fun logInputSkipped(
+        inputLabel: String,
+        inputState: CarVirtualDisplayProbeInputState,
+    ) {
+        Log.i(TAG, "$inputLabel injection skipped. ${inputState.logLabel}")
     }
 
     private fun findViewportForInput(inputLabel: String): CarVirtualDisplayProbeViewport? {

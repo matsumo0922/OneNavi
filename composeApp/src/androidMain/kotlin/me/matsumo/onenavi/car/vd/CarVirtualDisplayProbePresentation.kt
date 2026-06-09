@@ -3,11 +3,8 @@ package me.matsumo.onenavi.car.vd
 import android.app.Presentation
 import android.content.Context
 import android.os.Bundle
-import android.os.SystemClock
 import android.util.Log
 import android.view.Display
-import android.view.InputDevice
-import android.view.MotionEvent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +23,7 @@ class CarVirtualDisplayProbePresentation(
 ) : Presentation(outerContext, display, R.style.Theme_Matsumo) {
 
     private val runtime = CarVirtualDisplayRuntime()
+    private val gestureDispatcher = CarVirtualDisplayProbeGestureDispatcher()
     private var viewport by mutableStateOf(initialViewport)
     private var inputState by mutableStateOf(initialInputState)
     private var composeView: ComposeView? = null
@@ -55,9 +53,29 @@ class CarVirtualDisplayProbePresentation(
         }
 
         return dispatchClickMotionEvents(
-            composeView = targetComposeView,
-            eventX = eventX,
-            eventY = eventY,
+            surfaceX = eventX,
+            surfaceY = eventY,
+        )
+    }
+
+    fun dispatchScrollInput(inputState: CarVirtualDisplayProbeInputState): Boolean {
+        return gestureDispatcher.dispatchScroll(
+            inputState = inputState,
+            viewport = viewport,
+        )
+    }
+
+    fun dispatchFlingInput(inputState: CarVirtualDisplayProbeInputState): Boolean {
+        return gestureDispatcher.dispatchFling(
+            inputState = inputState,
+            viewport = viewport,
+        )
+    }
+
+    fun dispatchScaleInput(inputState: CarVirtualDisplayProbeInputState): Boolean {
+        return gestureDispatcher.dispatchScale(
+            inputState = inputState,
+            viewport = viewport,
         )
     }
 
@@ -67,6 +85,7 @@ class CarVirtualDisplayProbePresentation(
 
         val createdComposeView = createComposeView()
         composeView = createdComposeView
+        gestureDispatcher.attach(composeView = createdComposeView)
         installViewTreeOwners(composeView = createdComposeView)
         setContentView(createdComposeView)
         installComposeContent(composeView = createdComposeView)
@@ -80,6 +99,7 @@ class CarVirtualDisplayProbePresentation(
 
     override fun onStop() {
         runtime.destroy()
+        gestureDispatcher.detach()
         composeView = null
         super.onStop()
     }
@@ -125,68 +145,21 @@ class CarVirtualDisplayProbePresentation(
         }
     }
 
-    private fun dispatchClickMotionEvents(
-        composeView: ComposeView,
-        eventX: Float,
-        eventY: Float,
-    ): Boolean {
-        val downTime = SystemClock.uptimeMillis()
-        val upTime = downTime + CLICK_UP_DELAY_MS
-        val downEvent = createClickMotionEvent(
-            downTime = downTime,
-            eventTime = downTime,
-            action = MotionEvent.ACTION_DOWN,
-            eventX = eventX,
-            eventY = eventY,
-        )
-        val upEvent = createClickMotionEvent(
-            downTime = downTime,
-            eventTime = upTime,
-            action = MotionEvent.ACTION_UP,
-            eventX = eventX,
-            eventY = eventY,
+    private fun dispatchClickMotionEvents(surfaceX: Float, surfaceY: Float): Boolean {
+        val didHandleClick = gestureDispatcher.dispatchClick(
+            surfaceX = surfaceX,
+            surfaceY = surfaceY,
         )
 
-        return try {
-            val isDownHandled = composeView.dispatchTouchEvent(downEvent)
-            val isUpHandled = composeView.dispatchTouchEvent(upEvent)
-
-            Log.i(
-                TAG,
-                "Click injected. surface=${eventX.toInt()},${eventY.toInt()} " +
-                    "down=$isDownHandled up=$isUpHandled",
-            )
-            isDownHandled || isUpHandled
-        } finally {
-            downEvent.recycle()
-            upEvent.recycle()
-        }
-    }
-
-    private fun createClickMotionEvent(
-        downTime: Long,
-        eventTime: Long,
-        action: Int,
-        eventX: Float,
-        eventY: Float,
-    ): MotionEvent {
-        return MotionEvent.obtain(
-            downTime,
-            eventTime,
-            action,
-            eventX,
-            eventY,
-            0,
-        ).apply {
-            setSource(InputDevice.SOURCE_TOUCHSCREEN)
-        }
+        Log.i(
+            TAG,
+            "Click injected. surface=${surfaceX.toInt()},${surfaceY.toInt()} handled=$didHandleClick",
+        )
+        return didHandleClick
     }
 
     private companion object {
         /** logcat 抽出用タグ。 */
         const val TAG = "OneNaviCarVd"
-
-        /** click 注入時の down/up 間隔。 */
-        const val CLICK_UP_DELAY_MS = 32L
     }
 }

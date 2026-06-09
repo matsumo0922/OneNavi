@@ -167,14 +167,17 @@ internal fun createCarVirtualDisplayProbeClickInputState(
 
 internal fun createCarVirtualDisplayProbeScrollInputState(
     sequence: Long,
+    viewport: CarVirtualDisplayProbeViewport,
     distanceX: Float,
     distanceY: Float,
     isInPanMode: Boolean,
 ): CarVirtualDisplayProbeInputState {
-    return createInitialCarVirtualDisplayProbeInputState().copy(
+    return createGestureCenterCarVirtualDisplayProbeInputState(
         sequence = sequence,
         kind = CarVirtualDisplayProbeInputKind.Scroll,
+        viewport = viewport,
         isInPanMode = isInPanMode,
+    ).copy(
         distanceX = distanceX,
         distanceY = distanceY,
     )
@@ -182,14 +185,17 @@ internal fun createCarVirtualDisplayProbeScrollInputState(
 
 internal fun createCarVirtualDisplayProbeFlingInputState(
     sequence: Long,
+    viewport: CarVirtualDisplayProbeViewport,
     velocityX: Float,
     velocityY: Float,
     isInPanMode: Boolean,
 ): CarVirtualDisplayProbeInputState {
-    return createInitialCarVirtualDisplayProbeInputState().copy(
+    return createGestureCenterCarVirtualDisplayProbeInputState(
         sequence = sequence,
         kind = CarVirtualDisplayProbeInputKind.Fling,
+        viewport = viewport,
         isInPanMode = isInPanMode,
+    ).copy(
         velocityX = velocityX,
         velocityY = velocityY,
     )
@@ -214,9 +220,10 @@ internal fun createCarVirtualDisplayProbeScaleInputState(
             isInPanMode = isInPanMode,
         )
     } else {
-        createInitialCarVirtualDisplayProbeInputState().copy(
+        createGestureCenterCarVirtualDisplayProbeInputState(
             sequence = sequence,
             kind = CarVirtualDisplayProbeInputKind.Scale,
+            viewport = viewport,
             isInPanMode = isInPanMode,
         )
     }
@@ -225,6 +232,30 @@ internal fun createCarVirtualDisplayProbeScaleInputState(
         scaleFactor = scaleFactor,
     )
 }
+
+private fun createGestureCenterCarVirtualDisplayProbeInputState(
+    sequence: Long,
+    kind: CarVirtualDisplayProbeInputKind,
+    viewport: CarVirtualDisplayProbeViewport,
+    isInPanMode: Boolean,
+): CarVirtualDisplayProbeInputState {
+    val viewportObservedFrame = viewport.observedFrame
+
+    return createPositionedCarVirtualDisplayProbeInputState(
+        sequence = sequence,
+        kind = kind,
+        viewport = viewport,
+        hostInputX = viewportObservedFrame.centerSurfaceX,
+        hostInputY = viewportObservedFrame.centerSurfaceY,
+        isInPanMode = isInPanMode,
+    )
+}
+
+private val CarVirtualDisplayObservedFrame.centerSurfaceX: Float
+    get() = left + width / 2f
+
+private val CarVirtualDisplayObservedFrame.centerSurfaceY: Float
+    get() = top + height / 2f
 
 private fun createPositionedCarVirtualDisplayProbeInputState(
     sequence: Long,
