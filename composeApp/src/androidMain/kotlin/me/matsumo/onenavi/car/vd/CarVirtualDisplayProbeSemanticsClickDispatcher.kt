@@ -24,31 +24,14 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
 
     fun dispatchClick(
         composeView: ComposeView,
-        viewport: CarVirtualDisplayProbeViewport,
-        surfaceX: Float,
-        surfaceY: Float,
-        observedFrameX: Float?,
-        observedFrameY: Float?,
-        hostVisibleX: Float?,
-        hostVisibleY: Float?,
+        touchPoint: CarVirtualDisplayProbeClickCoordinateCandidate,
     ): CarVirtualDisplayProbeClickCoordinateResult? {
         val rootForTest = composeView.getChildAt(0) as? ViewRootForTest ?: return null
-        val touchPoints = createCarVirtualDisplayProbeClickCoordinateCandidates(
-            viewport = viewport,
-            surfaceX = surfaceX,
-            surfaceY = surfaceY,
-            observedFrameX = observedFrameX,
-            observedFrameY = observedFrameY,
-            hostVisibleX = hostVisibleX,
-            hostVisibleY = hostVisibleY,
-        )
 
-        return touchPoints.firstNotNullOfOrNull { touchPoint ->
-            dispatchClick(
-                rootForTest = rootForTest,
-                touchPoint = touchPoint,
-            )
-        }
+        return dispatchClick(
+            rootForTest = rootForTest,
+            touchPoint = touchPoint,
+        )
     }
 
     private fun dispatchClick(

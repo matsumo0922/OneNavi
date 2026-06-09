@@ -6,6 +6,24 @@ import androidx.compose.ui.geometry.Offset
 /** split 表示とみなして visibleArea 横補正候補を追加する最小 inset。 */
 private const val SPLIT_VISIBLE_AREA_MIN_INSET_PX = 120
 
+/** split 時に host visible 起点の X 座標を Surface 全体へ戻す click 候補名。 */
+internal const val CLICK_COORDINATE_VISIBLE_OFFSET_LABEL = "visibleOffset"
+
+/** Android Auto callback から届いた raw Surface 座標の click 候補名。 */
+internal const val CLICK_COORDINATE_SURFACE_LABEL = "surface"
+
+/** OneNavi の observed frame 左上を原点にした click 候補名。 */
+internal const val CLICK_COORDINATE_OBSERVED_LABEL = "observed"
+
+/** Android Auto host visible area 左上を原点にした click 候補名。 */
+internal const val CLICK_COORDINATE_HOST_VISIBLE_LABEL = "hostVisible"
+
+/** split 時に host visible 幅で X 座標を拡縮した click 候補名。 */
+internal const val CLICK_COORDINATE_VISIBLE_SCALED_LABEL = "visibleScaled"
+
+/** MotionEvent fallback で click 注入したことを示す結果ラベルの接頭辞。 */
+internal const val CLICK_COORDINATE_MOTION_EVENT_PREFIX = "motionEvent"
+
 /** VD click 注入で試す座標候補。 */
 @Immutable
 data class CarVirtualDisplayProbeClickCoordinateCandidate(
@@ -19,6 +37,51 @@ data class CarVirtualDisplayProbeClickCoordinateResult(
     val label: String,
     val point: Offset,
 )
+
+internal fun CarVirtualDisplayProbeInputState.createCarVirtualDisplayProbeClickCoordinateCandidates(
+    viewport: CarVirtualDisplayProbeViewport,
+): List<CarVirtualDisplayProbeClickCoordinateCandidate> {
+    val inputSurfaceX = surfaceX ?: return emptyList()
+    val inputSurfaceY = surfaceY ?: return emptyList()
+
+    if (kind != CarVirtualDisplayProbeInputKind.Click) {
+        return emptyList()
+    }
+
+    return createCarVirtualDisplayProbeClickCoordinateCandidates(
+        viewport = viewport,
+        surfaceX = inputSurfaceX,
+        surfaceY = inputSurfaceY,
+        observedFrameX = observedFrameX,
+        observedFrameY = observedFrameY,
+        hostVisibleX = hostVisibleX,
+        hostVisibleY = hostVisibleY,
+    )
+}
+
+internal fun CarVirtualDisplayProbeInputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(
+    viewport: CarVirtualDisplayProbeViewport,
+): CarVirtualDisplayProbeClickCoordinateCandidate? {
+    val candidates = createCarVirtualDisplayProbeClickCoordinateCandidates(viewport = viewport)
+
+    return candidates.findClickCoordinate(label = CLICK_COORDINATE_VISIBLE_OFFSET_LABEL)
+        ?: candidates.findClickCoordinate(label = CLICK_COORDINATE_SURFACE_LABEL)
+}
+
+internal fun CarVirtualDisplayProbeViewport.containsClickDispatchCoordinate(
+    candidate: CarVirtualDisplayProbeClickCoordinateCandidate,
+): Boolean {
+    val viewportObservedFrame = observedFrame
+    val point = candidate.point
+    val isAfterLeft = point.x >= viewportObservedFrame.left.toFloat()
+    val isBeforeRight = point.x <= viewportObservedFrame.right.toFloat()
+    val isAfterTop = point.y >= viewportObservedFrame.top.toFloat()
+    val isBeforeBottom = point.y <= viewportObservedFrame.bottom.toFloat()
+    val isInsideHorizontalBounds = isAfterLeft && isBeforeRight
+    val isInsideVerticalBounds = isAfterTop && isBeforeBottom
+
+    return isInsideHorizontalBounds && isInsideVerticalBounds
+}
 
 internal fun createCarVirtualDisplayProbeClickCoordinateCandidates(
     viewport: CarVirtualDisplayProbeViewport,
@@ -52,23 +115,23 @@ internal fun createCarVirtualDisplayProbeClickCoordinateCandidates(
     val candidatePoints = mutableListOf<CarVirtualDisplayProbeClickCoordinateCandidate>()
 
     candidatePoints.addUniqueClickCoordinateCandidate(
-        label = "visibleOffset",
+        label = CLICK_COORDINATE_VISIBLE_OFFSET_LABEL,
         touchPoint = visibleOffsetPoint,
     )
     candidatePoints.addUniqueClickCoordinateCandidate(
-        label = "surface",
+        label = CLICK_COORDINATE_SURFACE_LABEL,
         touchPoint = surfacePoint,
     )
     candidatePoints.addUniqueClickCoordinateCandidate(
-        label = "observed",
+        label = CLICK_COORDINATE_OBSERVED_LABEL,
         touchPoint = observedFramePoint,
     )
     candidatePoints.addUniqueClickCoordinateCandidate(
-        label = "hostVisible",
+        label = CLICK_COORDINATE_HOST_VISIBLE_LABEL,
         touchPoint = hostVisiblePoint,
     )
     candidatePoints.addUniqueClickCoordinateCandidate(
-        label = "visibleScaled",
+        label = CLICK_COORDINATE_VISIBLE_SCALED_LABEL,
         touchPoint = visibleScaledPoint,
     )
 
@@ -146,6 +209,14 @@ private fun MutableList<CarVirtualDisplayProbeClickCoordinateCandidate>.addUniqu
             point = touchPoint,
         ),
     )
+}
+
+private fun List<CarVirtualDisplayProbeClickCoordinateCandidate>.findClickCoordinate(
+    label: String,
+): CarVirtualDisplayProbeClickCoordinateCandidate? {
+    return firstOrNull { candidate ->
+        candidate.label == label
+    }
 }
 
 private fun CarVirtualDisplayProbeViewport.hasHorizontalSplitVisibleArea(): Boolean {

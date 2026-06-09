@@ -10,7 +10,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import me.matsumo.onenavi.R
@@ -156,16 +155,32 @@ class CarVirtualDisplayProbePresentation(
         val surfaceY = inputState.surfaceY ?: return false
         clickCoordinateResult = null
 
+        val dispatchCoordinate = inputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(
+            viewport = viewport,
+        )
+
+        if (dispatchCoordinate == null) {
+            Log.i(
+                TAG,
+                "Click injection skipped. dispatch coordinate is missing. " +
+                    "surface=${surfaceX.toInt()},${surfaceY.toInt()}",
+            )
+            return false
+        }
+
+        if (!viewport.containsClickDispatchCoordinate(candidate = dispatchCoordinate)) {
+            Log.i(
+                TAG,
+                "Click injection skipped. coordinate=${dispatchCoordinate.toLogLabel()} " +
+                    "surface=${surfaceX.toInt()},${surfaceY.toInt()} is outside observed frame.",
+            )
+            return false
+        }
+
         val semanticsCoordinateResult = targetComposeView?.let { composeView ->
             semanticsClickDispatcher.dispatchClick(
                 composeView = composeView,
-                viewport = viewport,
-                surfaceX = surfaceX,
-                surfaceY = surfaceY,
-                observedFrameX = inputState.observedFrameX,
-                observedFrameY = inputState.observedFrameY,
-                hostVisibleX = inputState.hostVisibleX,
-                hostVisibleY = inputState.hostVisibleY,
+                touchPoint = dispatchCoordinate,
             )
         }
 
@@ -173,7 +188,7 @@ class CarVirtualDisplayProbePresentation(
             clickCoordinateResult = semanticsCoordinateResult
             Log.i(
                 TAG,
-                "Click semantics applied. coordinate=${semanticsCoordinateResult.label} " +
+                "Click semantics applied. coordinate=${semanticsCoordinateResult.toLogLabel()} " +
                     "surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
                     "observed=${inputState.observedFramePointLabel} " +
                     "hostVisible=${inputState.hostVisiblePointLabel}",
@@ -183,30 +198,25 @@ class CarVirtualDisplayProbePresentation(
 
         Log.i(
             TAG,
-            "Click semantics missed. surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
+            "Click semantics missed. coordinate=${dispatchCoordinate.toLogLabel()} " +
+                "surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
                 "observed=${inputState.observedFramePointLabel} " +
                 "hostVisible=${inputState.hostVisiblePointLabel}",
         )
 
-        if (inputState.isInsideObservedFrame != true) {
-            return false
-        }
-
         val didHandleClick = gestureDispatcher.dispatchClick(
-            surfaceX = surfaceX,
-            surfaceY = surfaceY,
+            surfaceX = dispatchCoordinate.point.x,
+            surfaceY = dispatchCoordinate.point.y,
         )
         clickCoordinateResult = CarVirtualDisplayProbeClickCoordinateResult(
-            label = "motionEvent",
-            point = Offset(
-                x = surfaceX,
-                y = surfaceY,
-            ),
+            label = "$CLICK_COORDINATE_MOTION_EVENT_PREFIX:${dispatchCoordinate.label}",
+            point = dispatchCoordinate.point,
         )
 
         Log.i(
             TAG,
-            "Click injection started. surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
+            "Click injection started. coordinate=${dispatchCoordinate.toLogLabel()} " +
+                "surface=${surfaceX.toInt()},${surfaceY.toInt()} " +
                 "handledDown=$didHandleClick",
         )
         return didHandleClick
@@ -216,4 +226,12 @@ class CarVirtualDisplayProbePresentation(
         /** logcat 抽出用タグ。 */
         const val TAG = "OneNaviCarVd"
     }
+}
+
+private fun CarVirtualDisplayProbeClickCoordinateCandidate.toLogLabel(): String {
+    return "$label ${point.x.toInt()},${point.y.toInt()}"
+}
+
+private fun CarVirtualDisplayProbeClickCoordinateResult.toLogLabel(): String {
+    return "$label ${point.x.toInt()},${point.y.toInt()}"
 }

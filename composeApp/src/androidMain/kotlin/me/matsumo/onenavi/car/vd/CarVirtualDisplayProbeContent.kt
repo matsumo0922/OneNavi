@@ -72,6 +72,8 @@ internal fun CarVirtualDisplayProbeContent(
         "scale=${inputState.scaleFactorLabel}"
     val clickCoordinateLabel = clickCoordinateResult.toClickCoordinateLabel()
     val clickCandidateLabel = inputState.toClickCandidateLabel(viewport = viewport)
+    val clickColorLegendLabel = "tap colors actual=red surface=cyan visibleOffset=yellow " +
+        "visibleScaled=pink observed=purple hostVisible=green"
 
     MaterialTheme {
         Box(
@@ -116,6 +118,7 @@ internal fun CarVirtualDisplayProbeContent(
                     gestureLabel = gestureLabel,
                     clickCoordinateLabel = clickCoordinateLabel,
                     clickCandidateLabel = clickCandidateLabel,
+                    clickColorLegendLabel = clickColorLegendLabel,
                 )
             }
         }
@@ -203,6 +206,7 @@ private fun CarVirtualDisplayProbeDiagnosticsOverlay(
     gestureLabel: String,
     clickCoordinateLabel: String,
     clickCandidateLabel: String,
+    clickColorLegendLabel: String,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -283,6 +287,11 @@ private fun CarVirtualDisplayProbeDiagnosticsOverlay(
             color = Color(0xFFA7F3D0),
             fontSize = 12.sp,
         )
+        Text(
+            text = clickColorLegendLabel,
+            color = Color(0xFFE5E7EB),
+            fontSize = 12.sp,
+        )
     }
 }
 
@@ -352,12 +361,13 @@ private fun DrawScope.drawProbeClickCoordinates(
     inputState: CarVirtualDisplayProbeInputState,
     clickCoordinateResult: CarVirtualDisplayProbeClickCoordinateResult?,
 ) {
-    val clickCoordinateCandidates = inputState.clickCoordinateCandidates(viewport = viewport)
+    val clickCoordinateCandidates = inputState.createCarVirtualDisplayProbeClickCoordinateCandidates(
+        viewport = viewport,
+    )
 
-    clickCoordinateCandidates.forEachIndexed { candidateIndex, candidate ->
+    clickCoordinateCandidates.forEach { candidate ->
         drawProbeClickCoordinateCandidate(
             candidate = candidate,
-            candidateIndex = candidateIndex,
         )
     }
 
@@ -368,9 +378,8 @@ private fun DrawScope.drawProbeClickCoordinates(
 
 private fun DrawScope.drawProbeClickCoordinateCandidate(
     candidate: CarVirtualDisplayProbeClickCoordinateCandidate,
-    candidateIndex: Int,
 ) {
-    val color = candidateIndex.toCandidateColor()
+    val color = candidate.label.toCandidateColor()
 
     drawCircle(
         color = color.copy(alpha = 0.36f),
@@ -419,27 +428,6 @@ private fun DrawScope.drawProbeClickCoordinateResult(
     )
 }
 
-private fun CarVirtualDisplayProbeInputState.clickCoordinateCandidates(
-    viewport: CarVirtualDisplayViewport,
-): List<CarVirtualDisplayProbeClickCoordinateCandidate> {
-    val inputSurfaceX = surfaceX ?: return emptyList()
-    val inputSurfaceY = surfaceY ?: return emptyList()
-
-    if (kind != CarVirtualDisplayProbeInputKind.Click) {
-        return emptyList()
-    }
-
-    return createCarVirtualDisplayProbeClickCoordinateCandidates(
-        viewport = viewport,
-        surfaceX = inputSurfaceX,
-        surfaceY = inputSurfaceY,
-        observedFrameX = observedFrameX,
-        observedFrameY = observedFrameY,
-        hostVisibleX = hostVisibleX,
-        hostVisibleY = hostVisibleY,
-    )
-}
-
 private fun CarVirtualDisplayProbeClickCoordinateResult?.toClickCoordinateLabel(): String {
     if (this == null) {
         return "tap actual=n/a"
@@ -451,7 +439,7 @@ private fun CarVirtualDisplayProbeClickCoordinateResult?.toClickCoordinateLabel(
 private fun CarVirtualDisplayProbeInputState.toClickCandidateLabel(
     viewport: CarVirtualDisplayViewport,
 ): String {
-    val candidates = clickCoordinateCandidates(viewport = viewport)
+    val candidates = createCarVirtualDisplayProbeClickCoordinateCandidates(viewport = viewport)
 
     if (candidates.isEmpty()) {
         return "tap candidates=n/a"
@@ -468,13 +456,14 @@ private fun Offset.toPointLabel(): String {
     return "${x.toInt()},${y.toInt()}"
 }
 
-private fun Int.toCandidateColor(): Color {
+private fun String.toCandidateColor(): Color {
     return when (this) {
-        0 -> Color(0xFFF59E0B)
-        1 -> Color(0xFF22D3EE)
-        2 -> Color(0xFFA78BFA)
-        3 -> Color(0xFF34D399)
-        else -> Color(0xFFF472B6)
+        CLICK_COORDINATE_VISIBLE_OFFSET_LABEL -> Color(0xFFF59E0B)
+        CLICK_COORDINATE_SURFACE_LABEL -> Color(0xFF22D3EE)
+        CLICK_COORDINATE_OBSERVED_LABEL -> Color(0xFFA78BFA)
+        CLICK_COORDINATE_HOST_VISIBLE_LABEL -> Color(0xFF34D399)
+        CLICK_COORDINATE_VISIBLE_SCALED_LABEL -> Color(0xFFF472B6)
+        else -> Color(0xFFE5E7EB)
     }
 }
 
