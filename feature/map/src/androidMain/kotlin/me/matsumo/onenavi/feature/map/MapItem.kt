@@ -2,7 +2,13 @@ package me.matsumo.onenavi.feature.map
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Rect
 import android.os.Bundle
+import android.util.DisplayMetrics
+import android.view.Display
+import android.view.SurfaceView
+import android.view.TextureView
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
@@ -31,6 +37,7 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapColorScheme
 import com.google.android.gms.maps.model.PointOfInterest
+import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.feature.map.state.MapCameraDefaults
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
@@ -41,6 +48,7 @@ internal fun MapItem(
     cameraState: MapCameraState,
     isDarkMode: Boolean,
     mapCanvasLayout: MapCanvasLayout,
+    shouldLogDiagnostics: Boolean,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
@@ -48,6 +56,7 @@ internal fun MapItem(
 ) {
     val density = LocalDensity.current
     val mapView = rememberMapViewWithLifecycle(isDarkMode = isDarkMode)
+    val mapViewDiagnosticState = remember { MapViewDiagnosticState() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     val canvasWidthPx = with(density) {
         mapCanvasLayout.width.roundToPx().coerceAtLeast(viewportSize.width)
@@ -75,6 +84,7 @@ internal fun MapItem(
     LaunchedEffect(
         viewportSize,
         canvasWidthPx,
+        canvasOffsetXPx,
     ) {
         if (viewportSize.hasNoArea()) return@LaunchedEffect
 
@@ -82,6 +92,12 @@ internal fun MapItem(
             widthPx = canvasWidthPx,
             heightPx = viewportSize.height,
         )
+        if (shouldLogDiagnostics) {
+            Napier.i(tag = MAP_CAMERA_LOG_TAG) {
+                "MapView layout updated. viewport=${viewportSize.width}x${viewportSize.height} " +
+                    "canvas=${canvasWidthPx}x${viewportSize.height} offsetX=$canvasOffsetXPx"
+            }
+        }
     }
 
     Box(
@@ -96,6 +112,8 @@ internal fun MapItem(
             factory = {
                 it.createMapContainer(
                     mapView = mapView,
+                    shouldLogDiagnostics = shouldLogDiagnostics,
+                    diagnosticState = mapViewDiagnosticState,
                     onMapUpdate = onMapUpdate,
                 )
             },
@@ -105,6 +123,8 @@ internal fun MapItem(
                     canvasWidthPx = canvasWidthPx,
                     canvasHeightPx = viewportSize.height,
                     canvasOffsetXPx = canvasOffsetXPx,
+                    shouldLogDiagnostics = shouldLogDiagnostics,
+                    diagnosticState = mapViewDiagnosticState,
                 )
             },
         )
@@ -113,15 +133,56 @@ internal fun MapItem(
 
 private fun Context.createMapContainer(
     mapView: MapView,
+    shouldLogDiagnostics: Boolean,
+    diagnosticState: MapViewDiagnosticState,
     onMapUpdate: (GoogleMap?) -> Unit,
 ): FrameLayout {
     return FrameLayout(this).apply {
         clipChildren = false
         clipToPadding = false
         addView(mapView)
-        mapView.getMapAsync { map ->
-            onMapUpdate(map)
-        }
+        registerMapUpdateCallback(
+            mapView = mapView,
+            shouldLogDiagnostics = shouldLogDiagnostics,
+            diagnosticState = diagnosticState,
+            onMapUpdate = onMapUpdate,
+        )
+    }
+}
+
+private fun FrameLayout.registerMapUpdateCallback(
+    mapView: MapView,
+    shouldLogDiagnostics: Boolean,
+    diagnosticState: MapViewDiagnosticState,
+    onMapUpdate: (GoogleMap?) -> Unit,
+) {
+    mapView.getMapAsync { googleMap ->
+        onMapReady(
+            mapView = mapView,
+            googleMap = googleMap,
+            shouldLogDiagnostics = shouldLogDiagnostics,
+            diagnosticState = diagnosticState,
+            onMapUpdate = onMapUpdate,
+        )
+    }
+}
+
+private fun FrameLayout.onMapReady(
+    mapView: MapView,
+    googleMap: GoogleMap,
+    shouldLogDiagnostics: Boolean,
+    diagnosticState: MapViewDiagnosticState,
+    onMapUpdate: (GoogleMap?) -> Unit,
+) {
+    onMapUpdate(googleMap)
+    if (!shouldLogDiagnostics) return
+
+    post {
+        logMapViewDiagnostics(
+            mapView = mapView,
+            reason = "map-ready",
+            diagnosticState = diagnosticState,
+        )
     }
 }
 
@@ -130,6 +191,8 @@ private fun FrameLayout.updateMapViewLayout(
     canvasWidthPx: Int,
     canvasHeightPx: Int,
     canvasOffsetXPx: Int,
+    shouldLogDiagnostics: Boolean,
+    diagnosticState: MapViewDiagnosticState,
 ) {
     if (canvasWidthPx <= 0 || canvasHeightPx <= 0) return
 
@@ -154,11 +217,127 @@ private fun FrameLayout.updateMapViewLayout(
     }
 
     mapView.translationX = canvasOffsetXPx.toFloat()
+    if (!shouldLogDiagnostics) return
+
+    post {
+        logMapViewDiagnostics(
+            mapView = mapView,
+            reason = "layout-updated",
+            diagnosticState = diagnosticState,
+        )
+    }
 }
 
 private fun IntSize.hasNoArea(): Boolean {
     return width <= 0 || height <= 0
 }
+
+private fun FrameLayout.logMapViewDiagnostics(
+    mapView: MapView,
+    reason: String,
+    diagnosticState: MapViewDiagnosticState,
+) {
+    val contextMetricsLabel = mapView.context.resources.displayMetrics.toDiagnosticLabel()
+    val displayMetricsLabel = mapView.display.toDiagnosticLabel()
+    val containerLabel = viewDiagnosticLabel()
+    val mapViewLabel = mapView.viewDiagnosticLabel()
+    val childLabel = directChildrenDiagnosticLabel()
+    val rendererLabel = mapView.rendererViewDiagnosticLabels().joinToString(separator = " | ")
+    val diagnosticSignature = "$contextMetricsLabel/$displayMetricsLabel/" +
+        "$containerLabel/$mapViewLabel/$childLabel/$rendererLabel"
+
+    if (diagnosticSignature == diagnosticState.lastSignature) return
+
+    diagnosticState.lastSignature = diagnosticSignature
+    Napier.i(tag = MAP_CAMERA_LOG_TAG) {
+        "MapView diagnostics. reason=$reason display=${mapView.display?.displayId} " +
+            "contextMetrics={$contextMetricsLabel} displayMetrics={$displayMetricsLabel} " +
+            "container={$containerLabel} mapView={$mapViewLabel} " +
+            "children=[$childLabel] renderers=[$rendererLabel]"
+    }
+}
+
+private fun ViewGroup.directChildrenDiagnosticLabel(): String {
+    if (childCount == 0) return "none"
+
+    return (0 until childCount).joinToString(separator = " | ") { childIndex ->
+        val child = getChildAt(childIndex)
+        "#$childIndex ${child.viewDiagnosticLabel()}"
+    }
+}
+
+private fun View.rendererViewDiagnosticLabels(
+    depth: Int = 0,
+): List<String> {
+    if (depth > MAP_VIEW_DIAGNOSTIC_MAX_DEPTH) return emptyList()
+
+    val selfLabel = if (isMapRendererView()) {
+        listOf("depth=$depth ${viewDiagnosticLabel()}")
+    } else {
+        emptyList()
+    }
+
+    if (this !is ViewGroup) return selfLabel
+
+    return buildList {
+        addAll(selfLabel)
+        for (childIndex in 0 until childCount) {
+            addAll(getChildAt(childIndex).rendererViewDiagnosticLabels(depth = depth + 1))
+        }
+    }
+}
+
+private fun View.isMapRendererView(): Boolean {
+    val className = javaClass.name
+    val isSurfaceView = this is SurfaceView
+    val isTextureView = this is TextureView
+    val isGlView = className.contains("GL", ignoreCase = true)
+    val isRendererView = className.contains("Renderer", ignoreCase = true)
+
+    return isSurfaceView || isTextureView || isGlView || isRendererView
+}
+
+private fun View.viewDiagnosticLabel(): String {
+    val screenLocation = IntArray(2)
+    val windowLocation = IntArray(2)
+    val globalVisibleRect = Rect()
+    getLocationOnScreen(screenLocation)
+    getLocationInWindow(windowLocation)
+    getGlobalVisibleRect(globalVisibleRect)
+
+    return "${javaClass.simpleName} " +
+        "size=${width}x$height measured=${measuredWidth}x$measuredHeight " +
+        "pos=$left,$top,$right,$bottom translation=$translationX,$translationY " +
+        "screen=${screenLocation[0]},${screenLocation[1]} " +
+        "window=${windowLocation[0]},${windowLocation[1]} visible=$globalVisibleRect"
+}
+
+@Suppress("DEPRECATION")
+private fun Display?.toDiagnosticLabel(): String {
+    val display = this ?: return "n/a"
+    val appMetrics = DisplayMetrics()
+    val realMetrics = DisplayMetrics()
+    display.getMetrics(appMetrics)
+    display.getRealMetrics(realMetrics)
+
+    return "id=${display.displayId} name=${display.name} " +
+        "app=${appMetrics.toDiagnosticLabel()} real=${realMetrics.toDiagnosticLabel()}"
+}
+
+private fun DisplayMetrics.toDiagnosticLabel(): String {
+    return "${widthPixels}x$heightPixels density=$density dpi=$densityDpi xdpi=$xdpi ydpi=$ydpi"
+}
+
+/** MapView 診断ログの重複出力を MapView 単位で抑える状態。 */
+private class MapViewDiagnosticState {
+    var lastSignature: String? = null
+}
+
+/** Map camera 周辺の検証ログ用タグ。 */
+private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"
+
+/** MapView 内部 View の探索深さ上限。 */
+private const val MAP_VIEW_DIAGNOSTIC_MAX_DEPTH = 6
 
 @Composable
 private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
@@ -250,10 +429,7 @@ private fun Boolean.toMapColorScheme(): Int {
 }
 
 @Composable
-private fun MapViewLifecycleEffect(
-    mapView: MapView,
-    onClear: () -> Unit,
-) {
+private fun MapViewLifecycleEffect(mapView: MapView, onClear: () -> Unit) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val currentOnClear by rememberUpdatedState(onClear)
 

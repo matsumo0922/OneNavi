@@ -18,6 +18,7 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
+import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.Saver
@@ -69,6 +70,8 @@ internal class MapCameraState internal constructor(
     private var handledGuidanceManeuverFocusIndex: Int? = null
     private var pendingRestoreState: MapCameraRestoreState? = initialRestoreState
     private var pendingManualBrowsingRestore: Boolean = initialRestoreState?.isFollowingMyLocation == false
+    private var lastProjectionDiagnosticSignature: String? = null
+    private var shouldLogDiagnostics: Boolean = false
 
     var cameraState by mutableStateOf(
         if (initialRestoreState == null) {
@@ -200,6 +203,7 @@ internal class MapCameraState internal constructor(
         mapViewHeightPx = heightPx
         vehicleCameraPositionFactory.updateViewportHeight(heightPx)
         applyCameraPadding()
+        logProjectionDiagnostics(reason = "viewport")
         moveFollowCameraIfNeeded()
     }
 
@@ -207,6 +211,15 @@ internal class MapCameraState internal constructor(
     fun updateDensity(density: Float) {
         this.density = density
         vehicleCameraPositionFactory.updateDensity(density)
+    }
+
+    /**
+     * Map camera の診断ログ出力可否を更新する。
+     *
+     * @param isEnabled true の場合のみ projection 診断ログを出す
+     */
+    fun updateDiagnosticsLogging(isEnabled: Boolean) {
+        shouldLogDiagnostics = isEnabled
     }
 
     /**
@@ -233,6 +246,7 @@ internal class MapCameraState internal constructor(
         this.guidanceAnchorFraction = guidanceAnchorFraction
         applyCameraPadding()
         applyPendingRestoreIfReady()
+        logProjectionDiagnostics(reason = "padding")
         moveFollowCameraIfNeeded()
     }
 
@@ -679,17 +693,78 @@ internal class MapCameraState internal constructor(
         val current = map.cameraPosition
         val target = runCatching {
             map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, paddingPx))
+            logProjectionDiagnostics(reason = "route-overview-target")
             map.cameraPosition
+        }.onFailure { throwable ->
+            Napier.w(tag = MAP_CAMERA_LOG_TAG, throwable = throwable) {
+                "Route overview target failed. points=${routePoints.size} padding=$paddingPx"
+            }
         }.getOrNull()
 
         map.moveCamera(CameraUpdateFactory.newCameraPosition(current))
 
         if (target != null) {
+            if (shouldLogDiagnostics) {
+                Napier.i(tag = MAP_CAMERA_LOG_TAG) {
+                    "Route overview target resolved. points=${routePoints.size} padding=$paddingPx " +
+                        "bounds=${bounds.southwest.latitude},${bounds.southwest.longitude}.." +
+                        "${bounds.northeast.latitude},${bounds.northeast.longitude} " +
+                        "currentZoom=${current.zoom} targetZoom=${target.zoom} " +
+                        "target=${target.target.latitude},${target.target.longitude}"
+                }
+            }
             flyCameraTo(
                 target = target,
                 durationMs = durationMs,
                 zoomEasing = DecelerateInterpolator(CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR),
             )
+        }
+    }
+
+    private fun logProjectionDiagnostics(reason: String) {
+        if (!shouldLogDiagnostics) return
+
+        val map = googleMap ?: return
+        val visibleRegion = runCatching {
+            map.projection.visibleRegion
+        }.getOrNull() ?: return
+        val cameraPosition = map.cameraPosition
+        val resolvedTopPaddingPx = resolveTopPaddingPx()
+        val bounds = visibleRegion.latLngBounds
+        val targetScreenPoint = runCatching {
+            map.projection.toScreenLocation(cameraPosition.target)
+        }.getOrNull()
+        val expectedCenterX = startPaddingPx + (mapViewWidthPx - startPaddingPx - endPaddingPx) / 2
+        val expectedCenterY = resolvedTopPaddingPx +
+            (mapViewHeightPx - resolvedTopPaddingPx - rawBottomPaddingPx) / 2
+        val targetScreenLabel = targetScreenPoint?.let { point ->
+            "${point.x},${point.y}"
+        } ?: "n/a"
+        val targetCenterDeltaLabel = targetScreenPoint?.let { point ->
+            "${point.x - expectedCenterX},${point.y - expectedCenterY}"
+        } ?: "n/a"
+        val diagnosticSignature = "$mapViewWidthPx,$mapViewHeightPx," +
+            "$startPaddingPx,$resolvedTopPaddingPx,$endPaddingPx,$rawBottomPaddingPx," +
+            "${cameraPosition.zoom},${cameraPosition.target.latitude},${cameraPosition.target.longitude}," +
+            "$targetScreenLabel,$targetCenterDeltaLabel," +
+            "${bounds.southwest.latitude},${bounds.southwest.longitude}," +
+            "${bounds.northeast.latitude},${bounds.northeast.longitude}"
+
+        if (diagnosticSignature == lastProjectionDiagnosticSignature) return
+
+        lastProjectionDiagnosticSignature = diagnosticSignature
+        Napier.i(tag = MAP_CAMERA_LOG_TAG) {
+            "Projection diagnostics. reason=$reason viewport=${mapViewWidthPx}x$mapViewHeightPx " +
+                "padding=$startPaddingPx,$resolvedTopPaddingPx,$endPaddingPx,$rawBottomPaddingPx " +
+                "cameraZoom=${cameraPosition.zoom} target=${cameraPosition.target.latitude}," +
+                "${cameraPosition.target.longitude} targetScreen=$targetScreenLabel " +
+                "expectedCenter=$expectedCenterX,$expectedCenterY " +
+                "targetCenterDelta=$targetCenterDeltaLabel nearLeft=${visibleRegion.nearLeft.latitude}," +
+                "${visibleRegion.nearLeft.longitude} nearRight=${visibleRegion.nearRight.latitude}," +
+                "${visibleRegion.nearRight.longitude} farLeft=${visibleRegion.farLeft.latitude}," +
+                "${visibleRegion.farLeft.longitude} farRight=${visibleRegion.farRight.latitude}," +
+                "${visibleRegion.farRight.longitude} bounds=${bounds.southwest.latitude}," +
+                "${bounds.southwest.longitude}..${bounds.northeast.latitude},${bounds.northeast.longitude}"
         }
     }
 
@@ -1156,6 +1231,9 @@ internal class MapCameraState internal constructor(
 
         /** density が未通知の間に使う既定値。 */
         private const val DEFAULT_DENSITY = 1f
+
+        /** Map camera 周辺の検証ログ用タグ。 */
+        private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"
 
         /** コンパス button による 3D heading-up / 2D north-up 切り替え animation 時間（ms）。 */
         private const val COMPASS_PERSPECTIVE_ANIMATION_DURATION_MS = 500L

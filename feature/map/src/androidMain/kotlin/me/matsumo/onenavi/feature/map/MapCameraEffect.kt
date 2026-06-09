@@ -7,10 +7,12 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
+import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -39,6 +41,7 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
  * @param panelLayout 地図 UI 帯の配置情報
  * @param viewportWidthPx 地図 viewport の幅
  * @param viewportHeightPx 地図 viewport の高さ
+ * @param shouldLogDiagnostics MapView / Camera の診断ログを出力するか
  */
 @Composable
 internal fun MapCameraEffect(
@@ -52,6 +55,7 @@ internal fun MapCameraEffect(
     panelLayout: MapPanelLayout,
     viewportWidthPx: Int,
     viewportHeightPx: Int,
+    shouldLogDiagnostics: Boolean,
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
@@ -77,6 +81,10 @@ internal fun MapCameraEffect(
     val hasNavigationRouteOverlay = hasAddWaypointOverlay || hasNavigationAlternativesOverlay
     val hasNavigationPreviewOverlay = hasNavigationRouteOverlay || hasRouteEditOverlay || hasSheetOverlay
     val isGuidanceCameraActive = screenState is MapScreenState.Navigating && !hasNavigationPreviewOverlay
+
+    SideEffect {
+        cameraState.updateDiagnosticsLogging(shouldLogDiagnostics)
+    }
 
     LaunchedEffect(isGuidanceCameraActive) {
         cameraState.setGuidanceCameraActive(isGuidanceCameraActive)
@@ -159,6 +167,8 @@ internal fun MapCameraEffect(
         )
         val horizontalBasePaddingPx = with(density) { horizontalBasePadding.toPx() }.toInt()
         val splitInsetPx = with(density) { panelLayout.splitHorizontalInset.toPx() }.toInt()
+        val panelWidthPx = with(density) { panelLayout.panelWidth.roundToPx() }
+        val visibleMapWidthPx = (viewportWidthPx - splitInsetPx).coerceAtLeast(0)
         val (startPaddingPx, endPaddingPx) = panelLayout.resolveHorizontalCameraPaddingPx(
             basePaddingPx = horizontalBasePaddingPx,
             splitInsetPx = splitInsetPx,
@@ -196,6 +206,15 @@ internal fun MapCameraEffect(
                 null
             },
         )
+        if (shouldLogDiagnostics) {
+            Napier.i(tag = MAP_CAMERA_LOG_TAG) {
+                "Camera padding updated. screen=${screenState.javaClass.simpleName} " +
+                    "split=${panelLayout.isSplit} side=${panelLayout.panelSide} " +
+                    "viewport=${viewportWidthPx}x$viewportHeightPx panelWidth=$panelWidthPx " +
+                    "splitInset=$splitInsetPx visibleMapWidth=$visibleMapWidthPx " +
+                    "padding=$startPaddingPx,$topPaddingPx,$endPaddingPx,$bottomPaddingPx"
+            }
+        }
     }
 
     LaunchedEffect(
@@ -284,7 +303,16 @@ internal fun MapCameraEffect(
         viewportWidthPx,
         viewportHeightPx,
     ) {
-        routeOverviewPoints?.let { cameraState.showRouteOverview(it) }
+        val points = routeOverviewPoints ?: return@LaunchedEffect
+        if (shouldLogDiagnostics) {
+            Napier.i(tag = MAP_CAMERA_LOG_TAG) {
+                "Route overview requested. screen=${screenState.javaClass.simpleName} " +
+                    "points=${points.size} viewport=${viewportWidthPx}x$viewportHeightPx " +
+                    "topKey=$routeOverviewTopPaddingKey bottomKey=$routeOverviewBottomPaddingKey " +
+                    "navCardKey=$routeOverviewNavigationCardHeightKey"
+            }
+        }
+        cameraState.showRouteOverview(points)
     }
 
     LaunchedEffect(screenState, addWaypointSearchResults, addWaypointSelected, overlayState) {
@@ -457,6 +485,9 @@ private val MAP_CAMERA_HORIZONTAL_BASE_PADDING = 24.dp
 
 /** 分割案内で自車を画面下端から置く割合。 */
 private const val SPLIT_GUIDANCE_ANCHOR_FRACTION_FROM_BOTTOM = 0.25f
+
+/** Map camera 周辺の検証ログ用タグ。 */
+private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"
 
 private fun GuidanceState.routeOverviewKey(): String? = when (this) {
     is GuidanceState.Guiding -> route.id
