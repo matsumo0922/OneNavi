@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Display
 import android.view.Surface
@@ -52,6 +53,10 @@ class CarVirtualDisplayProbeController(
             surfaceWidth = normalizePositiveDimension(surfaceContainer.width, DEFAULT_SURFACE_WIDTH),
             surfaceHeight = normalizePositiveDimension(surfaceContainer.height, DEFAULT_SURFACE_HEIGHT),
             densityDpi = normalizePositiveDimension(surfaceContainer.dpi, DEFAULT_DENSITY_DPI),
+        )
+        logVirtualDisplayRequest(
+            surfaceContainer = surfaceContainer,
+            viewport = initialViewport,
         )
         currentViewport = initialViewport
         createVirtualDisplayResult(
@@ -286,6 +291,22 @@ class CarVirtualDisplayProbeController(
 
     private fun logVirtualDisplayFailure(throwable: Throwable) {
         Log.e(TAG, "VirtualDisplay creation failed.", throwable)
+    }
+
+    private fun logVirtualDisplayRequest(
+        surfaceContainer: SurfaceContainer,
+        viewport: CarVirtualDisplayProbeViewport,
+    ) {
+        Log.i(
+            TAG,
+            "VirtualDisplay request. surface=${viewport.surfaceWidth}x${viewport.surfaceHeight} " +
+                "requestedDpi=${viewport.densityDpi} containerDpi=${surfaceContainer.dpi} " +
+                "appMetrics=${appContext.resources.displayMetrics.toLogLabel()}",
+        )
+    }
+
+    private fun DisplayMetrics.toLogLabel(): String {
+        return "${widthPixels}x$heightPixels density=$density dpi=$densityDpi xdpi=$xdpi ydpi=$ydpi"
     }
 
     private fun dispatchClickInput(inputState: CarVirtualDisplayProbeInputState) {

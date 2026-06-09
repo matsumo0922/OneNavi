@@ -4,7 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Rect
 import android.os.Bundle
+import android.util.DisplayMetrics
 import android.util.Log
+import android.view.Display
 import android.view.SurfaceView
 import android.view.TextureView
 import android.view.View
@@ -187,12 +189,14 @@ private fun FrameLayout.logMapViewDiagnostics(
     mapView: MapView,
     reason: String,
 ) {
-    val displayMetrics = mapView.context.resources.displayMetrics
+    val contextMetricsLabel = mapView.context.resources.displayMetrics.toDiagnosticLabel()
+    val displayMetricsLabel = mapView.display.toDiagnosticLabel()
     val containerLabel = viewDiagnosticLabel()
     val mapViewLabel = mapView.viewDiagnosticLabel()
     val childLabel = directChildrenDiagnosticLabel()
     val rendererLabel = mapView.rendererViewDiagnosticLabels().joinToString(separator = " | ")
-    val diagnosticSignature = "$containerLabel/$mapViewLabel/$childLabel/$rendererLabel"
+    val diagnosticSignature = "$contextMetricsLabel/$displayMetricsLabel/" +
+        "$containerLabel/$mapViewLabel/$childLabel/$rendererLabel"
 
     if (diagnosticSignature == lastMapViewDiagnosticSignature) return
 
@@ -200,8 +204,7 @@ private fun FrameLayout.logMapViewDiagnostics(
     Log.i(
         MAP_CAMERA_LOG_TAG,
         "MapView diagnostics. reason=$reason display=${mapView.display?.displayId} " +
-            "metrics=${displayMetrics.widthPixels}x${displayMetrics.heightPixels} " +
-            "density=${displayMetrics.density} dpi=${displayMetrics.densityDpi} " +
+            "contextMetrics={$contextMetricsLabel} displayMetrics={$displayMetricsLabel} " +
             "container={$containerLabel} mapView={$mapViewLabel} " +
             "children=[$childLabel] renderers=[$rendererLabel]",
     )
@@ -260,6 +263,22 @@ private fun View.viewDiagnosticLabel(): String {
         "pos=$left,$top,$right,$bottom translation=${translationX},$translationY " +
         "screen=${screenLocation[0]},${screenLocation[1]} " +
         "window=${windowLocation[0]},${windowLocation[1]} visible=$globalVisibleRect"
+}
+
+@Suppress("DEPRECATION")
+private fun Display?.toDiagnosticLabel(): String {
+    val display = this ?: return "n/a"
+    val appMetrics = DisplayMetrics()
+    val realMetrics = DisplayMetrics()
+    display.getMetrics(appMetrics)
+    display.getRealMetrics(realMetrics)
+
+    return "id=${display.displayId} name=${display.name} " +
+        "app=${appMetrics.toDiagnosticLabel()} real=${realMetrics.toDiagnosticLabel()}"
+}
+
+private fun DisplayMetrics.toDiagnosticLabel(): String {
+    return "${widthPixels}x$heightPixels density=$density dpi=$densityDpi xdpi=$xdpi ydpi=$ydpi"
 }
 
 private var lastMapViewDiagnosticSignature: String? = null

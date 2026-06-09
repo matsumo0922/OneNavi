@@ -720,9 +720,22 @@ internal class MapCameraState internal constructor(
         val cameraPosition = map.cameraPosition
         val resolvedTopPaddingPx = resolveTopPaddingPx()
         val bounds = visibleRegion.latLngBounds
+        val targetScreenPoint = runCatching {
+            map.projection.toScreenLocation(cameraPosition.target)
+        }.getOrNull()
+        val expectedCenterX = startPaddingPx + (mapViewWidthPx - startPaddingPx - endPaddingPx) / 2
+        val expectedCenterY = resolvedTopPaddingPx +
+            (mapViewHeightPx - resolvedTopPaddingPx - rawBottomPaddingPx) / 2
+        val targetScreenLabel = targetScreenPoint?.let { point ->
+            "${point.x},${point.y}"
+        } ?: "n/a"
+        val targetCenterDeltaLabel = targetScreenPoint?.let { point ->
+            "${point.x - expectedCenterX},${point.y - expectedCenterY}"
+        } ?: "n/a"
         val diagnosticSignature = "$mapViewWidthPx,$mapViewHeightPx," +
             "$startPaddingPx,$resolvedTopPaddingPx,$endPaddingPx,$rawBottomPaddingPx," +
             "${cameraPosition.zoom},${cameraPosition.target.latitude},${cameraPosition.target.longitude}," +
+            "$targetScreenLabel,$targetCenterDeltaLabel," +
             "${bounds.southwest.latitude},${bounds.southwest.longitude}," +
             "${bounds.northeast.latitude},${bounds.northeast.longitude}"
 
@@ -734,7 +747,9 @@ internal class MapCameraState internal constructor(
             "Projection diagnostics. reason=$reason viewport=${mapViewWidthPx}x$mapViewHeightPx " +
                 "padding=$startPaddingPx,$resolvedTopPaddingPx,$endPaddingPx,$rawBottomPaddingPx " +
                 "cameraZoom=${cameraPosition.zoom} target=${cameraPosition.target.latitude}," +
-                "${cameraPosition.target.longitude} nearLeft=${visibleRegion.nearLeft.latitude}," +
+                "${cameraPosition.target.longitude} targetScreen=$targetScreenLabel " +
+                "expectedCenter=$expectedCenterX,$expectedCenterY " +
+                "targetCenterDelta=$targetCenterDeltaLabel nearLeft=${visibleRegion.nearLeft.latitude}," +
                 "${visibleRegion.nearLeft.longitude} nearRight=${visibleRegion.nearRight.latitude}," +
                 "${visibleRegion.nearRight.longitude} farLeft=${visibleRegion.farLeft.latitude}," +
                 "${visibleRegion.farLeft.longitude} farRight=${visibleRegion.farRight.latitude}," +
