@@ -150,6 +150,7 @@ class CarVirtualDisplayProbePresentation(
         val semanticsCoordinateSpace = targetComposeView?.let { composeView ->
             semanticsClickDispatcher.dispatchClick(
                 composeView = composeView,
+                viewport = viewport,
                 surfaceX = surfaceX,
                 surfaceY = surfaceY,
                 observedFrameX = inputState.observedFrameX,

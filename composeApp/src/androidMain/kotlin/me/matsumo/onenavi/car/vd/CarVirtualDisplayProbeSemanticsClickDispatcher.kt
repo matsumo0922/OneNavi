@@ -10,6 +10,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
 
+/** split 表示とみなして visibleArea 横スケール候補を追加する最小 inset。 */
+private const val SPLIT_VISIBLE_AREA_MIN_INSET_PX = 120
+
 /** VD のクリックを Compose の clickable semantics へ直接渡す dispatcher。 */
 class CarVirtualDisplayProbeSemanticsClickDispatcher {
 
@@ -24,6 +27,7 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
 
     fun dispatchClick(
         composeView: ComposeView,
+        viewport: CarVirtualDisplayProbeViewport,
         surfaceX: Float,
         surfaceY: Float,
         observedFrameX: Float?,
@@ -33,6 +37,7 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
     ): String? {
         val rootForTest = composeView.getChildAt(0) as? ViewRootForTest ?: return null
         val touchPoints = createTouchPointCandidates(
+            viewport = viewport,
             surfaceX = surfaceX,
             surfaceY = surfaceY,
             observedFrameX = observedFrameX,
@@ -100,6 +105,7 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
     }
 
     private fun createTouchPointCandidates(
+        viewport: CarVirtualDisplayProbeViewport,
         surfaceX: Float,
         surfaceY: Float,
         observedFrameX: Float?,
@@ -119,6 +125,11 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
             hostVisibleX = hostVisibleX,
             hostVisibleY = hostVisibleY,
         )
+        val visibleScaledPoint = createVisibleScaledTouchPoint(
+            viewport = viewport,
+            surfaceX = surfaceX,
+            surfaceY = surfaceY,
+        )
         val candidatePoints = mutableListOf<Pair<String, Offset>>()
 
         candidatePoints.addUniqueTouchPointCandidate(
@@ -132,6 +143,10 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
         candidatePoints.addUniqueTouchPointCandidate(
             label = "hostVisible",
             touchPoint = hostVisiblePoint,
+        )
+        candidatePoints.addUniqueTouchPointCandidate(
+            label = "visibleScaled",
+            touchPoint = visibleScaledPoint,
         )
 
         return candidatePoints
@@ -165,6 +180,23 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
         )
     }
 
+    private fun createVisibleScaledTouchPoint(
+        viewport: CarVirtualDisplayProbeViewport,
+        surfaceX: Float,
+        surfaceY: Float,
+    ): Offset? {
+        if (!viewport.hasHorizontalSplitVisibleArea()) {
+            return null
+        }
+
+        val scaledSurfaceX = viewport.visibleLeft + surfaceX * viewport.visibleWidth / viewport.surfaceWidth
+
+        return Offset(
+            x = scaledSurfaceX,
+            y = surfaceY,
+        )
+    }
+
     private fun MutableList<Pair<String, Offset>>.addUniqueTouchPointCandidate(
         label: String,
         touchPoint: Offset?,
@@ -191,4 +223,12 @@ class CarVirtualDisplayProbeSemanticsClickDispatcher {
 
         return !isRoot && hasClickAction && isEnabled && isInsideBounds
     }
+}
+
+private fun CarVirtualDisplayProbeViewport.hasHorizontalSplitVisibleArea(): Boolean {
+    val leftInset = visibleLeft
+    val rightInset = surfaceWidth - visibleRight
+    val maxHorizontalInset = maxOf(leftInset, rightInset)
+
+    return surfaceWidth > 0 && visibleWidth > 0 && maxHorizontalInset >= SPLIT_VISIBLE_AREA_MIN_INSET_PX
 }
