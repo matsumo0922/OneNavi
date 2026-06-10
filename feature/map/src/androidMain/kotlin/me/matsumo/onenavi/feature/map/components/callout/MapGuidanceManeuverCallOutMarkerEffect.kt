@@ -23,6 +23,7 @@ import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.ManeuverCallout
 import me.matsumo.onenavi.core.ui.navigation.ManeuverIcon
+import me.matsumo.onenavi.feature.map.state.MapHostInsets
 import me.matsumo.onenavi.feature.map.state.RouteMeterIndex
 
 /**
@@ -34,14 +35,16 @@ internal fun MapGuidanceManeuverCallOutMarkerEffect(
     guidanceState: GuidanceState,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
-    horizontalViewportPadding: Dp,
+    viewportPadding: MapHostInsets,
     modifier: Modifier = Modifier,
 ) {
     if (googleMap == null) return
 
     val guiding = guidanceState as? GuidanceState.Guiding ?: return
     val density = LocalDensity.current
-    val topPadding = with(density) { topAppBarHeightPx.toDp() } + GUIDANCE_CALLOUT_VIEWPORT_PADDING
+    val topPadding = with(density) { topAppBarHeightPx.toDp() } +
+        viewportPadding.top +
+        GUIDANCE_CALLOUT_VIEWPORT_PADDING
     val nextManeuver = guiding.presentation.nextManeuver
     val followupManeuver = guiding.presentation.followupManeuver
     val maneuvers = listOfNotNull(
@@ -69,10 +72,10 @@ internal fun MapGuidanceManeuverCallOutMarkerEffect(
         googleMap = googleMap,
         requests = requests,
         viewportPadding = PaddingValues(
-            start = horizontalViewportPadding + GUIDANCE_CALLOUT_VIEWPORT_PADDING,
+            start = viewportPadding.start + GUIDANCE_CALLOUT_VIEWPORT_PADDING,
             top = topPadding,
-            end = horizontalViewportPadding + GUIDANCE_CALLOUT_VIEWPORT_PADDING,
-            bottom = bottomSheetPeekHeight + GUIDANCE_CALLOUT_VIEWPORT_PADDING,
+            end = viewportPadding.end + GUIDANCE_CALLOUT_VIEWPORT_PADDING,
+            bottom = bottomSheetPeekHeight + viewportPadding.bottom + GUIDANCE_CALLOUT_VIEWPORT_PADDING,
         ),
         onCallOutClick = { _, _ -> },
     ) { index, _, tailSide ->

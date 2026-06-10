@@ -22,6 +22,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.feature.map.state.MapCameraState
+import me.matsumo.onenavi.feature.map.state.MapHostInsets
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapPanelLayout
 import me.matsumo.onenavi.feature.map.state.MapScreenState
@@ -41,6 +42,7 @@ import kotlin.math.roundToInt
  * @param vehicleLocationState 最新の自車位置
  * @param cameraState カメラ操作を保持する state holder
  * @param panelLayout 地図 UI 帯の配置情報
+ * @param viewportPadding host / UI 帯に隠れる領域を避ける padding
  * @param viewportWidthPx 地図 viewport の幅
  * @param viewportHeightPx 地図 viewport の高さ
  * @param shouldLogDiagnostics MapView / Camera の診断ログを出力するか
@@ -55,6 +57,7 @@ internal fun MapCameraEffect(
     vehicleLocationState: VehicleLocationState?,
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
+    viewportPadding: MapHostInsets,
     viewportWidthPx: Int,
     viewportHeightPx: Int,
     shouldLogDiagnostics: Boolean,
@@ -166,43 +169,53 @@ internal fun MapCameraEffect(
         navigationBarBottomPadding,
         safeDrawingLeftPadding,
         safeDrawingRightPadding,
+        viewportPadding,
         mapRenderScale,
     ) {
-        val horizontalBasePadding = maxOf(
+        val startBasePadding = maxOf(
             MAP_CAMERA_HORIZONTAL_BASE_PADDING,
             safeDrawingLeftPadding,
-            safeDrawingRightPadding,
+            viewportPadding.start,
         )
-        val horizontalBasePaddingPx = with(density) { horizontalBasePadding.toPx() }.toInt()
+        val endBasePadding = maxOf(
+            MAP_CAMERA_HORIZONTAL_BASE_PADDING,
+            safeDrawingRightPadding,
+            viewportPadding.end,
+        )
+        val startPaddingPx = with(density) { startBasePadding.toPx() }.toInt()
+        val endPaddingPx = with(density) { endBasePadding.toPx() }.toInt()
         val splitInsetPx = with(density) { panelLayout.splitHorizontalInset.toPx() }.toInt()
         val panelWidthPx = with(density) { panelLayout.panelWidth.roundToPx() }
         val visibleMapWidthPx = (viewportWidthPx - splitInsetPx).coerceAtLeast(0)
-        val (startPaddingPx, endPaddingPx) = panelLayout.resolveHorizontalCameraPaddingPx(
-            basePaddingPx = horizontalBasePaddingPx,
-            splitInsetPx = splitInsetPx,
-        )
         val statusBarHeightPaddingPx = with(density) { statusBarHeightPadding.toPx() }.toInt()
         val navigationBarBottomPaddingPx = with(density) { navigationBarBottomPadding.toPx() }.toInt()
-        val splitVerticalPaddingPx = maxOf(
+        val hostTopPaddingPx = with(density) { viewportPadding.top.toPx() }.toInt()
+        val hostBottomPaddingPx = with(density) { viewportPadding.bottom.toPx() }.toInt()
+        val splitTopPaddingPx = maxOf(
             statusBarHeightPaddingPx,
+            hostTopPaddingPx,
+        )
+        val splitBottomPaddingPx = maxOf(
             navigationBarBottomPaddingPx,
+            hostBottomPaddingPx,
         )
         val topAppBarHeightPx = (uiState.topAppBarHeight * mapRenderScale).roundToInt()
         val navigationCardHeightPx = (uiState.navigationCardHeight * mapRenderScale).roundToInt()
         val topPaddingPx = if (panelLayout.isSplit) {
-            splitVerticalPaddingPx
+            splitTopPaddingPx
         } else {
-            topAppBarHeightPx + statusBarHeightPaddingPx
+            topAppBarHeightPx + maxOf(statusBarHeightPaddingPx, hostTopPaddingPx)
         }
         val bottomPaddingPx = if (panelLayout.isSplit) {
-            splitVerticalPaddingPx
+            splitBottomPaddingPx
         } else {
-            resolveCompactBottomPaddingPx(
+            val compactBottomPaddingPx = resolveCompactBottomPaddingPx(
                 hasSheetOverlay = hasSheetOverlay,
                 isNavigating = screenState is MapScreenState.Navigating,
                 bottomSheetPeekHeightPx = with(density) { uiState.bottomSheetPeekHeight.toPx() }.toInt(),
                 navigationCardHeightPx = navigationCardHeightPx,
             )
+            maxOf(compactBottomPaddingPx, navigationBarBottomPaddingPx, hostBottomPaddingPx)
         }
 
         cameraState.updatePadding(

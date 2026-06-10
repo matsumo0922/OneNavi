@@ -39,14 +39,14 @@ data class CarVirtualDisplayViewport(
 
     val horizontalSafetyInset: Int
         get() = minOf(
-            visibleLeft,
-            surfaceWidth - visibleRight,
+            effectiveVisibleLeft,
+            surfaceWidth - effectiveVisibleRight,
         ).coerceAtLeast(0)
 
     val observedFrame: CarVirtualDisplayObservedFrame
         get() {
-            val observedLeft = (visibleLeft - horizontalSafetyInset).coerceIn(0, surfaceWidth)
-            val observedRight = (visibleRight + horizontalSafetyInset).coerceIn(observedLeft, surfaceWidth)
+            val observedLeft = (effectiveVisibleLeft - horizontalSafetyInset).coerceIn(0, surfaceWidth)
+            val observedRight = (effectiveVisibleRight + horizontalSafetyInset).coerceIn(observedLeft, surfaceWidth)
 
             return CarVirtualDisplayObservedFrame(
                 left = observedLeft,
@@ -58,13 +58,20 @@ data class CarVirtualDisplayViewport(
 
     val observedFrameRightInset: Int
         get() = surfaceWidth - observedFrame.right
+
+    private val effectiveVisibleLeft: Int
+        get() = if (visibleLeft >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX) visibleLeft else 0
+
+    private val effectiveVisibleRight: Int
+        get() {
+            val rightInset = surfaceWidth - visibleRight
+
+            return if (rightInset >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX) visibleRight else surfaceWidth
+        }
 }
 
 /** probe 実装から既存名で参照するための viewport 型。 */
 internal typealias CarVirtualDisplayProbeViewport = CarVirtualDisplayViewport
-
-/** split 表示とみなして visibleArea 横補正候補を追加する最小 inset。 */
-private const val SPLIT_VISIBLE_AREA_MIN_INSET_PX = 120
 
 /** Android Auto host Surface 上で OneNaviApp を実際に描画する領域。 */
 @Immutable
@@ -121,14 +128,31 @@ internal fun createCarVirtualDisplayProbeViewport(
     )
 }
 
-internal fun CarVirtualDisplayProbeViewport.hasHorizontalSplitVisibleArea(): Boolean {
+internal fun CarVirtualDisplayProbeViewport.hasVisibleAreaInset(): Boolean {
+    val hasValidSurface = surfaceWidth > 0 && surfaceHeight > 0
+    val hasValidVisibleArea = visibleWidth > 0 && visibleHeight > 0
     val leftInset = visibleLeft
+    val topInset = visibleTop
     val rightInset = surfaceWidth - visibleRight
-    val maxHorizontalInset = maxOf(leftInset, rightInset)
-    val hasValidSurface = surfaceWidth > 0 && visibleWidth > 0
-    val hasSplitInset = maxHorizontalInset >= SPLIT_VISIBLE_AREA_MIN_INSET_PX
+    val bottomInset = surfaceHeight - visibleBottom
+    val hasLeftInset = leftInset >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX
+    val hasTopInset = topInset >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX
+    val hasRightInset = rightInset >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX
+    val hasBottomInset = bottomInset >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX
+    val hasHorizontalInset = hasLeftInset || hasRightInset
+    val hasVerticalInset = hasTopInset || hasBottomInset
 
-    return hasValidSurface && hasSplitInset
+    return hasValidSurface && hasValidVisibleArea && (hasHorizontalInset || hasVerticalInset)
+}
+
+internal fun CarVirtualDisplayProbeViewport.hasObservedFrameInset(): Boolean {
+    val viewportObservedFrame = observedFrame
+    val hasLeftInset = viewportObservedFrame.left >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX
+    val hasRightInset = surfaceWidth - viewportObservedFrame.right >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX
+    val hasTopInset = viewportObservedFrame.top >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX
+    val hasBottomInset = surfaceHeight - viewportObservedFrame.bottom >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX
+
+    return hasLeftInset || hasRightInset || hasTopInset || hasBottomInset
 }
 
 internal fun CarVirtualDisplayProbeViewport.resolveInputCoordinate(hostInputX: Float, hostInputY: Float): CarVirtualDisplayInputCoordinate {
@@ -230,3 +254,6 @@ private fun Rect.coerceToSurfaceBounds(surfaceWidth: Int, surfaceHeight: Int): R
         coercedBottom,
     )
 }
+
+/** host が返す visible area の 1px 程度の丸めノイズを無視する閾値。 */
+private const val VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX = 4

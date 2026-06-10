@@ -21,6 +21,7 @@ import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_day
 import me.matsumo.onenavi.core.resource.common_unit_hour
 import me.matsumo.onenavi.core.resource.common_unit_minute
+import me.matsumo.onenavi.feature.map.state.MapHostInsets
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -34,7 +35,7 @@ internal fun MapRoutePreviewCallOutMarkerEffect(
     routePreviewState: RoutePreviewState.Ready?,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
-    horizontalViewportPadding: Dp,
+    viewportPadding: MapHostInsets,
     onRouteSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable (
@@ -53,7 +54,7 @@ internal fun MapRoutePreviewCallOutMarkerEffect(
     if (googleMap == null || routePreviewState == null) return
 
     val density = LocalDensity.current
-    val topPadding = with(density) { topAppBarHeightPx.toDp() } + 12.dp
+    val topPadding = with(density) { topAppBarHeightPx.toDp() } + viewportPadding.top + 12.dp
 
     val items = remember(routePreviewState.routes, routePreviewState.selectedIndex) {
         routePreviewState.routes.mapIndexedNotNull { index, route ->
@@ -76,10 +77,10 @@ internal fun MapRoutePreviewCallOutMarkerEffect(
         googleMap = googleMap,
         requests = requests,
         viewportPadding = PaddingValues(
-            start = horizontalViewportPadding + 12.dp,
+            start = viewportPadding.start + 12.dp,
             top = topPadding,
-            end = horizontalViewportPadding + 12.dp,
-            bottom = bottomSheetPeekHeight + 12.dp,
+            end = viewportPadding.end + 12.dp,
+            bottom = bottomSheetPeekHeight + viewportPadding.bottom + 12.dp,
         ),
         onCallOutClick = { index, _ ->
             items.getOrNull(index)?.let { item ->

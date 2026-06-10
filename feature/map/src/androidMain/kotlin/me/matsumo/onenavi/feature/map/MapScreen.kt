@@ -63,9 +63,11 @@ import me.matsumo.onenavi.feature.map.components.content.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.content.MapNavigationContent
 import me.matsumo.onenavi.feature.map.components.content.MapRoutePreviewContent
 import me.matsumo.onenavi.feature.map.components.topappbar.MapWaypointSearchScreen
+import me.matsumo.onenavi.feature.map.state.LocalMapHostViewport
 import me.matsumo.onenavi.feature.map.state.MAP_CONTROLS_COLUMN_WIDTH
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
+import me.matsumo.onenavi.feature.map.state.MapHostInsets
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapPanelLayout
 import me.matsumo.onenavi.feature.map.state.MapPanelSide
@@ -95,9 +97,14 @@ fun MapScreen(
     val vehicleLocationState by viewModel.vehicleLocationState.collectAsStateWithLifecycle()
     val phoneCommand by carPhoneSessionCoordinator.phoneCommand.collectAsStateWithLifecycle()
 
-    val navigationBarHeightDp = WindowInsets.navigationBars
-        .asPaddingValues()
-        .calculateBottomPadding()
+    val mapHostViewport = LocalMapHostViewport.current
+    val hostStableInsets = mapHostViewport.stableInsets
+    val navigationBarHeightDp = maxOf(
+        WindowInsets.navigationBars
+            .asPaddingValues()
+            .calculateBottomPadding(),
+        hostStableInsets.bottom,
+    )
     val statusBarHeightDp = WindowInsets.statusBars
         .asPaddingValues()
         .calculateTopPadding()
@@ -192,6 +199,9 @@ fun MapScreen(
         val mapCanvasLayout = remember(panelLayout, maxWidth) {
             panelLayout.resolveCanvasLayout(viewportWidth = maxWidth)
         }
+        val mapViewportPadding = remember(mapCanvasLayout.horizontalInset, hostStableInsets) {
+            hostStableInsets.withAddedHorizontal(mapCanvasLayout.horizontalInset)
+        }
         val viewportWidthPx = with(density) { maxWidth.roundToPx() }
         val viewportHeightPx = with(density) { maxHeight.roundToPx() }
         val controlsBottomPadding by animateDpAsState(
@@ -208,6 +218,7 @@ fun MapScreen(
         )
         val controlsTopPadding by animateDpAsState(
             targetValue = resolveMapControlsTopPadding(
+                isAndroidAutoVirtualDisplay = isAndroidAutoVirtualDisplay,
                 isSplit = panelLayout.isSplit,
                 statusBarHeight = statusBarHeightDp,
                 topAppBarHeight = topAppBarHeightDp,
@@ -225,6 +236,7 @@ fun MapScreen(
                 vehicleLocationState = vehicleLocationState,
                 cameraState = cameraState,
                 panelLayout = panelLayout,
+                viewportPadding = mapViewportPadding,
                 viewportWidthPx = viewportWidthPx,
                 viewportHeightPx = viewportHeightPx,
                 shouldLogDiagnostics = shouldLogMapDiagnostics,
@@ -247,6 +259,7 @@ fun MapScreen(
                 shouldLogDiagnostics = shouldLogMapDiagnostics,
                 controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
+                viewportPadding = mapViewportPadding,
                 scaffoldState = scaffoldState,
                 destinationSearchRequestId = destinationSearchRequestId,
                 onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
@@ -281,6 +294,7 @@ fun MapScreen(
                 shouldLogDiagnostics = shouldLogMapDiagnostics,
                 controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
+                viewportPadding = mapViewportPadding,
                 scaffoldState = scaffoldState,
                 destinationSearchRequestId = destinationSearchRequestId,
                 onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
@@ -368,6 +382,7 @@ private fun MapScreenCompactLayout(
     shouldLogDiagnostics: Boolean,
     controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
+    viewportPadding: MapHostInsets,
     scaffoldState: BottomSheetScaffoldState,
     destinationSearchRequestId: Long?,
     onDestinationSearchRequestConsumed: (Long) -> Unit,
@@ -410,6 +425,7 @@ private fun MapScreenCompactLayout(
                 mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
                 shouldLogDiagnostics = shouldLogDiagnostics,
+                viewportPadding = viewportPadding,
                 onMapUpdate = onMapUpdate,
                 onPointOfInterestClicked = onPointOfInterestClicked,
                 onMapLongClicked = onMapLongClicked,
@@ -458,6 +474,7 @@ private fun MapScreenSplitLayout(
     shouldLogDiagnostics: Boolean,
     controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
+    viewportPadding: MapHostInsets,
     scaffoldState: BottomSheetScaffoldState,
     destinationSearchRequestId: Long?,
     onDestinationSearchRequestConsumed: (Long) -> Unit,
@@ -484,6 +501,7 @@ private fun MapScreenSplitLayout(
             mapCanvasLayout = mapCanvasLayout,
             isMapDarkMode = isMapDarkMode,
             shouldLogDiagnostics = shouldLogDiagnostics,
+            viewportPadding = viewportPadding,
             onMapUpdate = onMapUpdate,
             onPointOfInterestClicked = onPointOfInterestClicked,
             onMapLongClicked = onMapLongClicked,
@@ -555,6 +573,7 @@ private fun MapScreenMapLayer(
     mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
     shouldLogDiagnostics: Boolean,
+    viewportPadding: MapHostInsets,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
@@ -595,7 +614,7 @@ private fun MapScreenMapLayer(
                     topAppBarHeightPx = (uiState.topAppBarHeight * mapRenderScale).roundToInt(),
                     bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
                     navigationCardHeightPx = (uiState.navigationCardHeight * mapRenderScale).roundToInt(),
-                    horizontalViewportPadding = mapCanvasLayout.horizontalInset,
+                    viewportPadding = viewportPadding,
                     onRouteSelected = onRouteSelected,
                 )
             }
@@ -617,6 +636,7 @@ private fun MapScreenMapCanvasLayer(
             fontScale = displayDensity.fontScale,
         )
     }
+    val canvasOffsetXPx = with(displayDensity) { mapCanvasLayout.offsetX.roundToPx() }
 
     CompositionLocalProvider(LocalDensity provides mapSpaceDensity) {
         Layout(
@@ -640,7 +660,7 @@ private fun MapScreenMapCanvasLayer(
             ) {
                 placeables.forEach { placeable ->
                     placeable.place(
-                        x = 0,
+                        x = canvasOffsetXPx,
                         y = 0,
                     )
                 }
@@ -804,21 +824,28 @@ private fun MapScreenBottomSheetContent(
 /**
  * map controls カラム上グループ（設定/音量/コンパス）の上 padding を返す。
  *
+ * Android Auto VD では host top inset や検索バー高さで controls を下げず、固定の端余白だけで配置する。
  * 分割レイアウトではトップパネルは UI 帯ペイン内に収まり controls カラムへ被らないため status bar 分のみ。
  * Compact ではトップバー（検索バー / 案内パネル）が地図に重なるため、その下端へ揃える。トップバーは
  * `.statusBarsPadding()` の内側で高さ計測されるため [topAppBarHeight] は status bar を含まない。よって
  * 下端 = status bar + トップバー高さ。トップバー未表示時（0dp）は status bar 分だけ確保される。
  *
+ * @param isAndroidAutoVirtualDisplay Android Auto VD 上の表示か
  * @param isSplit 分割レイアウトか
  * @param statusBarHeight ステータスバー高さ
  * @param topAppBarHeight 計測済みトップバー高さ（status bar を含まない）。未表示時は 0dp
  * @return controls 上グループへ与える上 padding
  */
 private fun resolveMapControlsTopPadding(
+    isAndroidAutoVirtualDisplay: Boolean,
     isSplit: Boolean,
     statusBarHeight: Dp,
     topAppBarHeight: Dp,
 ): Dp {
+    if (isAndroidAutoVirtualDisplay) {
+        return 0.dp
+    }
+
     if (isSplit) {
         return statusBarHeight
     }

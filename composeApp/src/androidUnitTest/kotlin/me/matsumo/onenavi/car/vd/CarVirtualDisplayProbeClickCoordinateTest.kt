@@ -69,17 +69,17 @@ class CarVirtualDisplayProbeClickCoordinateTest {
     }
 
     @Test
-    fun resolveClickDispatchCoordinateKeepsVerticalCoordinateIndependentFromVisibleTop() {
+    fun resolveClickDispatchCoordinateKeepsSurfaceYWhenVisibleAreaHasVerticalInset() {
         val lowTopViewport = createTestViewport().withVisibleBounds(
-            visibleLeft = 444,
+            visibleLeft = 0,
             visibleTop = 24,
-            visibleRight = 1166,
+            visibleRight = 1280,
             visibleBottom = 688,
         )
         val highTopViewport = createTestViewport().withVisibleBounds(
-            visibleLeft = 444,
+            visibleLeft = 0,
             visibleTop = 88,
-            visibleRight = 1166,
+            visibleRight = 1280,
             visibleBottom = 688,
         )
 
@@ -95,11 +95,11 @@ class CarVirtualDisplayProbeClickCoordinateTest {
         ).resolveCarVirtualDisplayProbeClickDispatchCoordinate(highTopViewport)
 
         assertEquals(
-            expected = CLICK_COORDINATE_OBSERVED_OFFSET_LABEL,
+            expected = CLICK_COORDINATE_SURFACE_LABEL,
             actual = lowTopCoordinate?.label,
         )
         assertEquals(
-            expected = CLICK_COORDINATE_OBSERVED_OFFSET_LABEL,
+            expected = CLICK_COORDINATE_SURFACE_LABEL,
             actual = highTopCoordinate?.label,
         )
         assertEquals(
@@ -109,6 +109,63 @@ class CarVirtualDisplayProbeClickCoordinateTest {
         assertEquals(
             expected = 41f,
             actual = highTopCoordinate?.point?.y,
+        )
+    }
+
+    @Test
+    fun resolveClickDispatchCoordinateIgnoresOnePixelVisibleAreaNoise() {
+        val viewport = createTestViewport().withVisibleBounds(
+            visibleLeft = 1,
+            visibleTop = 1,
+            visibleRight = 1279,
+            visibleBottom = 719,
+        )
+        val inputState = createClickInputState(
+            viewport = viewport,
+            surfaceX = 510f,
+            surfaceY = 41f,
+        )
+
+        val coordinate = inputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(viewport)
+
+        assertEquals(
+            expected = CLICK_COORDINATE_SURFACE_LABEL,
+            actual = coordinate?.label,
+        )
+        assertEquals(
+            expected = 510f,
+            actual = coordinate?.point?.x,
+        )
+        assertEquals(
+            expected = 41f,
+            actual = coordinate?.point?.y,
+        )
+    }
+
+    @Test
+    fun observedFrameKeepsFullHeightWhenVisibleAreaHasVerticalInset() {
+        val viewport = createTestViewport().withVisibleBounds(
+            visibleLeft = 120,
+            visibleTop = 32,
+            visibleRight = 1280,
+            visibleBottom = 640,
+        )
+
+        assertEquals(
+            expected = 120,
+            actual = viewport.observedFrame.left,
+        )
+        assertEquals(
+            expected = 0,
+            actual = viewport.observedFrame.top,
+        )
+        assertEquals(
+            expected = 1280,
+            actual = viewport.observedFrame.right,
+        )
+        assertEquals(
+            expected = 720,
+            actual = viewport.observedFrame.bottom,
         )
     }
 
