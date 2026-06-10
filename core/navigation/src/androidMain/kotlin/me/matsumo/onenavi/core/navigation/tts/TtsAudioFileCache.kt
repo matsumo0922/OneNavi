@@ -25,6 +25,8 @@ internal class TtsAudioFileCache(
      */
     @Synchronized
     fun read(cacheKey: String): ByteArray? {
+        if (directory.isDirectory) cleanupTemporaryFiles()
+
         val file = fileFor(cacheKey)
         if (!file.isFile) return null
         if (file.length() <= 0L) {
@@ -55,6 +57,7 @@ internal class TtsAudioFileCache(
         if (audio.isEmpty()) return
         if (!directory.exists()) directory.mkdirs()
         if (!directory.isDirectory) return
+        cleanupTemporaryFiles()
 
         val targetFile = fileFor(cacheKey)
         var temporaryFile: File? = null
@@ -102,6 +105,14 @@ internal class TtsAudioFileCache(
                 totalBytes -= fileBytes
             }
         }
+    }
+
+    /** 書き込み中断で残った一時ファイルを削除する。 */
+    private fun cleanupTemporaryFiles() {
+        directory
+            .listFiles()
+            ?.filter { file -> file.isFile && file.name.endsWith(TEMPORARY_SUFFIX) }
+            ?.forEach { file -> runCatching { file.delete() } }
     }
 
     /** 指定文字列の SHA-256 hex を返す。 */

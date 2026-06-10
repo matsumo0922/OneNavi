@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 
@@ -54,14 +55,16 @@ class TtsAudioFileCacheTest {
 
     @Test
     fun `空ファイルや一時ファイルがあっても落ちない`() = withCache(maxBytes = 4L) { cache, directory ->
+        val temporaryFile = File(directory, "leftover.tmp")
         cache.fileFor("empty").apply {
             parentFile?.mkdirs()
             writeBytes(byteArrayOf())
         }
-        File(directory, "leftover.tmp").writeBytes(byteArrayOf(9, 9, 9, 9))
+        temporaryFile.writeBytes(byteArrayOf(9, 9, 9, 9))
 
         cache.write("valid", byteArrayOf(1, 2, 3, 4))
 
+        assertFalse(temporaryFile.exists())
         assertNull(cache.read("empty"))
         assertContentEquals(byteArrayOf(1, 2, 3, 4), cache.read("valid"))
     }

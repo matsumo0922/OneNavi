@@ -5,6 +5,7 @@ import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispat
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementTarget
+import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlan
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceTick
 
@@ -22,6 +23,7 @@ internal class VoiceAnnouncementPrefetcher(
 ) {
 
     private var plan: VoiceAnnouncementPlan? = null
+    private val prefetchedStageIds = mutableSetOf<VoiceAnnouncementId>()
     private val prefetchedSsmlKeys = mutableSetOf<String>()
 
     /**
@@ -35,6 +37,7 @@ internal class VoiceAnnouncementPrefetcher(
         currentCumulativeMeters: Double = 0.0,
     ) {
         dispatcher.clearPrefetch()
+        prefetchedStageIds.clear()
         prefetchedSsmlKeys.clear()
         this.plan = plan
         prefetchFrom(currentCumulativeMeters)
@@ -54,6 +57,7 @@ internal class VoiceAnnouncementPrefetcher(
     /** 発話プランと先読み済み状態を破棄する。 */
     fun detach() {
         plan = null
+        prefetchedStageIds.clear()
         prefetchedSsmlKeys.clear()
         dispatcher.clearPrefetch()
     }
@@ -96,6 +100,8 @@ internal class VoiceAnnouncementPrefetcher(
 
     /** stage を発話内容にして重複を避けながら先読みする。 */
     private fun prefetchStage(stage: AnnouncementStage) {
+        if (!recordPrefetchedStage(stage)) return
+
         val content = contentRenderer.render(stage) ?: return
         val ssml = content.ssml ?: return
         if (ssml.isBlank()) return
@@ -103,6 +109,10 @@ internal class VoiceAnnouncementPrefetcher(
 
         dispatcher.prefetch(content)
     }
+
+    /** stage が未先読みなら記録して true を返す。 */
+    private fun recordPrefetchedStage(stage: AnnouncementStage): Boolean =
+        prefetchedStageIds.add(stage.id)
 
     /** SSML が未先読みなら記録して true を返す。 */
     private fun recordPrefetched(ssml: String): Boolean =

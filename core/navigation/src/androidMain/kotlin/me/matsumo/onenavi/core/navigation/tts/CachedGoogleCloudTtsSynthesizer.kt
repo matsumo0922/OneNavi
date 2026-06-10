@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
  * @property backend Google Cloud TTS の合成 backend
  * @property cache WAV バイト列のファイルキャッシュ
  * @property synthesisConfig キャッシュキーに使う音声設定
- * @property apiKey 空なら合成を試みない
+ * @property apiKey 空なら Cloud TTS への新規 request を出さない
  * @property scope 先読み worker と in-flight 合成を動かす scope
  */
 internal class CachedGoogleCloudTtsSynthesizer(
@@ -36,7 +36,7 @@ internal class CachedGoogleCloudTtsSynthesizer(
     private val lock = Any()
     private val prefetchChannel = Channel<PrefetchRequest>(Channel.UNLIMITED)
     private val inFlight = mutableMapOf<String, InFlightSynthesis>()
-    private val queuedPrefetchKeys = mutableSetOf<String>()
+    private val queuedPrefetchGenerations = mutableMapOf<String, Int>()
 
     @Volatile
     private var sessionDisabled = false
@@ -60,6 +60,7 @@ internal class CachedGoogleCloudTtsSynthesizer(
     suspend fun synthesize(ssml: String?): ByteArray? {
         val request = synthesisRequestOf(ssml) ?: return null
         cache.read(request.cacheKey)?.let { audio -> return audio }
+        if (!canRequestCloudTts()) return null
 
         val firstEntry = inFlightOrStart(request, SynthesisSource.SPEECH)
 
@@ -72,10 +73,8 @@ internal class CachedGoogleCloudTtsSynthesizer(
      * @param ssml 合成対象 SSML
      */
     fun prefetch(ssml: String?) {
-        val request = synthesisRequestOf(
-            ssml = ssml,
-            shouldLogMissingApiKey = false,
-        ) ?: return
+        val request = synthesisRequestOf(ssml) ?: return
+        if (!canRequestCloudTts(shouldLogMissingApiKey = false)) return
         val queuedRequest = markPrefetchQueued(request) ?: return
 
         if (!prefetchChannel.trySend(queuedRequest).isSuccess) {
@@ -87,7 +86,7 @@ internal class CachedGoogleCloudTtsSynthesizer(
     fun clearPrefetch() {
         val cancelledEntries = synchronized(lock) {
             prefetchGeneration += PREFETCH_GENERATION_INCREMENT
-            queuedPrefetchKeys.clear()
+            queuedPrefetchGenerations.clear()
 
             inFlight
                 .filterValues { entry -> entry.source == SynthesisSource.PREFETCH }
@@ -125,7 +124,11 @@ internal class CachedGoogleCloudTtsSynthesizer(
         request: SynthesisRequest,
         entry: InFlightSynthesis,
     ): ByteArray? {
-        val result = entry.deferred.await()
+        val result = try {
+            entry.deferred.await()
+        } catch (cancellation: CancellationException) {
+            return handleSpeechCancellation(request, entry, cancellation)
+        }
         result.getOrNull()?.let { audio -> return audio }
 
         val error = result.exceptionOrNull() ?: return null
@@ -136,6 +139,23 @@ internal class CachedGoogleCloudTtsSynthesizer(
         }
 
         return handleSpeechTransientError(request, entry, error)
+    }
+
+    /** 発話側 await 中に先読み in-flight が破棄された場合だけ、実発話として取り直す。 */
+    private suspend fun handleSpeechCancellation(
+        request: SynthesisRequest,
+        entry: InFlightSynthesis,
+        cancellation: CancellationException,
+    ): ByteArray? {
+        currentCoroutineContext().ensureActive()
+
+        if (entry.source == SynthesisSource.PREFETCH) {
+            removeInFlight(request.cacheKey, entry)
+            Napier.d(tag = TAG, throwable = cancellation) { "voice prefetch cancelled; retrying for speech" }
+            return awaitSpeech(request, inFlightOrStart(request, SynthesisSource.SPEECH))
+        }
+
+        throw cancellation
     }
 
     /** Google Cloud TTS 例外を発話側で処理する。 */
@@ -256,10 +276,10 @@ internal class CachedGoogleCloudTtsSynthesizer(
 
     /** 先読み request を同一 route 世代で重複しないよう記録する。 */
     private fun markPrefetchQueued(request: SynthesisRequest): PrefetchRequest? = synchronized(lock) {
-        if (request.cacheKey in queuedPrefetchKeys) return@synchronized null
+        if (request.cacheKey in queuedPrefetchGenerations) return@synchronized null
         if (request.cacheKey in inFlight) return@synchronized null
 
-        queuedPrefetchKeys += request.cacheKey
+        queuedPrefetchGenerations[request.cacheKey] = prefetchGeneration
         PrefetchRequest(
             cacheKey = request.cacheKey,
             ssml = request.ssml,
@@ -270,7 +290,9 @@ internal class CachedGoogleCloudTtsSynthesizer(
     /** 先読み request の記録を解除する。 */
     private fun unmarkPrefetchQueued(request: PrefetchRequest) {
         synchronized(lock) {
-            queuedPrefetchKeys -= request.cacheKey
+            if (queuedPrefetchGenerations[request.cacheKey] == request.generation) {
+                queuedPrefetchGenerations.remove(request.cacheKey)
+            }
         }
     }
 
@@ -280,23 +302,26 @@ internal class CachedGoogleCloudTtsSynthesizer(
     }
 
     /** SSML から合成 request を作る。合成不能なら null。 */
-    private fun synthesisRequestOf(
-        ssml: String?,
-        shouldLogMissingApiKey: Boolean = true,
-    ): SynthesisRequest? {
+    private fun synthesisRequestOf(ssml: String?): SynthesisRequest? {
         if (ssml.isNullOrBlank()) return null
-        if (sessionDisabled) return null
-        if (apiKey.isBlank()) {
-            if (shouldLogMissingApiKey) {
-                Napier.w(tag = TAG) { "GOOGLE_CLOUD_TTS_API_KEY is blank; voice announcement disabled" }
-            }
-            return null
-        }
 
         return SynthesisRequest(
             cacheKey = synthesisConfig.cacheKeyOf(ssml),
             ssml = ssml,
         )
+    }
+
+    /** Cloud TTS API へ新規 request を出せるなら true を返す。 */
+    private fun canRequestCloudTts(shouldLogMissingApiKey: Boolean = true): Boolean {
+        if (sessionDisabled) return false
+        if (apiKey.isBlank()) {
+            if (shouldLogMissingApiKey) {
+                Napier.w(tag = TAG) { "GOOGLE_CLOUD_TTS_API_KEY is blank; voice announcement disabled" }
+            }
+            return false
+        }
+
+        return true
     }
 
     /** 恒久エラーなら true を返す。 */

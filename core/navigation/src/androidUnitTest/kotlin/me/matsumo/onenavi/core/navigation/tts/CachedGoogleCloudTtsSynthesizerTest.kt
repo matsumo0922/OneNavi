@@ -110,6 +110,27 @@ class CachedGoogleCloudTtsSynthesizerTest {
     }
 
     @Test
+    fun `speak が prefetch in-flight 待ち中でも clearPrefetch 後に取り直す`() = runTest {
+        val backend = FakeBackend()
+        val gate = CompletableDeferred<Unit>()
+        backend.gate = gate
+        val synthesizer = synthesizerOf(backend)
+
+        synthesizer.prefetch(SSML)
+        advanceUntilIdle()
+        val audio = async { synthesizer.synthesize(SSML) }
+        advanceUntilIdle()
+
+        assertEquals(1, backend.calls.size)
+
+        backend.gate = null
+        synthesizer.clearPrefetch()
+
+        assertContentEquals(audioOf(SSML), audio.await())
+        assertEquals(2, backend.calls.size)
+    }
+
+    @Test
     fun `permanent error で sessionDisabled になる`() = runTest {
         val backend = FakeBackend()
         backend.enqueueFailure(GoogleCloudTtsException(statusCode = 403, message = "forbidden"))
@@ -120,6 +141,27 @@ class CachedGoogleCloudTtsSynthesizerTest {
 
         assertNull(first)
         assertNull(second)
+        assertEquals(1, backend.calls.size)
+    }
+
+    @Test
+    fun `sessionDisabled 後も cache hit は再生する`() = runTest {
+        val backend = FakeBackend()
+        val config = GoogleCloudTtsSynthesisConfig()
+        val cache = cacheOf()
+        val synthesizer = synthesizerOf(
+            backend = backend,
+            cache = cache,
+            config = config,
+        )
+        backend.enqueueFailure(GoogleCloudTtsException(statusCode = 403, message = "forbidden"))
+
+        val failedAudio = synthesizer.synthesize(SSML)
+        cache.write(config.cacheKeyOf(SECOND_SSML), AUDIO)
+        val cachedAudio = synthesizer.synthesize(SECOND_SSML)
+
+        assertNull(failedAudio)
+        assertContentEquals(AUDIO, cachedAudio)
         assertEquals(1, backend.calls.size)
     }
 
@@ -173,6 +215,9 @@ class CachedGoogleCloudTtsSynthesizerTest {
 
         /** テスト用 SSML。 */
         const val SSML = "<speak>右です</speak>"
+
+        /** キャッシュ hit 確認用の別 SSML。 */
+        const val SECOND_SSML = "<speak>左です</speak>"
 
         /** テスト用 WAV バイト列。 */
         val AUDIO = byteArrayOf(1, 2, 3)
