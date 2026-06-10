@@ -23,6 +23,20 @@ internal class GoogleCloudTtsException(
 ) : Exception(message, cause)
 
 /**
+ * Google Cloud TTS の合成処理を差し替え可能にする backend。
+ */
+internal interface GoogleCloudTtsSynthesizerBackend {
+
+    /**
+     * SSML を合成し、WAV (LINEAR16) バイト列を返す。
+     *
+     * @param ssml 変換済み SSML (`<speak>` で囲み済み)
+     * @return base64 デコード済みの WAV バイト列
+     */
+    suspend fun synthesize(ssml: String): ByteArray
+}
+
+/**
  * Google Cloud Text-to-Speech REST API (`text:synthesize`) を叩く薄いクライアント。
  *
  * API キーは Android アプリ制限を発動させるため URL クエリではなくヘッダ
@@ -32,13 +46,15 @@ internal class GoogleCloudTtsException(
  * @property apiKey Google Cloud TTS の API キー
  * @property packageName 実行中アプリのパッケージ名 (`X-Android-Package`)
  * @property signatureSha1 実行中 APK 署名の SHA-1 (`X-Android-Cert`、`:` 区切り大文字)
+ * @property synthesisConfig 合成リクエストとキャッシュキーに使う音声設定
  */
 internal class GoogleCloudTtsApi(
     private val httpClient: HttpClient,
     private val apiKey: String,
     private val packageName: String,
     private val signatureSha1: String,
-) {
+    private val synthesisConfig: GoogleCloudTtsSynthesisConfig = GoogleCloudTtsSynthesisConfig(),
+) : GoogleCloudTtsSynthesizerBackend {
 
     /**
      * SSML を合成し、WAV (LINEAR16) バイト列を返す。
@@ -46,9 +62,19 @@ internal class GoogleCloudTtsApi(
      * @param ssml 変換済み SSML (`<speak>` で囲み済み)
      * @return base64 デコード済みの WAV バイト列 (先頭 44byte は WAV ヘッダ)
      */
-    suspend fun synthesize(ssml: String): ByteArray {
+    override suspend fun synthesize(ssml: String): ByteArray {
         val request = SynthesizeRequest(
             input = SynthesizeInput(ssml = ssml),
+            voice = SynthesizeVoice(
+                languageCode = synthesisConfig.languageCode,
+                name = synthesisConfig.voiceName,
+            ),
+            audioConfig = SynthesizeAudioConfig(
+                audioEncoding = synthesisConfig.audioEncoding,
+                sampleRateHertz = synthesisConfig.sampleRateHertz,
+                speakingRate = synthesisConfig.speakingRate,
+                pitch = synthesisConfig.pitch,
+            ),
         )
 
         val response = httpClient.post(SYNTHESIZE_ENDPOINT) {

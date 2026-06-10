@@ -1,7 +1,76 @@
 package me.matsumo.onenavi.core.navigation.tts
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+
+/**
+ * Google Cloud TTS 合成設定。
+ *
+ * 音声キャッシュキーにも使うため、リクエスト body に入る値を 1 か所に集約する。
+ *
+ * @property languageCode 言語コード
+ * @property voiceName voice 名
+ * @property audioEncoding エンコーディング
+ * @property sampleRateHertz サンプリングレート
+ * @property speakingRate 話速
+ * @property pitch ピッチ
+ */
+@Immutable
+internal data class GoogleCloudTtsSynthesisConfig(
+    val languageCode: String = DEFAULT_LANGUAGE_CODE,
+    val voiceName: String = DEFAULT_VOICE_NAME,
+    val audioEncoding: String = DEFAULT_AUDIO_ENCODING,
+    val sampleRateHertz: Int = DEFAULT_SAMPLE_RATE_HERTZ,
+    val speakingRate: Double = DEFAULT_SPEAKING_RATE,
+    val pitch: Double = DEFAULT_PITCH,
+) {
+
+    /**
+     * 指定 SSML と現在の音声設定から安定したキャッシュキーを作る。
+     *
+     * @param ssml 合成対象 SSML
+     * @return 音声設定と SSML を含むキャッシュキー
+     */
+    fun cacheKeyOf(ssml: String): String = listOf(
+        CACHE_SCHEMA_VERSION,
+        languageCode,
+        voiceName,
+        audioEncoding,
+        sampleRateHertz.toString(),
+        speakingRate.toString(),
+        pitch.toString(),
+        ssml,
+    ).joinToString(separator = CACHE_KEY_SEPARATOR)
+
+    /** Google Cloud TTS 合成設定の既定値。 */
+    internal companion object {
+
+        /** キャッシュキーの互換性を切り替える schema version。 */
+        const val CACHE_SCHEMA_VERSION = "tts-audio-v1"
+
+        /** キャッシュキー内の区切り文字。SSML 本文と衝突しても SHA-256 化するため問題にならない。 */
+        const val CACHE_KEY_SEPARATOR = "\u001F"
+
+        /** 既定の言語コード (日本語)。 */
+        const val DEFAULT_LANGUAGE_CODE = "ja-JP"
+
+        /** 既定の voice 名 (Chirp 3 HD / Despina)。 */
+        const val DEFAULT_VOICE_NAME = "ja-JP-Chirp3-HD-Despina"
+
+        /** 既定のエンコーディング (WAV ヘッダ付き LINEAR16 PCM)。 */
+        const val DEFAULT_AUDIO_ENCODING = "LINEAR16"
+
+        /** 既定のサンプリングレート。 */
+        const val DEFAULT_SAMPLE_RATE_HERTZ = 24_000
+
+        /** 既定の話速。 */
+        const val DEFAULT_SPEAKING_RATE = 1.0
+
+        /** 既定のピッチ。 */
+        const val DEFAULT_PITCH = 0.0
+    }
+}
 
 /**
  * Google Cloud Text-to-Speech `text:synthesize` のリクエスト body。
@@ -37,19 +106,9 @@ internal data class SynthesizeInput(
  */
 @Serializable
 internal data class SynthesizeVoice(
-    @SerialName("languageCode") val languageCode: String = DEFAULT_LANGUAGE_CODE,
-    val name: String = DEFAULT_VOICE_NAME,
-) {
-
-    private companion object {
-
-        /** 既定の言語コード (日本語)。 */
-        const val DEFAULT_LANGUAGE_CODE = "ja-JP"
-
-        /** 既定の voice 名 (Chirp 3 HD / Despina)。 */
-        const val DEFAULT_VOICE_NAME = "ja-JP-Chirp3-HD-Despina"
-    }
-}
+    @SerialName("languageCode") val languageCode: String = GoogleCloudTtsSynthesisConfig.DEFAULT_LANGUAGE_CODE,
+    val name: String = GoogleCloudTtsSynthesisConfig.DEFAULT_VOICE_NAME,
+)
 
 /**
  * 出力音声フォーマット。AudioTrack で即時再生するため LINEAR16 (24kHz mono) を既定とする。
@@ -61,27 +120,11 @@ internal data class SynthesizeVoice(
  */
 @Serializable
 internal data class SynthesizeAudioConfig(
-    @SerialName("audioEncoding") val audioEncoding: String = DEFAULT_AUDIO_ENCODING,
-    @SerialName("sampleRateHertz") val sampleRateHertz: Int = DEFAULT_SAMPLE_RATE_HERTZ,
-    @SerialName("speakingRate") val speakingRate: Double = DEFAULT_SPEAKING_RATE,
-    val pitch: Double = DEFAULT_PITCH,
-) {
-
-    private companion object {
-
-        /** 既定のエンコーディング (WAV ヘッダ付き LINEAR16 PCM)。 */
-        const val DEFAULT_AUDIO_ENCODING = "LINEAR16"
-
-        /** 既定のサンプリングレート。 */
-        const val DEFAULT_SAMPLE_RATE_HERTZ = 24_000
-
-        /** 既定の話速。 */
-        const val DEFAULT_SPEAKING_RATE = 1.0
-
-        /** 既定のピッチ。 */
-        const val DEFAULT_PITCH = 0.0
-    }
-}
+    @SerialName("audioEncoding") val audioEncoding: String = GoogleCloudTtsSynthesisConfig.DEFAULT_AUDIO_ENCODING,
+    @SerialName("sampleRateHertz") val sampleRateHertz: Int = GoogleCloudTtsSynthesisConfig.DEFAULT_SAMPLE_RATE_HERTZ,
+    @SerialName("speakingRate") val speakingRate: Double = GoogleCloudTtsSynthesisConfig.DEFAULT_SPEAKING_RATE,
+    val pitch: Double = GoogleCloudTtsSynthesisConfig.DEFAULT_PITCH,
+)
 
 /**
  * `text:synthesize` のレスポンス body。

@@ -18,13 +18,16 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
+import me.matsumo.onenavi.core.navigation.tts.CachedGoogleCloudTtsSynthesizer
 import me.matsumo.onenavi.core.navigation.tts.DefaultMilestoneAnnouncementProvider
 import me.matsumo.onenavi.core.navigation.tts.DefaultOpeningAnnouncementProvider
 import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsApi
+import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsSynthesisConfig
 import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsVoiceAnnouncementDispatcher
 import me.matsumo.onenavi.core.navigation.tts.GuidanceChimePlayer
 import me.matsumo.onenavi.core.navigation.tts.NavigationAudioChannelResolver
 import me.matsumo.onenavi.core.navigation.tts.PcmAudioPlayer
+import me.matsumo.onenavi.core.navigation.tts.TtsAudioFileCache
 import me.matsumo.onenavi.core.navigation.tts.TtsAudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.TtsSigningCertificate
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementCategoryGateResolver
@@ -33,6 +36,7 @@ import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementConten
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispatcher
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlanBuilder
 import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementController
+import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementPrefetcher
 import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementScheduler
 import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementSpeechRunner
 import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceTickFactory
@@ -55,12 +59,21 @@ val navigationModule: Module = module {
         val appConfig = get<AppConfig>()
         val context = androidContext()
         val audioPlayer = PcmAudioPlayer()
+        val synthesisConfig = GoogleCloudTtsSynthesisConfig()
         GoogleCloudTtsVoiceAnnouncementDispatcher(
-            api = GoogleCloudTtsApi(
-                httpClient = get(named("googleCloudTts")),
+            synthesizer = CachedGoogleCloudTtsSynthesizer(
+                backend = GoogleCloudTtsApi(
+                    httpClient = get(named("googleCloudTts")),
+                    apiKey = appConfig.googleCloudTtsApiKey,
+                    packageName = context.packageName,
+                    signatureSha1 = TtsSigningCertificate.resolveSha1(context),
+                    synthesisConfig = synthesisConfig,
+                ),
+                cache = TtsAudioFileCache(
+                    directory = context.cacheDir.resolve(GoogleCloudTtsSynthesisConfig.CACHE_SCHEMA_VERSION),
+                ),
+                synthesisConfig = synthesisConfig,
                 apiKey = appConfig.googleCloudTtsApiKey,
-                packageName = context.packageName,
-                signatureSha1 = TtsSigningCertificate.resolveSha1(context),
             ),
             audioPlayer = audioPlayer,
             chimePlayer = GuidanceChimePlayer(
@@ -69,7 +82,6 @@ val navigationModule: Module = module {
             ),
             audioFocusManager = TtsAudioFocusManager(context),
             audioChannelResolver = NavigationAudioChannelResolver(appSettingRepository = get()),
-            apiKey = appConfig.googleCloudTtsApiKey,
         )
     }
     single { VoiceAnnouncementCategoryGateResolver(appSettingRepository = get()) }
@@ -87,6 +99,12 @@ val navigationModule: Module = module {
         )
     }
     single {
+        VoiceAnnouncementPrefetcher(
+            contentRenderer = get(),
+            dispatcher = get(),
+        )
+    }
+    single {
         VoiceAnnouncementSpeechRunner(
             scheduler = get(),
             dispatcher = get(),
@@ -100,6 +118,7 @@ val navigationModule: Module = module {
             planBuilder = get(),
             tickFactory = get(),
             speechRunner = get(),
+            prefetcher = get(),
             config = get(),
         )
     }
