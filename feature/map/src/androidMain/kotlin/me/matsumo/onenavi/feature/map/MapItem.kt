@@ -2,7 +2,6 @@ package me.matsumo.onenavi.feature.map
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.Rect
@@ -25,8 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -70,7 +67,10 @@ internal fun MapItem(
             fontScale = displayDensity.fontScale,
         )
     }
-    val mapView = rememberMapViewWithLifecycle(isDarkMode = isDarkMode)
+    val mapView = rememberMapViewWithLifecycle(
+        isDarkMode = isDarkMode,
+        mapRenderScale = mapRenderScale,
+    )
     val mapViewDiagnosticState = remember { MapViewDiagnosticState() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     val viewportWidthMapPx = (viewportSize.width * mapRenderScale).roundToInt()
@@ -131,12 +131,6 @@ internal fun MapItem(
         AndroidView(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = 1f / mapRenderScale
-                    scaleY = 1f / mapRenderScale
-                    transformOrigin = TransformOrigin(0f, 0f)
-                    translationX = canvasOffsetXPx.toFloat()
-                }
                 .onSizeChanged { size ->
                     viewportSize = size
                 },
@@ -153,6 +147,8 @@ internal fun MapItem(
                     mapView = mapView,
                     canvasWidthPx = canvasWidthPx,
                     canvasHeightPx = viewportHeightMapPx,
+                    canvasOffsetXPx = canvasOffsetXPx,
+                    renderScale = mapRenderScale,
                     shouldLogDiagnostics = shouldLogDiagnostics,
                     diagnosticState = mapViewDiagnosticState,
                 )
@@ -220,6 +216,8 @@ private fun FrameLayout.updateMapViewLayout(
     mapView: MapView,
     canvasWidthPx: Int,
     canvasHeightPx: Int,
+    canvasOffsetXPx: Int,
+    renderScale: Float,
     shouldLogDiagnostics: Boolean,
     diagnosticState: MapViewDiagnosticState,
 ) {
@@ -245,6 +243,12 @@ private fun FrameLayout.updateMapViewLayout(
         )
     }
 
+    val inverseRenderScale = 1f / renderScale
+    mapView.pivotX = 0f
+    mapView.pivotY = 0f
+    mapView.scaleX = inverseRenderScale
+    mapView.scaleY = inverseRenderScale
+    mapView.translationX = canvasOffsetXPx.toFloat()
     if (!shouldLogDiagnostics) return
 
     post {
@@ -371,11 +375,14 @@ private const val MAP_VIEW_DIAGNOSTIC_MAX_DEPTH = 6
 private const val MAP_RENDER_DENSITY_SAMPLE_INTERVAL_MS = 1000L
 
 @Composable
-private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
+private fun rememberMapViewWithLifecycle(
+    isDarkMode: Boolean,
+    mapRenderScale: Float,
+): MapView {
     val context = LocalContext.current
     val mapColorScheme = isDarkMode.toMapColorScheme()
 
-    return remember(context) {
+    return remember(context, mapRenderScale) {
         val mapOptions = GoogleMapOptions()
             .mapType(GoogleMap.MAP_TYPE_NORMAL)
             .mapColorScheme(mapColorScheme)
@@ -387,51 +394,30 @@ private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
             .compassEnabled(false)
             .mapToolbarEnabled(false)
 
-        MapView(context.withDisplayMatchedApplicationContext(), mapOptions).apply {
+        MapView(context.withMapRenderDensityContext(mapRenderScale), mapOptions).apply {
             onCreate(Bundle())
         }
     }
 }
 
 /**
- * MapView へ渡す context の applicationContext を、この context が乗っているディスプレイの density に揃える。
+ * MapView へ渡す context の density を、地図の描画 density（焼付 density）へ揃える。
  *
- * GoogleMap SDK は地図描画スケールを applicationContext の resources density から取得する。
- * VirtualDisplay / Presentation 上では applicationContext がプライマリディスプレイ（端末本体）の
- * density のままになり、地図だけが拡大表示される。表示先ディスプレイと applicationContext の density が
- * 食い違う場合のみ、density を合わせた applicationContext を返す wrapper を被せる。
+ * GoogleMap SDK は bounds フィットや zoom 計算の px↔dp 変換に MapView の context density を使う一方、
+ * 地図描画自体はプロセス共通の焼付 density で行う。VirtualDisplay 上では context density が表示先
+ * （低 density）のままになり、両者の factor が食い違って bounds フィットや追従 zoom が寄りすぎる。
+ * context density を焼付 density（表示先 density × [renderScale]）へ揃えることで、描画と zoom 計算の
+ * factor を一致させる。
  *
- * 通常端末・タブレットでは両 density が一致するため [this] をそのまま返す（no-op）。
+ * 通常端末では [renderScale] が [DEFAULT_MAP_RENDER_SCALE] のため [this] をそのまま返す（no-op）。
  */
-private fun Context.withDisplayMatchedApplicationContext(): Context {
-    val displayDensityDpi = resources.configuration.densityDpi
-    val applicationDensityDpi = applicationContext.resources.configuration.densityDpi
-
-    if (displayDensityDpi == applicationDensityDpi) {
+private fun Context.withMapRenderDensityContext(renderScale: Float): Context {
+    if (renderScale == DEFAULT_MAP_RENDER_SCALE) {
         return this
     }
 
-    val matchedApplicationContext = DisplayDensityApplicationContext(
-        applicationContext = applicationContext,
-        targetDensityDpi = displayDensityDpi,
-    )
-
-    return object : ContextWrapper(this) {
-        override fun getApplicationContext(): Context = matchedApplicationContext
-    }
-}
-
-/**
- * 表示先ディスプレイ density に揃えた resources を返す applicationContext wrapper。
- *
- * GoogleMap SDK の applicationContext 検証を通すため、[getApplicationContext] は自身を返す（冪等）。
- */
-private class DisplayDensityApplicationContext(
-    applicationContext: Context,
-    targetDensityDpi: Int,
-) : ContextWrapper(applicationContext.createDensityConfigurationContext(targetDensityDpi)) {
-
-    override fun getApplicationContext(): Context = this
+    val bakedDensityDpi = (resources.configuration.densityDpi * renderScale).roundToInt()
+    return createDensityConfigurationContext(bakedDensityDpi)
 }
 
 private fun Context.createDensityConfigurationContext(targetDensityDpi: Int): Context {
