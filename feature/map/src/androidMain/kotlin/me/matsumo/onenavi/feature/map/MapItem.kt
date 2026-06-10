@@ -25,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -129,6 +131,12 @@ internal fun MapItem(
         AndroidView(
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = 1f / mapRenderScale
+                    scaleY = 1f / mapRenderScale
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    translationX = canvasOffsetXPx.toFloat()
+                }
                 .onSizeChanged { size ->
                     viewportSize = size
                 },
@@ -145,8 +153,6 @@ internal fun MapItem(
                     mapView = mapView,
                     canvasWidthPx = canvasWidthPx,
                     canvasHeightPx = viewportHeightMapPx,
-                    canvasOffsetXPx = canvasOffsetXPx,
-                    renderScale = mapRenderScale,
                     shouldLogDiagnostics = shouldLogDiagnostics,
                     diagnosticState = mapViewDiagnosticState,
                 )
@@ -214,8 +220,6 @@ private fun FrameLayout.updateMapViewLayout(
     mapView: MapView,
     canvasWidthPx: Int,
     canvasHeightPx: Int,
-    canvasOffsetXPx: Int,
-    renderScale: Float,
     shouldLogDiagnostics: Boolean,
     diagnosticState: MapViewDiagnosticState,
 ) {
@@ -241,12 +245,6 @@ private fun FrameLayout.updateMapViewLayout(
         )
     }
 
-    val inverseRenderScale = 1f / renderScale
-    mapView.pivotX = 0f
-    mapView.pivotY = 0f
-    mapView.scaleX = inverseRenderScale
-    mapView.scaleY = inverseRenderScale
-    mapView.translationX = canvasOffsetXPx.toFloat()
     if (!shouldLogDiagnostics) return
 
     post {
