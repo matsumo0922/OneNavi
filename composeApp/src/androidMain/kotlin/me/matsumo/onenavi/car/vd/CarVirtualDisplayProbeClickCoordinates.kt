@@ -141,7 +141,7 @@ private fun createNullableOffset(pointX: Float?, pointY: Float?): Offset? {
 }
 
 private fun CarVirtualDisplayProbeViewport.createObservedOffsetTouchPoint(surfaceX: Float, surfaceY: Float): Offset? {
-    if (!hasVisibleAreaInset()) {
+    if (!hasObservedFrameInset()) {
         return null
     }
 

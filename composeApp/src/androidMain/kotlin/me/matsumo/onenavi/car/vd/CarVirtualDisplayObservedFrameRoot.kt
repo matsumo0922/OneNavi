@@ -56,27 +56,47 @@ internal fun CarVirtualDisplayViewport.toMapHostViewport(density: Density): MapH
     val viewportObservedFrame = observedFrame
 
     return with(density) {
+        val visibleInsets = MapHostInsets(
+            start = (visibleLeft - viewportObservedFrame.left)
+                .coerceAtLeast(0)
+                .toDp(),
+            top = (visibleTop - viewportObservedFrame.top)
+                .coerceAtLeast(0)
+                .toDp(),
+            end = (viewportObservedFrame.right - visibleRight)
+                .coerceAtLeast(0)
+                .toDp(),
+            bottom = (viewportObservedFrame.bottom - visibleBottom)
+                .coerceAtLeast(0)
+                .toDp(),
+        )
+        val stableInsets = MapHostInsets(
+            start = (stableLeft - viewportObservedFrame.left)
+                .coerceAtLeast(0)
+                .toDp(),
+            top = (stableTop - viewportObservedFrame.top)
+                .coerceAtLeast(0)
+                .toDp(),
+            end = (viewportObservedFrame.right - stableRight)
+                .coerceAtLeast(0)
+                .toDp(),
+            bottom = (viewportObservedFrame.bottom - stableBottom)
+                .coerceAtLeast(0)
+                .toDp(),
+        )
+
         MapHostViewport(
-            visibleInsets = MapHostInsets(
-                start = viewportObservedFrame.left.toDp(),
-                top = viewportObservedFrame.top.toDp(),
-                end = (surfaceWidth - viewportObservedFrame.right).toDp(),
-                bottom = (surfaceHeight - viewportObservedFrame.bottom).toDp(),
-            ),
-            stableInsets = MapHostInsets(
-                start = (stableLeft - viewportObservedFrame.left)
-                    .coerceAtLeast(0)
-                    .toDp(),
-                top = (stableTop - viewportObservedFrame.top)
-                    .coerceAtLeast(0)
-                    .toDp(),
-                end = (viewportObservedFrame.right - stableRight)
-                    .coerceAtLeast(0)
-                    .toDp(),
-                bottom = (viewportObservedFrame.bottom - stableBottom)
-                    .coerceAtLeast(0)
-                    .toDp(),
-            ),
+            visibleInsets = visibleInsets,
+            stableInsets = stableInsets.maxWith(visibleInsets),
         )
     }
+}
+
+private fun MapHostInsets.maxWith(other: MapHostInsets): MapHostInsets {
+    return MapHostInsets(
+        start = maxOf(start, other.start),
+        top = maxOf(top, other.top),
+        end = maxOf(end, other.end),
+        bottom = maxOf(bottom, other.bottom),
+    )
 }
