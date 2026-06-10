@@ -19,6 +19,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -32,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -69,6 +71,7 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 import me.matsumo.onenavi.feature.map.state.rememberMapCameraState
 import me.matsumo.onenavi.feature.map.state.resolveMapPanelLayout
 import org.koin.compose.viewmodel.koinViewModel
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -558,31 +561,41 @@ private fun MapScreenMapCanvasLayer(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    Layout(
-        modifier = modifier,
-        content = content,
-    ) { measurables, constraints ->
-        val viewportWidthPx = constraints.maxWidth
-        val viewportHeightPx = constraints.maxHeight
-        val canvasWidthPx = mapCanvasLayout.width.roundToPx().coerceAtLeast(viewportWidthPx)
-        val canvasOffsetXPx = mapCanvasLayout.offsetX.roundToPx()
-        val canvasConstraints = Constraints.fixed(
-            width = canvasWidthPx,
-            height = viewportHeightPx,
+    val displayDensity = LocalDensity.current
+    val mapRenderScale = LocalMapRenderScale.current
+    val mapSpaceDensity = remember(displayDensity, mapRenderScale) {
+        Density(
+            density = displayDensity.density * mapRenderScale,
+            fontScale = displayDensity.fontScale,
         )
-        val placeables = measurables.map { measurable ->
-            measurable.measure(canvasConstraints)
-        }
+    }
 
-        layout(
-            width = viewportWidthPx,
-            height = viewportHeightPx,
-        ) {
-            placeables.forEach { placeable ->
-                placeable.place(
-                    x = canvasOffsetXPx,
-                    y = 0,
-                )
+    CompositionLocalProvider(LocalDensity provides mapSpaceDensity) {
+        Layout(
+            modifier = modifier,
+            content = content,
+        ) { measurables, constraints ->
+            val viewportWidthPx = (constraints.maxWidth * mapRenderScale).roundToInt()
+            val viewportHeightPx = (constraints.maxHeight * mapRenderScale).roundToInt()
+            val canvasWidthPx = mapCanvasLayout.width.roundToPx().coerceAtLeast(viewportWidthPx)
+            val canvasConstraints = Constraints.fixed(
+                width = canvasWidthPx,
+                height = viewportHeightPx,
+            )
+            val placeables = measurables.map { measurable ->
+                measurable.measure(canvasConstraints)
+            }
+
+            layout(
+                width = constraints.maxWidth,
+                height = constraints.maxHeight,
+            ) {
+                placeables.forEach { placeable ->
+                    placeable.place(
+                        x = 0,
+                        y = 0,
+                    )
+                }
             }
         }
     }
