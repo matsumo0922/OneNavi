@@ -165,6 +165,7 @@ internal fun MapTopAppBar(
     LaunchedEffect(destinationSearchRequestId) {
         val requestId = destinationSearchRequestId ?: return@LaunchedEffect
 
+        onDestinationSearchRequestConsumed(requestId)
         canFocus = true
         showSearchResult = false
         searchBarState.animateToExpanded()
@@ -173,7 +174,6 @@ internal fun MapTopAppBar(
             destinationSearchFocusRequester.requestFocus()
         }
         softwareKeyboardController?.show()
-        onDestinationSearchRequestConsumed(requestId)
     }
 
     Box(
