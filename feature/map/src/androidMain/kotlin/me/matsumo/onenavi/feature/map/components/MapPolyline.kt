@@ -16,6 +16,7 @@ import me.matsumo.onenavi.core.model.CongestionSeverity
 import me.matsumo.onenavi.core.model.RoadClassSegment
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.ui.theme.RouteColors
+import me.matsumo.onenavi.feature.map.LocalMapRenderScale
 
 /**
  * ルート Polyline の表示スタイル。
@@ -27,8 +28,9 @@ import me.matsumo.onenavi.core.ui.theme.RouteColors
  * 渋滞区間 (`congestionSegments`) は本体の上に赤 / オレンジのオーバーレイを重ねるため
  * 枠線の濃色はそのまま透けて見える。
  *
- * 線幅は dp で保持し、描画先 display の density で px へ換算する（`Polyline.width` は screen px 指定の
- * ため、密度の異なる display（スマホ / 車 display）でも見かけの太さを揃える）。
+ * 線幅は dp で保持し、地図の描画 density（焼付 density。VirtualDisplay では [LocalMapRenderScale] を
+ * 加味）で px へ換算する。`Polyline.width` は screen px 指定で GoogleMap の描画 density 空間に乗るため、
+ * 地図タイルや marker と同じ density 空間へ揃えないと見かけの太さがずれる。
  *
  * @param borderColor 枠線（外側）の色。道路種別で塗り分ける場合は使われない。
  * @param bodyColor 本体（内側）の色。道路種別で塗り分ける場合は使われない。
@@ -83,7 +85,7 @@ internal fun MapPolyline(
     roadClassSegments: ImmutableList<RoadClassSegment> = persistentListOf(),
     congestionSegments: ImmutableList<CongestionSegment> = persistentListOf(),
 ) {
-    val density = LocalDensity.current.density
+    val density = LocalDensity.current.density * LocalMapRenderScale.current
     val bodyWidthPx = style.bodyWidthDp * density
     val borderWidthPx = style.borderWidthDp * density
 
