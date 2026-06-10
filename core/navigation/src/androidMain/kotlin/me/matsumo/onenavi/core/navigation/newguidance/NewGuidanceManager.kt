@@ -165,9 +165,9 @@ class NewGuidanceManager internal constructor(
     }
 
     /**
-     * Manager 破棄時に呼ぶ。
+     * 全表示面が閉じたときなど、画面 owner ではないプロセス側 lifecycle から案内を停止する。
      *
-     * Singleton として再利用できるように manager scope は cancel せず、現在の案内 session だけを止める。
+     * ViewModel 破棄では呼ばず、表示面監視や process 終了相当の明示停止だけで使う。
      */
     fun release() {
         stopGuidance()

@@ -113,6 +113,36 @@ class CarVirtualDisplayProbeClickCoordinateTest {
     }
 
     @Test
+    fun resolveClickDispatchCoordinateIgnoresOnePixelVisibleAreaNoise() {
+        val viewport = createTestViewport().withVisibleBounds(
+            visibleLeft = 1,
+            visibleTop = 1,
+            visibleRight = 1279,
+            visibleBottom = 719,
+        )
+        val inputState = createClickInputState(
+            viewport = viewport,
+            surfaceX = 510f,
+            surfaceY = 41f,
+        )
+
+        val coordinate = inputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(viewport)
+
+        assertEquals(
+            expected = CLICK_COORDINATE_SURFACE_LABEL,
+            actual = coordinate?.label,
+        )
+        assertEquals(
+            expected = 510f,
+            actual = coordinate?.point?.x,
+        )
+        assertEquals(
+            expected = 41f,
+            actual = coordinate?.point?.y,
+        )
+    }
+
+    @Test
     fun observedFrameUsesVisibleAreaBounds() {
         val viewport = createTestViewport().withVisibleBounds(
             visibleLeft = 120,

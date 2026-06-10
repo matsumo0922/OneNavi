@@ -28,31 +28,4 @@ class MapHostInsetsTest {
             actual = result,
         )
     }
-
-    @Test
-    fun `maxWith は各辺の大きい inset を採用する`() {
-        val result = MapHostInsets(
-            start = 4.dp,
-            top = 20.dp,
-            end = 12.dp,
-            bottom = 16.dp,
-        ).maxWith(
-            MapHostInsets(
-                start = 8.dp,
-                top = 10.dp,
-                end = 24.dp,
-                bottom = 6.dp,
-            ),
-        )
-
-        assertEquals(
-            expected = MapHostInsets(
-                start = 8.dp,
-                top = 20.dp,
-                end = 24.dp,
-                bottom = 16.dp,
-            ),
-            actual = result,
-        )
-    }
 }

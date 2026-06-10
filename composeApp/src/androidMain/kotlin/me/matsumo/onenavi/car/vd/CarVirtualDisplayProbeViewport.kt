@@ -110,8 +110,16 @@ internal fun createCarVirtualDisplayProbeViewport(
 internal fun CarVirtualDisplayProbeViewport.hasVisibleAreaInset(): Boolean {
     val hasValidSurface = surfaceWidth > 0 && surfaceHeight > 0
     val hasValidVisibleArea = visibleWidth > 0 && visibleHeight > 0
-    val hasHorizontalInset = visibleLeft > 0 || visibleRight < surfaceWidth
-    val hasVerticalInset = visibleTop > 0 || visibleBottom < surfaceHeight
+    val leftInset = visibleLeft
+    val topInset = visibleTop
+    val rightInset = surfaceWidth - visibleRight
+    val bottomInset = surfaceHeight - visibleBottom
+    val hasLeftInset = leftInset >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX
+    val hasTopInset = topInset >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX
+    val hasRightInset = rightInset >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX
+    val hasBottomInset = bottomInset >= VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX
+    val hasHorizontalInset = hasLeftInset || hasRightInset
+    val hasVerticalInset = hasTopInset || hasBottomInset
 
     return hasValidSurface && hasValidVisibleArea && (hasHorizontalInset || hasVerticalInset)
 }
@@ -215,3 +223,6 @@ private fun Rect.coerceToSurfaceBounds(surfaceWidth: Int, surfaceHeight: Int): R
         coercedBottom,
     )
 }
+
+/** host が返す visible area の 1px 程度の丸めノイズを無視する閾値。 */
+private const val VISIBLE_AREA_INSET_NOISE_THRESHOLD_PX = 4

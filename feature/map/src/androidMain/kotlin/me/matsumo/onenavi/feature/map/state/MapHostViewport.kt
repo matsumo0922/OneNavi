@@ -1,6 +1,5 @@
 package me.matsumo.onenavi.feature.map.state
 
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.Dp
@@ -15,30 +14,11 @@ data class MapHostInsets(
     val bottom: Dp = 0.dp,
 ) {
 
-    fun maxWith(other: MapHostInsets): MapHostInsets {
-        return MapHostInsets(
-            start = maxOf(start, other.start),
-            top = maxOf(top, other.top),
-            end = maxOf(end, other.end),
-            bottom = maxOf(bottom, other.bottom),
-        )
-    }
-
+    /** 左右に追加の inset を足した値を返す。 */
     fun withAddedHorizontal(inset: Dp): MapHostInsets {
         return copy(
             start = start + inset,
             end = end + inset,
-        )
-    }
-
-    fun toPaddingValues(
-        additional: Dp = 0.dp,
-    ): PaddingValues {
-        return PaddingValues(
-            start = start + additional,
-            top = top + additional,
-            end = end + additional,
-            bottom = bottom + additional,
         )
     }
 
