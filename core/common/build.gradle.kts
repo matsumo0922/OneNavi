@@ -20,5 +20,9 @@ kotlin {
             api(libs.bundles.firebase)
             api(libs.koin.android)
         }
+
+        androidUnitTest.dependencies {
+            implementation(kotlin("test"))
+        }
     }
 }
