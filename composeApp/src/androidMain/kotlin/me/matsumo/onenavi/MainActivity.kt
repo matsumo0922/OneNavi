@@ -1,7 +1,6 @@
 package me.matsumo.onenavi
 
 import android.Manifest.permission
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
@@ -32,7 +31,6 @@ import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommand
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommandEnvelope
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
-import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
 import me.matsumo.onenavi.core.model.Theme
 import me.matsumo.onenavi.core.ui.theme.LocalOneNaviDisplaySurface
 import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
@@ -50,7 +48,6 @@ class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         carGuidanceSessionReleaser.ensureStarted()
-        handleDestinationSearchIntent(intent)
         enableEdgeToEdge()
         setContent {
             val userData by viewModel.setting.collectAsStateWithLifecycle(null)
@@ -117,12 +114,6 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        handleDestinationSearchIntent(intent)
-    }
-
     private fun initAdsSdk() {
         if (viewModel.isAdsSdkInitialized.value) {
             return
@@ -134,14 +125,6 @@ class MainActivity : ComponentActivity() {
 
     private fun hasRequiredPermissions(): Boolean {
         return ContextCompat.checkSelfPermission(this, permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun handleDestinationSearchIntent(intent: Intent?) {
-        if (intent?.action != PhoneDestinationSearchLauncher.ACTION_OPEN_DESTINATION_SEARCH) {
-            return
-        }
-
-        carPhoneSessionCoordinator.requestPhoneDestinationSearch()
     }
 
     private fun CarPhoneSessionCommandEnvelope.destinationSearchRequestId(): Long? {

@@ -541,7 +541,6 @@ private class UiEventDelegate(
 
     private fun handleNavigationStop() {
         newGuidanceManager.stopGuidance()
-        handleGuidanceStopped()
     }
 
     private fun handleGuidanceEvent(event: GuidanceEvent) {

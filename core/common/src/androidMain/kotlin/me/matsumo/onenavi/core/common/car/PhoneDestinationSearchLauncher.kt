@@ -11,10 +11,4 @@ interface PhoneDestinationSearchLauncher {
      * @return 起動結果
      */
     fun launchDestinationSearch(): Result<Unit>
-
-    companion object {
-
-        /** スマホ側で目的地検索を開く explicit intent action。 */
-        const val ACTION_OPEN_DESTINATION_SEARCH = "me.matsumo.onenavi.action.OPEN_DESTINATION_SEARCH"
-    }
 }
