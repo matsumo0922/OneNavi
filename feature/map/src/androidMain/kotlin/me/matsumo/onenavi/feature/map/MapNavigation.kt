@@ -6,10 +6,12 @@ import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import me.matsumo.onenavi.core.ui.screen.Destination
 
-fun EntryProviderScope<NavKey>.mapEntry() {
+fun EntryProviderScope<NavKey>.mapEntry(destinationSearchRequestId: Long?, onDestinationSearchRequestConsumed: (Long) -> Unit) {
     entry<Destination.Home> {
         MapScreen(
             modifier = Modifier.fillMaxSize(),
+            destinationSearchRequestId = destinationSearchRequestId,
+            onDestinationSearchRequestConsumed = onDestinationSearchRequestConsumed,
         )
     }
 }

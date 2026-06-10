@@ -37,12 +37,16 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.matsumo.onenavi.MainViewModel
 import me.matsumo.onenavi.OneNaviApp
+import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
+import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
 import me.matsumo.onenavi.core.model.AppSetting
+import me.matsumo.onenavi.core.ui.theme.LocalOneNaviDisplaySurface
 import me.matsumo.onenavi.core.ui.theme.LocalSupportsPlatformDialogWindow
 import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
 import me.matsumo.onenavi.feature.map.DEFAULT_MAP_RENDER_SCALE
 import me.matsumo.onenavi.feature.map.LocalMapRenderScale
 import me.matsumo.onenavi.feature.map.MapRenderDensityDiagnostics
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -145,10 +149,19 @@ private fun CarVirtualDisplayProbeAppHost(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val carPhoneSessionCoordinator = koinInject<CarPhoneSessionCoordinator>()
     val hasLocationPermission = ContextCompat.checkSelfPermission(
         context,
         permission.ACCESS_FINE_LOCATION,
     ) == PackageManager.PERMISSION_GRANTED
+
+    DisposableEffect(carPhoneSessionCoordinator) {
+        carPhoneSessionCoordinator.registerSurface(OneNaviDisplaySurface.AndroidAutoVirtualDisplay)
+
+        onDispose {
+            carPhoneSessionCoordinator.unregisterSurface(OneNaviDisplaySurface.AndroidAutoVirtualDisplay)
+        }
+    }
 
     when {
         settings == null -> {
@@ -161,6 +174,7 @@ private fun CarVirtualDisplayProbeAppHost(
         hasLocationPermission -> {
             val mapRenderScale = rememberCarVirtualDisplayMapRenderScale(viewport.densityDpi)
             CompositionLocalProvider(
+                LocalOneNaviDisplaySurface provides OneNaviDisplaySurface.AndroidAutoVirtualDisplay,
                 LocalSupportsPlatformDialogWindow provides false,
                 LocalMapRenderScale provides mapRenderScale,
             ) {

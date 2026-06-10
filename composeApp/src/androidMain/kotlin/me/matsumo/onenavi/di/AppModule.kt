@@ -6,7 +6,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import me.matsumo.onenavi.BuildKonfig
 import me.matsumo.onenavi.MainViewModel
+import me.matsumo.onenavi.car.MainActivityPhoneDestinationSearchLauncher
+import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
 import me.matsumo.onenavi.core.model.AppConfig
+import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
@@ -35,6 +38,10 @@ val appModule = module {
             extNavLoginId = BuildKonfig.EXT_NAV_LOGIN_ID,
             extNavPassword = BuildKonfig.EXT_NAV_PASSWORD,
         )
+    }
+
+    single<PhoneDestinationSearchLauncher> {
+        MainActivityPhoneDestinationSearchLauncher(context = androidContext())
     }
 
     viewModelOf(::MainViewModel)
