@@ -17,7 +17,6 @@ import androidx.core.graphics.applyCanvas
 import androidx.core.graphics.createBitmap
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
-import me.matsumo.onenavi.feature.map.LocalMapRenderScale
 
 @Composable
 internal fun rememberMapComposeBitmapDescriptor(
@@ -27,14 +26,7 @@ internal fun rememberMapComposeBitmapDescriptor(
     val parent = LocalView.current as ViewGroup
     val compositionContext = rememberCompositionContext()
     val currentContent by rememberUpdatedState(content)
-    val mapRenderScale = LocalMapRenderScale.current
-    val displayDensity = LocalDensity.current
-    val bitmapDensity = remember(displayDensity, mapRenderScale) {
-        Density(
-            density = displayDensity.density * mapRenderScale,
-            fontScale = displayDensity.fontScale,
-        )
-    }
+    val bitmapDensity = LocalDensity.current
 
     return remember(parent, compositionContext, currentContent, bitmapDensity, *keys) {
         renderComposeContentToBitmapDescriptor(

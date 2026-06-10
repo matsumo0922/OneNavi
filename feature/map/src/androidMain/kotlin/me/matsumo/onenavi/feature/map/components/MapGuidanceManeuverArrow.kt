@@ -32,7 +32,6 @@ import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.ManeuverCallout
 import me.matsumo.onenavi.core.ui.theme.RouteColors
-import me.matsumo.onenavi.feature.map.LocalMapRenderScale
 import me.matsumo.onenavi.feature.map.state.RouteMeterIndex
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -318,7 +317,7 @@ internal fun MapGuidanceManeuverArrowEffect(
             fallbackRoadClass = guidanceState.progress.currentRoadClass,
         )
     }
-    val density = LocalDensity.current.density * LocalMapRenderScale.current
+    val density = LocalDensity.current.density
     val borderWidthPx = GUIDANCE_ARROW_BORDER_WIDTH_DP * density
     val bodyWidthPx = GUIDANCE_ARROW_BODY_WIDTH_DP * density
     val headScale = guidanceArrowHeadScaleForZoom(cameraZoom)
@@ -528,15 +527,15 @@ private const val GUIDANCE_ARROW_ROAD_CLASS_LOOKAHEAD_METERS = 8.0
 
 /**
  * 矢印外側の道路種別色 polyline 幅 (dp)。
- * `Polyline.width` は screen px 指定のため、地図の描画 density（VirtualDisplay では [LocalMapRenderScale]
- * を加味）で px へ換算し、地図タイルや route polyline と同じ density 空間へ揃える。
+ * `Polyline.width` は screen px 指定のため、`MapScreenMapCanvasLayer` が供給する地図描画 density 空間で
+ * px へ換算し、地図タイルや route polyline と同じ density 空間へ揃える。
  */
 private const val GUIDANCE_ARROW_BORDER_WIDTH_DP = 12f
 
 /**
  * 矢印内側の白背景 polyline 幅 (dp)。
- * `Polyline.width` は screen px 指定のため、地図の描画 density（VirtualDisplay では [LocalMapRenderScale]
- * を加味）で px へ換算し、地図タイルや route polyline と同じ density 空間へ揃える。
+ * `Polyline.width` は screen px 指定のため、`MapScreenMapCanvasLayer` が供給する地図描画 density 空間で
+ * px へ換算し、地図タイルや route polyline と同じ density 空間へ揃える。
  */
 private const val GUIDANCE_ARROW_BODY_WIDTH_DP = 8f
 
