@@ -141,7 +141,7 @@ private fun createNullableOffset(pointX: Float?, pointY: Float?): Offset? {
 }
 
 private fun CarVirtualDisplayProbeViewport.createObservedOffsetTouchPoint(surfaceX: Float, surfaceY: Float): Offset? {
-    if (!hasHorizontalSplitVisibleArea()) {
+    if (!hasVisibleAreaInset()) {
         return null
     }
 
@@ -162,15 +162,16 @@ private fun CarVirtualDisplayProbeViewport.createObservedOffsetTouchPoint(surfac
 }
 
 private fun CarVirtualDisplayProbeViewport.createVisibleScaledTouchPoint(surfaceX: Float, surfaceY: Float): Offset? {
-    if (!hasHorizontalSplitVisibleArea()) {
+    if (!hasVisibleAreaInset()) {
         return null
     }
 
     val scaledSurfaceX = visibleLeft + surfaceX * visibleWidth / surfaceWidth
+    val scaledSurfaceY = visibleTop + surfaceY * visibleHeight / surfaceHeight
 
     return Offset(
         x = scaledSurfaceX,
-        y = surfaceY,
+        y = scaledSurfaceY,
     )
 }
 

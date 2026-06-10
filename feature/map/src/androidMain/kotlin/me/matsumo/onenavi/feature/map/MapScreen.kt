@@ -63,9 +63,11 @@ import me.matsumo.onenavi.feature.map.components.content.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.content.MapNavigationContent
 import me.matsumo.onenavi.feature.map.components.content.MapRoutePreviewContent
 import me.matsumo.onenavi.feature.map.components.topappbar.MapWaypointSearchScreen
+import me.matsumo.onenavi.feature.map.state.LocalMapHostViewport
 import me.matsumo.onenavi.feature.map.state.MAP_CONTROLS_COLUMN_WIDTH
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
+import me.matsumo.onenavi.feature.map.state.MapHostInsets
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapPanelLayout
 import me.matsumo.onenavi.feature.map.state.MapPanelSide
@@ -95,12 +97,20 @@ fun MapScreen(
     val vehicleLocationState by viewModel.vehicleLocationState.collectAsStateWithLifecycle()
     val phoneCommand by carPhoneSessionCoordinator.phoneCommand.collectAsStateWithLifecycle()
 
-    val navigationBarHeightDp = WindowInsets.navigationBars
-        .asPaddingValues()
-        .calculateBottomPadding()
-    val statusBarHeightDp = WindowInsets.statusBars
-        .asPaddingValues()
-        .calculateTopPadding()
+    val mapHostViewport = LocalMapHostViewport.current
+    val hostStableInsets = mapHostViewport.stableInsets
+    val navigationBarHeightDp = maxOf(
+        WindowInsets.navigationBars
+            .asPaddingValues()
+            .calculateBottomPadding(),
+        hostStableInsets.bottom,
+    )
+    val statusBarHeightDp = maxOf(
+        WindowInsets.statusBars
+            .asPaddingValues()
+            .calculateTopPadding(),
+        hostStableInsets.top,
+    )
 
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
     var allowSheetHide by remember { mutableStateOf(false) }
@@ -192,6 +202,9 @@ fun MapScreen(
         val mapCanvasLayout = remember(panelLayout, maxWidth) {
             panelLayout.resolveCanvasLayout(viewportWidth = maxWidth)
         }
+        val mapViewportPadding = remember(mapCanvasLayout.horizontalInset, hostStableInsets) {
+            hostStableInsets.withAddedHorizontal(mapCanvasLayout.horizontalInset)
+        }
         val viewportWidthPx = with(density) { maxWidth.roundToPx() }
         val viewportHeightPx = with(density) { maxHeight.roundToPx() }
         val controlsBottomPadding by animateDpAsState(
@@ -225,6 +238,7 @@ fun MapScreen(
                 vehicleLocationState = vehicleLocationState,
                 cameraState = cameraState,
                 panelLayout = panelLayout,
+                viewportPadding = mapViewportPadding,
                 viewportWidthPx = viewportWidthPx,
                 viewportHeightPx = viewportHeightPx,
                 shouldLogDiagnostics = shouldLogMapDiagnostics,
@@ -247,6 +261,7 @@ fun MapScreen(
                 shouldLogDiagnostics = shouldLogMapDiagnostics,
                 controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
+                viewportPadding = mapViewportPadding,
                 scaffoldState = scaffoldState,
                 destinationSearchRequestId = destinationSearchRequestId,
                 onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
@@ -281,6 +296,7 @@ fun MapScreen(
                 shouldLogDiagnostics = shouldLogMapDiagnostics,
                 controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
+                viewportPadding = mapViewportPadding,
                 scaffoldState = scaffoldState,
                 destinationSearchRequestId = destinationSearchRequestId,
                 onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
@@ -368,6 +384,7 @@ private fun MapScreenCompactLayout(
     shouldLogDiagnostics: Boolean,
     controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
+    viewportPadding: MapHostInsets,
     scaffoldState: BottomSheetScaffoldState,
     destinationSearchRequestId: Long?,
     onDestinationSearchRequestConsumed: (Long) -> Unit,
@@ -410,6 +427,7 @@ private fun MapScreenCompactLayout(
                 mapCanvasLayout = mapCanvasLayout,
                 isMapDarkMode = isMapDarkMode,
                 shouldLogDiagnostics = shouldLogDiagnostics,
+                viewportPadding = viewportPadding,
                 onMapUpdate = onMapUpdate,
                 onPointOfInterestClicked = onPointOfInterestClicked,
                 onMapLongClicked = onMapLongClicked,
@@ -458,6 +476,7 @@ private fun MapScreenSplitLayout(
     shouldLogDiagnostics: Boolean,
     controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
+    viewportPadding: MapHostInsets,
     scaffoldState: BottomSheetScaffoldState,
     destinationSearchRequestId: Long?,
     onDestinationSearchRequestConsumed: (Long) -> Unit,
@@ -484,6 +503,7 @@ private fun MapScreenSplitLayout(
             mapCanvasLayout = mapCanvasLayout,
             isMapDarkMode = isMapDarkMode,
             shouldLogDiagnostics = shouldLogDiagnostics,
+            viewportPadding = viewportPadding,
             onMapUpdate = onMapUpdate,
             onPointOfInterestClicked = onPointOfInterestClicked,
             onMapLongClicked = onMapLongClicked,
@@ -555,6 +575,7 @@ private fun MapScreenMapLayer(
     mapCanvasLayout: MapCanvasLayout,
     isMapDarkMode: Boolean,
     shouldLogDiagnostics: Boolean,
+    viewportPadding: MapHostInsets,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
@@ -595,7 +616,7 @@ private fun MapScreenMapLayer(
                     topAppBarHeightPx = (uiState.topAppBarHeight * mapRenderScale).roundToInt(),
                     bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
                     navigationCardHeightPx = (uiState.navigationCardHeight * mapRenderScale).roundToInt(),
-                    horizontalViewportPadding = mapCanvasLayout.horizontalInset,
+                    viewportPadding = viewportPadding,
                     onRouteSelected = onRouteSelected,
                 )
             }
@@ -617,6 +638,7 @@ private fun MapScreenMapCanvasLayer(
             fontScale = displayDensity.fontScale,
         )
     }
+    val canvasOffsetXPx = with(displayDensity) { mapCanvasLayout.offsetX.roundToPx() }
 
     CompositionLocalProvider(LocalDensity provides mapSpaceDensity) {
         Layout(
@@ -640,7 +662,7 @@ private fun MapScreenMapCanvasLayer(
             ) {
                 placeables.forEach { placeable ->
                     placeable.place(
-                        x = 0,
+                        x = canvasOffsetXPx,
                         y = 0,
                     )
                 }

@@ -60,7 +60,7 @@ internal val CarVirtualDisplayProbeInputState.surfacePointOrNull: CarVirtualDisp
 internal fun CarVirtualDisplayProbeInputState.scaleFocusPointOrNull(viewport: CarVirtualDisplayProbeViewport): CarVirtualDisplaySurfacePoint? {
     val rawFocusPoint = surfacePointOrNull ?: return null
 
-    if (!viewport.hasHorizontalSplitVisibleArea()) {
+    if (!viewport.hasVisibleAreaInset()) {
         return rawFocusPoint
     }
 

@@ -37,24 +37,13 @@ data class CarVirtualDisplayViewport(
     val stableAreaLabel: String
         get() = "Rect($stableLeft, $stableTop - $stableRight, $stableBottom)"
 
-    val horizontalSafetyInset: Int
-        get() = minOf(
-            visibleLeft,
-            surfaceWidth - visibleRight,
-        ).coerceAtLeast(0)
-
     val observedFrame: CarVirtualDisplayObservedFrame
-        get() {
-            val observedLeft = (visibleLeft - horizontalSafetyInset).coerceIn(0, surfaceWidth)
-            val observedRight = (visibleRight + horizontalSafetyInset).coerceIn(observedLeft, surfaceWidth)
-
-            return CarVirtualDisplayObservedFrame(
-                left = observedLeft,
-                top = 0,
-                right = observedRight,
-                bottom = surfaceHeight,
-            )
-        }
+        get() = CarVirtualDisplayObservedFrame(
+            left = visibleLeft,
+            top = visibleTop,
+            right = visibleRight,
+            bottom = visibleBottom,
+        )
 
     val observedFrameRightInset: Int
         get() = surfaceWidth - observedFrame.right
@@ -129,6 +118,15 @@ internal fun CarVirtualDisplayProbeViewport.hasHorizontalSplitVisibleArea(): Boo
     val hasSplitInset = maxHorizontalInset >= SPLIT_VISIBLE_AREA_MIN_INSET_PX
 
     return hasValidSurface && hasSplitInset
+}
+
+internal fun CarVirtualDisplayProbeViewport.hasVisibleAreaInset(): Boolean {
+    val hasValidSurface = surfaceWidth > 0 && surfaceHeight > 0
+    val hasValidVisibleArea = visibleWidth > 0 && visibleHeight > 0
+    val hasHorizontalInset = visibleLeft > 0 || visibleRight < surfaceWidth
+    val hasVerticalInset = visibleTop > 0 || visibleBottom < surfaceHeight
+
+    return hasValidSurface && hasValidVisibleArea && (hasHorizontalInset || hasVerticalInset)
 }
 
 internal fun CarVirtualDisplayProbeViewport.resolveInputCoordinate(hostInputX: Float, hostInputY: Float): CarVirtualDisplayInputCoordinate {

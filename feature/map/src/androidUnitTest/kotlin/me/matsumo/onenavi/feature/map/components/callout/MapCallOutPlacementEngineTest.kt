@@ -84,6 +84,35 @@ class MapCallOutPlacementEngineTest {
     }
 
     @Test
+    fun pointFixedKeepsBodyInsidePaddedViewport() {
+        val paddedViewport = Rect(
+            left = 40f,
+            top = 120f,
+            right = 360f,
+            bottom = 300f,
+        )
+        val placements = MapCallOutPlacementEngine.place(
+            requests = listOf(
+                MapCallOutRequest(
+                    id = "fixed",
+                    target = MapCallOutTarget.PointFixed(Offset(200f, 140f).toRoutePoint()),
+                ),
+            ),
+            sizes = listOf(IntSize(96, 48)),
+            viewportSize = ViewportSize,
+            viewport = paddedViewport,
+            tailLengthPx = TailLengthPx,
+            shadowPaddingPx = ShadowPaddingPx,
+            project = ::projectForTest,
+        )
+
+        val body = placements.single().bodyBounds
+
+        assertTrue(body.top >= paddedViewport.top)
+        assertTrue(body.bottom <= paddedViewport.bottom)
+    }
+
+    @Test
     fun polylineMovableChoosesTipOnPolyline() {
         val placements = MapCallOutPlacementEngine.place(
             requests = listOf(

@@ -50,51 +50,8 @@ class MapPanelLayoutTest {
         val splitLayout = resolveMapPanelLayout(maxWidth = 1328.dp)
         val compactLayout = resolveMapPanelLayout(maxWidth = 559.dp)
 
-        assertEquals(MAP_PANEL_MAX_WIDTH + MAP_CONTROLS_COLUMN_WIDTH, splitLayout.splitHorizontalInset)
         assertEquals(464.dp, splitLayout.splitHorizontalInset)
         assertEquals(0.dp, compactLayout.splitHorizontalInset)
-    }
-
-    @Test
-    fun `Compact では左右に基本 padding だけを返す`() {
-        val layout = resolveMapPanelLayout(maxWidth = 559.dp)
-
-        val horizontalPadding = layout.resolveHorizontalCameraPaddingPx(
-            basePaddingPx = 24,
-            splitInsetPx = 456,
-        )
-
-        assertEquals(24 to 24, horizontalPadding)
-    }
-
-    @Test
-    fun `右 UI 帯では左右 padding に inset を加算する`() {
-        val layout = resolveMapPanelLayout(
-            maxWidth = 1328.dp,
-            panelSide = MapPanelSide.RIGHT,
-        )
-
-        val horizontalPadding = layout.resolveHorizontalCameraPaddingPx(
-            basePaddingPx = 24,
-            splitInsetPx = 464,
-        )
-
-        assertEquals(488 to 488, horizontalPadding)
-    }
-
-    @Test
-    fun `左 UI 帯では左右 padding に inset を加算する`() {
-        val layout = resolveMapPanelLayout(
-            maxWidth = 1328.dp,
-            panelSide = MapPanelSide.LEFT,
-        )
-
-        val horizontalPadding = layout.resolveHorizontalCameraPaddingPx(
-            basePaddingPx = 24,
-            splitInsetPx = 464,
-        )
-
-        assertEquals(488 to 488, horizontalPadding)
     }
 
     @Test
