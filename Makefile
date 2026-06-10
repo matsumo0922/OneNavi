@@ -7,13 +7,18 @@ FAKE_GPS_PORT := 5173
 ROUTE_COMPARE_DIR := dev-tools/route-compare
 UI_PLAYGROUND_DIR := dev-tools/ui-playground
 
-.PHONY: detekt dhu route-demo-1 clean-dhu fake-gps fake-gps-setup fake-gps-dev fake-gps-status fake-gps-stop route-compare route-compare-setup route-compare-dev ui-playground ui-playground-setup ui-playground-dev
+.PHONY: detekt dhu route-demo-1 clean-dhu ext-nav-api-setup fake-gps fake-gps-setup fake-gps-dev fake-gps-status fake-gps-stop route-compare route-compare-setup route-compare-dev ui-playground ui-playground-setup ui-playground-dev
 
 detekt:
 	./gradlew detekt --auto-correct --continue
 
 dhu:
 	~/Library/Android/sdk/extras/google/auto/desktop-head-unit --usb -c ~/Library/Android/sdk/extras/google/auto/config/default_720p.ini
+
+# ── External Nav API local dependency ──
+
+ext-nav-api-setup:
+	scripts/setup_ext_nav_api.sh
 
 # ── Fake GPS (Android Emulator) ──
 
