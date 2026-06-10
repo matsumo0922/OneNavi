@@ -20,6 +20,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.feature.map.LocalMapRenderScale
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.Saver
 
@@ -30,7 +31,7 @@ import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.Saver
  */
 @Composable
 internal fun rememberMapCameraState(): MapCameraState {
-    val density = LocalDensity.current.density
+    val density = LocalDensity.current.density * LocalMapRenderScale.current
     val state = rememberSaveable(saver = MapCameraState.Saver) { MapCameraState() }
 
     SideEffect {

@@ -527,13 +527,15 @@ private const val GUIDANCE_ARROW_ROAD_CLASS_LOOKAHEAD_METERS = 8.0
 
 /**
  * 矢印外側の道路種別色 polyline 幅 (dp)。
- * `Polyline.width` は screen px 指定のため、描画時に表示先 display の density で px へ換算する。
+ * `Polyline.width` は screen px 指定のため、`MapScreenMapCanvasLayer` が供給する地図描画 density 空間で
+ * px へ換算し、地図タイルや route polyline と同じ density 空間へ揃える。
  */
 private const val GUIDANCE_ARROW_BORDER_WIDTH_DP = 12f
 
 /**
  * 矢印内側の白背景 polyline 幅 (dp)。
- * `Polyline.width` は screen px 指定のため、描画時に表示先 display の density で px へ換算する。
+ * `Polyline.width` は screen px 指定のため、`MapScreenMapCanvasLayer` が供給する地図描画 density 空間で
+ * px へ換算し、地図タイルや route polyline と同じ density 空間へ揃える。
  */
 private const val GUIDANCE_ARROW_BODY_WIDTH_DP = 8f
 

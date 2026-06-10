@@ -2,6 +2,8 @@ package me.matsumo.onenavi.feature.map
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.res.Configuration
+import android.content.res.Resources
 import android.graphics.Rect
 import android.os.Bundle
 import android.util.DisplayMetrics
@@ -25,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -38,9 +41,11 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapColorScheme
 import com.google.android.gms.maps.model.PointOfInterest
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.delay
 import me.matsumo.onenavi.feature.map.state.MapCameraDefaults
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
+import kotlin.math.roundToInt
 
 @Composable
 internal fun MapItem(
@@ -54,14 +59,26 @@ internal fun MapItem(
     onMapLongClicked: (LatLng) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
-    val mapView = rememberMapViewWithLifecycle(isDarkMode = isDarkMode)
+    val displayDensity = LocalDensity.current
+    val mapRenderScale = LocalMapRenderScale.current
+    val mapSpaceDensity = remember(displayDensity, mapRenderScale) {
+        Density(
+            density = displayDensity.density * mapRenderScale,
+            fontScale = displayDensity.fontScale,
+        )
+    }
+    val mapView = rememberMapViewWithLifecycle(
+        isDarkMode = isDarkMode,
+        mapRenderScale = mapRenderScale,
+    )
     val mapViewDiagnosticState = remember { MapViewDiagnosticState() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
-    val canvasWidthPx = with(density) {
-        mapCanvasLayout.width.roundToPx().coerceAtLeast(viewportSize.width)
+    val viewportWidthMapPx = (viewportSize.width * mapRenderScale).roundToInt()
+    val viewportHeightMapPx = (viewportSize.height * mapRenderScale).roundToInt()
+    val canvasWidthPx = with(mapSpaceDensity) {
+        mapCanvasLayout.width.roundToPx().coerceAtLeast(viewportWidthMapPx)
     }
-    val canvasOffsetXPx = with(density) { mapCanvasLayout.offsetX.roundToPx() }
+    val canvasOffsetXPx = with(displayDensity) { mapCanvasLayout.offsetX.roundToPx() }
 
     MapViewLifecycleEffect(
         mapView = mapView,
@@ -79,6 +96,14 @@ internal fun MapItem(
         LaunchedEffect(it) {
             cameraState.attachMap(it)
         }
+
+        if (shouldLogDiagnostics) {
+            MapRenderDensityDiagnosticsEffect(
+                googleMap = it,
+                composeDensity = displayDensity.density,
+                mapView = mapView,
+            )
+        }
     }
 
     LaunchedEffect(
@@ -90,12 +115,12 @@ internal fun MapItem(
 
         cameraState.updateViewportSize(
             widthPx = canvasWidthPx,
-            heightPx = viewportSize.height,
+            heightPx = viewportHeightMapPx,
         )
         if (shouldLogDiagnostics) {
             Napier.i(tag = MAP_CAMERA_LOG_TAG) {
                 "MapView layout updated. viewport=${viewportSize.width}x${viewportSize.height} " +
-                    "canvas=${canvasWidthPx}x${viewportSize.height} offsetX=$canvasOffsetXPx"
+                    "canvas=${canvasWidthPx}x$viewportHeightMapPx offsetX=$canvasOffsetXPx"
             }
         }
     }
@@ -121,8 +146,9 @@ internal fun MapItem(
                 container.updateMapViewLayout(
                     mapView = mapView,
                     canvasWidthPx = canvasWidthPx,
-                    canvasHeightPx = viewportSize.height,
+                    canvasHeightPx = viewportHeightMapPx,
                     canvasOffsetXPx = canvasOffsetXPx,
+                    renderScale = mapRenderScale,
                     shouldLogDiagnostics = shouldLogDiagnostics,
                     diagnosticState = mapViewDiagnosticState,
                 )
@@ -191,6 +217,7 @@ private fun FrameLayout.updateMapViewLayout(
     canvasWidthPx: Int,
     canvasHeightPx: Int,
     canvasOffsetXPx: Int,
+    renderScale: Float,
     shouldLogDiagnostics: Boolean,
     diagnosticState: MapViewDiagnosticState,
 ) {
@@ -216,6 +243,11 @@ private fun FrameLayout.updateMapViewLayout(
         )
     }
 
+    val inverseRenderScale = 1f / renderScale
+    mapView.pivotX = 0f
+    mapView.pivotY = 0f
+    mapView.scaleX = inverseRenderScale
+    mapView.scaleY = inverseRenderScale
     mapView.translationX = canvasOffsetXPx.toFloat()
     if (!shouldLogDiagnostics) return
 
@@ -339,12 +371,18 @@ private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"
 /** MapView 内部 View の探索深さ上限。 */
 private const val MAP_VIEW_DIAGNOSTIC_MAX_DEPTH = 6
 
+/** 描画 density 計測のポーリング間隔 (ms)。 */
+private const val MAP_RENDER_DENSITY_SAMPLE_INTERVAL_MS = 1000L
+
 @Composable
-private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
+private fun rememberMapViewWithLifecycle(
+    isDarkMode: Boolean,
+    mapRenderScale: Float,
+): MapView {
     val context = LocalContext.current
     val mapColorScheme = isDarkMode.toMapColorScheme()
 
-    return remember(context) {
+    return remember(context, mapRenderScale) {
         val mapOptions = GoogleMapOptions()
             .mapType(GoogleMap.MAP_TYPE_NORMAL)
             .mapColorScheme(mapColorScheme)
@@ -356,10 +394,38 @@ private fun rememberMapViewWithLifecycle(isDarkMode: Boolean): MapView {
             .compassEnabled(false)
             .mapToolbarEnabled(false)
 
-        MapView(context, mapOptions).apply {
+        MapView(context.withMapRenderDensityContext(mapRenderScale), mapOptions).apply {
             onCreate(Bundle())
         }
     }
+}
+
+/**
+ * MapView へ渡す context の density を、地図の描画 density（焼付 density）へ揃える。
+ *
+ * GoogleMap SDK は bounds フィットや zoom 計算の px↔dp 変換に MapView の context density を使う一方、
+ * 地図描画自体はプロセス共通の焼付 density で行う。VirtualDisplay 上では context density が表示先
+ * （低 density）のままになり、両者の factor が食い違って bounds フィットや追従 zoom が寄りすぎる。
+ * context density を焼付 density（表示先 density × [renderScale]）へ揃えることで、描画と zoom 計算の
+ * factor を一致させる。
+ *
+ * 通常端末では [renderScale] が [DEFAULT_MAP_RENDER_SCALE] のため [this] をそのまま返す（no-op）。
+ */
+private fun Context.withMapRenderDensityContext(renderScale: Float): Context {
+    if (renderScale == DEFAULT_MAP_RENDER_SCALE) {
+        return this
+    }
+
+    val bakedDensityDpi = (resources.configuration.densityDpi * renderScale).roundToInt()
+    return createDensityConfigurationContext(bakedDensityDpi)
+}
+
+private fun Context.createDensityConfigurationContext(targetDensityDpi: Int): Context {
+    val densityConfiguration = Configuration(resources.configuration).apply {
+        densityDpi = targetDensityDpi
+    }
+
+    return createConfigurationContext(densityConfiguration)
 }
 
 /**
@@ -426,6 +492,53 @@ private fun GoogleMapEffect(
 
 private fun Boolean.toMapColorScheme(): Int {
     return if (this) MapColorScheme.DARK else MapColorScheme.LIGHT
+}
+
+/**
+ * GoogleMap の描画実効 density をカメラ静止ごとに計測し、logcat と overlay へ反映する診断 Effect。
+ *
+ * VirtualDisplay 上で地図が拡大表示される問題の原因切り分け用。debug 診断時のみ呼ぶ。
+ */
+@Composable
+private fun MapRenderDensityDiagnosticsEffect(googleMap: GoogleMap, composeDensity: Float, mapView: MapView) {
+    DisposableEffect(googleMap, composeDensity) {
+        onDispose {
+            MapRenderDensityDiagnostics.clear()
+        }
+    }
+
+    LaunchedEffect(googleMap, composeDensity) {
+        var lastLabel: String? = null
+
+        while (true) {
+            val measurement = googleMap.measureRenderDensity()
+            val label = measurement?.toDiagnosticLabel(composeDensity)
+
+            if (label != null && label != lastLabel) {
+                lastLabel = label
+                MapRenderDensityDiagnostics.update(label)
+                Napier.i(tag = MAP_CAMERA_LOG_TAG) {
+                    "MapView render density. displayId=${mapView.display?.displayId} " +
+                        "$label ${mapView.densitySourceLabel()}"
+                }
+            }
+
+            delay(MAP_RENDER_DENSITY_SAMPLE_INTERVAL_MS)
+        }
+    }
+}
+
+/** GoogleMap が描画 density を引きうる候補を横並びでログ化し、eff と一致する源を切り分ける。 */
+@Suppress("DEPRECATION")
+private fun MapView.densitySourceLabel(): String {
+    val viewContextDpi = context.resources.displayMetrics.densityDpi
+    val appContextDpi = context.applicationContext.resources.displayMetrics.densityDpi
+    val systemDpi = Resources.getSystem().displayMetrics.densityDpi
+    val displayDpi = display?.let { mapDisplay ->
+        DisplayMetrics().also { metrics -> mapDisplay.getRealMetrics(metrics) }.densityDpi
+    } ?: -1
+
+    return "densitySrc[viewCtx=$viewContextDpi appCtx=$appContextDpi system=$systemDpi display=$displayDpi]"
 }
 
 @Composable
