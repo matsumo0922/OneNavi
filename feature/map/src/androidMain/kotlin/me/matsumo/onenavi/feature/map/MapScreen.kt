@@ -105,12 +105,9 @@ fun MapScreen(
             .calculateBottomPadding(),
         hostStableInsets.bottom,
     )
-    val statusBarHeightDp = maxOf(
-        WindowInsets.statusBars
-            .asPaddingValues()
-            .calculateTopPadding(),
-        hostStableInsets.top,
-    )
+    val statusBarHeightDp = WindowInsets.statusBars
+        .asPaddingValues()
+        .calculateTopPadding()
 
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
     var allowSheetHide by remember { mutableStateOf(false) }
@@ -221,6 +218,7 @@ fun MapScreen(
         )
         val controlsTopPadding by animateDpAsState(
             targetValue = resolveMapControlsTopPadding(
+                isAndroidAutoVirtualDisplay = isAndroidAutoVirtualDisplay,
                 isSplit = panelLayout.isSplit,
                 statusBarHeight = statusBarHeightDp,
                 topAppBarHeight = topAppBarHeightDp,
@@ -826,21 +824,28 @@ private fun MapScreenBottomSheetContent(
 /**
  * map controls カラム上グループ（設定/音量/コンパス）の上 padding を返す。
  *
+ * Android Auto VD では host top inset や検索バー高さで controls を下げず、固定の端余白だけで配置する。
  * 分割レイアウトではトップパネルは UI 帯ペイン内に収まり controls カラムへ被らないため status bar 分のみ。
  * Compact ではトップバー（検索バー / 案内パネル）が地図に重なるため、その下端へ揃える。トップバーは
  * `.statusBarsPadding()` の内側で高さ計測されるため [topAppBarHeight] は status bar を含まない。よって
  * 下端 = status bar + トップバー高さ。トップバー未表示時（0dp）は status bar 分だけ確保される。
  *
+ * @param isAndroidAutoVirtualDisplay Android Auto VD 上の表示か
  * @param isSplit 分割レイアウトか
  * @param statusBarHeight ステータスバー高さ
  * @param topAppBarHeight 計測済みトップバー高さ（status bar を含まない）。未表示時は 0dp
  * @return controls 上グループへ与える上 padding
  */
 private fun resolveMapControlsTopPadding(
+    isAndroidAutoVirtualDisplay: Boolean,
     isSplit: Boolean,
     statusBarHeight: Dp,
     topAppBarHeight: Dp,
 ): Dp {
+    if (isAndroidAutoVirtualDisplay) {
+        return 0.dp
+    }
+
     if (isSplit) {
         return statusBarHeight
     }
