@@ -1,7 +1,7 @@
 [versions]
 # Application
-versionName = "0.0.3"
-versionCode = "3"
+versionName = "0.0.4"
+versionCode = "4"
 
 # SDK
 minSdk = "28"
@@ -41,7 +41,7 @@ androidxRoom = "2.7.1"
 androidxSqlite = "2.5.1"
 
 # Google
-googlePlaces = "5.1.1"
+googlePlaces = "5.2.0"
 playServicesMaps = "19.2.0"
 playReview = "2.0.2"
 playUpdate = "2.1.0"
