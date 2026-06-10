@@ -10,7 +10,6 @@ import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import io.github.aakira.napier.Napier
-import me.matsumo.onenavi.core.common.car.CarDisplayState
 
 /** Android Auto template 画面として Surface callback を登録する検証 Screen。 */
 class CarVirtualDisplayProbeScreen(
@@ -24,18 +23,9 @@ class CarVirtualDisplayProbeScreen(
     init {
         lifecycle.addObserver(
             object : DefaultLifecycleObserver {
-                override fun onStart(owner: LifecycleOwner) {
-                    CarDisplayState.setOnCar(true)
-                }
-
-                override fun onStop(owner: LifecycleOwner) {
-                    CarDisplayState.setOnCar(false)
-                }
-
                 override fun onDestroy(owner: LifecycleOwner) {
                     unregisterSurfaceCallback()
                     controller.release()
-                    CarDisplayState.setOnCar(false)
                 }
             },
         )
