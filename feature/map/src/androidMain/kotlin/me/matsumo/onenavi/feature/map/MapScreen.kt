@@ -515,6 +515,8 @@ private fun MapScreenMapLayer(
     onRouteSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val mapRenderScale = LocalMapRenderScale.current
+
     Box(
         modifier = modifier,
     ) {
@@ -544,9 +546,9 @@ private fun MapScreenMapLayer(
                     vehicleLocationState = vehicleLocationState,
                     googleMap = it,
                     cameraState = cameraState,
-                    topAppBarHeightPx = uiState.topAppBarHeight,
+                    topAppBarHeightPx = (uiState.topAppBarHeight * mapRenderScale).roundToInt(),
                     bottomSheetPeekHeight = uiState.bottomSheetPeekHeight,
-                    navigationCardHeightPx = uiState.navigationCardHeight,
+                    navigationCardHeightPx = (uiState.navigationCardHeight * mapRenderScale).roundToInt(),
                     horizontalViewportPadding = mapCanvasLayout.horizontalInset,
                     onRouteSelected = onRouteSelected,
                 )
