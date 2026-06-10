@@ -46,12 +46,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
@@ -77,6 +81,8 @@ internal fun MapTopAppBar(
     histories: ImmutableList<SearchHistory>,
     selectedResult: SearchResultItem?,
     showSettingAction: Boolean,
+    destinationSearchRequestId: Long?,
+    onDestinationSearchRequestConsumed: (Long) -> Unit,
     onUiEvent: (MapUiEvent) -> Unit,
     onSettingClicked: () -> Unit,
     onTopAppBarHeightChanged: (Int) -> Unit,
@@ -85,6 +91,8 @@ internal fun MapTopAppBar(
     val scope = rememberCoroutineScope()
     val searchBarState = rememberSearchBarState()
     val textFieldState = rememberTextFieldState()
+    val destinationSearchFocusRequester = remember { FocusRequester() }
+    val softwareKeyboardController = LocalSoftwareKeyboardController.current
     val supportsPlatformDialogWindow = LocalSupportsPlatformDialogWindow.current
 
     var showSearchResult by rememberSaveable { mutableStateOf(false) }
@@ -154,6 +162,20 @@ internal fun MapTopAppBar(
             }
     }
 
+    LaunchedEffect(destinationSearchRequestId) {
+        val requestId = destinationSearchRequestId ?: return@LaunchedEffect
+
+        onDestinationSearchRequestConsumed(requestId)
+        canFocus = true
+        showSearchResult = false
+        searchBarState.animateToExpanded()
+        awaitDestinationSearchInputPlacement()
+        runCatching {
+            destinationSearchFocusRequester.requestFocus()
+        }
+        softwareKeyboardController?.show()
+    }
+
     Box(
         modifier = modifier,
     ) {
@@ -180,6 +202,7 @@ internal fun MapTopAppBar(
                             },
                         searchBarState = searchBarState,
                         textFieldState = textFieldState,
+                        focusRequester = destinationSearchFocusRequester,
                         showSearchResult = showSearchResult,
                         showSettingAction = shouldShowSettingAction,
                         onSearch = ::onSearchAction,
@@ -203,6 +226,7 @@ internal fun MapTopAppBar(
                         HomeMapSearchInputField(
                             searchBarState = searchBarState,
                             textFieldState = textFieldState,
+                            focusRequester = destinationSearchFocusRequester,
                             showSearchResult = showSearchResult,
                             showSettingAction = false,
                             onSearch = ::onSearchAction,
@@ -230,6 +254,7 @@ internal fun MapTopAppBar(
                 isVisible = searchBarState.isExpandedOrExpanding(),
                 searchBarState = searchBarState,
                 textFieldState = textFieldState,
+                focusRequester = destinationSearchFocusRequester,
                 query = textFieldState.text.toString(),
                 suggestions = suggestions,
                 histories = histories,
@@ -251,6 +276,7 @@ private fun MapTopAppBarEmbeddedSearchOverlay(
     isVisible: Boolean,
     searchBarState: SearchBarState,
     textFieldState: TextFieldState,
+    focusRequester: FocusRequester,
     query: String,
     suggestions: ImmutableList<SearchSuggestionItem>,
     histories: ImmutableList<SearchHistory>,
@@ -276,6 +302,7 @@ private fun MapTopAppBarEmbeddedSearchOverlay(
             modifier = Modifier.fillMaxWidth(),
             searchBarState = searchBarState,
             textFieldState = textFieldState,
+            focusRequester = focusRequester,
             showSearchResult = showSearchResult,
             showSettingAction = false,
             onSearch = onSearch,
@@ -331,6 +358,7 @@ private fun SearchBarState.isExpandedOrExpanding(): Boolean {
 private fun HomeMapSearchInputField(
     searchBarState: SearchBarState,
     textFieldState: TextFieldState,
+    focusRequester: FocusRequester,
     showSearchResult: Boolean,
     showSettingAction: Boolean,
     onSearch: (String) -> Unit,
@@ -341,7 +369,7 @@ private fun HomeMapSearchInputField(
     val scope = rememberCoroutineScope()
 
     SearchBarDefaults.InputField(
-        modifier = modifier,
+        modifier = modifier.focusRequester(focusRequester),
         searchBarState = searchBarState,
         textFieldState = textFieldState,
         onSearch = {
@@ -555,4 +583,8 @@ internal fun HomeMapSearchHistoryList(
             HorizontalDivider()
         }
     }
+}
+
+private suspend fun awaitDestinationSearchInputPlacement() {
+    withFrameNanos { frameTimeNanos -> frameTimeNanos }
 }

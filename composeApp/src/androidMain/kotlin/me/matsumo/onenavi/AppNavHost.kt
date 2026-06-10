@@ -2,6 +2,7 @@ package me.matsumo.onenavi
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -18,8 +19,18 @@ import me.matsumo.onenavi.feature.setting.settingVoiceCategoryEntry
 @Composable
 internal fun AppNavHost(
     modifier: Modifier = Modifier,
+    destinationSearchRequestId: Long? = null,
 ) {
     val navBackStack = rememberNavBackStack(Destination.config, Destination.Home)
+
+    LaunchedEffect(destinationSearchRequestId) {
+        if (destinationSearchRequestId == null) {
+            return@LaunchedEffect
+        }
+
+        navBackStack.clear()
+        navBackStack.add(Destination.Home)
+    }
 
     CompositionLocalProvider(
         LocalNavBackStack provides navBackStack,

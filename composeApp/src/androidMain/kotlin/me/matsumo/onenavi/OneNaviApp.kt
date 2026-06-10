@@ -17,12 +17,16 @@ import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
 internal fun OneNaviApp(
     setting: AppSetting,
     modifier: Modifier = Modifier,
+    destinationSearchRequestId: Long? = null,
 ) {
     SetupCoil()
     BasicAds.Initialize()
 
     OneNaviTheme(setting) {
-        AppNavHost(modifier)
+        AppNavHost(
+            modifier = modifier,
+            destinationSearchRequestId = destinationSearchRequestId,
+        )
     }
 }
 

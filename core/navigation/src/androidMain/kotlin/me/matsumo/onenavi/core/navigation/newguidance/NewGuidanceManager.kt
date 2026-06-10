@@ -149,6 +149,8 @@ class NewGuidanceManager internal constructor(
      * GPS 購読 job と snapshot 購読 job を止め、tracker の attach 状態も破棄する。
      */
     fun stopGuidance() {
+        val shouldEmitStopped = _state.value != GuidanceState.Idle
+
         Napier.i(tag = TAG) { "Guidance stopped" }
         rerouteJob?.cancel()
         rerouteJob = null
@@ -156,6 +158,10 @@ class NewGuidanceManager internal constructor(
         rerouteDetector?.detach()
         currentRoute = null
         _state.value = GuidanceState.Idle
+
+        if (shouldEmitStopped) {
+            _events.tryEmit(GuidanceEvent.Stopped)
+        }
     }
 
     /**

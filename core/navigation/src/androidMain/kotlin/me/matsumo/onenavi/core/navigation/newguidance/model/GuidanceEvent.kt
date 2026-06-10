@@ -12,4 +12,7 @@ sealed interface GuidanceEvent {
 
     /** 目的地に到達し、案内 session が完了した。 */
     data object DestinationReached : GuidanceEvent
+
+    /** ユーザー操作または最終 teardown により案内 session が停止した。 */
+    data object Stopped : GuidanceEvent
 }

@@ -43,11 +43,16 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PointOfInterest
+import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommand
+import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommandEnvelope
+import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
+import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.ui.screen.Destination
 import me.matsumo.onenavi.core.ui.theme.LocalAppSetting
 import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
+import me.matsumo.onenavi.core.ui.theme.LocalOneNaviDisplaySurface
 import me.matsumo.onenavi.core.ui.theme.shouldUseDarkTheme
 import me.matsumo.onenavi.feature.map.components.MapControls
 import me.matsumo.onenavi.feature.map.components.MapRecenterButton
@@ -70,13 +75,17 @@ import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 import me.matsumo.onenavi.feature.map.state.rememberMapCameraState
 import me.matsumo.onenavi.feature.map.state.resolveMapPanelLayout
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MapScreen(modifier: Modifier = Modifier) {
+fun MapScreen(
+    modifier: Modifier = Modifier,
+) {
     val viewModel = koinViewModel<MapViewModel>()
+    val carPhoneSessionCoordinator = koinInject<CarPhoneSessionCoordinator>()
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val screenState by viewModel.currentScreenState.collectAsStateWithLifecycle()
@@ -84,6 +93,7 @@ fun MapScreen(modifier: Modifier = Modifier) {
     val routePreviewState by viewModel.newRoutePreviewState.collectAsStateWithLifecycle()
     val guidanceState by viewModel.newGuidanceState.collectAsStateWithLifecycle()
     val vehicleLocationState by viewModel.vehicleLocationState.collectAsStateWithLifecycle()
+    val phoneCommand by carPhoneSessionCoordinator.phoneCommand.collectAsStateWithLifecycle()
 
     val navigationBarHeightDp = WindowInsets.navigationBars
         .asPaddingValues()
@@ -105,10 +115,18 @@ fun MapScreen(modifier: Modifier = Modifier) {
 
     val density = LocalDensity.current
     val appSetting = LocalAppSetting.current
+    val displaySurface = LocalOneNaviDisplaySurface.current
     val navBackStack = LocalNavBackStack.current
     val isMapDarkMode = shouldUseDarkTheme(appSetting.theme)
     val shouldLogMapDiagnostics = appSetting.developerMode
     val isNavigating = screenState is MapScreenState.Navigating
+    val isAndroidAutoVirtualDisplay = displaySurface == OneNaviDisplaySurface.AndroidAutoVirtualDisplay
+    val isPhoneDisplaySurface = displaySurface == OneNaviDisplaySurface.Phone
+    val destinationSearchRequestId = if (isPhoneDisplaySurface) {
+        phoneCommand?.destinationSearchRequestId()
+    } else {
+        null
+    }
     val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
     val topAppBarHeightDp = with(density) { uiState.topAppBarHeight.toDp() }
     val waypointSearchOverlay = uiState.overlayState as? MapOverlayState.WaypointSearch
@@ -146,6 +164,22 @@ fun MapScreen(modifier: Modifier = Modifier) {
             allowSheetHide = true
             scaffoldState.bottomSheetState.hide()
             viewModel.onUiEvent(MapUiEvent.OnBottomSheetPeekHeightChanged(0.dp))
+        }
+    }
+
+    LaunchedEffect(destinationSearchRequestId) {
+        if (destinationSearchRequestId != null) {
+            viewModel.onUiEvent(MapUiEvent.OnPhoneDestinationSearchRequested)
+        }
+    }
+
+    LaunchedEffect(guidanceState, isAndroidAutoVirtualDisplay, screenState) {
+        val isGuidanceStarted = guidanceState is GuidanceState.Guiding
+        val isAlreadyNavigating = screenState is MapScreenState.Navigating
+        val shouldSyncGuidance = isAndroidAutoVirtualDisplay && isGuidanceStarted && !isAlreadyNavigating
+
+        if (shouldSyncGuidance) {
+            viewModel.onUiEvent(MapUiEvent.OnSharedGuidanceStarted)
         }
     }
 
@@ -214,6 +248,8 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
                 scaffoldState = scaffoldState,
+                destinationSearchRequestId = destinationSearchRequestId,
+                onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
                 onMapUpdate = { googleMap = it },
                 onPointOfInterestClicked = { pointOfInterest ->
                     viewModel.onUiEvent(pointOfInterest.toMapPointOfInterestSelectedEvent())
@@ -246,6 +282,8 @@ fun MapScreen(modifier: Modifier = Modifier) {
                 controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
                 scaffoldState = scaffoldState,
+                destinationSearchRequestId = destinationSearchRequestId,
+                onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
                 onMapUpdate = { googleMap = it },
                 onPointOfInterestClicked = { pointOfInterest ->
                     viewModel.onUiEvent(pointOfInterest.toMapPointOfInterestSelectedEvent())
@@ -331,6 +369,8 @@ private fun MapScreenCompactLayout(
     controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
     scaffoldState: BottomSheetScaffoldState,
+    destinationSearchRequestId: Long?,
+    onDestinationSearchRequestConsumed: (Long) -> Unit,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
@@ -383,6 +423,8 @@ private fun MapScreenCompactLayout(
                 guidanceState = guidanceState,
                 cameraState = cameraState,
                 panelLayout = panelLayout,
+                destinationSearchRequestId = destinationSearchRequestId,
+                onDestinationSearchRequestConsumed = onDestinationSearchRequestConsumed,
                 onUiEvent = onUiEvent,
                 onSettingClicked = onSettingClicked,
             )
@@ -417,6 +459,8 @@ private fun MapScreenSplitLayout(
     controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
     scaffoldState: BottomSheetScaffoldState,
+    destinationSearchRequestId: Long?,
+    onDestinationSearchRequestConsumed: (Long) -> Unit,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
@@ -489,6 +533,8 @@ private fun MapScreenSplitLayout(
                     guidanceState = guidanceState,
                     cameraState = cameraState,
                     panelLayout = panelLayout,
+                    destinationSearchRequestId = destinationSearchRequestId,
+                    onDestinationSearchRequestConsumed = onDestinationSearchRequestConsumed,
                     onUiEvent = onUiEvent,
                     onSettingClicked = onSettingClicked,
                 )
@@ -610,12 +656,18 @@ private fun MapScreenContent(
     guidanceState: GuidanceState,
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
+    destinationSearchRequestId: Long?,
+    onDestinationSearchRequestConsumed: (Long) -> Unit,
     onUiEvent: (MapUiEvent) -> Unit,
     onSettingClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
+    val displaySurface = LocalOneNaviDisplaySurface.current
     val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
+    val isAndroidAutoVirtualDisplay = displaySurface == OneNaviDisplaySurface.AndroidAutoVirtualDisplay
+    val isBrowsing = screenState is MapScreenState.Browsing
+    val showPhoneDestinationSearchAction = isAndroidAutoVirtualDisplay && isBrowsing
 
     when (screenState) {
         is MapScreenState.Browsing,
@@ -627,6 +679,9 @@ private fun MapScreenContent(
                 cameraState = cameraState,
                 uiState = uiState,
                 showSettingAction = screenState is MapScreenState.Browsing,
+                showPhoneDestinationSearchAction = showPhoneDestinationSearchAction,
+                destinationSearchRequestId = destinationSearchRequestId,
+                onDestinationSearchRequestConsumed = onDestinationSearchRequestConsumed,
                 onUiEvent = onUiEvent,
                 onSettingClicked = onSettingClicked,
             )
@@ -867,6 +922,12 @@ private fun LatLng.toMapLongPressedEvent(): MapUiEvent {
         latitude = latitude,
         longitude = longitude,
     )
+}
+
+private fun CarPhoneSessionCommandEnvelope.destinationSearchRequestId(): Long? {
+    return when (command) {
+        CarPhoneSessionCommand.OpenDestinationSearch -> id
+    }
 }
 
 private val SHEET_VISIBLE_STATES = listOf(

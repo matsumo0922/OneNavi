@@ -23,7 +23,7 @@ class MapPanelLayoutTest {
         val layout = resolveMapPanelLayout(maxWidth = 560.dp)
 
         assertEquals(MapWidthSizeClass.EXPANDED, layout.widthSizeClass)
-        assertEquals(252.dp, layout.panelWidth)
+        assertEquals(244.dp, layout.panelWidth)
         assertEquals(MapPanelSide.RIGHT, layout.panelSide)
         assertTrue(layout.isSplit)
     }
@@ -42,7 +42,7 @@ class MapPanelLayoutTest {
         val wideLayout = resolveMapPanelLayout(maxWidth = 1328.dp)
 
         assertEquals(252.dp, narrowLayout.visibleMapWidth(viewportWidth = 560.dp))
-        assertEquals(872.dp, wideLayout.visibleMapWidth(viewportWidth = 1328.dp))
+        assertEquals(864.dp, wideLayout.visibleMapWidth(viewportWidth = 1328.dp))
     }
 
     @Test
@@ -51,7 +51,7 @@ class MapPanelLayoutTest {
         val compactLayout = resolveMapPanelLayout(maxWidth = 559.dp)
 
         assertEquals(MAP_PANEL_MAX_WIDTH + MAP_CONTROLS_COLUMN_WIDTH, splitLayout.splitHorizontalInset)
-        assertEquals(456.dp, splitLayout.splitHorizontalInset)
+        assertEquals(464.dp, splitLayout.splitHorizontalInset)
         assertEquals(0.dp, compactLayout.splitHorizontalInset)
     }
 
@@ -76,10 +76,10 @@ class MapPanelLayoutTest {
 
         val horizontalPadding = layout.resolveHorizontalCameraPaddingPx(
             basePaddingPx = 24,
-            splitInsetPx = 456,
+            splitInsetPx = 464,
         )
 
-        assertEquals(480 to 480, horizontalPadding)
+        assertEquals(488 to 488, horizontalPadding)
     }
 
     @Test
@@ -91,10 +91,10 @@ class MapPanelLayoutTest {
 
         val horizontalPadding = layout.resolveHorizontalCameraPaddingPx(
             basePaddingPx = 24,
-            splitInsetPx = 456,
+            splitInsetPx = 464,
         )
 
-        assertEquals(480 to 480, horizontalPadding)
+        assertEquals(488 to 488, horizontalPadding)
     }
 
     @Test
@@ -117,9 +117,9 @@ class MapPanelLayoutTest {
 
         val canvasLayout = layout.resolveCanvasLayout(viewportWidth = 1328.dp)
 
-        assertEquals(1784.dp, canvasLayout.width)
-        assertEquals((-456).dp, canvasLayout.offsetX)
-        assertEquals(456.dp, canvasLayout.horizontalInset)
+        assertEquals(1792.dp, canvasLayout.width)
+        assertEquals((-464).dp, canvasLayout.offsetX)
+        assertEquals(464.dp, canvasLayout.horizontalInset)
     }
 
     @Test
@@ -131,8 +131,8 @@ class MapPanelLayoutTest {
 
         val canvasLayout = layout.resolveCanvasLayout(viewportWidth = 1328.dp)
 
-        assertEquals(1784.dp, canvasLayout.width)
+        assertEquals(1792.dp, canvasLayout.width)
         assertEquals(0.dp, canvasLayout.offsetX)
-        assertEquals(456.dp, canvasLayout.horizontalInset)
+        assertEquals(464.dp, canvasLayout.horizontalInset)
     }
 }
