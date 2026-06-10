@@ -40,6 +40,8 @@ import me.matsumo.onenavi.OneNaviApp
 import me.matsumo.onenavi.core.model.AppSetting
 import me.matsumo.onenavi.core.ui.theme.LocalSupportsPlatformDialogWindow
 import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
+import me.matsumo.onenavi.feature.map.DEFAULT_MAP_RENDER_SCALE
+import me.matsumo.onenavi.feature.map.LocalMapRenderScale
 import me.matsumo.onenavi.feature.map.MapRenderDensityDiagnostics
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -96,6 +98,7 @@ internal fun CarVirtualDisplayProbeContent(
                 CarVirtualDisplayProbeAppHost(
                     modifier = Modifier.fillMaxSize(),
                     settings = settings,
+                    viewport = viewport,
                 )
             }
             if (shouldShowDebugOverlay) {
@@ -138,6 +141,7 @@ internal fun CarVirtualDisplayProbeContent(
 @Composable
 private fun CarVirtualDisplayProbeAppHost(
     settings: AppSetting?,
+    viewport: CarVirtualDisplayViewport,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -155,8 +159,10 @@ private fun CarVirtualDisplayProbeAppHost(
         }
 
         hasLocationPermission -> {
+            val mapRenderScale = rememberCarVirtualDisplayMapRenderScale(viewport.densityDpi)
             CompositionLocalProvider(
                 LocalSupportsPlatformDialogWindow provides false,
+                LocalMapRenderScale provides mapRenderScale,
             ) {
                 OneNaviApp(
                     modifier = modifier,
@@ -176,6 +182,36 @@ private fun CarVirtualDisplayProbeAppHost(
             }
         }
     }
+}
+
+/**
+ * VirtualDisplay 上の地図描画スケール係数を算出する。
+ *
+ * GoogleMap の描画 density はプロセス単位で端末本体（applicationContext）の density に焼き付くため、
+ * VirtualDisplay 上では地図だけが `端末本体 density / 表示先 density` 倍に拡大される。地図サブツリーの
+ * 座標計算をその焼き付け済み density 空間へ揃えるための係数として、両者の比を返す。
+ *
+ * @param displayDensityDpi 表示先 VirtualDisplay の densityDpi
+ * @return 地図サブツリーへ与える描画スケール係数
+ */
+@Composable
+private fun rememberCarVirtualDisplayMapRenderScale(displayDensityDpi: Int): Float {
+    val context = LocalContext.current
+
+    return remember(displayDensityDpi, context) {
+        resolveMapRenderScale(
+            bakedDensityDpi = context.applicationContext.resources.displayMetrics.densityDpi,
+            displayDensityDpi = displayDensityDpi,
+        )
+    }
+}
+
+private fun resolveMapRenderScale(bakedDensityDpi: Int, displayDensityDpi: Int): Float {
+    if (displayDensityDpi <= 0) {
+        return DEFAULT_MAP_RENDER_SCALE
+    }
+
+    return bakedDensityDpi.toFloat() / displayDensityDpi
 }
 
 @Composable

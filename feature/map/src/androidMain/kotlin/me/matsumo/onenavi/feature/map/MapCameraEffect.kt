@@ -11,6 +11,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.core.model.RouteDetail
@@ -27,6 +28,7 @@ import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.RouteMeterIndex
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
+import kotlin.math.roundToInt
 
 /**
  * 画面状態の変化を GoogleMap カメラ操作へ変換する。
@@ -57,7 +59,12 @@ internal fun MapCameraEffect(
     viewportHeightPx: Int,
     shouldLogDiagnostics: Boolean,
 ) {
-    val density = LocalDensity.current
+    val mapRenderScale = LocalMapRenderScale.current
+    val displayDensity = LocalDensity.current
+    val density = Density(
+        density = displayDensity.density * mapRenderScale,
+        fontScale = displayDensity.fontScale,
+    )
     val layoutDirection = LocalLayoutDirection.current
     val statusBarHeightPadding = WindowInsets.statusBars
         .asPaddingValues()
@@ -159,6 +166,7 @@ internal fun MapCameraEffect(
         navigationBarBottomPadding,
         safeDrawingLeftPadding,
         safeDrawingRightPadding,
+        mapRenderScale,
     ) {
         val horizontalBasePadding = maxOf(
             MAP_CAMERA_HORIZONTAL_BASE_PADDING,
@@ -179,10 +187,12 @@ internal fun MapCameraEffect(
             statusBarHeightPaddingPx,
             navigationBarBottomPaddingPx,
         )
+        val topAppBarHeightPx = (uiState.topAppBarHeight * mapRenderScale).roundToInt()
+        val navigationCardHeightPx = (uiState.navigationCardHeight * mapRenderScale).roundToInt()
         val topPaddingPx = if (panelLayout.isSplit) {
             splitVerticalPaddingPx
         } else {
-            uiState.topAppBarHeight + statusBarHeightPaddingPx
+            topAppBarHeightPx + statusBarHeightPaddingPx
         }
         val bottomPaddingPx = if (panelLayout.isSplit) {
             splitVerticalPaddingPx
@@ -191,7 +201,7 @@ internal fun MapCameraEffect(
                 hasSheetOverlay = hasSheetOverlay,
                 isNavigating = screenState is MapScreenState.Navigating,
                 bottomSheetPeekHeightPx = with(density) { uiState.bottomSheetPeekHeight.toPx() }.toInt(),
-                navigationCardHeightPx = uiState.navigationCardHeight,
+                navigationCardHeightPx = navigationCardHeightPx,
             )
         }
 

@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -45,6 +46,7 @@ import kotlinx.coroutines.delay
 import me.matsumo.onenavi.feature.map.state.MapCameraDefaults
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapCanvasLayout
+import kotlin.math.roundToInt
 
 @Composable
 internal fun MapItem(
@@ -58,14 +60,23 @@ internal fun MapItem(
     onMapLongClicked: (LatLng) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
+    val displayDensity = LocalDensity.current
+    val mapRenderScale = LocalMapRenderScale.current
+    val mapSpaceDensity = remember(displayDensity, mapRenderScale) {
+        Density(
+            density = displayDensity.density * mapRenderScale,
+            fontScale = displayDensity.fontScale,
+        )
+    }
     val mapView = rememberMapViewWithLifecycle(isDarkMode = isDarkMode)
     val mapViewDiagnosticState = remember { MapViewDiagnosticState() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
-    val canvasWidthPx = with(density) {
-        mapCanvasLayout.width.roundToPx().coerceAtLeast(viewportSize.width)
+    val viewportWidthMapPx = (viewportSize.width * mapRenderScale).roundToInt()
+    val viewportHeightMapPx = (viewportSize.height * mapRenderScale).roundToInt()
+    val canvasWidthPx = with(mapSpaceDensity) {
+        mapCanvasLayout.width.roundToPx().coerceAtLeast(viewportWidthMapPx)
     }
-    val canvasOffsetXPx = with(density) { mapCanvasLayout.offsetX.roundToPx() }
+    val canvasOffsetXPx = with(displayDensity) { mapCanvasLayout.offsetX.roundToPx() }
 
     MapViewLifecycleEffect(
         mapView = mapView,
@@ -87,7 +98,7 @@ internal fun MapItem(
         if (shouldLogDiagnostics) {
             MapRenderDensityDiagnosticsEffect(
                 googleMap = it,
-                composeDensity = density.density,
+                composeDensity = displayDensity.density,
                 mapView = mapView,
             )
         }
@@ -102,12 +113,12 @@ internal fun MapItem(
 
         cameraState.updateViewportSize(
             widthPx = canvasWidthPx,
-            heightPx = viewportSize.height,
+            heightPx = viewportHeightMapPx,
         )
         if (shouldLogDiagnostics) {
             Napier.i(tag = MAP_CAMERA_LOG_TAG) {
                 "MapView layout updated. viewport=${viewportSize.width}x${viewportSize.height} " +
-                    "canvas=${canvasWidthPx}x${viewportSize.height} offsetX=$canvasOffsetXPx"
+                    "canvas=${canvasWidthPx}x$viewportHeightMapPx offsetX=$canvasOffsetXPx"
             }
         }
     }
@@ -133,8 +144,9 @@ internal fun MapItem(
                 container.updateMapViewLayout(
                     mapView = mapView,
                     canvasWidthPx = canvasWidthPx,
-                    canvasHeightPx = viewportSize.height,
+                    canvasHeightPx = viewportHeightMapPx,
                     canvasOffsetXPx = canvasOffsetXPx,
+                    renderScale = mapRenderScale,
                     shouldLogDiagnostics = shouldLogDiagnostics,
                     diagnosticState = mapViewDiagnosticState,
                 )
@@ -203,6 +215,7 @@ private fun FrameLayout.updateMapViewLayout(
     canvasWidthPx: Int,
     canvasHeightPx: Int,
     canvasOffsetXPx: Int,
+    renderScale: Float,
     shouldLogDiagnostics: Boolean,
     diagnosticState: MapViewDiagnosticState,
 ) {
@@ -228,6 +241,11 @@ private fun FrameLayout.updateMapViewLayout(
         )
     }
 
+    val inverseRenderScale = 1f / renderScale
+    mapView.pivotX = 0f
+    mapView.pivotY = 0f
+    mapView.scaleX = inverseRenderScale
+    mapView.scaleY = inverseRenderScale
     mapView.translationX = canvasOffsetXPx.toFloat()
     if (!shouldLogDiagnostics) return
 
@@ -516,7 +534,8 @@ private fun MapRenderDensityDiagnosticsEffect(googleMap: GoogleMap, composeDensi
                 lastLabel = label
                 MapRenderDensityDiagnostics.update(label)
                 Napier.i(tag = MAP_CAMERA_LOG_TAG) {
-                    "MapView render density. $label ${mapView.densitySourceLabel()}"
+                    "MapView render density. displayId=${mapView.display?.displayId} " +
+                        "$label ${mapView.densitySourceLabel()}"
                 }
             }
 
