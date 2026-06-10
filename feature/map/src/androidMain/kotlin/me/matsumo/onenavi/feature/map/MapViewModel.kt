@@ -47,6 +47,7 @@ import me.matsumo.onenavi.feature.map.location.VehicleLocationDataSource
 import me.matsumo.onenavi.feature.map.state.ExtNavNavigationGuideImageLoader
 import me.matsumo.onenavi.feature.map.state.GuidanceVehicleLocationSelector
 import me.matsumo.onenavi.feature.map.state.MapGeodesy
+import me.matsumo.onenavi.feature.map.state.MapGuidanceScreenStateRestorer
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
@@ -139,6 +140,7 @@ class MapViewModel(
 
     init {
         observeNavigationGuideImageKey()
+        observeGuidanceScreenState()
     }
 
     fun onUiEvent(event: MapUiEvent) = uiEventDelegate.onUiEvent(event)
@@ -180,6 +182,25 @@ class MapViewModel(
     override fun onCleared() {
         super.onCleared()
         guideImageController.clear()
+    }
+
+    private fun observeGuidanceScreenState() {
+        newGuidanceState
+            .onEach(::restoreScreenStateForGuidance)
+            .launchIn(viewModelScope)
+    }
+
+    private fun restoreScreenStateForGuidance(guidanceState: GuidanceState) {
+        val restoredStates = MapGuidanceScreenStateRestorer.restore(
+            states = _screenStates.value,
+            guidanceState = guidanceState,
+        )
+
+        if (restoredStates == _screenStates.value) {
+            return
+        }
+
+        setScreenStates(restoredStates)
     }
 
     private fun observeNavigationGuideImageKey() {
