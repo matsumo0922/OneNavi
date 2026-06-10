@@ -65,9 +65,9 @@ OneNavi は Android 向けカーナビアプリ。Google Maps 等から intent s
 - `08_open_questions.md` — 未解決事項・意思決定ログ
 - `09_etc_card_detection.md` — ETC カード検出 API 調査
 - `18_external_nav_api_migration_plan.md` — 外部ナビ API 移行計画
-- `19_drive_supporter_api_integration_plan.md` — 外部ナビ API 統合計画
 - `23_route_compare_dev_tool.md` — ルート比較 dev tool
 - `28_navigating_state_and_guidance_progress_design.md` — ナビ中状態・案内進捗設計
+- `33_external_nav_api_local_dependency.md` — 外部ナビ API ライブラリのローカル依存化
 
 ## Tech Stack
 
@@ -78,11 +78,11 @@ OneNavi は Android 向けカーナビアプリ。Google Maps 等から intent s
 - **Serialization**: kotlinx.serialization
 - **Image**: Coil 3
 - **Navigation**: Navigation3 (androidx.navigation3)
-- **Build**: Gradle 9.4 + build-logic (Convention Plugins)
+- **Build**: Gradle 9.4 wrapper + Android Gradle Plugin 8.13 + build-logic (Convention Plugins)
 - **Lint**: detekt + Twitter Compose Rules
 - **Map/Navigation**: Google Maps SDK + Google Routes API + 外部ナビ API ライブラリ
-- **TTS**: Google Cloud TTS Chirp 3 HD (Laomedeia) + Android 内蔵 TTS (未統合)
-- **Toll**: Google Routes API (未統合)
+- **TTS**: Google Cloud TTS Chirp 3 HD + ローカル効果音 / AudioFocus 制御（Android 内蔵 TTS fallback は未実装）
+- **Toll**: 外部ナビ API ライブラリ由来の route summary（Google Routes API は dev tool / 補助検証用途）
 
 ## Module Structure
 
@@ -136,6 +136,25 @@ make detekt
 # or
 ./gradlew detekt --auto-correct --continue
 ```
+
+## External Nav API Local Dependency
+
+外部ナビ API ライブラリは submodule ではなく、ローカル file Maven repository に publish した
+AAR として解決する。通常の IDE import では外部ライブラリのソースを読み込まない。
+
+```bash
+make ext-nav-api-setup
+./gradlew assembleDebug --no-configuration-cache
+```
+
+- 既定では OneNavi と同じ親ディレクトリにある checkout を使う。checkout が無い初回だけ
+  `EXT_NAV_API_GIT_URL=<private-repository-url> make ext-nav-api-setup` で clone + publish する。
+- checkout の場所を変える場合は `EXT_NAV_API_PATH`、publish 先を変える場合は
+  `EXT_NAV_API_REPOSITORY_PATH`、依存 version を固定する場合は `EXT_NAV_API_VERSION` を使う。
+- 外部ナビ API ライブラリ自体を編集しながらビルドする場合のみ、`extNavApiPath` /
+  `EXT_NAV_API_PATH` で opt-in composite build を有効化する。通常の IDE import の既定にしない。
+- 外部ナビ API ライブラリを submodule として再追加しないこと。詳細は
+  `docs/spec/33_external_nav_api_local_dependency.md` を参照。
 
 ## Convention Plugins (build-logic)
 
