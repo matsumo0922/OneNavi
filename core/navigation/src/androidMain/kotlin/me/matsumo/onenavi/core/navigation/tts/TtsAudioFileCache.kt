@@ -57,7 +57,6 @@ internal class TtsAudioFileCache(
         if (audio.isEmpty()) return
         if (!directory.exists()) directory.mkdirs()
         if (!directory.isDirectory) return
-        cleanupTemporaryFiles()
 
         val targetFile = fileFor(cacheKey)
         var temporaryFile: File? = null
@@ -69,7 +68,7 @@ internal class TtsAudioFileCache(
             if (targetFile.exists()) targetFile.delete()
             check(resolvedTemporaryFile.renameTo(targetFile))
             targetFile.setLastModified(System.currentTimeMillis())
-            trimToSize()
+            cleanupTemporaryFilesAndTrimToSize()
         }.onFailure {
             temporaryFile?.let { file -> runCatching { file.delete() } }
         }
@@ -83,12 +82,15 @@ internal class TtsAudioFileCache(
      */
     fun fileFor(cacheKey: String): File = directory.resolve("${sha256(cacheKey)}$AUDIO_EXTENSION")
 
-    /** キャッシュ容量が上限を超えていれば古いファイルから削除する。 */
-    private fun trimToSize() {
-        val audioFiles = directory
+    /** 一時ファイルを掃除し、キャッシュ容量が上限を超えていれば古いファイルから削除する。 */
+    private fun cleanupTemporaryFilesAndTrimToSize() {
+        val allFiles = directory
             .listFiles()
-            ?.filter { file -> file.isFile && file.name.endsWith(AUDIO_EXTENSION) }
             .orEmpty()
+
+        cleanupTemporaryFiles(allFiles)
+
+        val audioFiles = allFiles.filter { file -> file.isFile && file.name.endsWith(AUDIO_EXTENSION) }
         var totalBytes = audioFiles.sumOf { file -> file.length() }
         if (totalBytes <= maxBytes) return
 
@@ -109,10 +111,18 @@ internal class TtsAudioFileCache(
 
     /** 書き込み中断で残った一時ファイルを削除する。 */
     private fun cleanupTemporaryFiles() {
-        directory
+        val allFiles = directory
             .listFiles()
-            ?.filter { file -> file.isFile && file.name.endsWith(TEMPORARY_SUFFIX) }
-            ?.forEach { file -> runCatching { file.delete() } }
+            .orEmpty()
+
+        cleanupTemporaryFiles(allFiles)
+    }
+
+    /** 指定ファイル一覧に含まれる一時ファイルを削除する。 */
+    private fun cleanupTemporaryFiles(allFiles: Array<out File>) {
+        allFiles
+            .filter { file -> file.isFile && file.name.endsWith(TEMPORARY_SUFFIX) }
+            .forEach { file -> runCatching { file.delete() } }
     }
 
     /** 指定文字列の SHA-256 hex を返す。 */
@@ -126,7 +136,7 @@ internal class TtsAudioFileCache(
     private companion object {
 
         /** 既定の最大キャッシュ容量。 */
-        const val DEFAULT_MAX_BYTES = 32L * 1024L * 1024L
+        const val DEFAULT_MAX_BYTES = 100L * 1024L * 1024L
 
         /** キャッシュファイル拡張子。 */
         const val AUDIO_EXTENSION = ".wav"

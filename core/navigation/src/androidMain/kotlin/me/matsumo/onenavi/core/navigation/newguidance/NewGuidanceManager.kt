@@ -194,11 +194,6 @@ class NewGuidanceManager internal constructor(
         }
 
         val attachment = tracker.attach(payload = payload, route = route)
-        voiceController?.start(
-            payload = payload,
-            distanceContext = attachment.distanceContext,
-            announceOpening = announceOpening,
-        )
         rerouteDetector?.attach(route)
         tracker.onLocation(route.toOriginUserLocation())
 
@@ -207,6 +202,13 @@ class NewGuidanceManager internal constructor(
             Napier.w(tag = TAG) { "Tracker snapshot was not produced. routeId=${route.id}" }
             return null
         }
+
+        voiceController?.start(
+            payload = payload,
+            distanceContext = attachment.distanceContext,
+            announceOpening = announceOpening,
+            initialSnapshot = snapshot,
+        )
 
         return snapshot
     }

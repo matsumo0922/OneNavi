@@ -37,20 +37,28 @@ internal class VoiceAnnouncementController(
      * @param payload 案内対象の payload (guidancePoints / announcementBlocks を含む)
      * @param distanceContext tracker attach 時と同一の source→geometry 距離変換 context
      * @param announceOpening true なら案内発話に先立って開始アナウンスを発話する (初回開始時のみ true、リルート貼り直しは false)
+     * @param initialSnapshot attach 時点の tracker snapshot。あれば現在距離基準で初回先読みする
      */
     fun start(
         payload: ExtNavRoutePayload,
         distanceContext: ExtNavRouteDistanceContext,
         announceOpening: Boolean,
+        initialSnapshot: ExtNavProgressSnapshot? = null,
     ) {
         val plan = planBuilder.build(
             payload = payload,
             distanceContext = distanceContext,
             config = config,
         )
+        val initialCumulativeMeters = initialSnapshot
+            ?.let { snapshot -> tickFactory.from(snapshot).currentCumulativeMeters }
+
         logPlan(plan)
         speechRunner.attach(plan, announceOpening = announceOpening)
-        prefetcher.attach(plan)
+        prefetcher.attach(
+            plan = plan,
+            currentCumulativeMeters = initialCumulativeMeters,
+        )
     }
 
     /**

@@ -28,9 +28,27 @@ class VoiceAnnouncementPrefetcherTest {
     fun `現在地より後ろの target は prefetch しない`() {
         val dispatcher = RecordingDispatcher()
         val prefetcher = prefetcherOf(dispatcher)
-        prefetcher.attach(planOf(targetOf(index = 0, geometryMeters = 3_000.0, stage("far"))))
+        prefetcher.attach(
+            planOf(
+                targetOf(index = 0, geometryMeters = 3_000.0, stage("far")),
+            ),
+        )
 
         prefetcher.onTick(tickOf(current = 3_100.0))
+
+        assertEquals(emptyList(), dispatcher.prefetchedSsml)
+    }
+
+    @Test
+    fun `現在距離なしの attach では prefetch しない`() {
+        val dispatcher = RecordingDispatcher()
+        val prefetcher = prefetcherOf(dispatcher)
+
+        prefetcher.attach(
+            planOf(
+                targetOf(index = 0, geometryMeters = 500.0, stage("a")),
+            ),
+        )
 
         assertEquals(emptyList(), dispatcher.prefetchedSsml)
     }
@@ -57,13 +75,14 @@ class VoiceAnnouncementPrefetcherTest {
         val prefetcher = prefetcherOf(dispatcher)
 
         prefetcher.attach(
-            planOf(
+            plan = planOf(
                 targetOf(index = 0, geometryMeters = 500.0, stage("a")),
                 targetOf(index = 1, geometryMeters = 1_000.0, stage("b")),
                 targetOf(index = 2, geometryMeters = 1_500.0, stage("c")),
                 targetOf(index = 3, geometryMeters = 1_800.0, stage("d")),
                 targetOf(index = 4, geometryMeters = 2_500.0, stage("e")),
             ),
+            currentCumulativeMeters = 0.0,
         )
 
         assertEquals(
@@ -81,7 +100,16 @@ class VoiceAnnouncementPrefetcherTest {
             gate = gate,
         )
 
-        prefetcher.attach(planOf(targetOf(index = 0, geometryMeters = 500.0, stage("curve", GuidanceCategory.Curve))))
+        prefetcher.attach(
+            plan = planOf(
+                targetOf(
+                    index = 0,
+                    geometryMeters = 500.0,
+                    stage = stage("curve", GuidanceCategory.Curve),
+                ),
+            ),
+            currentCumulativeMeters = 0.0,
+        )
 
         assertEquals(emptyList(), dispatcher.prefetchedSsml)
     }
@@ -91,7 +119,12 @@ class VoiceAnnouncementPrefetcherTest {
         val dispatcher = RecordingDispatcher()
         val prefetcher = prefetcherOf(dispatcher)
 
-        prefetcher.attach(planOf(targetOf(index = 0, geometryMeters = 500.0, stage("ポーン"))))
+        prefetcher.attach(
+            plan = planOf(
+                targetOf(index = 0, geometryMeters = 500.0, stage("ポーン")),
+            ),
+            currentCumulativeMeters = 0.0,
+        )
 
         assertEquals(emptyList(), dispatcher.prefetchedSsml)
     }
@@ -100,7 +133,12 @@ class VoiceAnnouncementPrefetcherTest {
     fun `detach で pending prefetch を clear し 以後の tick では prefetch しない`() {
         val dispatcher = RecordingDispatcher()
         val prefetcher = prefetcherOf(dispatcher)
-        prefetcher.attach(planOf(targetOf(index = 0, geometryMeters = 500.0, stage("a"))))
+        prefetcher.attach(
+            plan = planOf(
+                targetOf(index = 0, geometryMeters = 500.0, stage("a")),
+            ),
+            currentCumulativeMeters = 0.0,
+        )
 
         prefetcher.detach()
         prefetcher.onTick(tickOf(current = 100.0))

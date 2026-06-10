@@ -27,20 +27,20 @@ internal class VoiceAnnouncementPrefetcher(
     private val prefetchedSsmlKeys = mutableSetOf<String>()
 
     /**
-     * 発話プランを attach し、route 始点基準で近傍発話を先読みする。
+     * 発話プランを attach し、現在距離が分かっている場合だけ近傍発話を先読みする。
      *
      * @param plan attach する発話プラン
-     * @param currentCumulativeMeters 現在地の route 累積距離
+     * @param currentCumulativeMeters 現在地の route 累積距離。不明な場合は snapshot 更新まで先読みしない
      */
     fun attach(
         plan: VoiceAnnouncementPlan,
-        currentCumulativeMeters: Double = 0.0,
+        currentCumulativeMeters: Double? = null,
     ) {
         dispatcher.clearPrefetch()
         prefetchedStageIds.clear()
         prefetchedSsmlKeys.clear()
         this.plan = plan
-        prefetchFrom(currentCumulativeMeters)
+        currentCumulativeMeters?.let { meters -> prefetchFrom(meters) }
     }
 
     /**
