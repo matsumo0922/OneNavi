@@ -32,28 +32,6 @@ internal data class MapPanelLayout(
         get() = if (isSplit) panelWidth + MAP_CONTROLS_COLUMN_WIDTH else 0.dp
 
     /**
-     * GoogleMap に渡す左右 padding を返す。
-     *
-     * 分割レイアウトでは MapView の実 viewport を [splitHorizontalInset]（UI 帯 + map controls
-     * カラム）ぶん横へ広げるため、左右に同じ inset を足して padded center と 3D 投影中心を一致させる。
-     *
-     * @param basePaddingPx 左右に常に確保する基本 padding（px）
-     * @param splitInsetPx 分割時に UI 帯側へ確保する inset（[splitHorizontalInset] の px）
-     * @return start padding と end padding
-     */
-    fun resolveHorizontalCameraPaddingPx(
-        basePaddingPx: Int,
-        splitInsetPx: Int,
-    ): Pair<Int, Int> {
-        if (!isSplit) {
-            return basePaddingPx to basePaddingPx
-        }
-
-        val splitPaddingPx = basePaddingPx + splitInsetPx
-        return splitPaddingPx to splitPaddingPx
-    }
-
-    /**
      * UI 帯と map controls カラムに隠れていない地図の可視幅を返す。
      *
      * 分割レイアウトでは画面幅から [splitHorizontalInset]（UI 帯 + map controls カラム）を除いた
