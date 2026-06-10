@@ -16,4 +16,20 @@ internal interface VoiceAnnouncementDispatcher {
      * @param content category gate / 結合を適用済みの発話内容
      */
     suspend fun speak(content: VoiceAnnouncementContent)
+
+    /**
+     * 近い将来に発話する可能性がある内容を事前準備する。
+     *
+     * 既定実装は何もしない。実際の合成・キャッシュを持つ dispatcher だけが必要に応じて実装する。
+     *
+     * @param content category gate / 結合を適用済みの発話内容
+     */
+    fun prefetch(content: VoiceAnnouncementContent) = Unit
+
+    /**
+     * 現在の route に紐づく事前準備キューを破棄する。
+     *
+     * 既定実装は何もしない。永続キャッシュ自体は削除せず、未処理の先読みだけを捨てる想定。
+     */
+    fun clearPrefetch() = Unit
 }

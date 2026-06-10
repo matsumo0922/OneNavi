@@ -20,12 +20,14 @@ import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlanBuilde
  * @property planBuilder payload + 距離変換 context から発話プランを構築する
  * @property tickFactory snapshot を発話 tick へ変換する
  * @property speechRunner 発話プランと tick を受けて発話を再生する実行系
+ * @property prefetcher 近傍発話の音声合成を事前に走らせる先読み部品
  * @property config category gate / リードタイム等の発話設定
  */
 internal class VoiceAnnouncementController(
     private val planBuilder: VoiceAnnouncementPlanBuilder,
     private val tickFactory: VoiceTickFactory,
     private val speechRunner: VoiceAnnouncementSpeechRunner,
+    private val prefetcher: VoiceAnnouncementPrefetcher,
     private val config: VoiceAnnouncementConfig,
 ) {
 
@@ -48,6 +50,7 @@ internal class VoiceAnnouncementController(
         )
         logPlan(plan)
         speechRunner.attach(plan, announceOpening = announceOpening)
+        prefetcher.attach(plan)
     }
 
     /**
@@ -56,7 +59,9 @@ internal class VoiceAnnouncementController(
      * @param snapshot tracker が発行した進捗 snapshot
      */
     fun onSnapshot(snapshot: ExtNavProgressSnapshot) {
-        speechRunner.submit(tickFactory.from(snapshot))
+        val tick = tickFactory.from(snapshot)
+        speechRunner.submit(tick)
+        prefetcher.onTick(tick)
     }
 
     /** 経由地通過アナウンスを発話する。進行中の案内発話へ割り込んでから発話する。 */
@@ -72,6 +77,7 @@ internal class VoiceAnnouncementController(
     /** 音声案内を停止し、発話プランと進行中の発話を破棄する。 */
     fun stop() {
         speechRunner.detach()
+        prefetcher.detach()
     }
 
     // ---------------------------------------------------------------------
