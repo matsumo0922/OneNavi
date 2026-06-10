@@ -199,7 +199,7 @@ private fun MapZoomButtons(
 }
 
 /** 地図コントロールの丸ボタンサイズ。 */
-internal val MapControlButtonSize = 40.dp
+internal val MapControlButtonSize = 48.dp
 
 /** 地図コントロールの左右 padding。画面端からの inset と、分割時に隣接する UI 帯との隙間を兼ねる。 */
 internal val MapControlsHorizontalPadding = 8.dp
