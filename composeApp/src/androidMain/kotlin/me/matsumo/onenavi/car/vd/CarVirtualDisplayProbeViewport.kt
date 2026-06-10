@@ -52,9 +52,6 @@ data class CarVirtualDisplayViewport(
 /** probe 実装から既存名で参照するための viewport 型。 */
 internal typealias CarVirtualDisplayProbeViewport = CarVirtualDisplayViewport
 
-/** split 表示とみなして visibleArea 横補正候補を追加する最小 inset。 */
-private const val SPLIT_VISIBLE_AREA_MIN_INSET_PX = 120
-
 /** Android Auto host Surface 上で OneNaviApp を実際に描画する領域。 */
 @Immutable
 data class CarVirtualDisplayObservedFrame(
@@ -108,16 +105,6 @@ internal fun createCarVirtualDisplayProbeViewport(
         stableRight = surfaceWidth,
         stableBottom = surfaceHeight,
     )
-}
-
-internal fun CarVirtualDisplayProbeViewport.hasHorizontalSplitVisibleArea(): Boolean {
-    val leftInset = visibleLeft
-    val rightInset = surfaceWidth - visibleRight
-    val maxHorizontalInset = maxOf(leftInset, rightInset)
-    val hasValidSurface = surfaceWidth > 0 && visibleWidth > 0
-    val hasSplitInset = maxHorizontalInset >= SPLIT_VISIBLE_AREA_MIN_INSET_PX
-
-    return hasValidSurface && hasSplitInset
 }
 
 internal fun CarVirtualDisplayProbeViewport.hasVisibleAreaInset(): Boolean {
