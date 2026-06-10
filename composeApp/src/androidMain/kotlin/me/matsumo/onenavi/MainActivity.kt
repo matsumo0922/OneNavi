@@ -26,8 +26,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.ads.MobileAds
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.dialogs.init
+import me.matsumo.onenavi.car.CarGuidanceSessionReleaser
 import me.matsumo.onenavi.components.PermissionScreen
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommand
+import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommandEnvelope
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
 import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
@@ -42,10 +44,12 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel by viewModel<MainViewModel>()
     private val carPhoneSessionCoordinator by inject<CarPhoneSessionCoordinator>()
+    private val carGuidanceSessionReleaser by inject<CarGuidanceSessionReleaser>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        carGuidanceSessionReleaser.ensureStarted()
         handleDestinationSearchIntent(intent)
         enableEdgeToEdge()
         setContent {
@@ -84,7 +88,6 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxSize(),
                                 setting = setting,
                                 destinationSearchRequestId = destinationSearchRequestId,
-                                onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
                             )
                         } else {
                             OneNaviTheme(setting) {
@@ -141,7 +144,7 @@ class MainActivity : ComponentActivity() {
         carPhoneSessionCoordinator.requestPhoneDestinationSearch()
     }
 
-    private fun me.matsumo.onenavi.core.common.car.CarPhoneSessionCommandEnvelope.destinationSearchRequestId(): Long? {
+    private fun CarPhoneSessionCommandEnvelope.destinationSearchRequestId(): Long? {
         return when (command) {
             CarPhoneSessionCommand.OpenDestinationSearch -> id
         }

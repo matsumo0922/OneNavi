@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import me.matsumo.onenavi.BuildKonfig
 import me.matsumo.onenavi.MainViewModel
+import me.matsumo.onenavi.car.CarGuidanceSessionReleaser
 import me.matsumo.onenavi.car.MainActivityPhoneDestinationSearchLauncher
 import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
 import me.matsumo.onenavi.core.model.AppConfig
@@ -41,7 +42,18 @@ val appModule = module {
     }
 
     single<PhoneDestinationSearchLauncher> {
-        MainActivityPhoneDestinationSearchLauncher(context = androidContext())
+        MainActivityPhoneDestinationSearchLauncher(
+            context = androidContext(),
+            carPhoneSessionCoordinator = get(),
+        )
+    }
+
+    single {
+        CarGuidanceSessionReleaser(
+            carPhoneSessionCoordinator = get(),
+            newGuidanceManager = get(),
+            scope = get(),
+        )
     }
 
     viewModelOf(::MainViewModel)

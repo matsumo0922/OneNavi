@@ -43,6 +43,9 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PointOfInterest
+import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommand
+import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommandEnvelope
+import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
@@ -72,6 +75,7 @@ import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 import me.matsumo.onenavi.feature.map.state.rememberMapCameraState
 import me.matsumo.onenavi.feature.map.state.resolveMapPanelLayout
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import kotlin.math.roundToInt
 
@@ -79,10 +83,9 @@ import kotlin.math.roundToInt
 @Composable
 fun MapScreen(
     modifier: Modifier = Modifier,
-    destinationSearchRequestId: Long? = null,
-    onDestinationSearchRequestConsumed: (Long) -> Unit = {},
 ) {
     val viewModel = koinViewModel<MapViewModel>()
+    val carPhoneSessionCoordinator = koinInject<CarPhoneSessionCoordinator>()
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val screenState by viewModel.currentScreenState.collectAsStateWithLifecycle()
@@ -90,6 +93,7 @@ fun MapScreen(
     val routePreviewState by viewModel.newRoutePreviewState.collectAsStateWithLifecycle()
     val guidanceState by viewModel.newGuidanceState.collectAsStateWithLifecycle()
     val vehicleLocationState by viewModel.vehicleLocationState.collectAsStateWithLifecycle()
+    val phoneCommand by carPhoneSessionCoordinator.phoneCommand.collectAsStateWithLifecycle()
 
     val navigationBarHeightDp = WindowInsets.navigationBars
         .asPaddingValues()
@@ -117,6 +121,12 @@ fun MapScreen(
     val shouldLogMapDiagnostics = appSetting.developerMode
     val isNavigating = screenState is MapScreenState.Navigating
     val isAndroidAutoVirtualDisplay = displaySurface == OneNaviDisplaySurface.AndroidAutoVirtualDisplay
+    val isPhoneDisplaySurface = displaySurface == OneNaviDisplaySurface.Phone
+    val destinationSearchRequestId = if (isPhoneDisplaySurface) {
+        phoneCommand?.destinationSearchRequestId()
+    } else {
+        null
+    }
     val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
     val topAppBarHeightDp = with(density) { uiState.topAppBarHeight.toDp() }
     val waypointSearchOverlay = uiState.overlayState as? MapOverlayState.WaypointSearch
@@ -239,7 +249,7 @@ fun MapScreen(
                 controlsBottomPadding = controlsBottomPadding,
                 scaffoldState = scaffoldState,
                 destinationSearchRequestId = destinationSearchRequestId,
-                onDestinationSearchRequestConsumed = onDestinationSearchRequestConsumed,
+                onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
                 onMapUpdate = { googleMap = it },
                 onPointOfInterestClicked = { pointOfInterest ->
                     viewModel.onUiEvent(pointOfInterest.toMapPointOfInterestSelectedEvent())
@@ -273,7 +283,7 @@ fun MapScreen(
                 controlsBottomPadding = controlsBottomPadding,
                 scaffoldState = scaffoldState,
                 destinationSearchRequestId = destinationSearchRequestId,
-                onDestinationSearchRequestConsumed = onDestinationSearchRequestConsumed,
+                onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
                 onMapUpdate = { googleMap = it },
                 onPointOfInterestClicked = { pointOfInterest ->
                     viewModel.onUiEvent(pointOfInterest.toMapPointOfInterestSelectedEvent())
@@ -912,6 +922,12 @@ private fun LatLng.toMapLongPressedEvent(): MapUiEvent {
         latitude = latitude,
         longitude = longitude,
     )
+}
+
+private fun CarPhoneSessionCommandEnvelope.destinationSearchRequestId(): Long? {
+    return when (command) {
+        CarPhoneSessionCommand.OpenDestinationSearch -> id
+    }
 }
 
 private val SHEET_VISIBLE_STATES = listOf(

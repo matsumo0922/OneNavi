@@ -18,7 +18,6 @@ internal fun OneNaviApp(
     setting: AppSetting,
     modifier: Modifier = Modifier,
     destinationSearchRequestId: Long? = null,
-    onDestinationSearchRequestConsumed: (Long) -> Unit = {},
 ) {
     SetupCoil()
     BasicAds.Initialize()
@@ -27,7 +26,6 @@ internal fun OneNaviApp(
         AppNavHost(
             modifier = modifier,
             destinationSearchRequestId = destinationSearchRequestId,
-            onDestinationSearchRequestConsumed = onDestinationSearchRequestConsumed,
         )
     }
 }

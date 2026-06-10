@@ -20,7 +20,6 @@ import me.matsumo.onenavi.feature.setting.settingVoiceCategoryEntry
 internal fun AppNavHost(
     modifier: Modifier = Modifier,
     destinationSearchRequestId: Long? = null,
-    onDestinationSearchRequestConsumed: (Long) -> Unit = {},
 ) {
     val navBackStack = rememberNavBackStack(Destination.config, Destination.Home)
 
@@ -41,10 +40,7 @@ internal fun AppNavHost(
             backStack = navBackStack,
             entryProvider = entryProvider {
                 // homeEntry()
-                mapEntry(
-                    destinationSearchRequestId = destinationSearchRequestId,
-                    onDestinationSearchRequestConsumed = onDestinationSearchRequestConsumed,
-                )
+                mapEntry()
                 paywallEntry()
                 settingEntry()
                 settingLicenseEntry()

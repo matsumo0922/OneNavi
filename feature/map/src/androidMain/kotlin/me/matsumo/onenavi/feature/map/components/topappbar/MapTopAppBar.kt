@@ -46,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -58,7 +59,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.model.SearchHistory
@@ -168,7 +168,7 @@ internal fun MapTopAppBar(
         canFocus = true
         showSearchResult = false
         searchBarState.animateToExpanded()
-        delay(DESTINATION_SEARCH_FOCUS_DELAY_MILLIS)
+        awaitDestinationSearchInputPlacement()
         runCatching {
             destinationSearchFocusRequester.requestFocus()
         }
@@ -585,5 +585,6 @@ internal fun HomeMapSearchHistoryList(
     }
 }
 
-/** 目的地検索 command 後に展開先の入力欄が配置されるまで待つ時間。 */
-private const val DESTINATION_SEARCH_FOCUS_DELAY_MILLIS = 100L
+private suspend fun awaitDestinationSearchInputPlacement() {
+    withFrameNanos { frameTimeNanos -> frameTimeNanos }
+}

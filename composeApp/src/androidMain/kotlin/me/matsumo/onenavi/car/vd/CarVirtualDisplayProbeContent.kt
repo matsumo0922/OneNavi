@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.matsumo.onenavi.MainViewModel
 import me.matsumo.onenavi.OneNaviApp
+import me.matsumo.onenavi.car.CarGuidanceSessionReleaser
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
 import me.matsumo.onenavi.core.model.AppSetting
@@ -150,10 +151,17 @@ private fun CarVirtualDisplayProbeAppHost(
 ) {
     val context = LocalContext.current
     val carPhoneSessionCoordinator = koinInject<CarPhoneSessionCoordinator>()
+    val carGuidanceSessionReleaser = koinInject<CarGuidanceSessionReleaser>()
     val hasLocationPermission = ContextCompat.checkSelfPermission(
         context,
         permission.ACCESS_FINE_LOCATION,
     ) == PackageManager.PERMISSION_GRANTED
+
+    DisposableEffect(carGuidanceSessionReleaser) {
+        carGuidanceSessionReleaser.ensureStarted()
+
+        onDispose {}
+    }
 
     DisposableEffect(carPhoneSessionCoordinator) {
         carPhoneSessionCoordinator.registerSurface(OneNaviDisplaySurface.AndroidAutoVirtualDisplay)

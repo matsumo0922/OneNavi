@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.view.Display
 import me.matsumo.onenavi.MainActivity
+import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
 
 /**
@@ -12,12 +13,12 @@ import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
  */
 class MainActivityPhoneDestinationSearchLauncher(
     private val context: Context,
+    private val carPhoneSessionCoordinator: CarPhoneSessionCoordinator,
 ) : PhoneDestinationSearchLauncher {
 
     override fun launchDestinationSearch(): Result<Unit> {
         return runCatching {
             val intent = Intent(context, MainActivity::class.java)
-                .setAction(PhoneDestinationSearchLauncher.ACTION_OPEN_DESTINATION_SEARCH)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -25,6 +26,7 @@ class MainActivityPhoneDestinationSearchLauncher(
                 .setLaunchDisplayId(Display.DEFAULT_DISPLAY)
 
             context.startActivity(intent, options.toBundle())
+            carPhoneSessionCoordinator.requestPhoneDestinationSearch()
         }
     }
 }

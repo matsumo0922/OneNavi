@@ -540,22 +540,18 @@ private class UiEventDelegate(
     }
 
     private fun handleNavigationStop() {
-        clearNavigationOverlayState()
         newGuidanceManager.stopGuidance()
-        handleNavigationRoutePreviewDismissed()
-
-        if (screenStates.value.lastOrNull() is MapScreenState.Navigating) {
-            popScreenState()
-        }
+        handleGuidanceStopped()
     }
 
     private fun handleGuidanceEvent(event: GuidanceEvent) {
         when (event) {
-            GuidanceEvent.DestinationReached -> handleDestinationReached()
+            GuidanceEvent.DestinationReached -> handleGuidanceStopped()
+            GuidanceEvent.Stopped -> handleGuidanceStopped()
         }
     }
 
-    private fun handleDestinationReached() {
+    private fun handleGuidanceStopped() {
         clearNavigationOverlayState()
         handleNavigationRoutePreviewDismissed()
         newRouteManager.reset()
