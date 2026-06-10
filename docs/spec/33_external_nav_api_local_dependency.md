@@ -18,6 +18,15 @@ IDE 補完対象の肥大化を避ける。
 任意の場所を使う場合は `extNavApiRepositoryPath` または `EXT_NAV_API_REPOSITORY_PATH` を
 指定する。
 
+初回セットアップは Makefile target から実行できる。既定では OneNavi と同じ親
+ディレクトリにある checkout を使い、checkout が存在しない場合は `EXT_NAV_API_GIT_URL` を
+指定すると clone してから publish する。
+
+```bash
+EXT_NAV_API_GIT_URL=<private-repository-url> make ext-nav-api-setup
+make ext-nav-api-setup
+```
+
 ```bash
 scripts/publish_ext_nav_api_to_local_repo.sh /path/to/external-nav-api-library
 ./gradlew :composeApp:assembleDebug
