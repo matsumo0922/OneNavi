@@ -121,6 +121,15 @@ sealed interface MapUiEvent {
     /** ナビゲーション中に選択した waypoint 候補を経由する代替ルート候補を表示する。 */
     data object OnAddWaypointAlternativesClicked : MapUiEvent
 
+    /** スマホ側の目的地検索 UI 起動を要求する。 */
+    data object OnPhoneDestinationSearchClicked : MapUiEvent
+
+    /** スマホ側で目的地検索を始めるため、地図画面を検索可能な状態へ戻す。 */
+    data object OnPhoneDestinationSearchRequested : MapUiEvent
+
+    /** 共有案内状態が開始済みになったため、現在の表示面も案内画面へ同期する。 */
+    data object OnSharedGuidanceStarted : MapUiEvent
+
     /** waypoint 差し替え用の地点検索オーバーレイを閉じる。 */
     data object OnWaypointSearchDismissed : MapUiEvent
 

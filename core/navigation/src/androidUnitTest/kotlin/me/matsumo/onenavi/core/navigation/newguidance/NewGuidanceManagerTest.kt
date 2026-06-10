@@ -1,8 +1,15 @@
 package me.matsumo.onenavi.core.navigation.newguidance
 
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -38,6 +45,24 @@ class NewGuidanceManagerTest {
         manager.stopGuidance()
 
         assertEquals(GuidanceState.Idle, manager.state.value)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `stopGuidance で停止イベントを通知する`() = runTest {
+        val events = mutableListOf<GuidanceEvent>()
+        val collectJob = launch {
+            manager.events
+                .take(1)
+                .toList(events)
+        }
+        runCurrent()
+
+        manager.startGuidance(route = buildRoute())
+        manager.stopGuidance()
+        collectJob.join()
+
+        assertEquals(listOf<GuidanceEvent>(GuidanceEvent.Stopped), events)
     }
 
     @Test

@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.common.OpenLocationCode
+import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
@@ -62,6 +63,7 @@ class MapViewModel(
     private val searchRepository: SearchRepository,
     private val newRouteManager: NewRouteManager,
     private val newGuidanceManager: NewGuidanceManager,
+    phoneDestinationSearchLauncher: PhoneDestinationSearchLauncher,
     guideImageGateway: ExtNavGuideImageGateway,
     vehicleLocationDataSource: VehicleLocationDataSource,
 ) : ViewModel() {
@@ -120,6 +122,7 @@ class MapViewModel(
         searchRepository = searchRepository,
         newRouteManager = newRouteManager,
         newGuidanceManager = newGuidanceManager,
+        phoneDestinationSearchLauncher = phoneDestinationSearchLauncher,
         scope = viewModelScope,
         uiState = _uiState,
         screenStates = _screenStates,
@@ -177,7 +180,6 @@ class MapViewModel(
     override fun onCleared() {
         super.onCleared()
         guideImageController.clear()
-        newGuidanceManager.release()
     }
 
     private fun observeNavigationGuideImageKey() {
@@ -207,6 +209,7 @@ private class UiEventDelegate(
     private val searchRepository: SearchRepository,
     private val newRouteManager: NewRouteManager,
     private val newGuidanceManager: NewGuidanceManager,
+    private val phoneDestinationSearchLauncher: PhoneDestinationSearchLauncher,
     private val scope: CoroutineScope,
     private val uiState: MutableStateFlow<MapUiState>,
     private val screenStates: StateFlow<List<MapScreenState>>,
@@ -275,6 +278,9 @@ private class UiEventDelegate(
             is MapUiEvent.OnAddWaypointCandidateSelected -> handleAddWaypointCandidateSelected(event.item)
             is MapUiEvent.OnAddWaypointConfirmed -> handleAddWaypointConfirmed()
             is MapUiEvent.OnAddWaypointAlternativesClicked -> handleAddWaypointAlternativesClicked()
+            MapUiEvent.OnPhoneDestinationSearchClicked -> handlePhoneDestinationSearchClicked()
+            MapUiEvent.OnPhoneDestinationSearchRequested -> handlePhoneDestinationSearchRequested()
+            MapUiEvent.OnSharedGuidanceStarted -> handleSharedGuidanceStarted()
             is MapUiEvent.OnWaypointSearchDismissed -> handleWaypointSearchDismissed()
             is MapUiEvent.OnWaypointEditResultConsumed -> handleWaypointEditResultConsumed()
             is MapUiEvent.OnTopAppBarHeightChanged -> handleTopAppBarHeightChanged(event.height)
@@ -534,22 +540,17 @@ private class UiEventDelegate(
     }
 
     private fun handleNavigationStop() {
-        clearNavigationOverlayState()
         newGuidanceManager.stopGuidance()
-        handleNavigationRoutePreviewDismissed()
-
-        if (screenStates.value.lastOrNull() is MapScreenState.Navigating) {
-            popScreenState()
-        }
     }
 
     private fun handleGuidanceEvent(event: GuidanceEvent) {
         when (event) {
-            GuidanceEvent.DestinationReached -> handleDestinationReached()
+            GuidanceEvent.DestinationReached -> handleGuidanceStopped()
+            GuidanceEvent.Stopped -> handleGuidanceStopped()
         }
     }
 
-    private fun handleDestinationReached() {
+    private fun handleGuidanceStopped() {
         clearNavigationOverlayState()
         handleNavigationRoutePreviewDismissed()
         newRouteManager.reset()
@@ -949,6 +950,40 @@ private class UiEventDelegate(
                 routePreviewState = overlayState.routePreviewState,
             ),
         )
+    }
+
+    private fun handlePhoneDestinationSearchClicked() {
+        phoneDestinationSearchLauncher.launchDestinationSearch()
+            .onFailure { error ->
+                Napier.w(tag = TAG, throwable = error) { "Failed to launch phone destination search." }
+            }
+    }
+
+    private fun handlePhoneDestinationSearchRequested() {
+        if (screenStates.value.lastOrNull() is MapScreenState.Navigating) {
+            return
+        }
+
+        routeSearchJob?.cancel()
+        newRouteManager.reset()
+        uiState.value = uiState.value.copy(
+            query = null,
+            suggestions = persistentListOf(),
+            selectedResult = null,
+            overlayState = MapOverlayState.None,
+            bottomSheetPeekHeight = 0.dp,
+        )
+        showBrowsing()
+    }
+
+    private fun handleSharedGuidanceStarted() {
+        if (screenStates.value.lastOrNull() is MapScreenState.Navigating) {
+            return
+        }
+
+        clearNavigationOverlayState()
+        showBrowsing()
+        pushScreenState(MapScreenState.Navigating)
     }
 
     private suspend fun searchAddWaypointRoute(result: SearchResultItem) {
