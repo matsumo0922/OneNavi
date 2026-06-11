@@ -77,7 +77,7 @@ class GuidanceForegroundService : Service(), KoinComponent {
     }
 
     private fun handleGuidanceState(state: GuidanceState) {
-        if (!state.requiresForegroundService()) {
+        if (!state.isActiveGuidance) {
             stopForegroundService()
             return
         }

@@ -2,9 +2,9 @@ package me.matsumo.onenavi.guidance
 
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 
-/** 案内状態が Foreground Service による所有を必要とするかを返す。 */
-internal fun GuidanceState.requiresForegroundService(): Boolean {
-    return when (this) {
+/** 案内状態が位置更新と案内継続を必要とする active 状態かを返す。 */
+internal val GuidanceState.isActiveGuidance: Boolean
+    get() = when (this) {
         is GuidanceState.Guiding,
         is GuidanceState.Rerouting,
         -> true
@@ -13,4 +13,3 @@ internal fun GuidanceState.requiresForegroundService(): Boolean {
         GuidanceState.Idle,
         -> false
     }
-}

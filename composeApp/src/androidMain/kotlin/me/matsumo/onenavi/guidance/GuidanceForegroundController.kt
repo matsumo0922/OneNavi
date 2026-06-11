@@ -27,7 +27,7 @@ internal class GuidanceForegroundController(
         }
 
         guidanceState
-            .map { state -> state.requiresForegroundService() }
+            .map { state -> state.isActiveGuidance }
             .distinctUntilChanged()
             .onEach(::handleForegroundServiceState)
             .launchIn(scope)
@@ -35,13 +35,13 @@ internal class GuidanceForegroundController(
 
     /** 表示面へ戻った時に案内中なら Foreground Service の再起動を試みる。 */
     fun restartIfGuidanceActive() {
-        if (guidanceState.value.requiresForegroundService()) {
+        if (guidanceState.value.isActiveGuidance) {
             startForegroundService()
         }
     }
 
-    private fun handleForegroundServiceState(requiresForegroundService: Boolean) {
-        if (requiresForegroundService) {
+    private fun handleForegroundServiceState(hasActiveGuidance: Boolean) {
+        if (hasActiveGuidance) {
             startForegroundService()
         } else {
             stopForegroundService()

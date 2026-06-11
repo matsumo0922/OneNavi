@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.common.car.CarDisplayState
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
-import me.matsumo.onenavi.guidance.requiresForegroundService
+import me.matsumo.onenavi.guidance.isActiveGuidance
 
 /**
  * 全ての表示面と Android Auto session と active guidance が閉じた時だけ共有中の案内 session を停止する監視役。
@@ -30,7 +30,7 @@ internal class CarGuidanceSessionReleaser(
 
     init {
         val hasActiveGuidanceFlow = guidanceState
-            .map { state -> state.requiresForegroundService() }
+            .map { state -> state.isActiveGuidance }
             .distinctUntilChanged()
 
         carPhoneSessionCoordinator.state
@@ -72,7 +72,7 @@ internal class CarGuidanceSessionReleaser(
 
         val hasNoActiveSurface = carPhoneSessionCoordinator.state.value.activeSurfaces.isEmpty()
         val hasNoCarSession = !CarDisplayState.isOnCar
-        val hasNoActiveGuidance = !guidanceState.value.requiresForegroundService()
+        val hasNoActiveGuidance = !guidanceState.value.isActiveGuidance
         val hasNoGuidanceOwner = hasNoActiveSurface && hasNoCarSession && hasNoActiveGuidance
 
         if (hasNoGuidanceOwner) {

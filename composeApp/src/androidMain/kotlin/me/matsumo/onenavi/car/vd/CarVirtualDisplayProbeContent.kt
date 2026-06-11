@@ -162,6 +162,7 @@ private fun CarVirtualDisplayProbeAppHost(
     DisposableEffect(carGuidanceSessionReleaser, guidanceForegroundController) {
         carGuidanceSessionReleaser.ensureStarted()
         guidanceForegroundController.ensureStarted()
+        guidanceForegroundController.restartIfGuidanceActive()
 
         onDispose {}
     }
