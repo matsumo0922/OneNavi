@@ -11,6 +11,8 @@ class AppSettingRepository(
 ) {
     val setting: StateFlow<AppSetting> = dataSource.setting
 
+    suspend fun currentSetting(): AppSetting = dataSource.currentSetting()
+
     suspend fun initializeIdIfNeeded() = dataSource.initializeIdIfNeeded()
 
     suspend fun setId(id: String) = dataSource.setId(id)
