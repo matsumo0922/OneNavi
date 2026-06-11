@@ -65,9 +65,9 @@ class VoiceAnnouncementSelectorTest {
         // m500 が処理済みになると、以後どの距離帯に入っても MIDDLE はもう鳴らない (グループ消費)。
         val consumedState = emptyState().withStageFired(VoiceAnnouncementId("m500"))
         val atM300Band = selector.select(plan, tickOf(current = 750.0), consumedState)
-        val atM100Band = selector.select(plan, tickOf(current = 950.0), consumedState)
+        val atM100Band = selector.select(plan, tickOf(current = 940.0), consumedState)
         // FINAL はグループ消費に左右されず、到達リードタイムに達したら鳴る。
-        val finalSelection = selector.select(plan, tickOf(current = 975.0), consumedState)
+        val finalSelection = selector.select(plan, tickOf(current = 955.0), consumedState)
 
         assertEquals(VoiceAnnouncementId("m500"), firstOpportunity?.stage?.id)
         assertNull(atM300Band)
@@ -99,7 +99,7 @@ class VoiceAnnouncementSelectorTest {
     @Test
     fun `直前段は速度から逆算した手前距離に達した tick で発話する`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
-        // leadTime 3s × 20m/s = 60m 手前。target 1000m なので fire 境界は 940m。
+        // leadTime 5s × 20m/s = 100m 手前。target 1000m なので fire 境界は 900m。
         val plan = planOf(
             targetOf(
                 index = 0,
@@ -108,8 +108,8 @@ class VoiceAnnouncementSelectorTest {
             ),
         )
 
-        val beforeBoundary = selector.select(plan, tickOf(current = 930.0, speed = 20.0), emptyState())
-        val atBoundary = selector.select(plan, tickOf(current = 950.0, speed = 20.0), emptyState())
+        val beforeBoundary = selector.select(plan, tickOf(current = 890.0, speed = 20.0), emptyState())
+        val atBoundary = selector.select(plan, tickOf(current = 910.0, speed = 20.0), emptyState())
 
         assertNull(beforeBoundary)
         assertEquals(VoiceAnnouncementId("f"), atBoundary?.stage?.id)
@@ -119,7 +119,7 @@ class VoiceAnnouncementSelectorTest {
     @Test
     fun `速度が無い直前段は最小手前距離で発話する`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
-        // 速度なし → minLead 30m 手前。target 1000m なので fire 境界は 970m。
+        // 速度なし → minLead 50m 手前。target 1000m なので fire 境界は 950m。
         val plan = planOf(
             targetOf(
                 index = 0,
@@ -128,8 +128,8 @@ class VoiceAnnouncementSelectorTest {
             ),
         )
 
-        val beforeBoundary = selector.select(plan, tickOf(current = 965.0, speed = null), emptyState())
-        val atBoundary = selector.select(plan, tickOf(current = 975.0, speed = null), emptyState())
+        val beforeBoundary = selector.select(plan, tickOf(current = 945.0, speed = null), emptyState())
+        val atBoundary = selector.select(plan, tickOf(current = 955.0, speed = null), emptyState())
 
         assertNull(beforeBoundary)
         assertEquals(VoiceAnnouncementId("f"), atBoundary?.stage?.id)

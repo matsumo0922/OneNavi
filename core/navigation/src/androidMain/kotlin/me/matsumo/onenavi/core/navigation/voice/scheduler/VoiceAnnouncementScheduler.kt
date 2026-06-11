@@ -4,6 +4,7 @@ import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContent
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementRequest
+import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlan
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelection
@@ -37,6 +38,7 @@ internal class VoiceAnnouncementScheduler(
 
     private var plan: VoiceAnnouncementPlan? = null
     private var state = VoiceAnnouncementSpeechState()
+    private var latestTick: VoiceTick? = null
     private val pendingQueue = ArrayDeque<VoiceAnnouncementRequest>()
 
     /**
@@ -47,6 +49,7 @@ internal class VoiceAnnouncementScheduler(
     fun attach(plan: VoiceAnnouncementPlan) {
         this.plan = plan
         state = VoiceAnnouncementSpeechState()
+        latestTick = null
         pendingQueue.clear()
     }
 
@@ -54,6 +57,7 @@ internal class VoiceAnnouncementScheduler(
     fun detach() {
         plan = null
         state = VoiceAnnouncementSpeechState()
+        latestTick = null
         pendingQueue.clear()
     }
 
@@ -65,7 +69,12 @@ internal class VoiceAnnouncementScheduler(
      */
     fun onTick(tick: VoiceTick): VoiceAnnouncementCommand? {
         val currentPlan = plan ?: return null
+        latestTick = tick
         recordPassedTargets(currentPlan, tick)
+
+        if (state.speaking == null) {
+            dispatchNextFromQueue(tick)?.let { command -> return command }
+        }
 
         val selection = selector.select(currentPlan, tick, state) ?: return null
 
@@ -85,7 +94,9 @@ internal class VoiceAnnouncementScheduler(
         state = state.withSpeakingFinished(stageId)
         if (state.speaking != null) return null
 
-        return dispatchNextFromQueue()
+        val tick = latestTick ?: return null
+
+        return dispatchNextFromQueue(tick)
     }
 
     /**
@@ -145,12 +156,24 @@ internal class VoiceAnnouncementScheduler(
         }
     }
 
-    /** キュー先頭のうち、通過済みでない最初の発話を取り出して開始指示にする。無ければ null。 */
-    private fun dispatchNextFromQueue(): VoiceAnnouncementCommand? {
+    /**
+     * キュー先頭のうち、最新 tick でも有効な最初の発話を取り出して開始指示にする。無ければ null。
+     *
+     * MIDDLE は距離窓にいる間だけ有効な予告なので、発話待ちの間に窓を過ぎたものはここで捨てる。
+     */
+    private fun dispatchNextFromQueue(tick: VoiceTick): VoiceAnnouncementCommand? {
+        if (!tick.isRouteUsable) return null
+
         while (pendingQueue.isNotEmpty()) {
             val request = pendingQueue.removeFirst()
             if (state.isTargetPassed(request.targetIndex)) {
                 Napier.d(tag = TAG) { "drain-skip passed stage=${request.stageId.value} target=${request.targetIndex}" }
+                continue
+            }
+            if (request.isStaleAt(tick)) {
+                Napier.d(tag = TAG) {
+                    "drain-skip stale stage=${request.stageId.value} kind=${request.kind} current=${tick.currentCumulativeMeters}"
+                }
                 continue
             }
 
@@ -159,6 +182,12 @@ internal class VoiceAnnouncementScheduler(
         }
 
         return null
+    }
+
+    /** キュー投入後に発話の有効範囲を過ぎていたら true を返す。 */
+    private fun VoiceAnnouncementRequest.isStaleAt(tick: VoiceTick): Boolean = when (kind) {
+        AnnouncementStageKind.MIDDLE -> middleWindow?.contains(tick.currentCumulativeMeters) != true
+        AnnouncementStageKind.FINAL -> tick.currentCumulativeMeters >= targetGeometryMeters
     }
 
     /** 発話中マークを立てて開始指示を返す。発話中が無い前提 (PLAY / キュー消化) で使う。 */

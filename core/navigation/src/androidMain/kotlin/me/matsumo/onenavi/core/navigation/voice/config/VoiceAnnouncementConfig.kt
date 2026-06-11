@@ -11,7 +11,7 @@ import androidx.compose.runtime.Immutable
  *
  * @property categoryGates 発話カテゴリごとの ON/OFF ゲート
  * @property distanceOverrides 中間段の発話開始距離の上書き設定
- * @property leadTimeSeconds 直前段を到達何秒前に発話開始するか (TTS リクエスト遅延込み)
+ * @property leadTimeSeconds 直前段を到達何秒前に発話開始するか (位置 tick 間隔・チャイム・TTS 本文開始までの余裕込み)
  * @property minLeadMeters 低速時に直前段が遅れないよう保証する最小手前距離 (m)
  * @property ordering 緊急度同値時の tie-break 並び順
  */
@@ -27,9 +27,9 @@ internal data class VoiceAnnouncementConfig(
     internal companion object {
 
         /** 直前段の到達リードタイム既定値 (秒)。 */
-        const val DEFAULT_LEAD_TIME_SECONDS: Double = 3.0
+        const val DEFAULT_LEAD_TIME_SECONDS: Double = 5.0
 
-        /** 低速時の保険となる最小手前距離の既定値 (m)。実走行ログで Phase 4 に調整する。 */
-        const val DEFAULT_MIN_LEAD_METERS: Double = 30.0
+        /** 低速時の保険となる最小手前距離の既定値 (m)。チャイム後の本文開始が案内地点に寄りすぎない距離。 */
+        const val DEFAULT_MIN_LEAD_METERS: Double = 50.0
     }
 }

@@ -70,17 +70,16 @@ class VoiceAnnouncementPrefetcherTest {
     }
 
     @Test
-    fun `最大3 target かつ 2km 以内の近傍だけ prefetch する`() {
+    fun `最大3 target かつ 5km 以内の近傍だけ prefetch する`() {
         val dispatcher = RecordingDispatcher()
         val prefetcher = prefetcherOf(dispatcher)
 
         prefetcher.attach(
             plan = planOf(
                 targetOf(index = 0, geometryMeters = 500.0, stage("a")),
-                targetOf(index = 1, geometryMeters = 1_000.0, stage("b")),
-                targetOf(index = 2, geometryMeters = 1_500.0, stage("c")),
-                targetOf(index = 3, geometryMeters = 1_800.0, stage("d")),
-                targetOf(index = 4, geometryMeters = 2_500.0, stage("e")),
+                targetOf(index = 1, geometryMeters = 3_000.0, stage("b")),
+                targetOf(index = 2, geometryMeters = 4_500.0, stage("c")),
+                targetOf(index = 3, geometryMeters = 5_500.0, stage("d")),
             ),
             currentCumulativeMeters = 0.0,
         )

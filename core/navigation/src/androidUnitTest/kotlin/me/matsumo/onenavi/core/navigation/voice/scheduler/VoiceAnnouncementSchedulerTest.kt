@@ -110,6 +110,24 @@ class VoiceAnnouncementSchedulerTest {
     }
 
     @Test
+    fun `キュー消化時に距離窓を過ぎた中間段の発話は抑止する`() {
+        val scheduler = schedulerOf()
+        scheduler.attach(
+            planOf(
+                targetOf(index = 0, geometryMeters = 500.0, middleStage("near", 400.0)),
+                targetOf(index = 1, geometryMeters = 1_500.0, middleStageWindowed("far", enter = 400.0, exit = 700.0)),
+            ),
+        )
+
+        scheduler.onTick(tickOf(current = 450.0)) // near を発話開始
+        scheduler.onTick(tickOf(current = 460.0)) // far は窓内だが near より非緊急なのでキューへ
+        scheduler.onTick(tickOf(current = 750.0)) // far の target は未通過だが、距離窓は通過済み
+        val drained = scheduler.onSpeechFinished(VoiceAnnouncementId("near"))
+
+        assertNull(drained)
+    }
+
+    @Test
     fun `発話内容が空の段は発話を起こさず畳み 同 tick の別候補を次 tick で拾う`() {
         val gate = VoiceAnnouncementCategoryGate.of(GuidanceCategory.Curve to false)
         val scheduler = schedulerOf(gate)
@@ -152,9 +170,9 @@ class VoiceAnnouncementSchedulerTest {
         scheduler.onSpeechFinished(VoiceAnnouncementId("m500"))
         // 300m 帯・100m 帯に入っても、グループ消費で予告は二度と鳴らない。
         val atM300Band = scheduler.onTick(tickOf(current = 750.0))
-        val atM100Band = scheduler.onTick(tickOf(current = 950.0))
+        val atM100Band = scheduler.onTick(tickOf(current = 940.0))
         // 直前で FINAL だけが鳴る。
-        val finalCommand = scheduler.onTick(tickOf(current = 975.0))
+        val finalCommand = scheduler.onTick(tickOf(current = 955.0))
 
         assertEquals(
             VoiceAnnouncementId("m500"),
