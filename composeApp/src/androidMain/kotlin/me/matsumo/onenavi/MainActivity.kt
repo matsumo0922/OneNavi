@@ -35,6 +35,7 @@ import me.matsumo.onenavi.core.model.Theme
 import me.matsumo.onenavi.core.ui.theme.LocalOneNaviDisplaySurface
 import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
 import me.matsumo.onenavi.core.ui.theme.shouldUseDarkTheme
+import me.matsumo.onenavi.guidance.GuidanceForegroundController
 import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
@@ -43,11 +44,13 @@ class MainActivity : ComponentActivity() {
     private val viewModel by viewModel<MainViewModel>()
     private val carPhoneSessionCoordinator by inject<CarPhoneSessionCoordinator>()
     private val carGuidanceSessionReleaser by inject<CarGuidanceSessionReleaser>()
+    private val guidanceForegroundController by inject<GuidanceForegroundController>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         carGuidanceSessionReleaser.ensureStarted()
+        guidanceForegroundController.ensureStarted()
         enableEdgeToEdge()
         setContent {
             val userData by viewModel.setting.collectAsStateWithLifecycle(null)
@@ -107,6 +110,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         carPhoneSessionCoordinator.registerSurface(OneNaviDisplaySurface.Phone)
+        guidanceForegroundController.restartIfGuidanceActive()
     }
 
     override fun onStop() {

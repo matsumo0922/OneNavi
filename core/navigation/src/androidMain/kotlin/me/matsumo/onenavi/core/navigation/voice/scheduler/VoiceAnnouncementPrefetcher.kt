@@ -141,6 +141,6 @@ internal class VoiceAnnouncementPrefetcher(
         const val MAX_PREFETCH_TARGETS = 3
 
         /** 先読みする最大前方距離。 */
-        const val PREFETCH_LOOKAHEAD_METERS = 2_000.0
+        const val PREFETCH_LOOKAHEAD_METERS = 5_000.0
     }
 }

@@ -4,10 +4,12 @@ import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContent
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementRequest
+import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlan
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelection
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelector
+import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementUrgency
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceTick
 import me.matsumo.onenavi.core.navigation.voice.suppression.SpeakingAnnouncement
 import me.matsumo.onenavi.core.navigation.voice.suppression.VoiceAnnouncementDispatchDecision
@@ -37,6 +39,7 @@ internal class VoiceAnnouncementScheduler(
 
     private var plan: VoiceAnnouncementPlan? = null
     private var state = VoiceAnnouncementSpeechState()
+    private var latestTick: VoiceTick? = null
     private val pendingQueue = ArrayDeque<VoiceAnnouncementRequest>()
 
     /**
@@ -47,6 +50,7 @@ internal class VoiceAnnouncementScheduler(
     fun attach(plan: VoiceAnnouncementPlan) {
         this.plan = plan
         state = VoiceAnnouncementSpeechState()
+        latestTick = null
         pendingQueue.clear()
     }
 
@@ -54,6 +58,7 @@ internal class VoiceAnnouncementScheduler(
     fun detach() {
         plan = null
         state = VoiceAnnouncementSpeechState()
+        latestTick = null
         pendingQueue.clear()
     }
 
@@ -65,9 +70,19 @@ internal class VoiceAnnouncementScheduler(
      */
     fun onTick(tick: VoiceTick): VoiceAnnouncementCommand? {
         val currentPlan = plan ?: return null
+        latestTick = tick
         recordPassedTargets(currentPlan, tick)
 
-        val selection = selector.select(currentPlan, tick, state) ?: return null
+        val selection = selector.select(currentPlan, tick, state)
+        if (state.speaking == null) {
+            queueCandidateAt(tick)?.let { queuedRequest ->
+                if (selection == null || !selection.isMoreUrgentThan(queuedRequest, tick)) {
+                    return dispatchQueuedRequest(queuedRequest)
+                }
+            }
+        }
+
+        if (selection == null) return null
 
         return dispatchSelection(selection, tick)
     }
@@ -85,7 +100,9 @@ internal class VoiceAnnouncementScheduler(
         state = state.withSpeakingFinished(stageId)
         if (state.speaking != null) return null
 
-        return dispatchNextFromQueue()
+        val tick = latestTick ?: return null
+
+        return dispatchNextFromQueue(tick)
     }
 
     /**
@@ -114,7 +131,7 @@ internal class VoiceAnnouncementScheduler(
      * 処理済みマークだけ付けて畳む。発話内容が**同一案内地点で既に発話確定済みの内容キーと一致**する場合も
      * 発話を起こさず畳む。距離違い候補は plan 構築時に raw text で dedup 済みだが、category gate 適用後に
      * 別段が同一内容へ畳まれることがあるため、render 後の内容キーでもう一度抑止する (外部ナビ API 参照実装の
-     * 同一文言抑止に対応)。発話に進む場合はその内容キーを発話確定済みとして記録する。
+     * 同一文言抑止に対応)。発話に進む場合は実発話開始時に内容キーを発話済みとして記録する。
      */
     private fun dispatchSelection(
         selection: VoiceAnnouncementSelection,
@@ -136,7 +153,6 @@ internal class VoiceAnnouncementScheduler(
         val request = VoiceAnnouncementRequest.from(selection, content)
         val decision = policy.decide(state, selection, tick)
         logDecision(decision, selection, tick)
-        state = state.withContentSpoken(selection.targetIndex, content.dedupeKey)
 
         return when (decision) {
             VoiceAnnouncementDispatchDecision.PLAY -> startSpeaking(request)
@@ -145,32 +161,93 @@ internal class VoiceAnnouncementScheduler(
         }
     }
 
-    /** キュー先頭のうち、通過済みでない最初の発話を取り出して開始指示にする。無ければ null。 */
-    private fun dispatchNextFromQueue(): VoiceAnnouncementCommand? {
+    /**
+     * キュー先頭のうち、最新 tick でも有効な最初の発話を取り出して開始指示にする。無ければ null。
+     *
+     * MIDDLE は距離窓にいる間だけ有効な予告なので、発話待ちの間に窓を過ぎたものはここで捨てる。
+     */
+    private fun dispatchNextFromQueue(tick: VoiceTick): VoiceAnnouncementCommand? {
+        val request = queueCandidateAt(tick) ?: return null
+
+        return dispatchQueuedRequest(request)
+    }
+
+    /**
+     * キュー先頭から最新 tick で発話可能な最初の候補を返す。
+     *
+     * 古くなった候補はここで破棄するが、実際に鳴らしていないため発話済み content にはしない。
+     */
+    private fun queueCandidateAt(tick: VoiceTick): VoiceAnnouncementRequest? {
+        if (!tick.isRouteUsable) return null
+
         while (pendingQueue.isNotEmpty()) {
-            val request = pendingQueue.removeFirst()
+            val request = pendingQueue.first()
             if (state.isTargetPassed(request.targetIndex)) {
+                pendingQueue.removeFirst()
                 Napier.d(tag = TAG) { "drain-skip passed stage=${request.stageId.value} target=${request.targetIndex}" }
                 continue
             }
+            if (request.isStaleAt(tick)) {
+                pendingQueue.removeFirst()
+                Napier.d(tag = TAG) {
+                    "drain-skip stale stage=${request.stageId.value} kind=${request.kind} current=${tick.currentCumulativeMeters}"
+                }
+                continue
+            }
+            if (state.isContentSpoken(request.targetIndex, request.content.dedupeKey)) {
+                pendingQueue.removeFirst()
+                logSkippedQueuedDuplicateContent(request, tick)
+                continue
+            }
 
-            Napier.d(tag = TAG) { "drain stage=${request.stageId.value}" }
-            return startSpeaking(request)
+            return request
         }
 
         return null
     }
 
+    /** キュー投入後に MIDDLE の有効範囲を過ぎていたら true を返す。target 通過済みは呼び出し側で判定する。 */
+    private fun VoiceAnnouncementRequest.isStaleAt(tick: VoiceTick): Boolean = when (kind) {
+        AnnouncementStageKind.MIDDLE -> middleWindow?.contains(tick.currentCumulativeMeters) != true
+        AnnouncementStageKind.FINAL -> false
+    }
+
+    /** queue candidate と新規 selection を現在 tick の緊急度で比較する。 */
+    private fun VoiceAnnouncementSelection.isMoreUrgentThan(
+        request: VoiceAnnouncementRequest,
+        tick: VoiceTick,
+    ): Boolean {
+        val requestUrgency = VoiceAnnouncementUrgency.of(
+            targetGeometryMeters = request.targetGeometryMeters,
+            currentCumulativeMeters = tick.currentCumulativeMeters,
+            kind = request.kind,
+        )
+
+        return urgency > requestUrgency
+    }
+
+    /** キュー先頭の候補を取り出して発話開始指示にする。 */
+    private fun dispatchQueuedRequest(request: VoiceAnnouncementRequest): VoiceAnnouncementCommand {
+        pendingQueue.removeFirst()
+        Napier.d(tag = TAG) { "drain stage=${request.stageId.value}" }
+
+        return startSpeaking(request)
+    }
+
     /** 発話中マークを立てて開始指示を返す。発話中が無い前提 (PLAY / キュー消化) で使う。 */
     private fun startSpeaking(request: VoiceAnnouncementRequest): VoiceAnnouncementCommand {
-        state = state.withSpeakingStarted(speakingOf(request))
+        state = state
+            .withContentSpoken(request.targetIndex, request.content.dedupeKey)
+            .withSpeakingStarted(speakingOf(request))
 
         return VoiceAnnouncementCommand.StartSpeaking(request)
     }
 
     /** 発話中を中断する前提で発話中マークを差し替え、中断+開始指示を返す。 */
     private fun interruptAndSpeak(request: VoiceAnnouncementRequest): VoiceAnnouncementCommand {
-        state = state.withSpeakingStarted(speakingOf(request))
+        state = state
+            .withContentSpoken(request.targetIndex, request.content.dedupeKey)
+            .withSpeakingStarted(speakingOf(request))
 
         return VoiceAnnouncementCommand.InterruptAndSpeak(request)
     }
@@ -224,6 +301,17 @@ internal class VoiceAnnouncementScheduler(
         Napier.d(tag = TAG) {
             "skip-dupcontent stage=${selection.stage.id.value} target=${selection.targetIndex} " +
                 "current=${tick.currentCumulativeMeters} content=\"${content.dedupeKey}\""
+        }
+    }
+
+    /** キュー消化時に同一内容が発話済みだった段を出力する。 */
+    private fun logSkippedQueuedDuplicateContent(
+        request: VoiceAnnouncementRequest,
+        tick: VoiceTick,
+    ) {
+        Napier.d(tag = TAG) {
+            "drain-skip dupcontent stage=${request.stageId.value} target=${request.targetIndex} " +
+                "current=${tick.currentCumulativeMeters} content=\"${request.content.dedupeKey}\""
         }
     }
 

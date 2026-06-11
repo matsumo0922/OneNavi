@@ -8,8 +8,13 @@ import me.matsumo.onenavi.BuildKonfig
 import me.matsumo.onenavi.MainViewModel
 import me.matsumo.onenavi.car.CarGuidanceSessionReleaser
 import me.matsumo.onenavi.car.MainActivityPhoneDestinationSearchLauncher
+import me.matsumo.onenavi.car.navigation.CarNavigationSessionPublisher
+import me.matsumo.onenavi.car.navigation.GuidanceCarTripMapper
 import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
 import me.matsumo.onenavi.core.model.AppConfig
+import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
+import me.matsumo.onenavi.guidance.GuidanceForegroundController
+import me.matsumo.onenavi.guidance.GuidanceForegroundService
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -49,10 +54,37 @@ val appModule = module {
     }
 
     single {
+        val newGuidanceManager = get<NewGuidanceManager>()
         CarGuidanceSessionReleaser(
             carPhoneSessionCoordinator = get(),
-            newGuidanceManager = get(),
+            guidanceState = newGuidanceManager.state,
+            releaseGuidanceSession = newGuidanceManager::release,
             scope = get(),
+        )
+    }
+
+    single {
+        val applicationContext = androidContext()
+        val newGuidanceManager = get<NewGuidanceManager>()
+        GuidanceForegroundController(
+            guidanceState = newGuidanceManager.state,
+            startService = { GuidanceForegroundService.start(applicationContext) },
+            stopService = { GuidanceForegroundService.stop(applicationContext) },
+            scope = get(),
+        )
+    }
+
+    single {
+        GuidanceCarTripMapper()
+    }
+
+    single {
+        val newGuidanceManager = get<NewGuidanceManager>()
+        CarNavigationSessionPublisher(
+            guidanceState = newGuidanceManager.state,
+            stopGuidance = newGuidanceManager::stopGuidance,
+            scope = get(),
+            tripMapper = get(),
         )
     }
 

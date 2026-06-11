@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">OneNavi</string>
+    <string name="guidance_notification_channel_name">ナビゲーション</string>
+    <string name="guidance_notification_channel_description">案内中の位置情報と音声案内を維持します。</string>
+    <string name="guidance_notification_title">ナビゲーション中</string>
+    <string name="guidance_notification_waiting">案内を準備しています</string>
+    <string name="guidance_notification_rerouting">経路を再探索中</string>
+    <string name="guidance_notification_progress">残り %1$s・%2$s</string>
+    <string name="guidance_notification_next_maneuver">%1$s先 %2$s</string>
+    <string name="guidance_notification_stop">終了</string>
+    <string name="guidance_distance_meters">%1$d m</string>
+    <string name="guidance_distance_kilometers">%1$.1f km</string>
+    <plurals name="guidance_duration_minutes">
+        <item quantity="one">%1$d分</item>
+        <item quantity="other">%1$d分</item>
+    </plurals>
 </resources>

@@ -58,6 +58,11 @@
             </intent-filter>
         </service>
 
+        <service
+            android:name=".guidance.GuidanceForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="${ADMOB_ANDROID_APP_ID}" />
