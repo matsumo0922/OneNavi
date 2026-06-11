@@ -518,8 +518,6 @@ private const val UTurnTopYRatio = 0.26f
 private const val UTurnArchRatio = 0.16f
 private const val UTurnTailRatio = 0.02f
 
-internal const val SecondaryContentAlpha: Float = 0.82f
-
 /**
  * Preview 用に [LaneCell] を組み立てる。`isActive` の場合は先頭方向を推奨方向に充てる。
  *

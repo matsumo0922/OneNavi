@@ -419,7 +419,7 @@ private fun MapNavigationManeuverBottomSection(
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     lanes = laneCells,
                     activeTint = panelColors.onContainer,
-                    inactiveTint = panelColors.onContainer.copy(alpha = SecondaryContentAlpha),
+                    inactiveTint = panelColors.onContainer.copy(alpha = ManeuverLaneInactiveAlpha),
                 )
             }
         }
@@ -539,6 +539,9 @@ private fun formatGuidanceDistance(
 
 private val ManeuverLaneIconSize = 36.dp
 private val ManeuverLaneIconSpacing = 12.dp
+
+/** マニューバレーンの非推奨矢印に適用する透明度。 */
+private const val ManeuverLaneInactiveAlpha: Float = 0.46f
 
 /** 案内画像がバナー下段で占有できる最大高さ。 */
 private val ManeuverGuideImageMaxHeight = 240.dp
