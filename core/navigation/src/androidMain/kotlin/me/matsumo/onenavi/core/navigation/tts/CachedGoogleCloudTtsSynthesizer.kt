@@ -21,14 +21,14 @@ import kotlinx.coroutines.launch
  *
  * @property backend Google Cloud TTS の合成 backend
  * @property cache WAV バイト列のファイルキャッシュ
- * @property synthesisConfig キャッシュキーに使う音声設定
+ * @property synthesisConfigProvider キャッシュキーと合成リクエストに使う音声設定を返す provider
  * @property apiKey 空なら Cloud TTS への新規 request を出さない
  * @property scope 先読み worker と in-flight 合成を動かす scope
  */
 internal class CachedGoogleCloudTtsSynthesizer(
     private val backend: GoogleCloudTtsSynthesizerBackend,
     private val cache: TtsAudioFileCache,
-    private val synthesisConfig: GoogleCloudTtsSynthesisConfig = GoogleCloudTtsSynthesisConfig(),
+    private val synthesisConfigProvider: () -> GoogleCloudTtsSynthesisConfig = { GoogleCloudTtsSynthesisConfig() },
     private val apiKey: String,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
@@ -250,7 +250,7 @@ internal class CachedGoogleCloudTtsSynthesizer(
         Napier.d(tag = TAG) { "voice synthesize: ${request.ssml}" }
 
         return runCatching {
-            val audio = backend.synthesize(request.ssml)
+            val audio = backend.synthesize(request.ssml, request.synthesisConfig)
             cache.write(
                 cacheKey = request.cacheKey,
                 audio = audio,
@@ -283,6 +283,7 @@ internal class CachedGoogleCloudTtsSynthesizer(
         PrefetchRequest(
             cacheKey = request.cacheKey,
             ssml = request.ssml,
+            synthesisConfig = request.synthesisConfig,
             generation = prefetchGeneration,
         )
     }
@@ -305,9 +306,11 @@ internal class CachedGoogleCloudTtsSynthesizer(
     private fun synthesisRequestOf(ssml: String?): SynthesisRequest? {
         if (ssml.isNullOrBlank()) return null
 
+        val synthesisConfig = synthesisConfigProvider()
         return SynthesisRequest(
             cacheKey = synthesisConfig.cacheKeyOf(ssml),
             ssml = ssml,
+            synthesisConfig = synthesisConfig,
         )
     }
 
@@ -347,10 +350,12 @@ internal class CachedGoogleCloudTtsSynthesizer(
      *
      * @property cacheKey 音声設定と SSML から作った cache key
      * @property ssml 合成対象 SSML
+     * @property synthesisConfig 合成 request に使う音声設定
      */
     private data class SynthesisRequest(
         val cacheKey: String,
         val ssml: String,
+        val synthesisConfig: GoogleCloudTtsSynthesisConfig,
     )
 
     /**
@@ -358,11 +363,13 @@ internal class CachedGoogleCloudTtsSynthesizer(
      *
      * @property cacheKey 音声設定と SSML から作った cache key
      * @property ssml 合成対象 SSML
+     * @property synthesisConfig 合成 request に使う音声設定
      * @property generation route attach ごとの先読み世代
      */
     private data class PrefetchRequest(
         val cacheKey: String,
         val ssml: String,
+        val synthesisConfig: GoogleCloudTtsSynthesisConfig,
         val generation: Int,
     ) {
 
@@ -370,6 +377,7 @@ internal class CachedGoogleCloudTtsSynthesizer(
         fun toSynthesisRequest(): SynthesisRequest = SynthesisRequest(
             cacheKey = cacheKey,
             ssml = ssml,
+            synthesisConfig = synthesisConfig,
         )
     }
 

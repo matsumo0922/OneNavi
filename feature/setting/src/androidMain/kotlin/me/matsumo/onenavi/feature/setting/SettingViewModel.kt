@@ -42,6 +42,12 @@ class SettingViewModel(
         }
     }
 
+    fun setTtsVolumeGainDb(ttsVolumeGainDb: Double) {
+        viewModelScope.launch {
+            repository.setTtsVolumeGainDb(ttsVolumeGainDb)
+        }
+    }
+
     fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) {
         viewModelScope.launch {
             repository.setGuidanceCategoryEnabled(categoryKey, isEnabled)

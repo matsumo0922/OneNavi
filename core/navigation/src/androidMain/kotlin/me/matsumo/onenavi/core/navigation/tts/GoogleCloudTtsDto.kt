@@ -15,6 +15,7 @@ import kotlinx.serialization.Serializable
  * @property sampleRateHertz サンプリングレート
  * @property speakingRate 話速
  * @property pitch ピッチ
+ * @property volumeGainDb 音量ゲイン
  */
 @Immutable
 internal data class GoogleCloudTtsSynthesisConfig(
@@ -24,7 +25,15 @@ internal data class GoogleCloudTtsSynthesisConfig(
     val sampleRateHertz: Int = DEFAULT_SAMPLE_RATE_HERTZ,
     val speakingRate: Double = DEFAULT_SPEAKING_RATE,
     val pitch: Double = DEFAULT_PITCH,
+    val volumeGainDb: Double = DEFAULT_VOLUME_GAIN_DB,
 ) {
+
+    /** Google Cloud TTS に渡せる範囲へ丸めた音量ゲインを返す。 */
+    fun resolvedVolumeGainDb(): Double =
+        volumeGainDb.coerceIn(
+            minimumValue = MIN_VOLUME_GAIN_DB,
+            maximumValue = MAX_VOLUME_GAIN_DB,
+        )
 
     /**
      * 指定 SSML と現在の音声設定から安定したキャッシュキーを作る。
@@ -40,6 +49,7 @@ internal data class GoogleCloudTtsSynthesisConfig(
         sampleRateHertz.toString(),
         speakingRate.toString(),
         pitch.toString(),
+        resolvedVolumeGainDb().toString(),
         ssml,
     ).joinToString(separator = CACHE_KEY_SEPARATOR)
 
@@ -47,7 +57,7 @@ internal data class GoogleCloudTtsSynthesisConfig(
     internal companion object {
 
         /** キャッシュキーの互換性を切り替える schema version。 */
-        const val CACHE_SCHEMA_VERSION = "tts-audio-v1"
+        const val CACHE_SCHEMA_VERSION = "tts-audio-v2"
 
         /** キャッシュキー内の区切り文字。SSML 本文と衝突しても SHA-256 化するため問題にならない。 */
         const val CACHE_KEY_SEPARATOR = "\u001F"
@@ -69,6 +79,15 @@ internal data class GoogleCloudTtsSynthesisConfig(
 
         /** 既定のピッチ。 */
         const val DEFAULT_PITCH = 0.0
+
+        /** 既定の音量ゲイン。 */
+        const val DEFAULT_VOLUME_GAIN_DB = 0.0
+
+        /** Google Cloud TTS が許容する最小音量ゲイン。 */
+        const val MIN_VOLUME_GAIN_DB = -96.0
+
+        /** Google Cloud TTS が許容する最大音量ゲイン。 */
+        const val MAX_VOLUME_GAIN_DB = 16.0
     }
 }
 
@@ -117,6 +136,7 @@ internal data class SynthesizeVoice(
  * @property sampleRateHertz サンプリングレート
  * @property speakingRate 話速 (1.0 が等速)
  * @property pitch ピッチ (0.0 が無調整)
+ * @property volumeGainDb 音量ゲイン (dB)
  */
 @Serializable
 internal data class SynthesizeAudioConfig(
@@ -124,6 +144,7 @@ internal data class SynthesizeAudioConfig(
     @SerialName("sampleRateHertz") val sampleRateHertz: Int = GoogleCloudTtsSynthesisConfig.DEFAULT_SAMPLE_RATE_HERTZ,
     @SerialName("speakingRate") val speakingRate: Double = GoogleCloudTtsSynthesisConfig.DEFAULT_SPEAKING_RATE,
     val pitch: Double = GoogleCloudTtsSynthesisConfig.DEFAULT_PITCH,
+    @SerialName("volumeGainDb") val volumeGainDb: Double = GoogleCloudTtsSynthesisConfig.DEFAULT_VOLUME_GAIN_DB,
 )
 
 /**

@@ -28,6 +28,8 @@ class AppSettingRepository(
     suspend fun setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar: Boolean) =
         dataSource.setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar)
 
+    suspend fun setTtsVolumeGainDb(ttsVolumeGainDb: Double) = dataSource.setTtsVolumeGainDb(ttsVolumeGainDb)
+
     suspend fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) =
         dataSource.setGuidanceCategoryEnabled(categoryKey, isEnabled)
 }

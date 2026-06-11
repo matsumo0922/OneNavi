@@ -65,6 +65,7 @@ internal fun SettingScreen(
                     modifier = Modifier.fillMaxWidth(),
                     setting = setting,
                     onUseMediaAudioChannelOnCarChanged = viewModel::setUseMediaAudioChannelOnCar,
+                    onTtsVolumeGainDbChanged = viewModel::setTtsVolumeGainDb,
                     onVoiceCategoryClicked = { navBackStack.add(Destination.Setting.VoiceCategory) },
                 )
             }
