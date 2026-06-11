@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.core.navigation.voice.dispatch
 
 import androidx.compose.runtime.Immutable
+import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementDistanceWindow
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelection
@@ -15,6 +16,7 @@ import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelect
  * @property targetIndex 案内地点の plan 内 index。キュー消化時の通過済み判定に使う
  * @property targetGeometryMeters 案内地点の geometry 累積距離 (m)。発話中の緊急度再計算の素材
  * @property kind 距離段の種別。発話中の緊急度 tie-break に使う
+ * @property middleWindow MIDDLE 段の有効窓。キュー消化時に古くなった予告を捨てるために使う
  * @property content 読み上げる確定内容
  */
 @Immutable
@@ -23,6 +25,7 @@ internal data class VoiceAnnouncementRequest(
     val targetIndex: Int,
     val targetGeometryMeters: Double,
     val kind: AnnouncementStageKind,
+    val middleWindow: AnnouncementDistanceWindow?,
     val content: VoiceAnnouncementContent,
 ) {
 
@@ -42,6 +45,7 @@ internal data class VoiceAnnouncementRequest(
             targetIndex = selection.targetIndex,
             targetGeometryMeters = selection.targetGeometryMeters,
             kind = selection.stage.kind,
+            middleWindow = selection.stage.middleWindow,
             content = content,
         )
     }

@@ -13,7 +13,7 @@ import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
  *
  * @property firedStageIds 発話・割り込み・キュー投入のいずれかで処理が確定した段の id 集合。再トリガを防ぐ
  * @property passedTargetIndices 通過済み案内地点の plan 内 index 集合。残段の遅延発話を防ぐ
- * @property spokenContents 発話を確定した (案内地点 index, 発話内容キー) の集合。category gate 適用後に
+ * @property spokenContents 実際に発話開始した (案内地点 index, 発話内容キー) の集合。category gate 適用後に
  *   同一内容へ畳まれた段の二重発話を防ぐ
  * @property speaking 現在発話中の段。無発話なら null
  */
@@ -43,11 +43,11 @@ internal data class VoiceAnnouncementSpeechState(
     fun withTargetPassed(targetIndex: Int): VoiceAnnouncementSpeechState =
         copy(passedTargetIndices = passedTargetIndices.add(targetIndex))
 
-    /** 案内地点 × 発話内容キーを発話確定済みとして記録した新しい状態を返す。 */
+    /** 案内地点 × 発話内容キーを発話開始済みとして記録した新しい状態を返す。 */
     fun withContentSpoken(targetIndex: Int, contentKey: String): VoiceAnnouncementSpeechState =
         copy(spokenContents = spokenContents.add(SpokenAnnouncementContent(targetIndex = targetIndex, contentKey = contentKey)))
 
-    /** 指定段の発話を開始した状態を返す。発話中マークと既発話マークを同時に立てる。 */
+    /** 指定段の発話を開始した状態を返す。発話中マークと段の処理済みマークを同時に立てる。 */
     fun withSpeakingStarted(announcement: SpeakingAnnouncement): VoiceAnnouncementSpeechState =
         copy(
             firedStageIds = firedStageIds.add(announcement.stageId),
