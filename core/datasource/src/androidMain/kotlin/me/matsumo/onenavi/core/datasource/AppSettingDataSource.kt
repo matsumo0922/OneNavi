@@ -31,11 +31,13 @@ import kotlin.uuid.Uuid
  * @param preferenceHelper DataStore を作成する helper
  * @param formatter 設定値の JSON 変換に使う formatter
  * @param ioDispatcher DataStore の読み書きに使う dispatcher
+ * @param applicationScope [setting] を常駐 collect するアプリ共通 scope
  */
 class AppSettingDataSource(
     private val preferenceHelper: PreferenceHelper,
     private val formatter: Json,
     private val ioDispatcher: CoroutineDispatcher,
+    applicationScope: CoroutineScope,
 ) {
     private val preference = preferenceHelper.create(PreferencesName.SETTING)
 
@@ -43,9 +45,11 @@ class AppSettingDataSource(
         it.deserialize(formatter, AppSetting.serializer(), AppSetting.DEFAULT)
     }
 
+    // UI 購読の有無に依存せず、プロセス起動直後から DataStore の読み込みを始めて
+    // 同期的な `.value` 参照が DEFAULT を見る時間を最小化する。
     val setting = settingFlow.stateIn(
-        scope = CoroutineScope(ioDispatcher),
-        started = SharingStarted.WhileSubscribed(1000),
+        scope = applicationScope,
+        started = SharingStarted.Eagerly,
         initialValue = AppSetting.DEFAULT,
     )
 
