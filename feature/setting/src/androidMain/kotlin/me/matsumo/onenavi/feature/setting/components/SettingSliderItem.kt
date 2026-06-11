@@ -11,6 +11,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -25,8 +27,28 @@ internal fun SettingSliderItem(
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
     modifier: Modifier = Modifier,
+    onValueChangeFinished: (() -> Unit)? = null,
     isEnabled: Boolean = true,
 ) {
+    val titleColor: Color
+    val descriptionColor: Color
+    val valueLabelColor: Color
+
+    if (isEnabled) {
+        titleColor = MaterialTheme.colorScheme.onSurface
+        descriptionColor = MaterialTheme.colorScheme.onSurfaceVariant
+        valueLabelColor = MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+            .copy(alpha = 0.38f)
+            .compositeOver(MaterialTheme.colorScheme.surface)
+            .also {
+                titleColor = it
+                descriptionColor = it
+                valueLabelColor = it
+            }
+    }
+
     Column(
         modifier = modifier.padding(horizontal = 24.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -44,21 +66,21 @@ internal fun SettingSliderItem(
                     modifier = Modifier.fillMaxWidth(),
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = titleColor,
                 )
 
                 Text(
                     modifier = Modifier.fillMaxWidth(),
                     text = description,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = descriptionColor,
                 )
             }
 
             Text(
                 text = valueLabel,
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
+                color = valueLabelColor,
             )
         }
 
@@ -67,6 +89,7 @@ internal fun SettingSliderItem(
             enabled = isEnabled,
             value = value.coerceIn(valueRange),
             onValueChange = onValueChanged,
+            onValueChangeFinished = onValueChangeFinished,
             valueRange = valueRange,
             steps = steps,
         )
@@ -83,6 +106,7 @@ internal fun SettingSliderItem(
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
     modifier: Modifier = Modifier,
+    onValueChangeFinished: (() -> Unit)? = null,
     isEnabled: Boolean = true,
 ) {
     SettingSliderItem(
@@ -92,6 +116,7 @@ internal fun SettingSliderItem(
         valueLabel = valueLabel,
         value = value,
         onValueChanged = onValueChanged,
+        onValueChangeFinished = onValueChangeFinished,
         valueRange = valueRange,
         steps = steps,
         isEnabled = isEnabled,
