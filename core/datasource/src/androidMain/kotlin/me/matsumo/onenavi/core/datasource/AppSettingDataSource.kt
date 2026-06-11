@@ -31,25 +31,43 @@ import kotlin.uuid.Uuid
  * @param preferenceHelper DataStore を作成する helper
  * @param formatter 設定値の JSON 変換に使う formatter
  * @param ioDispatcher DataStore の読み書きに使う dispatcher
+ * @param applicationScope [setting] を常駐 collect するアプリ共通 scope
  */
 class AppSettingDataSource(
     private val preferenceHelper: PreferenceHelper,
     private val formatter: Json,
     private val ioDispatcher: CoroutineDispatcher,
+    applicationScope: CoroutineScope,
 ) {
     private val preference = preferenceHelper.create(PreferencesName.SETTING)
 
-    val setting = preference.data.map {
+    private val settingFlow = preference.data.map {
         it.deserialize(formatter, AppSetting.serializer(), AppSetting.DEFAULT)
-    }.stateIn(
-        scope = CoroutineScope(ioDispatcher),
-        started = SharingStarted.WhileSubscribed(1000),
+    }
+
+    // UI 購読の有無に依存せず、プロセス起動直後から DataStore の読み込みを始めて
+    // 同期的な `.value` 参照が DEFAULT を見る時間を最小化する。
+    val setting = settingFlow.stateIn(
+        scope = applicationScope,
+        started = SharingStarted.Eagerly,
         initialValue = AppSetting.DEFAULT,
     )
 
+    /**
+     * DataStore から読み込み済みの設定値を返す。
+     *
+     * [setting] の `value` は購読が始まるまで [AppSetting.DEFAULT] を保持し続けるため、
+     * 購読の有無に依存せず永続値そのものが必要な箇所ではこちらを使う。
+     *
+     * @return DataStore に永続化されている [AppSetting]
+     */
+    suspend fun currentSetting(): AppSetting = withContext(ioDispatcher) {
+        settingFlow.first()
+    }
+
     @OptIn(ExperimentalUuidApi::class)
     suspend fun initializeIdIfNeeded() = withContext(ioDispatcher) {
-        val current = setting.first()
+        val current = currentSetting()
         if (current.id.isBlank()) {
             val uuid = Uuid.random().toString()
             preference.edit {
@@ -59,7 +77,7 @@ class AppSettingDataSource(
     }
 
     suspend fun setId(id: String) = withContext(ioDispatcher) {
-        if (setting.first().id == id) return@withContext
+        if (currentSetting().id == id) return@withContext
 
         preference.edit {
             it[stringPreferencesKey(AppSetting::id.name)] = id
@@ -67,7 +85,7 @@ class AppSettingDataSource(
     }
 
     suspend fun setTheme(theme: Theme) = withContext(ioDispatcher) {
-        if (setting.first().theme == theme) return@withContext
+        if (currentSetting().theme == theme) return@withContext
 
         preference.edit {
             it[stringPreferencesKey(AppSetting::theme.name)] = theme.name
@@ -75,7 +93,7 @@ class AppSettingDataSource(
     }
 
     suspend fun setUseDynamicColor(useDynamicColor: Boolean) = withContext(ioDispatcher) {
-        if (setting.first().useDynamicColor == useDynamicColor) return@withContext
+        if (currentSetting().useDynamicColor == useDynamicColor) return@withContext
 
         preference.edit {
             it[booleanPreferencesKey(AppSetting::useDynamicColor.name)] = useDynamicColor
@@ -83,7 +101,7 @@ class AppSettingDataSource(
     }
 
     suspend fun setSeedColor(color: Color) = withContext(ioDispatcher) {
-        if (setting.first().seedColor == color) return@withContext
+        if (currentSetting().seedColor == color) return@withContext
 
         preference.edit {
             it[intPreferencesKey(AppSetting::seedColor.name)] = color.toArgb()
@@ -91,7 +109,7 @@ class AppSettingDataSource(
     }
 
     suspend fun setPlusMode(plusMode: Boolean) = withContext(ioDispatcher) {
-        if (setting.first().plusMode == plusMode) return@withContext
+        if (currentSetting().plusMode == plusMode) return@withContext
 
         preference.edit {
             it[booleanPreferencesKey(AppSetting::plusMode.name)] = plusMode
@@ -99,7 +117,7 @@ class AppSettingDataSource(
     }
 
     suspend fun setDeveloperMode(developerMode: Boolean) = withContext(ioDispatcher) {
-        if (setting.first().developerMode == developerMode) return@withContext
+        if (currentSetting().developerMode == developerMode) return@withContext
 
         preference.edit {
             it[booleanPreferencesKey(AppSetting::developerMode.name)] = developerMode
@@ -107,7 +125,7 @@ class AppSettingDataSource(
     }
 
     suspend fun setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar: Boolean) = withContext(ioDispatcher) {
-        if (setting.first().useMediaAudioChannelOnCar == useMediaAudioChannelOnCar) return@withContext
+        if (currentSetting().useMediaAudioChannelOnCar == useMediaAudioChannelOnCar) return@withContext
 
         preference.edit {
             it[booleanPreferencesKey(AppSetting::useMediaAudioChannelOnCar.name)] = useMediaAudioChannelOnCar
@@ -119,7 +137,7 @@ class AppSettingDataSource(
             minimumValue = AppSetting.TTS_VOLUME_GAIN_DB_MIN,
             maximumValue = AppSetting.TTS_VOLUME_GAIN_DB_MAX,
         )
-        if (setting.first().ttsVolumeGainDb == resolvedVolumeGainDb) return@withContext
+        if (currentSetting().ttsVolumeGainDb == resolvedVolumeGainDb) return@withContext
 
         preference.edit {
             it[doublePreferencesKey(AppSetting::ttsVolumeGainDb.name)] = resolvedVolumeGainDb
@@ -146,7 +164,7 @@ class AppSettingDataSource(
     }
 
     suspend fun getOrCreateExtNavDeviceUuid(): String = withContext(ioDispatcher) {
-        val current = setting.first().extNavDeviceUuid
+        val current = currentSetting().extNavDeviceUuid
         if (current.matches(EXT_NAV_DEVICE_UUID_REGEX)) return@withContext current
 
         // 旧バージョンは標準 UUID (`xxxxxxxx-xxxx-...`) を保存していたが、

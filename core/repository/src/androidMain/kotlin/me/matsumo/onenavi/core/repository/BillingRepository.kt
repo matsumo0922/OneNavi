@@ -102,7 +102,7 @@ class BillingRepository(
     suspend fun verifySubscriptionStatus(): Boolean {
         billingDataSource.getCustomerInfo() ?: return false
 
-        val wasPremium = appSettingRepository.setting.value.plusMode
+        val wasPremium = appSettingRepository.currentSetting().plusMode
         val isPremiumNow = billingDataSource.getCurrentSubscriptionState().isPremium
 
         appSettingRepository.setPlusMode(isPremiumNow)

@@ -13,13 +13,15 @@ import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelperImpl
 import me.matsumo.onenavi.core.datasource.location.CurrentLocationDataSource
 import me.matsumo.onenavi.core.model.AppConfig
+import org.koin.core.module.dsl.createdAtStart
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 
 // NOTE: [RouteDataSource] の Android バインディングは core/navigation 側 (NavigationModule) で
 // 外部ナビ API ライブラリベースの実装 (ExtNavRouteDataSource) を登録する。
 val dataSourceModule = module {
-    singleOf(::AppSettingDataSource)
+    // UI を経由しないプロセス起動でも DataStore の読み込みが Koin 起動時に始まるよう即時生成する。
+    singleOf(::AppSettingDataSource) { createdAtStart() }
     singleOf(::SearchHistoryDataSource)
     singleOf(::CurrentLocationDataSource)
 
