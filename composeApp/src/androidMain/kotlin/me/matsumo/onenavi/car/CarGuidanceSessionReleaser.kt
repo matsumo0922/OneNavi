@@ -3,46 +3,50 @@ package me.matsumo.onenavi.car
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import me.matsumo.onenavi.core.common.car.CarDisplayState
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
-import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 
 /**
- * 全ての表示面が閉じた時だけ共有中の案内 session を停止する監視役。
+ * 全ての表示面と Android Auto session が閉じた時だけ共有中の案内 session を停止する監視役。
  */
-class CarGuidanceSessionReleaser(
+internal class CarGuidanceSessionReleaser(
     private val carPhoneSessionCoordinator: CarPhoneSessionCoordinator,
-    private val newGuidanceManager: NewGuidanceManager,
+    private val releaseGuidanceSession: () -> Unit,
     private val scope: CoroutineScope,
 ) {
 
-    private var hasObservedActiveSurface = false
+    private var hasObservedGuidanceOwner = false
     private var releaseJob: Job? = null
 
     init {
         carPhoneSessionCoordinator.state
             .map { state -> state.activeSurfaces.isNotEmpty() }
+            .combine(CarDisplayState.isOnCarFlow) { hasActiveSurface, isOnCar ->
+                hasActiveSurface || isOnCar
+            }
             .distinctUntilChanged()
-            .onEach { hasActiveSurface -> handleActiveSurfaceChanged(hasActiveSurface) }
+            .onEach { hasGuidanceOwner -> handleGuidanceOwnerChanged(hasGuidanceOwner) }
             .launchIn(scope)
     }
 
     /** 監視が開始済みであることを呼び出し側から明示する。 */
     fun ensureStarted() = Unit
 
-    private fun handleActiveSurfaceChanged(hasActiveSurface: Boolean) {
-        if (hasActiveSurface) {
-            hasObservedActiveSurface = true
+    private fun handleGuidanceOwnerChanged(hasGuidanceOwner: Boolean) {
+        if (hasGuidanceOwner) {
+            hasObservedGuidanceOwner = true
             releaseJob?.cancel()
             releaseJob = null
             return
         }
 
-        if (!hasObservedActiveSurface) {
+        if (!hasObservedGuidanceOwner) {
             return
         }
 
@@ -56,8 +60,10 @@ class CarGuidanceSessionReleaser(
         delay(EMPTY_SURFACE_RELEASE_DELAY_MILLIS)
 
         val hasNoActiveSurface = carPhoneSessionCoordinator.state.value.activeSurfaces.isEmpty()
-        if (hasNoActiveSurface) {
-            newGuidanceManager.release()
+        val hasNoGuidanceOwner = hasNoActiveSurface && !CarDisplayState.isOnCar
+
+        if (hasNoGuidanceOwner) {
+            releaseGuidanceSession()
         }
     }
 

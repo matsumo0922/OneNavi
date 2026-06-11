@@ -10,6 +10,7 @@ import me.matsumo.onenavi.car.CarGuidanceSessionReleaser
 import me.matsumo.onenavi.car.MainActivityPhoneDestinationSearchLauncher
 import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
 import me.matsumo.onenavi.core.model.AppConfig
+import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -49,9 +50,10 @@ val appModule = module {
     }
 
     single {
+        val newGuidanceManager = get<NewGuidanceManager>()
         CarGuidanceSessionReleaser(
             carPhoneSessionCoordinator = get(),
-            newGuidanceManager = get(),
+            releaseGuidanceSession = newGuidanceManager::release,
             scope = get(),
         )
     }

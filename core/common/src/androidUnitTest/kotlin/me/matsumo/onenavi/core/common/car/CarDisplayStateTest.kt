@@ -25,6 +25,7 @@ class CarDisplayStateTest {
         CarDisplayState.registerCarDisplay()
 
         assertTrue(CarDisplayState.isOnCar)
+        assertTrue(CarDisplayState.isOnCarFlow.value)
     }
 
     @Test
@@ -46,5 +47,6 @@ class CarDisplayStateTest {
         CarDisplayState.unregisterCarDisplay()
 
         assertFalse(CarDisplayState.isOnCar)
+        assertFalse(CarDisplayState.isOnCarFlow.value)
     }
 }
