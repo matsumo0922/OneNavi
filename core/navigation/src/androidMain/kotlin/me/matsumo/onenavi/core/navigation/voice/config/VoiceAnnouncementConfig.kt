@@ -29,7 +29,7 @@ internal data class VoiceAnnouncementConfig(
         /** 直前段の到達リードタイム既定値 (秒)。 */
         const val DEFAULT_LEAD_TIME_SECONDS: Double = 5.0
 
-        /** 低速時の保険となる最小手前距離の既定値 (m)。チャイム後の本文開始が案内地点に寄りすぎない距離。 */
-        const val DEFAULT_MIN_LEAD_METERS: Double = 50.0
+        /** 低速時の保険となる最小手前距離の既定値 (m)。低速側の「まもなく」が早すぎない従来値。 */
+        const val DEFAULT_MIN_LEAD_METERS: Double = 30.0
     }
 }
