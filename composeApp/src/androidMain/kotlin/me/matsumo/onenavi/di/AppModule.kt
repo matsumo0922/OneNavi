@@ -8,6 +8,8 @@ import me.matsumo.onenavi.BuildKonfig
 import me.matsumo.onenavi.MainViewModel
 import me.matsumo.onenavi.car.CarGuidanceSessionReleaser
 import me.matsumo.onenavi.car.MainActivityPhoneDestinationSearchLauncher
+import me.matsumo.onenavi.car.navigation.CarNavigationSessionPublisher
+import me.matsumo.onenavi.car.navigation.GuidanceCarTripMapper
 import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
 import me.matsumo.onenavi.core.model.AppConfig
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
@@ -68,6 +70,20 @@ val appModule = module {
             startService = { GuidanceForegroundService.start(applicationContext) },
             stopService = { GuidanceForegroundService.stop(applicationContext) },
             scope = get(),
+        )
+    }
+
+    single {
+        GuidanceCarTripMapper()
+    }
+
+    single {
+        val newGuidanceManager = get<NewGuidanceManager>()
+        CarNavigationSessionPublisher(
+            guidanceState = newGuidanceManager.state,
+            stopGuidance = newGuidanceManager::stopGuidance,
+            scope = get(),
+            tripMapper = get(),
         )
     }
 
