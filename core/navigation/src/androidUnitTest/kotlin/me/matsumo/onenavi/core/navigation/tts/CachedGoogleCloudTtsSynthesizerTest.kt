@@ -165,6 +165,26 @@ class CachedGoogleCloudTtsSynthesizerTest {
         assertEquals(1, backend.calls.size)
     }
 
+    @Test
+    fun `合成ごとに現在の音量ゲイン設定を使う`() = runTest {
+        val backend = FakeBackend()
+        var config = GoogleCloudTtsSynthesisConfig()
+        val synthesizer = CachedGoogleCloudTtsSynthesizer(
+            backend = backend,
+            cache = cacheOf(),
+            synthesisConfigProvider = { config },
+            apiKey = "api-key",
+            scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler)),
+        )
+
+        synthesizer.synthesize(SSML)
+        config = config.copy(volumeGainDb = 6.0)
+        synthesizer.synthesize(SSML)
+
+        assertEquals(listOf(0.0, 6.0), backend.configs.map { it.volumeGainDb })
+        assertEquals(2, backend.calls.size)
+    }
+
     private fun TestScope.synthesizerOf(
         backend: FakeBackend,
         cache: TtsAudioFileCache = cacheOf(),
@@ -172,7 +192,7 @@ class CachedGoogleCloudTtsSynthesizerTest {
     ): CachedGoogleCloudTtsSynthesizer = CachedGoogleCloudTtsSynthesizer(
         backend = backend,
         cache = cache,
-        synthesisConfig = config,
+        synthesisConfigProvider = { config },
         apiKey = "api-key",
         scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler)),
     )
@@ -189,11 +209,16 @@ class CachedGoogleCloudTtsSynthesizerTest {
     private class FakeBackend : GoogleCloudTtsSynthesizerBackend {
 
         val calls = mutableListOf<String>()
+        val configs = mutableListOf<GoogleCloudTtsSynthesisConfig>()
         var gate: CompletableDeferred<Unit>? = null
         private val results = ArrayDeque<Result<ByteArray>>()
 
-        override suspend fun synthesize(ssml: String): ByteArray {
+        override suspend fun synthesize(
+            ssml: String,
+            synthesisConfig: GoogleCloudTtsSynthesisConfig,
+        ): ByteArray {
             calls += ssml
+            configs += synthesisConfig
             gate?.await()
 
             if (results.isEmpty()) return audioOf(ssml)

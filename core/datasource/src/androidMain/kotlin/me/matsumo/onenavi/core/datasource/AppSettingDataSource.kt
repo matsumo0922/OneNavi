@@ -3,6 +3,7 @@ package me.matsumo.onenavi.core.datasource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -110,6 +111,18 @@ class AppSettingDataSource(
 
         preference.edit {
             it[booleanPreferencesKey(AppSetting::useMediaAudioChannelOnCar.name)] = useMediaAudioChannelOnCar
+        }
+    }
+
+    suspend fun setTtsVolumeGainDb(ttsVolumeGainDb: Double) = withContext(ioDispatcher) {
+        val resolvedVolumeGainDb = ttsVolumeGainDb.coerceIn(
+            minimumValue = AppSetting.TTS_VOLUME_GAIN_DB_MIN,
+            maximumValue = AppSetting.TTS_VOLUME_GAIN_DB_MAX,
+        )
+        if (setting.first().ttsVolumeGainDb == resolvedVolumeGainDb) return@withContext
+
+        preference.edit {
+            it[doublePreferencesKey(AppSetting::ttsVolumeGainDb.name)] = resolvedVolumeGainDb
         }
     }
 

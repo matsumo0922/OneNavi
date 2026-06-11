@@ -165,6 +165,8 @@
     <string name="setting_sound">音声案内</string>
     <string name="setting_sound_media_channel">メディア枠で再生する</string>
     <string name="setting_sound_media_channel_description">Android Auto 接続中、ナビ音声を通知ではなくメディア枠で再生します。車種によっては高音質化処理が適用されます。再生中の音楽は小さく流れ続けます。</string>
+    <string name="setting_sound_tts_volume_gain">音声案内の増幅</string>
+    <string name="setting_sound_tts_volume_gain_description">Google Cloud TTS の音量ゲインを調整します。0 dB が標準、+10 dB までが推奨上限です。</string>
     <string name="setting_sound_category">案内カテゴリ別の発話</string>
     <string name="setting_sound_category_description">案内の種類ごとに、発話する・しないを選べます。</string>
 

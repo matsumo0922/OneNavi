@@ -42,6 +42,7 @@ import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementSpeec
 import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceTickFactory
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelector
 import me.matsumo.onenavi.core.navigation.voice.suppression.VoiceAnnouncementSelectionPolicy
+import me.matsumo.onenavi.core.repository.AppSettingRepository
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
 import org.koin.core.qualifier.named
@@ -59,7 +60,7 @@ val navigationModule: Module = module {
         val appConfig = get<AppConfig>()
         val context = androidContext()
         val audioPlayer = PcmAudioPlayer()
-        val synthesisConfig = GoogleCloudTtsSynthesisConfig()
+        val appSettingRepository = get<AppSettingRepository>()
         GoogleCloudTtsVoiceAnnouncementDispatcher(
             synthesizer = CachedGoogleCloudTtsSynthesizer(
                 backend = GoogleCloudTtsApi(
@@ -67,12 +68,13 @@ val navigationModule: Module = module {
                     apiKey = appConfig.googleCloudTtsApiKey,
                     packageName = context.packageName,
                     signatureSha1 = TtsSigningCertificate.resolveSha1(context),
-                    synthesisConfig = synthesisConfig,
                 ),
                 cache = TtsAudioFileCache(
                     directory = context.cacheDir.resolve(GoogleCloudTtsSynthesisConfig.CACHE_SCHEMA_VERSION),
                 ),
-                synthesisConfig = synthesisConfig,
+                synthesisConfigProvider = {
+                    GoogleCloudTtsSynthesisConfig(volumeGainDb = appSettingRepository.setting.value.ttsVolumeGainDb)
+                },
                 apiKey = appConfig.googleCloudTtsApiKey,
             ),
             audioPlayer = audioPlayer,
