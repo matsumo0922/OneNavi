@@ -47,6 +47,7 @@ import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
 import me.matsumo.onenavi.feature.map.DEFAULT_MAP_RENDER_SCALE
 import me.matsumo.onenavi.feature.map.LocalMapRenderScale
 import me.matsumo.onenavi.feature.map.MapRenderDensityDiagnostics
+import me.matsumo.onenavi.guidance.GuidanceForegroundController
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -152,13 +153,15 @@ private fun CarVirtualDisplayProbeAppHost(
     val context = LocalContext.current
     val carPhoneSessionCoordinator = koinInject<CarPhoneSessionCoordinator>()
     val carGuidanceSessionReleaser = koinInject<CarGuidanceSessionReleaser>()
+    val guidanceForegroundController = koinInject<GuidanceForegroundController>()
     val hasLocationPermission = ContextCompat.checkSelfPermission(
         context,
         permission.ACCESS_FINE_LOCATION,
     ) == PackageManager.PERMISSION_GRANTED
 
-    DisposableEffect(carGuidanceSessionReleaser) {
+    DisposableEffect(carGuidanceSessionReleaser, guidanceForegroundController) {
         carGuidanceSessionReleaser.ensureStarted()
+        guidanceForegroundController.ensureStarted()
 
         onDispose {}
     }

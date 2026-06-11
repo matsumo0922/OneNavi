@@ -11,6 +11,8 @@ import me.matsumo.onenavi.car.MainActivityPhoneDestinationSearchLauncher
 import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
 import me.matsumo.onenavi.core.model.AppConfig
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
+import me.matsumo.onenavi.guidance.GuidanceForegroundController
+import me.matsumo.onenavi.guidance.GuidanceForegroundService
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -54,6 +56,17 @@ val appModule = module {
         CarGuidanceSessionReleaser(
             carPhoneSessionCoordinator = get(),
             releaseGuidanceSession = newGuidanceManager::release,
+            scope = get(),
+        )
+    }
+
+    single {
+        val applicationContext = androidContext()
+        val newGuidanceManager = get<NewGuidanceManager>()
+        GuidanceForegroundController(
+            guidanceState = newGuidanceManager.state,
+            startService = { GuidanceForegroundService.start(applicationContext) },
+            stopService = { GuidanceForegroundService.stop(applicationContext) },
             scope = get(),
         )
     }

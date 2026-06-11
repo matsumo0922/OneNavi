@@ -106,6 +106,7 @@ kotlin {
             implementation(project(":feature:setting"))
             implementation(project(":feature:billing"))
 
+            implementation(libs.androidx.core)
             implementation(libs.androidx.core.splashscreen)
             implementation(libs.play.review)
             implementation(libs.play.update)
