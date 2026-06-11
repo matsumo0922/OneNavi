@@ -551,6 +551,22 @@ data class UserLocation(
 - バックグラウンド継続が必要な場合は ForegroundService 側がこの data source を collect する。
   `CurrentLocationDataSource` 自体は位置更新 Flow の提供に責務を限定する
 
+#### 3.2.1 Background / lock 中の案内 owner
+
+案内 active (`GuidanceState.Guiding` / `GuidanceState.Rerouting`) 中は、スマホ画面や Android Auto の
+表示面が一時的に無くなっても `CarGuidanceSessionReleaser` から `NewGuidanceManager.release()` を
+呼ばない。`MainActivity.onStop()` は phone surface を unregister するため、表示面の有無だけを
+release 条件にすると、スマホ単体でバックグラウンド / lock に入った通常案内が停止してしまう。
+
+active guidance の停止経路は、foreground service 通知の停止 action、Android Auto host の
+`NavigationManagerCallback.onStopNavigation()`、到着・失敗・ユーザー操作による明示停止に限定する。
+全表示面終了後の `CarGuidanceSessionReleaser` は、active guidance が `Idle` / `Arrived` / `Failed`
+へ遷移した後のクリーンアップ経路として扱う。
+
+Foreground Service の起動要求は guidance state の active 化で行う。Android のバックグラウンド起動制限
+などで起動要求が失敗した場合に備え、スマホ画面復帰 (`MainActivity.onStart`) と Android Auto 表示面の
+再接続時にも、案内が active なら service 起動を再試行する。
+
 ### 3.3 `ExtNavGuidanceTracker`
 
 ```kotlin

@@ -1,6 +1,8 @@
 package me.matsumo.onenavi.core.common.car
 
-import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * 車載ディスプレイ(Android Auto)上で OneNavi が表示中かをプロセス全体で共有するフラグ。
@@ -10,20 +12,36 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 object CarDisplayState {
 
-    private val activeDisplayCount = AtomicInteger(0)
+    /** 車載ディスプレイ entry point 数の増減単位。 */
+    private const val ACTIVE_DISPLAY_COUNT_INCREMENT = 1
+
+    private val lock = Any()
+    private val _isOnCarFlow = MutableStateFlow(false)
+    private var activeDisplayCount = 0
 
     /** 車載ディスプレイ上で表示中なら true。 */
-    val isOnCar: Boolean get() = activeDisplayCount.get() > 0
+    val isOnCar: Boolean get() = _isOnCarFlow.value
+
+    /** 車載ディスプレイの接続状態を通知する flow。 */
+    val isOnCarFlow: StateFlow<Boolean> = _isOnCarFlow.asStateFlow()
 
     /** 車載ディスプレイ上の表示 entry point が開始したことを記録する。 */
     fun registerCarDisplay() {
-        activeDisplayCount.incrementAndGet()
+        synchronized(lock) {
+            activeDisplayCount += ACTIVE_DISPLAY_COUNT_INCREMENT
+            publishStateLocked()
+        }
     }
 
     /** 車載ディスプレイ上の表示 entry point が終了したことを記録する。 */
     fun unregisterCarDisplay() {
-        activeDisplayCount.updateAndGet { currentCount ->
-            maxOf(currentCount - 1, 0)
+        synchronized(lock) {
+            activeDisplayCount = maxOf(activeDisplayCount - ACTIVE_DISPLAY_COUNT_INCREMENT, 0)
+            publishStateLocked()
         }
+    }
+
+    private fun publishStateLocked() {
+        _isOnCarFlow.value = activeDisplayCount > 0
     }
 }
