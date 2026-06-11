@@ -3,6 +3,7 @@ package me.matsumo.onenavi.car
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
@@ -11,12 +12,15 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.common.car.CarDisplayState
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
+import me.matsumo.onenavi.guidance.requiresForegroundService
 
 /**
- * 全ての表示面と Android Auto session が閉じた時だけ共有中の案内 session を停止する監視役。
+ * 全ての表示面と Android Auto session と active guidance が閉じた時だけ共有中の案内 session を停止する監視役。
  */
 internal class CarGuidanceSessionReleaser(
     private val carPhoneSessionCoordinator: CarPhoneSessionCoordinator,
+    private val guidanceState: StateFlow<GuidanceState>,
     private val releaseGuidanceSession: () -> Unit,
     private val scope: CoroutineScope,
 ) {
@@ -25,10 +29,17 @@ internal class CarGuidanceSessionReleaser(
     private var releaseJob: Job? = null
 
     init {
+        val hasActiveGuidanceFlow = guidanceState
+            .map { state -> state.requiresForegroundService() }
+            .distinctUntilChanged()
+
         carPhoneSessionCoordinator.state
             .map { state -> state.activeSurfaces.isNotEmpty() }
             .combine(CarDisplayState.isOnCarFlow) { hasActiveSurface, isOnCar ->
                 hasActiveSurface || isOnCar
+            }
+            .combine(hasActiveGuidanceFlow) { hasDisplayGuidanceOwner, hasActiveGuidance ->
+                hasDisplayGuidanceOwner || hasActiveGuidance
             }
             .distinctUntilChanged()
             .onEach { hasGuidanceOwner -> handleGuidanceOwnerChanged(hasGuidanceOwner) }
@@ -60,7 +71,9 @@ internal class CarGuidanceSessionReleaser(
         delay(EMPTY_SURFACE_RELEASE_DELAY_MILLIS)
 
         val hasNoActiveSurface = carPhoneSessionCoordinator.state.value.activeSurfaces.isEmpty()
-        val hasNoGuidanceOwner = hasNoActiveSurface && !CarDisplayState.isOnCar
+        val hasNoCarSession = !CarDisplayState.isOnCar
+        val hasNoActiveGuidance = !guidanceState.value.requiresForegroundService()
+        val hasNoGuidanceOwner = hasNoActiveSurface && hasNoCarSession && hasNoActiveGuidance
 
         if (hasNoGuidanceOwner) {
             releaseGuidanceSession()

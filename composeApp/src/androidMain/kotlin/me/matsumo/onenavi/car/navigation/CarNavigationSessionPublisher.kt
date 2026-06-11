@@ -51,7 +51,7 @@ internal class CarNavigationSessionPublisher(
 
     private fun attachOnMain(carContext: CarContext, executor: Executor) {
         if (navigationManager != null) {
-            return
+            detachOnMain()
         }
 
         val manager = carContext.getCarService(NavigationManager::class.java)

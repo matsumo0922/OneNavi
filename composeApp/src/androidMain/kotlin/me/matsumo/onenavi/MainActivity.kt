@@ -110,6 +110,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         carPhoneSessionCoordinator.registerSurface(OneNaviDisplaySurface.Phone)
+        guidanceForegroundController.restartIfGuidanceActive()
     }
 
     override fun onStop() {

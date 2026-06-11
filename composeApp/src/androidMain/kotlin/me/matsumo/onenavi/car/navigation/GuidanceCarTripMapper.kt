@@ -107,7 +107,7 @@ internal class GuidanceCarTripMapper(
             ManeuverType.ROTARY,
             ManeuverType.ROUNDABOUT,
             ManeuverType.TRAFFIC_CIRCLE,
-            -> Maneuver.TYPE_ROUNDABOUT_ENTER_CCW
+            -> Maneuver.TYPE_ROUNDABOUT_ENTER_CW
             ManeuverType.TURN -> modifier.toTurnType()
             ManeuverType.UTURN -> modifier.toUTurnType()
         }
@@ -122,7 +122,7 @@ internal class GuidanceCarTripMapper(
             ManeuverModifier.SLIGHT_LEFT -> Maneuver.TYPE_TURN_SLIGHT_LEFT
             ManeuverModifier.SLIGHT_RIGHT -> Maneuver.TYPE_TURN_SLIGHT_RIGHT
             ManeuverModifier.STRAIGHT -> Maneuver.TYPE_STRAIGHT
-            ManeuverModifier.UTURN -> Maneuver.TYPE_U_TURN_LEFT
+            ManeuverModifier.UTURN -> Maneuver.TYPE_U_TURN_RIGHT
         }
     }
 
@@ -135,7 +135,7 @@ internal class GuidanceCarTripMapper(
             ManeuverModifier.SLIGHT_LEFT -> Maneuver.TYPE_ON_RAMP_SLIGHT_LEFT
             ManeuverModifier.SLIGHT_RIGHT -> Maneuver.TYPE_ON_RAMP_SLIGHT_RIGHT
             ManeuverModifier.STRAIGHT -> Maneuver.TYPE_STRAIGHT
-            ManeuverModifier.UTURN -> Maneuver.TYPE_ON_RAMP_U_TURN_LEFT
+            ManeuverModifier.UTURN -> Maneuver.TYPE_ON_RAMP_U_TURN_RIGHT
         }
     }
 
@@ -148,7 +148,7 @@ internal class GuidanceCarTripMapper(
             ManeuverModifier.SLIGHT_LEFT -> Maneuver.TYPE_OFF_RAMP_SLIGHT_LEFT
             ManeuverModifier.SLIGHT_RIGHT -> Maneuver.TYPE_OFF_RAMP_SLIGHT_RIGHT
             ManeuverModifier.STRAIGHT -> Maneuver.TYPE_STRAIGHT
-            ManeuverModifier.UTURN -> Maneuver.TYPE_U_TURN_LEFT
+            ManeuverModifier.UTURN -> Maneuver.TYPE_U_TURN_RIGHT
         }
     }
 
@@ -163,7 +163,7 @@ internal class GuidanceCarTripMapper(
             ManeuverModifier.SLIGHT_RIGHT,
             -> Maneuver.TYPE_FORK_RIGHT
             ManeuverModifier.STRAIGHT -> Maneuver.TYPE_STRAIGHT
-            ManeuverModifier.UTURN -> Maneuver.TYPE_U_TURN_LEFT
+            ManeuverModifier.UTURN -> Maneuver.TYPE_U_TURN_RIGHT
         }
     }
 
@@ -192,9 +192,10 @@ internal class GuidanceCarTripMapper(
             ManeuverModifier.LEFT,
             ManeuverModifier.SHARP_LEFT,
             ManeuverModifier.SLIGHT_LEFT,
+            -> Maneuver.TYPE_U_TURN_LEFT
             ManeuverModifier.STRAIGHT,
             ManeuverModifier.UTURN,
-            -> Maneuver.TYPE_U_TURN_LEFT
+            -> Maneuver.TYPE_U_TURN_RIGHT
         }
     }
 
@@ -238,7 +239,8 @@ internal class GuidanceCarTripMapper(
             return 0L
         }
 
-        val progressRatio = distanceMeters.coerceAtLeast(0).toDouble() / distanceRemainingMeters
+        val safeDistanceMeters = distanceMeters.coerceAtLeast(0)
+        val progressRatio = (safeDistanceMeters.toDouble() / distanceRemainingMeters).coerceAtMost(1.0)
         val durationSeconds = durationRemainingSeconds * progressRatio
 
         return durationSeconds.toLong().coerceAtLeast(0L)

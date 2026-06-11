@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.car.app.notification.CarAppExtender
 import androidx.compose.runtime.Immutable
 import androidx.core.app.NotificationCompat
@@ -24,10 +23,6 @@ internal class GuidanceForegroundNotificationFactory(
 
     /** 案内通知用 channel を必要に応じて作成する。 */
     fun ensureNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return
-        }
-
         val channel = NotificationChannel(
             CHANNEL_ID,
             context.getString(R.string.guidance_notification_channel_name),
@@ -170,13 +165,7 @@ internal class GuidanceForegroundNotificationFactory(
     }
 
     private fun pendingIntentFlags(): Int {
-        val immutableFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.FLAG_IMMUTABLE
-        } else {
-            0
-        }
-
-        return PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag
+        return PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     }
 
     /** 通知に表示する文言。 */

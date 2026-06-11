@@ -69,6 +69,52 @@ class GuidanceForegroundControllerTest {
         assertEquals(expected = 1, actual = stopCount)
     }
 
+    @Test
+    fun `foreground 復帰時に案内中なら Foreground Service の再起動を試みる`() = runTest {
+        val state = MutableStateFlow<GuidanceState>(
+            GuidanceState.Guiding(
+                route = buildRoute(),
+                progress = buildProgress(),
+                presentation = GuidancePresentation.Empty,
+            ),
+        )
+        var startCount = 0
+        var stopCount = 0
+        val controller = GuidanceForegroundController(
+            guidanceState = state,
+            startService = { startCount += COUNT_INCREMENT },
+            stopService = { stopCount += COUNT_INCREMENT },
+            scope = backgroundScope,
+        )
+        controller.ensureStarted()
+        runCurrent()
+
+        controller.restartIfGuidanceActive()
+
+        assertEquals(expected = 2, actual = startCount)
+        assertEquals(expected = 0, actual = stopCount)
+    }
+
+    @Test
+    fun `foreground 復帰時に Idle なら Foreground Service の再起動を試みない`() = runTest {
+        val state = MutableStateFlow<GuidanceState>(GuidanceState.Idle)
+        var startCount = 0
+        var stopCount = 0
+        val controller = GuidanceForegroundController(
+            guidanceState = state,
+            startService = { startCount += COUNT_INCREMENT },
+            stopService = { stopCount += COUNT_INCREMENT },
+            scope = backgroundScope,
+        )
+        controller.ensureStarted()
+        runCurrent()
+
+        controller.restartIfGuidanceActive()
+
+        assertEquals(expected = 0, actual = startCount)
+        assertEquals(expected = 1, actual = stopCount)
+    }
+
     private fun buildRoute(): RouteDetail {
         val origin = RoutePoint(
             latitude = 35.0,

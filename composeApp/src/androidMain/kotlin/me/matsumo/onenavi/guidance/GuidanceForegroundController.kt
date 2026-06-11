@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.guidance
 
+import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -32,23 +33,40 @@ internal class GuidanceForegroundController(
             .launchIn(scope)
     }
 
-    private fun handleForegroundServiceState(requiresForegroundService: Boolean) {
-        if (requiresForegroundService) {
-            startService()
-        } else {
-            stopService()
+    /** 表示面へ戻った時に案内中なら Foreground Service の再起動を試みる。 */
+    fun restartIfGuidanceActive() {
+        if (guidanceState.value.requiresForegroundService()) {
+            startForegroundService()
         }
     }
 
-    private fun GuidanceState.requiresForegroundService(): Boolean {
-        return when (this) {
-            is GuidanceState.Guiding,
-            is GuidanceState.Rerouting,
-            -> true
-            GuidanceState.Arrived,
-            is GuidanceState.Failed,
-            GuidanceState.Idle,
-            -> false
+    private fun handleForegroundServiceState(requiresForegroundService: Boolean) {
+        if (requiresForegroundService) {
+            startForegroundService()
+        } else {
+            stopForegroundService()
         }
+    }
+
+    private fun startForegroundService() {
+        runCatching {
+            startService()
+        }.onFailure { error ->
+            Napier.w(tag = TAG, throwable = error) { "Failed to request guidance foreground service start." }
+        }
+    }
+
+    private fun stopForegroundService() {
+        runCatching {
+            stopService()
+        }.onFailure { error ->
+            Napier.w(tag = TAG, throwable = error) { "Failed to request guidance foreground service stop." }
+        }
+    }
+
+    /** logcat 用の固定値。 */
+    private companion object {
+        /** logcat 抽出用タグ。 */
+        const val TAG = "GuidanceForegroundController"
     }
 }

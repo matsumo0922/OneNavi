@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.guidance
 
+import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -11,6 +12,7 @@ import androidx.core.content.ContextCompat
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.launchIn
@@ -21,12 +23,12 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
 /** 端末がバックグラウンドやロック画面でも案内状態を維持する Foreground Service。 */
-class GuidanceForegroundService : android.app.Service(), KoinComponent {
+class GuidanceForegroundService : Service(), KoinComponent {
 
     private val newGuidanceManager by inject<NewGuidanceManager>()
     private lateinit var notificationFactory: GuidanceForegroundNotificationFactory
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private var guidanceStateJob: kotlinx.coroutines.Job? = null
+    private var guidanceStateJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -117,18 +119,6 @@ class GuidanceForegroundService : android.app.Service(), KoinComponent {
     private fun stopForegroundService() {
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
-    }
-
-    private fun GuidanceState.requiresForegroundService(): Boolean {
-        return when (this) {
-            is GuidanceState.Guiding,
-            is GuidanceState.Rerouting,
-            -> true
-            GuidanceState.Arrived,
-            is GuidanceState.Failed,
-            GuidanceState.Idle,
-            -> false
-        }
     }
 
     /** 案内 Foreground Service の起動 API と固定値。 */

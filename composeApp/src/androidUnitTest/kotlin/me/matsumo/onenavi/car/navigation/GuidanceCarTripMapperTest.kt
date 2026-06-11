@@ -26,16 +26,7 @@ class GuidanceCarTripMapperTest {
     @Test
     fun `Guiding は目的地と次案内 step を持つ Trip に変換される`() {
         val maneuver = buildManeuverCallout()
-        val state = GuidanceState.Guiding(
-            route = buildRoute(),
-            progress = buildProgress(),
-            presentation = GuidancePresentation(
-                nextManeuver = maneuver,
-                followupManeuver = null,
-                banner = null,
-                listItems = persistentListOf(),
-            ),
-        )
+        val state = buildGuidingState(maneuver)
 
         val trip = mapper.toTrip(state)
         val destination = trip.destinations.single()
@@ -55,6 +46,62 @@ class GuidanceCarTripMapperTest {
     }
 
     @Test
+    fun `左側通行向けの既定 maneuver type に変換される`() {
+        assertManeuverType(
+            expectedType = Maneuver.TYPE_ROUNDABOUT_ENTER_CW,
+            maneuverType = ManeuverType.ROUNDABOUT,
+            maneuverModifier = ManeuverModifier.STRAIGHT,
+        )
+        assertManeuverType(
+            expectedType = Maneuver.TYPE_U_TURN_RIGHT,
+            maneuverType = ManeuverType.TURN,
+            maneuverModifier = ManeuverModifier.UTURN,
+        )
+        assertManeuverType(
+            expectedType = Maneuver.TYPE_ON_RAMP_U_TURN_RIGHT,
+            maneuverType = ManeuverType.ON_RAMP,
+            maneuverModifier = ManeuverModifier.UTURN,
+        )
+        assertManeuverType(
+            expectedType = Maneuver.TYPE_U_TURN_RIGHT,
+            maneuverType = ManeuverType.OFF_RAMP,
+            maneuverModifier = ManeuverModifier.UTURN,
+        )
+        assertManeuverType(
+            expectedType = Maneuver.TYPE_U_TURN_RIGHT,
+            maneuverType = ManeuverType.FORK,
+            maneuverModifier = ManeuverModifier.UTURN,
+        )
+        assertManeuverType(
+            expectedType = Maneuver.TYPE_U_TURN_RIGHT,
+            maneuverType = ManeuverType.UTURN,
+            maneuverModifier = ManeuverModifier.STRAIGHT,
+        )
+        assertManeuverType(
+            expectedType = Maneuver.TYPE_U_TURN_LEFT,
+            maneuverType = ManeuverType.UTURN,
+            maneuverModifier = ManeuverModifier.LEFT,
+        )
+    }
+
+    @Test
+    fun `step ETA は目的地 ETA を超えない`() {
+        val maneuver = buildManeuverCallout(
+            distanceToManeuverMeters = REMAINING_METERS * 2,
+        )
+        val state = buildGuidingState(maneuver)
+
+        val trip = mapper.toTrip(state)
+        val destinationEstimate = trip.destinationTravelEstimates.single()
+        val stepEstimate = trip.stepTravelEstimates.single()
+
+        assertEquals(
+            expected = destinationEstimate.remainingTimeSeconds,
+            actual = stepEstimate.remainingTimeSeconds,
+        )
+    }
+
+    @Test
     fun `Rerouting は loading Trip に変換される`() {
         val state = GuidanceState.Rerouting(
             previousRoute = buildRoute(),
@@ -67,6 +114,38 @@ class GuidanceCarTripMapperTest {
         assertEquals(expected = CURRENT_ROAD_NAME, actual = trip.currentRoad.toString())
         assertTrue(trip.steps.isEmpty())
         assertTrue(trip.stepTravelEstimates.isEmpty())
+    }
+
+    private fun assertManeuverType(
+        expectedType: Int,
+        maneuverType: ManeuverType,
+        maneuverModifier: ManeuverModifier,
+    ) {
+        val maneuver = buildManeuverCallout(
+            type = maneuverType,
+            modifier = maneuverModifier,
+        )
+        val state = buildGuidingState(maneuver)
+        val trip = mapper.toTrip(state)
+        val step = trip.steps.single()
+
+        assertEquals(expected = expectedType, actual = step.maneuver?.type)
+    }
+
+    private fun buildGuidingState(
+        maneuver: ManeuverCallout,
+        progress: GuidanceProgress = buildProgress(),
+    ): GuidanceState.Guiding {
+        return GuidanceState.Guiding(
+            route = buildRoute(),
+            progress = progress,
+            presentation = GuidancePresentation(
+                nextManeuver = maneuver,
+                followupManeuver = null,
+                banner = null,
+                listItems = persistentListOf(),
+            ),
+        )
     }
 
     private fun buildRoute(): RouteDetail {
@@ -102,16 +181,19 @@ class GuidanceCarTripMapperTest {
         )
     }
 
-    private fun buildProgress(): GuidanceProgress {
+    private fun buildProgress(
+        distanceRemainingMeters: Int = REMAINING_METERS,
+        durationRemainingSeconds: Int = REMAINING_SECONDS,
+    ): GuidanceProgress {
         val location = RoutePoint(
             latitude = 35.0,
             longitude = 139.0,
         )
 
         return GuidanceProgress(
-            distanceRemainingMeters = REMAINING_METERS,
-            durationRemainingSeconds = REMAINING_SECONDS,
-            etaEpochMillis = FIXED_NOW_MILLIS + REMAINING_SECONDS * MILLIS_PER_SECOND,
+            distanceRemainingMeters = distanceRemainingMeters,
+            durationRemainingSeconds = durationRemainingSeconds,
+            etaEpochMillis = FIXED_NOW_MILLIS + durationRemainingSeconds * MILLIS_PER_SECOND,
             traveledMeters = 0,
             elapsedSeconds = 0,
             currentCumulativeMeters = 0.0,
@@ -131,18 +213,22 @@ class GuidanceCarTripMapperTest {
         )
     }
 
-    private fun buildManeuverCallout(): ManeuverCallout {
+    private fun buildManeuverCallout(
+        type: ManeuverType = ManeuverType.TURN,
+        modifier: ManeuverModifier = ManeuverModifier.LEFT,
+        distanceToManeuverMeters: Int = 500,
+    ): ManeuverCallout {
         val location = RoutePoint(
             latitude = 35.05,
             longitude = 139.05,
         )
 
         return ManeuverCallout(
-            type = ManeuverType.TURN,
-            modifier = ManeuverModifier.LEFT,
+            type = type,
+            modifier = modifier,
             location = location,
             geometryDistanceFromStartMeters = 500.0,
-            distanceToManeuverMeters = 500,
+            distanceToManeuverMeters = distanceToManeuverMeters,
             intersectionName = "霞が関",
             exitNumber = null,
             guidancePointIndex = 0,

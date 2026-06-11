@@ -57,6 +57,7 @@ val appModule = module {
         val newGuidanceManager = get<NewGuidanceManager>()
         CarGuidanceSessionReleaser(
             carPhoneSessionCoordinator = get(),
+            guidanceState = newGuidanceManager.state,
             releaseGuidanceSession = newGuidanceManager::release,
             scope = get(),
         )
