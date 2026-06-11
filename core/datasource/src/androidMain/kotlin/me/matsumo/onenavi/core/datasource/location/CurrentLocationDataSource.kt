@@ -58,7 +58,7 @@ class CurrentLocationDataSource(
      */
     @SuppressLint("MissingPermission")
     suspend fun lastKnown(): UserLocation? {
-        if (appSettingDataSource.setting.value.developerMode) {
+        if (appSettingDataSource.currentSetting().developerMode) {
             return createDevelopmentUserLocation()
         }
 

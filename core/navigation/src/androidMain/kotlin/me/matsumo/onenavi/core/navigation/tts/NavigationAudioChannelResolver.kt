@@ -16,8 +16,8 @@ internal class NavigationAudioChannelResolver(
 ) {
 
     /** 現在の設定と車載状態から出力チャンネルを決定する。 */
-    fun resolve(): NavigationAudioChannel {
-        val prefersMediaChannel = appSettingRepository.setting.value.useMediaAudioChannelOnCar
+    suspend fun resolve(): NavigationAudioChannel {
+        val prefersMediaChannel = appSettingRepository.currentSetting().useMediaAudioChannelOnCar
         val shouldUseMediaChannel = prefersMediaChannel && CarDisplayState.isOnCar
         return if (shouldUseMediaChannel) NavigationAudioChannel.Media else NavigationAudioChannel.Guidance
     }
