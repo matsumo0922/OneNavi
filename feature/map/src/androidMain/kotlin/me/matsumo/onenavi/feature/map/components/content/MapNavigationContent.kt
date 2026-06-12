@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
+import me.matsumo.onenavi.core.datasource.location.VehicleSpeedState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_cancel
@@ -34,6 +35,7 @@ import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationManeuve
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationReroutingPanel
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSearchResultsCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSelectedWaypointCard
+import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSpeedOverlay
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationWaypointEditorCard
 import me.matsumo.onenavi.feature.map.state.MapHostInsets
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
@@ -51,9 +53,11 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun MapNavigationContent(
     guidanceState: GuidanceState,
+    vehicleSpeedState: VehicleSpeedState,
     navigationGuideImage: NavigationGuideImage?,
     overlayState: MapOverlayState,
     panelLayout: MapPanelLayout,
+    topAppBarHeight: Dp,
     navigationCardHeight: Dp,
     contentInsets: MapHostInsets,
     onUiEvent: (MapUiEvent) -> Unit,
@@ -158,6 +162,19 @@ internal fun MapNavigationContent(
                     horizontalPadding = horizontalContentPadding,
                 )
             }
+        }
+
+        if (!panelLayout.isSplit) {
+            MapNavigationSpeedOverlay(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(
+                        start = contentInsets.start + MAP_NAVIGATION_SPEED_OVERLAY_HORIZONTAL_PADDING,
+                        top = contentInsets.top + topAppBarHeight + MAP_NAVIGATION_SPEED_OVERLAY_TOP_PADDING,
+                    ),
+                displaySpeedKmh = vehicleSpeedState.displaySpeedKmh,
+                speedLimitKmh = etaProgress?.currentSpeedLimitKmh,
+            )
         }
 
         if (!hasSheetOverlay) {
@@ -301,6 +318,12 @@ private val MAP_NAVIGATION_SPLIT_BOTTOM_CARD_MIN_HEIGHT = 240.dp
 
 /** 下部 navigation card が system / host inset なしでも確保する下余白。 */
 private val MAP_NAVIGATION_BOTTOM_CARD_DEFAULT_PADDING = 8.dp
+
+/** compact レイアウトで速度 overlay を案内トップパネル下へずらす余白。 */
+private val MAP_NAVIGATION_SPEED_OVERLAY_TOP_PADDING = 8.dp
+
+/** compact レイアウトで速度 overlay が画面端から確保する横余白。 */
+private val MAP_NAVIGATION_SPEED_OVERLAY_HORIZONTAL_PADDING = 16.dp
 
 private fun Modifier.navigationBottomCardPadding(
     contentInsets: MapHostInsets,

@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.common.OpenLocationCode
 import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
+import me.matsumo.onenavi.core.datasource.location.CurrentLocationDataSource
+import me.matsumo.onenavi.core.datasource.location.VehicleSpeedState
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
@@ -67,6 +69,7 @@ class MapViewModel(
     phoneDestinationSearchLauncher: PhoneDestinationSearchLauncher,
     guideImageGateway: ExtNavGuideImageGateway,
     vehicleLocationDataSource: VehicleLocationDataSource,
+    currentLocationDataSource: CurrentLocationDataSource,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MapUiState())
@@ -94,6 +97,9 @@ class MapViewModel(
 
     /** Guidance 期の state machine を提供する ([GuidanceState])。 */
     val newGuidanceState: StateFlow<GuidanceState> = newGuidanceManager.state
+
+    /** core 層で推定した表示用の自車速度。 */
+    val vehicleSpeedState: StateFlow<VehicleSpeedState> = currentLocationDataSource.vehicleSpeedState
 
     /**
      * 地図 UI が読む自車位置。

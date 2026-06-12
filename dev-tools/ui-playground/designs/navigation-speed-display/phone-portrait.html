@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        width: 412px;
+        height: 915px;
+        overflow: hidden;
+        font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+        color: #1c1b1f;
+        background: #d9e5da;
+      }
+      .screen {
+        position: relative;
+        width: 412px;
+        height: 915px;
+        background:
+          linear-gradient(27deg, transparent 0 43%, rgba(255,255,255,0.92) 43.2% 50%, transparent 50.2%),
+          linear-gradient(118deg, transparent 0 58%, rgba(255,255,255,0.78) 58.2% 63%, transparent 63.2%),
+          linear-gradient(0deg, rgba(88, 130, 96, 0.18) 0 1px, transparent 1px 96px),
+          linear-gradient(90deg, rgba(88, 130, 96, 0.16) 0 1px, transparent 1px 96px),
+          #d9e5da;
+        background-size: auto, auto, 96px 96px, 96px 96px, auto;
+      }
+      .top-panel {
+        position: absolute;
+        top: 20px;
+        left: 16px;
+        right: 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 96px;
+        padding: 14px;
+        border-radius: 8px;
+        background: #fefbff;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+      }
+      .turn {
+        display: grid;
+        place-items: center;
+        width: 64px;
+        height: 64px;
+        color: #ffffff;
+        font-size: 36px;
+        font-weight: 800;
+        border-radius: 8px;
+        background: #1f7a3f;
+      }
+      .top-text {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+      .distance {
+        font-size: 30px;
+        font-weight: 800;
+        line-height: 1;
+      }
+      .road {
+        font-size: 15px;
+        color: #5f5d63;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .speed-stack {
+        position: absolute;
+        top: 132px;
+        left: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .speed-card {
+        display: flex;
+        align-items: baseline;
+        gap: 5px;
+        min-width: 110px;
+        padding: 8px 12px 10px;
+        border-radius: 8px;
+        color: #ffffff;
+        background: rgba(24, 28, 25, 0.9);
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.24);
+      }
+      .speed-value {
+        font-size: 34px;
+        font-weight: 850;
+        line-height: 1;
+        letter-spacing: 0;
+      }
+      .speed-unit {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+      .limit-sign {
+        display: grid;
+        place-items: center;
+        width: 58px;
+        height: 58px;
+        border: 5px solid #d5222a;
+        border-radius: 50%;
+        color: #1c1b1f;
+        background: #ffffff;
+        font-size: 23px;
+        font-weight: 850;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+      }
+      .eta-card {
+        position: absolute;
+        left: 16px;
+        right: 16px;
+        bottom: 18px;
+        padding: 16px;
+        border-radius: 8px;
+        background: #fefbff;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+      }
+      .eta-main {
+        font-size: 30px;
+        font-weight: 850;
+        color: #1b7f45;
+      }
+      .eta-sub {
+        margin-top: 2px;
+        font-size: 15px;
+        color: #5f5d63;
+      }
+      .traffic {
+        height: 8px;
+        margin-top: 14px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #1b7f45 0 55%, #f2b23a 55% 72%, #d64242 72% 100%);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="screen">
+      <section class="top-panel">
+        <div class="turn">↱</div>
+        <div class="top-text">
+          <div class="distance">300 m</div>
+          <div class="road">青山通りを左方向</div>
+        </div>
+      </section>
+
+      <section class="speed-stack" aria-label="速度">
+        <div class="speed-card">
+          <span class="speed-value">48</span>
+          <span class="speed-unit">km/h</span>
+        </div>
+        <div class="limit-sign" aria-label="制限速度 50 km/h">50</div>
+      </section>
+
+      <section class="eta-card">
+        <div class="eta-main">18分</div>
+        <div class="eta-sub">8.4 km · 12:48 到着予定</div>
+        <div class="traffic"></div>
+      </section>
+    </main>
+  </body>
+</html>

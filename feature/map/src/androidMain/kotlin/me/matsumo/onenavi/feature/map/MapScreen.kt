@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.BottomSheetScaffold
@@ -47,6 +48,7 @@ import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommand
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommandEnvelope
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
+import me.matsumo.onenavi.core.datasource.location.VehicleSpeedState
 import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
@@ -63,6 +65,7 @@ import me.matsumo.onenavi.feature.map.components.bottomsheet.MapSearchResultsShe
 import me.matsumo.onenavi.feature.map.components.content.MapBrowsingContent
 import me.matsumo.onenavi.feature.map.components.content.MapNavigationContent
 import me.matsumo.onenavi.feature.map.components.content.MapRoutePreviewContent
+import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSpeedOverlay
 import me.matsumo.onenavi.feature.map.components.topappbar.MapWaypointSearchScreen
 import me.matsumo.onenavi.feature.map.state.LocalMapHostViewport
 import me.matsumo.onenavi.feature.map.state.MAP_CONTROLS_COLUMN_WIDTH
@@ -97,6 +100,7 @@ fun MapScreen(
     val routePreviewState by viewModel.newRoutePreviewState.collectAsStateWithLifecycle()
     val guidanceState by viewModel.newGuidanceState.collectAsStateWithLifecycle()
     val vehicleLocationState by viewModel.vehicleLocationState.collectAsStateWithLifecycle()
+    val vehicleSpeedState by viewModel.vehicleSpeedState.collectAsStateWithLifecycle()
     val phoneCommand by carPhoneSessionCoordinator.phoneCommand.collectAsStateWithLifecycle()
 
     val mapHostViewport = LocalMapHostViewport.current
@@ -258,6 +262,7 @@ fun MapScreen(
                 routePreviewState = routePreviewState,
                 guidanceState = guidanceState,
                 vehicleLocationState = vehicleLocationState,
+                vehicleSpeedState = vehicleSpeedState,
                 googleMap = googleMap,
                 cameraState = cameraState,
                 panelLayout = panelLayout,
@@ -294,6 +299,7 @@ fun MapScreen(
                 routePreviewState = routePreviewState,
                 guidanceState = guidanceState,
                 vehicleLocationState = vehicleLocationState,
+                vehicleSpeedState = vehicleSpeedState,
                 googleMap = googleMap,
                 cameraState = cameraState,
                 panelLayout = panelLayout,
@@ -383,6 +389,7 @@ private fun MapScreenCompactLayout(
     routePreviewState: RoutePreviewState,
     guidanceState: GuidanceState,
     vehicleLocationState: VehicleLocationState?,
+    vehicleSpeedState: VehicleSpeedState,
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
@@ -447,6 +454,7 @@ private fun MapScreenCompactLayout(
                 uiState = uiState,
                 screenState = screenState,
                 guidanceState = guidanceState,
+                vehicleSpeedState = vehicleSpeedState,
                 cameraState = cameraState,
                 panelLayout = panelLayout,
                 contentInsets = contentInsets,
@@ -477,6 +485,7 @@ private fun MapScreenSplitLayout(
     routePreviewState: RoutePreviewState,
     guidanceState: GuidanceState,
     vehicleLocationState: VehicleLocationState?,
+    vehicleSpeedState: VehicleSpeedState,
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
@@ -561,6 +570,7 @@ private fun MapScreenSplitLayout(
                     uiState = uiState,
                     screenState = screenState,
                     guidanceState = guidanceState,
+                    vehicleSpeedState = vehicleSpeedState,
                     cameraState = cameraState,
                     panelLayout = panelLayout,
                     contentInsets = contentInsets,
@@ -570,6 +580,20 @@ private fun MapScreenSplitLayout(
                     onSettingClicked = onSettingClicked,
                 )
             }
+        }
+
+        if (screenState is MapScreenState.Navigating) {
+            MapNavigationSpeedOverlay(
+                modifier = Modifier
+                    .align(panelLayout.toNavigationSpeedOverlayAlignment())
+                    .padding(
+                        start = contentInsets.start + MAP_NAVIGATION_SPEED_OVERLAY_EDGE_PADDING,
+                        top = contentInsets.top + MAP_NAVIGATION_SPEED_OVERLAY_EDGE_PADDING,
+                        end = contentInsets.end + MAP_NAVIGATION_SPEED_OVERLAY_EDGE_PADDING,
+                    ),
+                displaySpeedKmh = vehicleSpeedState.displaySpeedKmh,
+                speedLimitKmh = guidanceState.currentSpeedLimitKmh(),
+            )
         }
     }
 }
@@ -687,6 +711,7 @@ private fun MapScreenContent(
     uiState: MapUiState,
     screenState: MapScreenState,
     guidanceState: GuidanceState,
+    vehicleSpeedState: VehicleSpeedState,
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
     contentInsets: MapHostInsets,
@@ -699,6 +724,7 @@ private fun MapScreenContent(
     val density = LocalDensity.current
     val displaySurface = LocalOneNaviDisplaySurface.current
     val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
+    val topAppBarHeightDp = with(density) { uiState.topAppBarHeight.toDp() }
     val isAndroidAutoVirtualDisplay = displaySurface == OneNaviDisplaySurface.AndroidAutoVirtualDisplay
     val isBrowsing = screenState is MapScreenState.Browsing
     val showPhoneDestinationSearchAction = isAndroidAutoVirtualDisplay && isBrowsing
@@ -736,9 +762,11 @@ private fun MapScreenContent(
             MapNavigationContent(
                 modifier = modifier,
                 guidanceState = guidanceState,
+                vehicleSpeedState = vehicleSpeedState,
                 navigationGuideImage = uiState.navigationGuideImage,
                 overlayState = uiState.overlayState,
                 panelLayout = panelLayout,
+                topAppBarHeight = topAppBarHeightDp,
                 navigationCardHeight = navigationCardHeightDp,
                 contentInsets = contentInsets,
                 onUiEvent = onUiEvent,
@@ -888,6 +916,37 @@ private fun resolveMapControlsBottomPadding(
         else -> navigationBarHeight
     }
 }
+
+/**
+ * 分割レイアウトで速度 overlay を可視地図側の上端へ置く alignment を返す。
+ *
+ * @return UI 帯と反対側の top alignment
+ */
+private fun MapPanelLayout.toNavigationSpeedOverlayAlignment(): Alignment {
+    return when (panelSide) {
+        MapPanelSide.LEFT -> Alignment.TopEnd
+        MapPanelSide.RIGHT -> Alignment.TopStart
+    }
+}
+
+/**
+ * 現在の案内 state から制限速度を返す。
+ *
+ * @return 取得できている制限速度。未取得の場合は null
+ */
+private fun GuidanceState.currentSpeedLimitKmh(): Int? {
+    return when (this) {
+        is GuidanceState.Guiding -> progress.currentSpeedLimitKmh
+        is GuidanceState.Rerouting -> previousProgress.currentSpeedLimitKmh
+        GuidanceState.Arrived,
+        is GuidanceState.Failed,
+        GuidanceState.Idle,
+        -> null
+    }
+}
+
+/** 分割レイアウトの速度 overlay が画面端から確保する余白。 */
+private val MAP_NAVIGATION_SPEED_OVERLAY_EDGE_PADDING = 16.dp
 
 private fun MapPanelLayout.toPanelAlignment(): Alignment {
     return when (panelSide) {

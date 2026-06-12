@@ -19,6 +19,9 @@ import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -48,6 +51,14 @@ class CurrentLocationDataSource(
 
     private val locationProviderClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
+    private val speedEstimatorLock = Any()
+    private val speedEstimator = VehicleSpeedEstimator()
+    private val _vehicleSpeedState = MutableStateFlow(VehicleSpeedState())
+
+    /**
+     * UI と案内ロジックが共有する表示用の自車速度。
+     */
+    val vehicleSpeedState: StateFlow<VehicleSpeedState> = _vehicleSpeedState.asStateFlow()
 
     /**
      * 最後に取得済みの位置を 1 件だけ返す。
@@ -60,11 +71,13 @@ class CurrentLocationDataSource(
     @SuppressLint("MissingPermission")
     suspend fun lastKnown(): UserLocation? {
         if (appSettingDataSource.currentSetting().isDeveloperFeatureEnabled(DeveloperFeature.FAKE_GPS)) {
-            return createDevelopmentUserLocation()
+            return applySpeedEstimation(createDevelopmentUserLocation())
         }
 
         return try {
-            locationProviderClient.lastLocation.await()?.toUserLocation()
+            val location = locationProviderClient.lastLocation.await()?.toUserLocation()
+
+            location?.let(::applySpeedEstimation)
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Throwable) {
@@ -157,7 +170,9 @@ class CurrentLocationDataSource(
      */
     private fun developmentLocationUpdates(intervalMillis: Long): Flow<UserLocation> = flow {
         while (true) {
-            emit(createDevelopmentUserLocation())
+            val location = createDevelopmentUserLocation()
+
+            emit(applySpeedEstimation(location))
             delay(intervalMillis.milliseconds)
         }
     }
@@ -187,13 +202,31 @@ class CurrentLocationDataSource(
         return object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 result.locations
-                    .mapNotNull { location -> location.toUserLocation() }
+                    .mapNotNull { location ->
+                        location.toUserLocation()?.let(::applySpeedEstimation)
+                    }
                     .forEach { userLocation ->
                         val sendResult = trySend(userLocation)
                         if (sendResult.isFailure) return@forEach
                     }
             }
         }
+    }
+
+    /**
+     * 速度推定を適用した位置 tick を返し、共有速度 state を更新する。
+     *
+     * @param location provider から受け取った位置 tick
+     * @return 速度推定を反映した位置 tick
+     */
+    private fun applySpeedEstimation(location: UserLocation): UserLocation {
+        val estimation = synchronized(speedEstimatorLock) {
+            speedEstimator.estimate(location)
+        }
+
+        _vehicleSpeedState.value = estimation.state
+
+        return estimation.location
     }
 
     /**
