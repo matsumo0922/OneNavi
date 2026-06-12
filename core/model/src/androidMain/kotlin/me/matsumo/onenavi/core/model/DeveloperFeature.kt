@@ -26,6 +26,9 @@ enum class DeveloperFeature {
     /** Android Auto Virtual Display の診断オーバーレイを表示する。 */
     CAR_VD_DEBUG_OVERLAY,
 
+    /** Android Auto Virtual Display の入力遅延計測ログを出力する。 */
+    CAR_VD_INPUT_LATENCY_LOGS,
+
     /** ナビゲーション中に TTS 発話予定のデバッグカードを表示する。 */
     TTS_SCHEDULE_DEBUG_CARD,
 

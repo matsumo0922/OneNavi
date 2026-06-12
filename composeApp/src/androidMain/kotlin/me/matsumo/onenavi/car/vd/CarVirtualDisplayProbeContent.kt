@@ -65,31 +65,6 @@ internal fun CarVirtualDisplayProbeContent(
     val viewModel = koinViewModel<MainViewModel>()
     val settings by viewModel.setting.collectAsStateWithLifecycle(null)
     val shouldShowDebugOverlay = settings?.isDeveloperFeatureEnabled(DeveloperFeature.CAR_VD_DEBUG_OVERLAY) == true
-    val lifecycleStateLabel = rememberCarVirtualDisplayLifecycleStateLabel()
-    val observedFrame = viewport.observedFrame
-    val hostSlotRightInset = viewport.surfaceWidth - viewport.visibleRight
-    val observedFrameLabel = "blue frame=${observedFrame.width}x${observedFrame.height} " +
-        "L=${observedFrame.left} R=${viewport.observedFrameRightInset} " +
-        observedFrame.frameLabel
-    val hostSlotFrameLabel = "pale frame=${viewport.visibleWidth}x${viewport.surfaceHeight} " +
-        "L=${viewport.visibleLeft} R=$hostSlotRightInset " +
-        "Rect(${viewport.visibleLeft},0 - ${viewport.visibleRight},${viewport.surfaceHeight})"
-    val hostStableLabel = "host stable=${viewport.stableWidth}x${viewport.stableHeight} " +
-        "${viewport.stableAreaLabel}"
-    val hostInputPointLabel = "hostInput=${inputState.hostInputPointLabel}"
-    val surfacePointLabel = "pt surface=${inputState.surfacePointLabel} " +
-        "surfaceIn=${inputState.insideSurfaceLabel}"
-    val observedFramePointLabel = "observed=${inputState.observedFramePointLabel} " +
-        "observedIn=${inputState.insideObservedFrameLabel}"
-    val hostVisiblePointLabel = "hostVisible=${inputState.hostVisiblePointLabel} " +
-        "hostVisibleIn=${inputState.insideHostVisibleAreaLabel}"
-    val gestureLabel = "d=${inputState.distanceLabel} v=${inputState.velocityLabel} " +
-        "scale=${inputState.scaleFactorLabel}"
-    val clickCoordinateLabel = clickCoordinateResult.toClickCoordinateLabel()
-    val clickCandidateLabel = inputState.toClickCandidateLabel(viewport)
-    val composeDensity = LocalDensity.current.density
-    val mapDensityLabel = MapRenderDensityDiagnostics.label
-        ?: "mapDensity eff=n/a compose=$composeDensity"
 
     MaterialTheme {
         Box(
@@ -109,6 +84,32 @@ internal fun CarVirtualDisplayProbeContent(
                 )
             }
             if (shouldShowDebugOverlay) {
+                val lifecycleStateLabel = rememberCarVirtualDisplayLifecycleStateLabel()
+                val observedFrame = viewport.observedFrame
+                val hostSlotRightInset = viewport.surfaceWidth - viewport.visibleRight
+                val observedFrameLabel = "blue frame=${observedFrame.width}x${observedFrame.height} " +
+                    "L=${observedFrame.left} R=${viewport.observedFrameRightInset} " +
+                    observedFrame.frameLabel
+                val hostSlotFrameLabel = "pale frame=${viewport.visibleWidth}x${viewport.surfaceHeight} " +
+                    "L=${viewport.visibleLeft} R=$hostSlotRightInset " +
+                    "Rect(${viewport.visibleLeft},0 - ${viewport.visibleRight},${viewport.surfaceHeight})"
+                val hostStableLabel = "host stable=${viewport.stableWidth}x${viewport.stableHeight} " +
+                    "${viewport.stableAreaLabel}"
+                val hostInputPointLabel = "hostInput=${inputState.hostInputPointLabel}"
+                val surfacePointLabel = "pt surface=${inputState.surfacePointLabel} " +
+                    "surfaceIn=${inputState.insideSurfaceLabel}"
+                val observedFramePointLabel = "observed=${inputState.observedFramePointLabel} " +
+                    "observedIn=${inputState.insideObservedFrameLabel}"
+                val hostVisiblePointLabel = "hostVisible=${inputState.hostVisiblePointLabel} " +
+                    "hostVisibleIn=${inputState.insideHostVisibleAreaLabel}"
+                val gestureLabel = "d=${inputState.distanceLabel} v=${inputState.velocityLabel} " +
+                    "scale=${inputState.scaleFactorLabel}"
+                val clickCoordinateLabel = clickCoordinateResult.toClickCoordinateLabel()
+                val clickCandidateLabel = inputState.toClickCandidateLabel(viewport)
+                val composeDensity = LocalDensity.current.density
+                val mapDensityLabel = MapRenderDensityDiagnostics.label
+                    ?: "mapDensity eff=n/a compose=$composeDensity"
+
                 CarVirtualDisplayProbeViewportOverlay(
                     modifier = Modifier.fillMaxSize(),
                     viewport = viewport,

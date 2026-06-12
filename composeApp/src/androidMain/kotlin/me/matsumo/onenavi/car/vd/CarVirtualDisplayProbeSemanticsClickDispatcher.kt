@@ -22,19 +22,45 @@ internal class CarVirtualDisplayProbeSemanticsClickDispatcher {
     private val Rect.area: Float
         get() = width * height
 
-    fun dispatchClick(composeView: ComposeView, touchPoint: CarVirtualDisplayProbeClickCoordinateCandidate): CarVirtualDisplayProbeClickCoordinateResult? {
+    fun dispatchClick(
+        composeView: ComposeView,
+        touchPoint: CarVirtualDisplayProbeClickCoordinateCandidate,
+        inputState: CarVirtualDisplayProbeInputState,
+        inputLatencyLogger: CarVirtualDisplayProbeInputLatencyLogger,
+    ): CarVirtualDisplayProbeClickCoordinateResult? {
         val rootForTest = composeView.getChildAt(0) as? ViewRootForTest ?: return null
 
-        return dispatchClick(rootForTest, touchPoint)
+        return dispatchClick(
+            rootForTest = rootForTest,
+            touchPoint = touchPoint,
+            inputState = inputState,
+            inputLatencyLogger = inputLatencyLogger,
+        )
     }
 
-    private fun dispatchClick(rootForTest: ViewRootForTest, touchPoint: CarVirtualDisplayProbeClickCoordinateCandidate): CarVirtualDisplayProbeClickCoordinateResult? {
-        val targetNode = findClickableTargetNode(rootForTest, touchPoint.point) ?: return null
+    private fun dispatchClick(
+        rootForTest: ViewRootForTest,
+        touchPoint: CarVirtualDisplayProbeClickCoordinateCandidate,
+        inputState: CarVirtualDisplayProbeInputState,
+        inputLatencyLogger: CarVirtualDisplayProbeInputLatencyLogger,
+    ): CarVirtualDisplayProbeClickCoordinateResult? {
+        val targetNode = findClickableTargetNode(
+            rootForTest = rootForTest,
+            touchPoint = touchPoint.point,
+            inputState = inputState,
+            inputLatencyLogger = inputLatencyLogger,
+        ) ?: return null
 
         val clickAction = targetNode.config.getOrNull(SemanticsActions.OnClick)
+        val actionStartedAtMillis = inputLatencyLogger.now()
         val didHandleClick = clickAction?.action?.let { action ->
             runCatching { action() }.getOrDefault(false)
         } == true
+        inputLatencyLogger.logSemanticsAction(
+            inputState = inputState,
+            elapsedMillis = inputLatencyLogger.elapsedSince(actionStartedAtMillis),
+            didHandleClick = didHandleClick,
+        )
 
         if (!didHandleClick) {
             return null
@@ -43,15 +69,24 @@ internal class CarVirtualDisplayProbeSemanticsClickDispatcher {
         return CarVirtualDisplayProbeClickCoordinateResult(touchPoint.label, touchPoint.point)
     }
 
-    private fun findClickableTargetNode(rootForTest: ViewRootForTest, touchPoint: Offset): SemanticsNode? {
+    private fun findClickableTargetNode(
+        rootForTest: ViewRootForTest,
+        touchPoint: Offset,
+        inputState: CarVirtualDisplayProbeInputState,
+        inputLatencyLogger: CarVirtualDisplayProbeInputLatencyLogger,
+    ): SemanticsNode? {
         return findClickableTargetNode(
             rootForTest = rootForTest,
             touchPoint = touchPoint,
             mergingEnabled = true,
+            inputState = inputState,
+            inputLatencyLogger = inputLatencyLogger,
         ) ?: findClickableTargetNode(
             rootForTest = rootForTest,
             touchPoint = touchPoint,
             mergingEnabled = false,
+            inputState = inputState,
+            inputLatencyLogger = inputLatencyLogger,
         )
     }
 
@@ -59,9 +94,12 @@ internal class CarVirtualDisplayProbeSemanticsClickDispatcher {
         rootForTest: ViewRootForTest,
         touchPoint: Offset,
         mergingEnabled: Boolean,
+        inputState: CarVirtualDisplayProbeInputState,
+        inputLatencyLogger: CarVirtualDisplayProbeInputLatencyLogger,
     ): SemanticsNode? {
-        return rootForTest.semanticsOwner
-            .getAllSemanticsNodes(mergingEnabled = mergingEnabled)
+        val scanStartedAtMillis = inputLatencyLogger.now()
+        val semanticsNodes = rootForTest.semanticsOwner.getAllSemanticsNodes(mergingEnabled = mergingEnabled)
+        val targetNode = semanticsNodes
             .asSequence()
             .filter { semanticsNode ->
                 semanticsNode.isClickableTarget(touchPoint)
@@ -71,6 +109,15 @@ internal class CarVirtualDisplayProbeSemanticsClickDispatcher {
                     semanticsNode.touchArea
                 },
             )
+        inputLatencyLogger.logSemanticsScan(
+            inputState = inputState,
+            mergingEnabled = mergingEnabled,
+            nodeCount = semanticsNodes.size,
+            elapsedMillis = inputLatencyLogger.elapsedSince(scanStartedAtMillis),
+            didFindTarget = targetNode != null,
+        )
+
+        return targetNode
     }
 
     private fun SemanticsNode.isClickableTarget(touchPoint: Offset): Boolean {

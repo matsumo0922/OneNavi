@@ -235,6 +235,8 @@
     <string name="setting_developer_options_map_diagnostics_description">地図の描画密度ログと viewport 診断ログを出力します。</string>
     <string name="setting_developer_options_car_vd_debug_overlay">AA VD デバッグオーバーレイ</string>
     <string name="setting_developer_options_car_vd_debug_overlay_description">Android Auto Virtual Display の viewport、タッチ座標、診断パネルを表示します。</string>
+    <string name="setting_developer_options_car_vd_input_latency_logs">AA VD 入力遅延ログ</string>
+    <string name="setting_developer_options_car_vd_input_latency_logs_description">タッチ受信、semantics 走査、action 実行、gesture fallback の計測ログを出力します。</string>
     <string name="setting_developer_options_tts_schedule_debug_card">TTS 発話予定デバッグカード</string>
     <string name="setting_developer_options_tts_schedule_debug_card_description">案内中の ETA カード上に直近の TTS 発話予定と取得状態を表示します。</string>
     <string name="setting_developer_options_car_hardware_diagnostics">車両データ診断</string>

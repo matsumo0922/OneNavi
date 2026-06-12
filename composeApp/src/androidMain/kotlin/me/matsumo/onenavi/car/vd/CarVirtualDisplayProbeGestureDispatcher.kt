@@ -43,6 +43,12 @@ class CarVirtualDisplayProbeGestureDispatcher {
     }
 
     fun dispatchClick(surfaceX: Float, surfaceY: Float): Boolean {
+        dispatchClickDown(surfaceX, surfaceY)
+
+        return finishClickAfterDelay()
+    }
+
+    fun dispatchClickDown(surfaceX: Float, surfaceY: Float): Boolean {
         val targetComposeView = composeView ?: return false
         cancelActiveGestures()
 
@@ -54,6 +60,7 @@ class CarVirtualDisplayProbeGestureDispatcher {
         clickGestureState = CarVirtualDisplayClickGestureState(
             downTime = downTime,
             downPoint = touchPoint,
+            didHandleDown = false,
         )
         val didHandleDown = targetComposeView.dispatchRecycledEvents(
             createSinglePointerMotionEvent(
@@ -63,9 +70,22 @@ class CarVirtualDisplayProbeGestureDispatcher {
                 point = touchPoint,
             ),
         )
+        clickGestureState = clickGestureState?.copy(
+            didHandleDown = didHandleDown,
+        )
+
+        return didHandleDown
+    }
+
+    fun finishClickAfterDelay(): Boolean {
+        val currentClickGestureState = clickGestureState ?: return false
 
         scheduleClickFinish()
-        return didHandleDown
+        return currentClickGestureState.didHandleDown
+    }
+
+    fun cancelClick() {
+        finishClickGesture(isCanceled = true)
     }
 
     fun dispatchScroll(inputState: CarVirtualDisplayProbeInputState, viewport: CarVirtualDisplayProbeViewport): Boolean {

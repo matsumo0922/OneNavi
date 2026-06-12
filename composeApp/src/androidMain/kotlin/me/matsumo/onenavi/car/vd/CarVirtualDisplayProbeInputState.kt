@@ -25,7 +25,11 @@ enum class CarVirtualDisplayProbeInputKind(
     Scale("scale"),
 }
 
-/** Android Auto host Surface から届いた入力イベントを Compose で観測するための状態。 */
+/**
+ * Android Auto host Surface から届いた入力イベントを Compose で観測するための状態。
+ *
+ * @param receivedUptimeMillis SurfaceCallback で click を受信した uptime millis
+ */
 @Immutable
 data class CarVirtualDisplayProbeInputState(
     val sequence: Long,
@@ -47,6 +51,7 @@ data class CarVirtualDisplayProbeInputState(
     val velocityX: Float?,
     val velocityY: Float?,
     val scaleFactor: Float?,
+    val receivedUptimeMillis: Long?,
 ) {
 
     val panModeLabel: String
@@ -134,6 +139,7 @@ internal fun createInitialCarVirtualDisplayProbeInputState(): CarVirtualDisplayP
         velocityX = null,
         velocityY = null,
         scaleFactor = null,
+        receivedUptimeMillis = null,
     )
 }
 
@@ -151,6 +157,7 @@ internal fun createCarVirtualDisplayProbeClickInputState(
     hostInputX: Float,
     hostInputY: Float,
     isInPanMode: Boolean,
+    receivedUptimeMillis: Long? = null,
 ): CarVirtualDisplayProbeInputState {
     return createPositionedCarVirtualDisplayProbeInputState(
         sequence = sequence,
@@ -159,6 +166,7 @@ internal fun createCarVirtualDisplayProbeClickInputState(
         hostInputX = hostInputX,
         hostInputY = hostInputY,
         isInPanMode = isInPanMode,
+        receivedUptimeMillis = receivedUptimeMillis,
     )
 }
 
@@ -261,6 +269,7 @@ private fun createPositionedCarVirtualDisplayProbeInputState(
     hostInputX: Float,
     hostInputY: Float,
     isInPanMode: Boolean,
+    receivedUptimeMillis: Long? = null,
 ): CarVirtualDisplayProbeInputState {
     val inputCoordinate = viewport.resolveInputCoordinate(
         hostInputX = hostInputX,
@@ -282,6 +291,7 @@ private fun createPositionedCarVirtualDisplayProbeInputState(
         hostVisibleX = inputCoordinate.hostVisibleX,
         hostVisibleY = inputCoordinate.hostVisibleY,
         isInsideHostVisibleArea = inputCoordinate.isInsideHostVisibleArea,
+        receivedUptimeMillis = receivedUptimeMillis,
     )
 }
 

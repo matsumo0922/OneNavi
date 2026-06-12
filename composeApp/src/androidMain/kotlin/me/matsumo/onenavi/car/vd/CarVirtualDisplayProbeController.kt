@@ -10,12 +10,23 @@ import android.view.Surface
 import androidx.car.app.SurfaceContainer
 import io.github.aakira.napier.Napier
 
-/** Android Auto host Surface の上に Presentation 描画用 VirtualDisplay を構築する検証 controller。 */
+/**
+ * Android Auto host Surface の上に Presentation 描画用 VirtualDisplay を構築する検証 controller。
+ *
+ * @param context Android context
+ * @param isDebugOverlayEnabled VD デバッグオーバーレイが有効な場合に true を返す provider
+ * @param isInputLatencyLoggingEnabled 入力遅延計測ログが有効な場合に true を返す provider
+ */
 class CarVirtualDisplayProbeController(
     context: Context,
+    private val isDebugOverlayEnabled: () -> Boolean = { false },
+    isInputLatencyLoggingEnabled: () -> Boolean = { false },
 ) {
 
     private val appContext = context.applicationContext
+    private val inputLatencyLogger = CarVirtualDisplayProbeInputLatencyLogger(
+        isEnabled = isInputLatencyLoggingEnabled,
+    )
     private val displayManager = requireNotNull(appContext.getSystemService(DisplayManager::class.java)) {
         "DisplayManager is not available."
     }
@@ -85,7 +96,11 @@ class CarVirtualDisplayProbeController(
         )
     }
 
-    fun updateClickInput(hostInputX: Float, hostInputY: Float) {
+    fun updateClickInput(
+        hostInputX: Float,
+        hostInputY: Float,
+        receivedUptimeMillis: Long,
+    ) {
         val viewport = findViewportForInput(
             inputLabel = "click",
         ) ?: return
@@ -96,8 +111,10 @@ class CarVirtualDisplayProbeController(
             hostInputX = hostInputX,
             hostInputY = hostInputY,
             isInPanMode = isInPanMode,
+            receivedUptimeMillis = receivedUptimeMillis,
         )
 
+        inputLatencyLogger.logClickReceived(inputState)
         publishInputState(inputState)
         dispatchClickInput(inputState)
     }
@@ -201,6 +218,10 @@ class CarVirtualDisplayProbeController(
                 display = display,
                 initialViewport = viewport,
                 initialInputState = currentInputState,
+                isDebugStateEnabled = {
+                    CarVirtualDisplayProbeDebugStateGate.shouldPublishInputState(isDebugOverlayEnabled())
+                },
+                inputLatencyLogger = inputLatencyLogger,
             ).also { probePresentation ->
                 probePresentation.show()
             }
@@ -340,6 +361,10 @@ class CarVirtualDisplayProbeController(
 
     private fun publishInputState(inputState: CarVirtualDisplayProbeInputState) {
         currentInputState = inputState
+
+        val shouldPublishInputState = CarVirtualDisplayProbeDebugStateGate.shouldPublishInputState(isDebugOverlayEnabled())
+        if (!shouldPublishInputState) return
+
         presentation?.updateInputState(inputState)
     }
 
