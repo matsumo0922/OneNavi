@@ -68,48 +68,41 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .speed-stack {
-        position: absolute;
-        top: 132px;
-        left: 16px;
+      .speed-row {
+        margin-left: auto;
         display: flex;
         align-items: center;
         gap: 8px;
       }
-      .speed-card {
+      .speed-current {
         display: flex;
-        align-items: baseline;
-        gap: 5px;
-        min-width: 110px;
-        padding: 8px 12px 10px;
-        border-radius: 8px;
-        color: #ffffff;
-        background: rgba(24, 28, 25, 0.9);
-        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.24);
+        flex-direction: column;
+        align-items: flex-end;
+        min-width: 52px;
       }
       .speed-value {
-        font-size: 34px;
+        font-size: 18px;
         font-weight: 850;
         line-height: 1;
         letter-spacing: 0;
       }
-      .speed-unit {
-        font-size: 12px;
-        font-weight: 700;
+      .speed-label {
+        margin-top: 2px;
+        font-size: 13px;
+        color: #5f5d63;
         letter-spacing: 0;
       }
       .limit-sign {
         display: grid;
         place-items: center;
-        width: 58px;
-        height: 58px;
-        border: 5px solid #d5222a;
+        width: 48px;
+        height: 48px;
+        border: 3px solid #d5222a;
         border-radius: 50%;
         color: #1c1b1f;
         background: #ffffff;
-        font-size: 23px;
+        font-size: 20px;
         font-weight: 850;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
       }
       .eta-card {
         position: absolute;
@@ -121,6 +114,14 @@
         background: #fefbff;
         box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
       }
+      .eta-top {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .eta-text {
+        min-width: 0;
+      }
       .eta-main {
         font-size: 30px;
         font-weight: 850;
@@ -131,11 +132,26 @@
         font-size: 15px;
         color: #5f5d63;
       }
-      .traffic {
-        height: 8px;
-        margin-top: 14px;
-        border-radius: 999px;
-        background: linear-gradient(90deg, #1b7f45 0 55%, #f2b23a 55% 72%, #d64242 72% 100%);
+      .eta-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 4px;
+        margin-top: 12px;
+      }
+      .action {
+        display: grid;
+        place-items: center;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        color: #5f5d63;
+        font-size: 20px;
+        font-weight: 800;
+      }
+      .action-close {
+        width: 64px;
+        color: #241a00;
+        background: #ffdea8;
       }
     </style>
   </head>
@@ -149,18 +165,26 @@
         </div>
       </section>
 
-      <section class="speed-stack" aria-label="速度">
-        <div class="speed-card">
-          <span class="speed-value">48</span>
-          <span class="speed-unit">km/h</span>
-        </div>
-        <div class="limit-sign" aria-label="制限速度 50 km/h">50</div>
-      </section>
-
       <section class="eta-card">
-        <div class="eta-main">18分</div>
-        <div class="eta-sub">8.4 km · 12:48 到着予定</div>
-        <div class="traffic"></div>
+        <div class="eta-top">
+          <div class="eta-text">
+            <div class="eta-main">18分</div>
+            <div class="eta-sub">8.4 km · 12:48 到着予定</div>
+          </div>
+          <div class="speed-row" aria-label="速度">
+            <div class="limit-sign" aria-label="制限速度 50 km/h">50</div>
+            <div class="speed-current" aria-label="現在速度 48 km/h">
+              <div class="speed-value">48km</div>
+              <div class="speed-label">speed</div>
+            </div>
+          </div>
+        </div>
+        <nav class="eta-actions" aria-label="ナビ操作">
+          <div class="action">⇄</div>
+          <div class="action">＋</div>
+          <div class="action">↗</div>
+          <div class="action action-close">×</div>
+        </nav>
       </section>
     </main>
   </body>

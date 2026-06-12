@@ -35,8 +35,6 @@ import kotlinx.datetime.toLocalDateTime
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.model.CongestionSegment
-import me.matsumo.onenavi.core.model.RoadClassSegment
-import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_day
@@ -48,7 +46,6 @@ import me.matsumo.onenavi.core.resource.home_map_navigation_eta_add_waypoint
 import me.matsumo.onenavi.core.resource.home_map_navigation_eta_alternatives
 import me.matsumo.onenavi.core.resource.home_map_navigation_eta_close
 import me.matsumo.onenavi.core.resource.home_map_navigation_eta_detour
-import me.matsumo.onenavi.core.ui.navigation.RouteTrafficBar
 import me.matsumo.onenavi.feature.map.state.NavigationTrafficLevel
 import me.matsumo.onenavi.feature.map.state.calculateNavigationTrafficLevel
 import org.jetbrains.compose.resources.stringResource
@@ -63,9 +60,9 @@ import kotlin.time.Instant
 @Composable
 internal fun MapNavigationEtaCard(
     progress: GuidanceProgress,
-    geometry: ImmutableList<RoutePoint>,
-    roadClassSegments: ImmutableList<RoadClassSegment>,
     congestionSegments: ImmutableList<CongestionSegment>,
+    displaySpeedKmh: Int?,
+    speedLimitKmh: Int?,
     onCloseClicked: () -> Unit,
     onAlternativesClicked: () -> Unit,
     onAddWaypointClicked: () -> Unit,
@@ -146,20 +143,18 @@ internal fun MapNavigationEtaCard(
                     modifier = Modifier.weight(1f),
                 )
 
-                MapNavigationEtaActionRow(
-                    onCloseClicked = onCloseClicked,
-                    onAlternativesClicked = onAlternativesClicked,
-                    onAddWaypointClicked = onAddWaypointClicked,
-                    onRoutePreviewClicked = onRoutePreviewClicked,
+                MapNavigationSpeedRow(
+                    displaySpeedKmh = displaySpeedKmh,
+                    speedLimitKmh = speedLimitKmh,
                 )
             }
 
-            RouteTrafficBar(
-                modifier = Modifier.fillMaxWidth(),
-                geometry = geometry,
-                currentCumulativeMeters = progress.currentCumulativeMeters,
-                roadClassSegments = roadClassSegments,
-                congestionSegments = congestionSegments,
+            MapNavigationEtaActionRow(
+                modifier = Modifier.align(Alignment.End),
+                onCloseClicked = onCloseClicked,
+                onAlternativesClicked = onAlternativesClicked,
+                onAddWaypointClicked = onAddWaypointClicked,
+                onRoutePreviewClicked = onRoutePreviewClicked,
             )
         }
     }

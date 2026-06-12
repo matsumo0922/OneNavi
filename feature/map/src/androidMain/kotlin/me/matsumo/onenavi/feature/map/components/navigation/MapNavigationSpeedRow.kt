@@ -3,13 +3,10 @@ package me.matsumo.onenavi.feature.map.components.navigation
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,12 +25,12 @@ import me.matsumo.onenavi.core.resource.home_map_navigation_speed_limit_content_
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * 案内中の地図上に現在速度と制限速度を表示する overlay。
+ * 案内中の ETA カード右端に現在速度と制限速度を表示する行。
  *
  * 制限速度が取得できない場合は現在速度だけを表示する。
  */
 @Composable
-internal fun MapNavigationSpeedOverlay(
+internal fun MapNavigationSpeedRow(
     displaySpeedKmh: Int?,
     speedLimitKmh: Int?,
     modifier: Modifier = Modifier,
@@ -43,20 +40,20 @@ internal fun MapNavigationSpeedOverlay(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MapNavigationCurrentSpeedBadge(
-            displaySpeedKmh = displaySpeedKmh,
-        )
-
         if (speedLimitKmh != null) {
             MapNavigationSpeedLimitSign(
                 speedLimitKmh = speedLimitKmh,
             )
         }
+
+        MapNavigationCurrentSpeedColumn(
+            displaySpeedKmh = displaySpeedKmh,
+        )
     }
 }
 
 @Composable
-private fun MapNavigationCurrentSpeedBadge(
+private fun MapNavigationCurrentSpeedColumn(
     displaySpeedKmh: Int?,
     modifier: Modifier = Modifier,
 ) {
@@ -67,36 +64,27 @@ private fun MapNavigationCurrentSpeedBadge(
     }
     val speedText = displaySpeedKmh?.toString() ?: SPEED_UNKNOWN_PLACEHOLDER
 
-    Surface(
+    Column(
         modifier = modifier
-            .height(56.dp)
-            .widthIn(min = 104.dp)
             .semantics {
                 this.contentDescription = contentDescription
             },
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.92f),
-        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-        shadowElevation = 6.dp,
+        horizontalAlignment = Alignment.End,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = speedText,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-            )
+        Text(
+            text = "$speedText$SPEED_UNIT_KM",
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End,
+        )
 
-            Text(
-                text = SPEED_UNIT_KMH,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-            )
-        }
+        Text(
+            text = SPEED_LABEL,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.End,
+        )
     }
 }
 
@@ -112,15 +100,14 @@ private fun MapNavigationSpeedLimitSign(
 
     Surface(
         modifier = modifier
-            .size(56.dp)
+            .size(SpeedLimitSignSize)
             .semantics {
                 this.contentDescription = contentDescription
             },
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(4.dp, MaterialTheme.colorScheme.error),
-        shadowElevation = 6.dp,
+        border = BorderStroke(3.dp, MaterialTheme.colorScheme.error),
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -139,4 +126,10 @@ private fun MapNavigationSpeedLimitSign(
 private const val SPEED_UNKNOWN_PLACEHOLDER = "--"
 
 /** 速度表示で使う単位。 */
-private const val SPEED_UNIT_KMH = "km/h"
+private const val SPEED_UNIT_KM = "km"
+
+/** 速度表示の補助ラベル。 */
+private const val SPEED_LABEL = "speed"
+
+/** 制限速度標識のサイズ。 */
+private val SpeedLimitSignSize = 48.dp
