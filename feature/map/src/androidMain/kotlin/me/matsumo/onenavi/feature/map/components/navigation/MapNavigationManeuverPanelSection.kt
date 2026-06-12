@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -37,11 +36,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
@@ -91,8 +88,6 @@ internal fun MapNavigationManeuverPanelSection(
     minuteLabel: String,
     timestampMillis: Long,
     currentCumulativeMeters: Double,
-    isSplit: Boolean,
-    availableHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
     val panelItems = remember(route, listItems, currentCumulativeMeters, timestampMillis) {
@@ -104,81 +99,48 @@ internal fun MapNavigationManeuverPanelSection(
         )
     }
     val primaryGuidanceItemId = listItems.lastOrNull()?.id
-    val roadClass = panelItems.lastOrNull()?.roadClass ?: RoadClass.ORDINARY
-    val panelColors = RouteColors.maneuver(roadClass)
     val bottomIndex = panelItems.size
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = bottomIndex)
-    val shape = RoundedCornerShape(
-        topStart = 0.dp,
-        topEnd = 0.dp,
-        bottomStart = 16.dp,
-        bottomEnd = 16.dp,
-    )
 
     MapNavigationGuidancePanelAutoScroll(
         listState = listState,
         bottomIndex = bottomIndex,
     )
 
-    Surface(
-        modifier = modifier
-            .navigationPanelHeight(
-                isSplit = isSplit,
-                availableHeight = availableHeight,
-            )
-            .shadow(
-                elevation = 8.dp,
-                shape = shape,
-            ),
-        shape = shape,
-        color = panelColors.container,
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        state = listState,
     ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            state = listState,
-        ) {
-            itemsIndexed(
-                items = panelItems,
-                key = { _, item -> item.id },
-            ) { _, item ->
-                when (item) {
-                    is NavigationPanelGuidanceItem -> MapNavigationGuidancePanelRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        item = item.guidanceItem,
-                        meterLabel = meterLabel,
-                        kilometerLabel = kilometerLabel,
-                        dayLabel = dayLabel,
-                        hourLabel = hourLabel,
-                        minuteLabel = minuteLabel,
-                        timestampMillis = timestampMillis,
-                        isPrimary = item.guidanceItem.id == primaryGuidanceItemId,
-                    )
+        itemsIndexed(
+            items = panelItems,
+            key = { _, item -> item.id },
+        ) { _, item ->
+            when (item) {
+                is NavigationPanelGuidanceItem -> MapNavigationGuidancePanelRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    item = item.guidanceItem,
+                    meterLabel = meterLabel,
+                    kilometerLabel = kilometerLabel,
+                    dayLabel = dayLabel,
+                    hourLabel = hourLabel,
+                    minuteLabel = minuteLabel,
+                    timestampMillis = timestampMillis,
+                    isPrimary = item.guidanceItem.id == primaryGuidanceItemId,
+                )
 
-                    is NavigationPanelStopItem -> MapNavigationStopPanelRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        item = item,
-                        meterLabel = meterLabel,
-                        kilometerLabel = kilometerLabel,
-                        dayLabel = dayLabel,
-                        hourLabel = hourLabel,
-                        minuteLabel = minuteLabel,
-                        timestampMillis = timestampMillis,
-                    )
-                }
+                is NavigationPanelStopItem -> MapNavigationStopPanelRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    item = item,
+                    meterLabel = meterLabel,
+                    kilometerLabel = kilometerLabel,
+                    dayLabel = dayLabel,
+                    hourLabel = hourLabel,
+                    minuteLabel = minuteLabel,
+                    timestampMillis = timestampMillis,
+                )
             }
         }
     }
-}
-
-private fun Modifier.navigationPanelHeight(
-    isSplit: Boolean,
-    availableHeight: Dp,
-): Modifier {
-    if (isSplit) {
-        return heightIn(max = availableHeight / 2f).fillMaxHeight()
-    }
-
-    return height(availableHeight / 4f)
 }
 
 /**

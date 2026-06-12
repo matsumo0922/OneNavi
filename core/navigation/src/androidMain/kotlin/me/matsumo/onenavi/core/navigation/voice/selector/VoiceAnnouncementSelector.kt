@@ -58,9 +58,13 @@ internal class VoiceAnnouncementSelector(
 
             if (state.isTargetPassed(targetIndex)) continue
             if (!isTargetAhead(target, tick)) continue
-            if (!areEarlierTargetsAnnounced(plan, targetIndex, state)) continue
-
-            val candidate = selectStageForTarget(targetIndex, target, tick, state)
+            val candidate = selectStageForTarget(
+                plan = plan,
+                targetIndex = targetIndex,
+                target = target,
+                tick = tick,
+                state = state,
+            )
             best = moreUrgentOf(best, candidate)
         }
 
@@ -96,13 +100,12 @@ internal class VoiceAnnouncementSelector(
             if (state.isTargetPassed(targetIndex)) continue
             if (!isTargetAhead(target, tick)) continue
 
-            val isRouteOrderBlocked = !areEarlierTargetsAnnounced(plan, targetIndex, state)
             val previewSelection = previewSelectionForTarget(
+                plan = plan,
                 targetIndex = targetIndex,
                 target = target,
                 tick = tick,
                 state = state,
-                isRouteOrderBlocked = isRouteOrderBlocked,
             )
 
             if (previewSelection != null) result += previewSelection
@@ -118,21 +121,25 @@ internal class VoiceAnnouncementSelector(
      * 外部データには、ある案内地点の発話を 1km 級の手前でトリガする bare な段があり、これを放置すると
      * 手前の地点の案内中に後続地点の案内が割り込んでしまう (例: 1 つ目の交差点へ向かう途中で 2 つ目の
      * 交差点の方向だけが鳴る)。route 順を保つため、手前の地点がすべて区切り済みになるまで後続地点は
-     * 候補にしない。区切り済みでなければ後続段は次 tick 以降に持ち越され、距離窓内にいる間は候補に残るため、
-     * 区切り後にその時点の距離帯の予告が鳴る (距離窓を通り過ぎた遠い予告は自然に対象外になる)。
+     * 原則候補にしない。
      *
      * 「○m先」のような予告は手前の地点が通過する前に鳴るのが正常なため、「通過済み」だけでなく
      * 「その地点の FINAL (= 最寄り段) が発話済み」も区切り済みとみなす。これにより手前の地点の直前案内が
      * 出た後は、後続地点の予告が即座に解禁される。
+     *
+     * ただし、後続 MIDDLE の距離窓が未発話の先行地点の最寄り MIDDLE 窓より前で完結している場合は、
+     * 先行地点の近接案内へ割り込む可能性がないため route 順ゲートの対象外にする。
      */
     private fun areEarlierTargetsAnnounced(
         plan: VoiceAnnouncementPlan,
         targetIndex: Int,
+        candidateStage: AnnouncementStage,
         state: VoiceAnnouncementSpeechState,
     ): Boolean {
         for (earlierIndex in 0 until targetIndex) {
             val earlierTarget = plan.targets[earlierIndex]
             if (isTargetAnnounced(earlierTarget, earlierIndex, state)) continue
+            if (canBypassEarlierTargetGate(candidateStage, earlierTarget)) continue
 
             return false
         }
@@ -194,6 +201,75 @@ internal class VoiceAnnouncementSelector(
      * 緊急度比較で最緊急 (= FINAL) を採用する。
      */
     private fun selectStageForTarget(
+        plan: VoiceAnnouncementPlan,
+        targetIndex: Int,
+        target: AnnouncementTarget,
+        tick: VoiceTick,
+        state: VoiceAnnouncementSpeechState,
+    ): VoiceAnnouncementSelection? {
+        val consumedGroupKeys = consumedGroupKeysOf(target, state)
+        val speakableStages = speakableStagesOf(target, tick, state, consumedGroupKeys)
+        val routeOrderedStages = speakableStages.filter { stage ->
+            areEarlierTargetsAnnounced(
+                plan = plan,
+                targetIndex = targetIndex,
+                candidateStage = stage,
+                state = state,
+            )
+        }
+        val preferredStages = applyGenericAvoidance(routeOrderedStages)
+        var best: VoiceAnnouncementSelection? = null
+
+        for (stage in preferredStages) {
+            val candidate = selectionOf(targetIndex, target, stage, tick)
+            best = moreUrgentOf(best, candidate)
+        }
+
+        return best
+    }
+
+    /**
+     * 指定 target の次の発話予定を返す。route 順ゲートは候補自体を消さず、状態だけ [isRouteOrderBlocked] に載せる。
+     */
+    private fun previewSelectionForTarget(
+        plan: VoiceAnnouncementPlan,
+        targetIndex: Int,
+        target: AnnouncementTarget,
+        tick: VoiceTick,
+        state: VoiceAnnouncementSpeechState,
+    ): VoiceAnnouncementPreviewSelection? {
+        val previewBoundaries = previewBoundariesForTarget(target, tick)
+
+        for (previewBoundary in previewBoundaries) {
+            val previewTick = tick.copy(currentCumulativeMeters = previewBoundary)
+            val selection = selectPreviewStageForTarget(
+                targetIndex = targetIndex,
+                target = target,
+                tick = previewTick,
+                state = state,
+            ) ?: continue
+            val remainingMeters = (previewBoundary - tick.currentCumulativeMeters).coerceAtLeast(0.0)
+            val isRouteOrderBlocked = !areEarlierTargetsAnnounced(
+                plan = plan,
+                targetIndex = targetIndex,
+                candidateStage = selection.stage,
+                state = state,
+            )
+
+            return VoiceAnnouncementPreviewSelection(
+                selection = selection,
+                remainingMeters = remainingMeters,
+                isRouteOrderBlocked = isRouteOrderBlocked,
+            )
+        }
+
+        return null
+    }
+
+    /**
+     * debug preview 用に route 順ゲートを表示状態へ残したまま、target 内の候補 stage を選ぶ。
+     */
+    private fun selectPreviewStageForTarget(
         targetIndex: Int,
         target: AnnouncementTarget,
         tick: VoiceTick,
@@ -210,38 +286,6 @@ internal class VoiceAnnouncementSelector(
         }
 
         return best
-    }
-
-    /**
-     * 指定 target の次の発話予定を返す。route 順ゲートは候補自体を消さず、状態だけ [isRouteOrderBlocked] に載せる。
-     */
-    private fun previewSelectionForTarget(
-        targetIndex: Int,
-        target: AnnouncementTarget,
-        tick: VoiceTick,
-        state: VoiceAnnouncementSpeechState,
-        isRouteOrderBlocked: Boolean,
-    ): VoiceAnnouncementPreviewSelection? {
-        val previewBoundaries = previewBoundariesForTarget(target, tick)
-
-        for (previewBoundary in previewBoundaries) {
-            val previewTick = tick.copy(currentCumulativeMeters = previewBoundary)
-            val selection = selectStageForTarget(
-                targetIndex = targetIndex,
-                target = target,
-                tick = previewTick,
-                state = state,
-            ) ?: continue
-            val remainingMeters = (previewBoundary - tick.currentCumulativeMeters).coerceAtLeast(0.0)
-
-            return VoiceAnnouncementPreviewSelection(
-                selection = selection,
-                remainingMeters = remainingMeters,
-                isRouteOrderBlocked = isRouteOrderBlocked,
-            )
-        }
-
-        return null
     }
 
     /** 指定 target の候補 stage が発話可能になる未来境界を近い順に返す。 */
@@ -310,6 +354,39 @@ internal class VoiceAnnouncementSelector(
         }
 
         return result
+    }
+
+    /** 後続 MIDDLE の距離窓が先行地点の最寄り MIDDLE 窓と重なり得ないかを返す。 */
+    private fun canBypassEarlierTargetGate(
+        candidateStage: AnnouncementStage,
+        earlierTarget: AnnouncementTarget,
+    ): Boolean {
+        if (candidateStage.kind != AnnouncementStageKind.MIDDLE) return false
+
+        val candidateWindow = candidateStage.middleWindow ?: return false
+        val earlierWindow = nearestWindowedMiddleStageOf(earlierTarget)?.middleWindow ?: return false
+
+        return candidateWindow.exitGeometryMeters <= earlierWindow.enterGeometryMeters
+    }
+
+    /** target 内で案内地点に最も近い MIDDLE 窓を持つ段を返す。 */
+    private fun nearestWindowedMiddleStageOf(target: AnnouncementTarget): AnnouncementStage? {
+        var nearestStage: AnnouncementStage? = null
+        var nearestExitGeometryMeters = Double.NEGATIVE_INFINITY
+
+        for (stage in target.stages) {
+            if (stage.kind != AnnouncementStageKind.MIDDLE) continue
+
+            val stageWindow = stage.middleWindow ?: continue
+            val isNearerThanCurrent = stageWindow.exitGeometryMeters > nearestExitGeometryMeters
+
+            if (isNearerThanCurrent) {
+                nearestStage = stage
+                nearestExitGeometryMeters = stageWindow.exitGeometryMeters
+            }
+        }
+
+        return nearestStage
     }
 
     /**

@@ -423,12 +423,62 @@ class VoiceAnnouncementSchedulerTest {
         )
     }
 
+    @Test
+    fun `debug snapshot は発話完了結果を3秒だけ返す`() {
+        var nowMillis = 1_000L
+        val scheduler = schedulerOf(currentTimeMillis = { nowMillis })
+        scheduler.attach(planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0))))
+
+        scheduler.onTick(tickOf(current = 850.0))
+        scheduler.onSpeechFinished(VoiceAnnouncementId("m800"), wasSpoken = true)
+
+        val activeSnapshot = scheduler.debugSnapshot {
+            me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState.NOT_REQUESTED
+        }
+        val recentItem = requireNotNull(activeSnapshot).recentAnnouncements.single()
+
+        assertEquals("m800", recentItem.stageId)
+        assertEquals(
+            me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugResult.SPOKEN,
+            recentItem.result,
+        )
+
+        nowMillis += 3_001L
+        val expiredSnapshot = scheduler.debugSnapshot {
+            me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState.NOT_REQUESTED
+        }
+
+        assertEquals(emptyList(), requireNotNull(expiredSnapshot).recentAnnouncements)
+    }
+
+    @Test
+    fun `debug snapshot は発話失敗結果を未発話として返す`() {
+        val scheduler = schedulerOf()
+        scheduler.attach(planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0))))
+
+        scheduler.onTick(tickOf(current = 850.0))
+        scheduler.onSpeechFinished(VoiceAnnouncementId("m800"), wasSpoken = false)
+
+        val snapshot = scheduler.debugSnapshot {
+            me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState.NOT_REQUESTED
+        }
+        val recentItem = requireNotNull(snapshot).recentAnnouncements.single()
+
+        assertEquals("m800", recentItem.stageId)
+        assertEquals(
+            me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugResult.NOT_SPOKEN,
+            recentItem.result,
+        )
+    }
+
     private fun schedulerOf(
         gate: VoiceAnnouncementCategoryGate = VoiceAnnouncementCategoryGate.AllOn,
+        currentTimeMillis: () -> Long = System::currentTimeMillis,
     ): VoiceAnnouncementScheduler = VoiceAnnouncementScheduler(
         selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig()),
         policy = VoiceAnnouncementSelectionPolicy(),
         contentRenderer = VoiceAnnouncementContentRenderer(gate),
+        currentTimeMillis = currentTimeMillis,
     )
 
     private fun planOf(vararg targets: AnnouncementTarget): VoiceAnnouncementPlan = VoiceAnnouncementPlan(

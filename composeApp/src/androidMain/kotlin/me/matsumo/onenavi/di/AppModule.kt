@@ -8,6 +8,7 @@ import me.matsumo.onenavi.BuildKonfig
 import me.matsumo.onenavi.MainViewModel
 import me.matsumo.onenavi.car.CarGuidanceSessionReleaser
 import me.matsumo.onenavi.car.MainActivityPhoneDestinationSearchLauncher
+import me.matsumo.onenavi.car.hardware.CarHardwareDataSource
 import me.matsumo.onenavi.car.navigation.CarNavigationSessionPublisher
 import me.matsumo.onenavi.car.navigation.GuidanceCarTripMapper
 import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
@@ -76,6 +77,10 @@ val appModule = module {
 
     single {
         GuidanceCarTripMapper()
+    }
+
+    single {
+        CarHardwareDataSource()
     }
 
     single {

@@ -234,6 +234,13 @@
     <string name="setting_developer_options_car_vd_debug_overlay_description">Android Auto Virtual Display の viewport、タッチ座標、診断パネルを表示します。</string>
     <string name="setting_developer_options_tts_schedule_debug_card">TTS 発話予定デバッグカード</string>
     <string name="setting_developer_options_tts_schedule_debug_card_description">案内中の ETA カード上に直近の TTS 発話予定と取得状態を表示します。</string>
+    <string name="setting_developer_options_car_hardware_diagnostics">車両データ診断</string>
+    <string name="setting_developer_options_car_hardware_diagnostics_description">Android Auto host から取得した車速、ETC、燃料/電池、車両位置の値と STATUS_* を表示します。</string>
+    <string name="setting_developer_options_car_hardware_diagnostics_connection">接続状態</string>
+    <string name="setting_developer_options_car_hardware_diagnostics_speed">車速</string>
+    <string name="setting_developer_options_car_hardware_diagnostics_toll_card">ETC カード</string>
+    <string name="setting_developer_options_car_hardware_diagnostics_energy">燃料 / 電池</string>
+    <string name="setting_developer_options_car_hardware_diagnostics_location">車両位置</string>
 
     <!-- Setting Paywall -->
     <string name="setting_paywall_title">Pro</string>

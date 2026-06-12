@@ -2,15 +2,18 @@ package me.matsumo.onenavi.core.navigation.voice.debug
 
 import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 
 /**
  * ナビゲーション中の発話予定を UI に表示するためのデバッグスナップショット。
  *
  * @property upcomingAnnouncements 現在地から近い順に並べた発話予定
+ * @property recentAnnouncements 直近で発話完了または未発話終了した発話
  */
 @Immutable
 data class VoiceAnnouncementDebugSnapshot(
     val upcomingAnnouncements: ImmutableList<VoiceAnnouncementDebugItem>,
+    val recentAnnouncements: ImmutableList<VoiceAnnouncementDebugRecentItem> = persistentListOf(),
 )
 
 /**
@@ -34,6 +37,28 @@ data class VoiceAnnouncementDebugItem(
     val stageKind: VoiceAnnouncementDebugStageKind,
     val fetchState: VoiceAnnouncementDebugFetchState,
     val isRouteOrderBlocked: Boolean,
+    val categories: ImmutableList<String>,
+)
+
+/**
+ * 発話処理が完了した 1 件を UI 表示向けに平坦化した情報。
+ *
+ * @property stageId 発話段の route session 内識別子
+ * @property targetIndex 発話対象の plan 内 index
+ * @property text レンダリング済み、または fallback の読み上げ文
+ * @property stageKind 発話段の種別
+ * @property result 発話処理の結果
+ * @property completedAtEpochMillis 結果が確定した epoch millis
+ * @property categories 発話段に紐づく category 名
+ */
+@Immutable
+data class VoiceAnnouncementDebugRecentItem(
+    val stageId: String,
+    val targetIndex: Int,
+    val text: String,
+    val stageKind: VoiceAnnouncementDebugStageKind,
+    val result: VoiceAnnouncementDebugResult,
+    val completedAtEpochMillis: Long,
     val categories: ImmutableList<String>,
 )
 
@@ -62,4 +87,16 @@ enum class VoiceAnnouncementDebugFetchState {
 
     /** キャッシュにも進行中 request にも無い。 */
     NOT_REQUESTED,
+}
+
+/**
+ * 発話処理の結果。
+ */
+enum class VoiceAnnouncementDebugResult {
+
+    /** 音声出力の完了まで到達した。 */
+    SPOKEN,
+
+    /** category gate、重複、割り込み、期限切れなどで音声出力完了まで到達しなかった。 */
+    NOT_SPOKEN,
 }

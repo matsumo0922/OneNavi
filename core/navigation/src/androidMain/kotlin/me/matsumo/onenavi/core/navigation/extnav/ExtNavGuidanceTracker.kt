@@ -682,7 +682,7 @@ class ExtNavGuidanceTracker {
     /**
      * 確定 off-route として扱うかを返す。
      *
-     * 通常区間では 50m または accuracy x2.5 を超える逸脱が 2 秒以上 / 3 tick 以上続いた場合に確定する。
+     * 通常区間では 40m または accuracy x2.5 を超える逸脱が 1.5 秒以上 / 2 tick 以上続いた場合に確定する。
      * 案内地点や交差点付近では、間違えて曲がったケースを早く拾うため、方位差が十分大きければ 2 tick で確定する。
      *
      * @param attached attach 済み route 情報
@@ -1075,19 +1075,19 @@ class ExtNavGuidanceTracker {
         private const val OFF_ROUTE_CANDIDATE_ACCURACY_MULTIPLIER: Double = 2.0
 
         /** off-route confirmed とみなす最小 projection error。 */
-        private const val MIN_OFF_ROUTE_CONFIRMED_ERROR_METRES: Double = 50.0
+        private const val MIN_OFF_ROUTE_CONFIRMED_ERROR_METRES: Double = 40.0
 
         /** GPS 精度から confirmed 閾値を増やす倍率。 */
         private const val OFF_ROUTE_CONFIRMED_ACCURACY_MULTIPLIER: Double = 2.5
 
         /** confirmed 判定に必要な off-route candidate の連続 tick 数。 */
-        private const val OFF_ROUTE_CONFIRMATION_SAMPLE_COUNT: Int = 3
+        private const val OFF_ROUTE_CONFIRMATION_SAMPLE_COUNT: Int = 2
 
         /** confirmed 判定で時間条件を許可する最小 tick 数。 */
         private const val OFF_ROUTE_MIN_DURATION_SAMPLE_COUNT: Int = 2
 
         /** confirmed 判定に必要な off-route candidate 継続時間。 */
-        private const val OFF_ROUTE_CONFIRMATION_DURATION_MILLIS: Long = 2_000L
+        private const val OFF_ROUTE_CONFIRMATION_DURATION_MILLIS: Long = 1_500L
 
         /** 案内判断点付近で confirmed 判定に必要な連続 tick 数。 */
         private const val OFF_ROUTE_DECISION_POINT_CONFIRMATION_SAMPLE_COUNT: Int = 2

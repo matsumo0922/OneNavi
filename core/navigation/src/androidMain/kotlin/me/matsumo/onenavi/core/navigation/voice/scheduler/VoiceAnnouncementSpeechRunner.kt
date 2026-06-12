@@ -186,7 +186,7 @@ internal class VoiceAnnouncementSpeechRunner(
     /** event をコアに渡して発話実行指示を得る。 */
     private fun resolveCommand(event: SpeechEvent): VoiceAnnouncementCommand? = when (event) {
         is SpeechEvent.Tick -> scheduler.onTick(event.tick)
-        is SpeechEvent.SpeechFinished -> scheduler.onSpeechFinished(event.stageId)
+        is SpeechEvent.SpeechFinished -> scheduler.onSpeechFinished(event.stageId, event.wasSpoken)
         is SpeechEvent.DebugSnapshot,
         is SpeechEvent.ExclusiveFinished,
         is SpeechEvent.WaypointMilestone,
@@ -250,14 +250,22 @@ internal class VoiceAnnouncementSpeechRunner(
      */
     private fun startSpeech(request: VoiceAnnouncementRequest, channel: Channel<SpeechEvent>) {
         speechJob = scope.launch {
+            var wasSpoken = true
+
             try {
                 dispatcher.speak(request.content)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Throwable) {
+                wasSpoken = false
                 Napier.w(tag = TAG, throwable = error) { "voice dispatch failed: ${request.stageId.value}" }
             }
-            channel.trySend(SpeechEvent.SpeechFinished(request.stageId))
+            channel.trySend(
+                SpeechEvent.SpeechFinished(
+                    stageId = request.stageId,
+                    wasSpoken = wasSpoken,
+                ),
+            )
         }
     }
 
@@ -277,8 +285,12 @@ internal class VoiceAnnouncementSpeechRunner(
          * 発話が完了した。
          *
          * @property stageId 完了した発話段の id
+         * @property wasSpoken 音声出力が最後まで成功した場合は true
          */
-        data class SpeechFinished(val stageId: VoiceAnnouncementId) : SpeechEvent
+        data class SpeechFinished(
+            val stageId: VoiceAnnouncementId,
+            val wasSpoken: Boolean,
+        ) : SpeechEvent
 
         /**
          * デバッグスナップショットの読み取りを要求する。
