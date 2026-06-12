@@ -150,6 +150,35 @@ class VoiceAnnouncementSpeechRunnerTest {
     }
 
     @Test
+    fun `設定の初回読了まで開始アナウンスと案内発話を保留する`() = runTest {
+        val dispatcher = GatingDispatcher()
+        val settingsGate = CompletableDeferred<Unit>()
+        val runner = runnerOf(
+            dispatcher = dispatcher,
+            scope = this,
+            awaitSettingsReady = { settingsGate.await() },
+        )
+        runner.attach(
+            planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0))),
+            announceOpening = true,
+        )
+
+        runner.submit(tickOf(current = 850.0)) // 読了前の tick は channel に溜まる
+        advanceUntilIdle()
+        assertEquals(emptyList(), dispatcher.spoken) // 読了まで一切発話しない
+
+        settingsGate.complete(Unit) // 初回読了 → 開始アナウンスから順に再生
+        advanceUntilIdle()
+        assertEquals(listOf(OPENING_SSML), dispatcher.spoken)
+
+        dispatcher.releaseNext() // 開始アナウンス完了 → 保留していた tick を再評価
+        advanceUntilIdle()
+        runner.detach()
+
+        assertEquals(listOf(OPENING_SSML, spokenSsml("m800")), dispatcher.spoken)
+    }
+
+    @Test
     fun `経由地通過アナウンスは進行中の案内発話へ割り込み、完了後に案内発話を再開する`() = runTest {
         val dispatcher = GatingDispatcher()
         val runner = runnerOf(dispatcher, this)
@@ -201,6 +230,7 @@ class VoiceAnnouncementSpeechRunnerTest {
     private fun runnerOf(
         dispatcher: VoiceAnnouncementDispatcher,
         scope: CoroutineScope,
+        awaitSettingsReady: suspend () -> Unit = {},
     ): VoiceAnnouncementSpeechRunner = VoiceAnnouncementSpeechRunner(
         scheduler = VoiceAnnouncementScheduler(
             selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig()),
@@ -212,6 +242,7 @@ class VoiceAnnouncementSpeechRunnerTest {
             VoiceAnnouncementContent(ssml = OPENING_SSML, cue = null)
         },
         milestoneAnnouncementProvider = FakeMilestoneAnnouncementProvider,
+        awaitSettingsReady = awaitSettingsReady,
         scope = scope,
     )
 

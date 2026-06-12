@@ -13,6 +13,8 @@ class AppSettingRepository(
 
     suspend fun currentSetting(): AppSetting = dataSource.currentSetting()
 
+    suspend fun awaitInitialLoad(): AppSetting = dataSource.awaitInitialLoad()
+
     suspend fun initializeIdIfNeeded() = dataSource.initializeIdIfNeeded()
 
     suspend fun setId(id: String) = dataSource.setId(id)
