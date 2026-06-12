@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
+import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.model.Theme
 import me.matsumo.onenavi.core.repository.AppSettingRepository
 
@@ -33,6 +34,12 @@ class SettingViewModel(
     fun setDeveloperMode(developerMode: Boolean) {
         viewModelScope.launch {
             repository.setDeveloperMode(developerMode)
+        }
+    }
+
+    fun setDeveloperFeatureEnabled(feature: DeveloperFeature, isEnabled: Boolean) {
+        viewModelScope.launch {
+            repository.setDeveloperFeatureEnabled(feature, isEnabled)
         }
     }
 

@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import me.matsumo.onenavi.core.datasource.AppSettingDataSource
+import me.matsumo.onenavi.core.model.DeveloperFeature
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -34,7 +35,7 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * このクラスは位置情報 API の callback / task を coroutine で扱いやすい形に変換するだけに責務を絞る。
  * 位置権限の確認や権限要求 UI は呼び出し側で済ませてから利用する。
- * 開発モード中は実端末の現在地を読まず、東京駅の固定位置を返す。
+ * Fake GPS 機能が有効な間は実端末の現在地を読まず、東京駅の固定位置を返す。
  *
  * @param context 位置情報クライアントを作るための Android context
  * @param appSettingDataSource 開発モード設定を読む data source
@@ -58,7 +59,7 @@ class CurrentLocationDataSource(
      */
     @SuppressLint("MissingPermission")
     suspend fun lastKnown(): UserLocation? {
-        if (appSettingDataSource.currentSetting().developerMode) {
+        if (appSettingDataSource.currentSetting().isDeveloperFeatureEnabled(DeveloperFeature.FAKE_GPS)) {
             return createDevelopmentUserLocation()
         }
 
@@ -101,10 +102,10 @@ class CurrentLocationDataSource(
         require(minDistanceMeters >= 0f) { "minDistanceMeters must be greater than or equal to 0." }
 
         return appSettingDataSource.setting
-            .map { setting -> setting.developerMode }
+            .map { setting -> setting.isDeveloperFeatureEnabled(DeveloperFeature.FAKE_GPS) }
             .distinctUntilChanged()
-            .flatMapLatest { isDeveloperMode ->
-                if (isDeveloperMode) {
+            .flatMapLatest { isFakeGpsEnabled ->
+                if (isFakeGpsEnabled) {
                     developmentLocationUpdates(intervalMillis = intervalMillis)
                 } else {
                     rawLocationUpdates(

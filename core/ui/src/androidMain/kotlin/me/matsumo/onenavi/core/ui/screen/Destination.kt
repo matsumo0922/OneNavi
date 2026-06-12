@@ -29,6 +29,10 @@ sealed interface Destination : NavKey {
 
         @Serializable
         data object VoiceCategory : Setting
+
+        /** 開発者向けオプション画面。 */
+        @Serializable
+        data object DeveloperOptions : Setting
     }
 
     companion object {
@@ -41,6 +45,7 @@ sealed interface Destination : NavKey {
                     subclass(Setting.Root::class, Setting.Root.serializer())
                     subclass(Setting.License::class, Setting.License.serializer())
                     subclass(Setting.VoiceCategory::class, Setting.VoiceCategory.serializer())
+                    subclass(Setting.DeveloperOptions::class, Setting.DeveloperOptions.serializer())
                 }
             }
         }

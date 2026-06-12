@@ -41,6 +41,7 @@ import me.matsumo.onenavi.car.CarGuidanceSessionReleaser
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
 import me.matsumo.onenavi.core.model.AppSetting
+import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.ui.theme.LocalOneNaviDisplaySurface
 import me.matsumo.onenavi.core.ui.theme.LocalSupportsPlatformDialogWindow
 import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
@@ -63,7 +64,7 @@ internal fun CarVirtualDisplayProbeContent(
 ) {
     val viewModel = koinViewModel<MainViewModel>()
     val settings by viewModel.setting.collectAsStateWithLifecycle(null)
-    val shouldShowDebugOverlay = settings?.developerMode == true
+    val shouldShowDebugOverlay = settings?.isDeveloperFeatureEnabled(DeveloperFeature.CAR_VD_DEBUG_OVERLAY) == true
     val lifecycleStateLabel = rememberCarVirtualDisplayLifecycleStateLabel()
     val observedFrame = viewport.observedFrame
     val hostSlotRightInset = viewport.surfaceWidth - viewport.visibleRight

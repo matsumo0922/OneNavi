@@ -13,6 +13,7 @@ import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
 import me.matsumo.onenavi.feature.billing.paywallEntry
 import me.matsumo.onenavi.feature.map.mapEntry
 import me.matsumo.onenavi.feature.setting.oss.settingLicenseEntry
+import me.matsumo.onenavi.feature.setting.settingDeveloperOptionsEntry
 import me.matsumo.onenavi.feature.setting.settingEntry
 import me.matsumo.onenavi.feature.setting.settingVoiceCategoryEntry
 
@@ -45,6 +46,7 @@ internal fun AppNavHost(
                 settingEntry()
                 settingLicenseEntry()
                 settingVoiceCategoryEntry()
+                settingDeveloperOptionsEntry()
             },
             transitionSpec = { NavigationTransitions.forwardTransition },
             popTransitionSpec = { NavigationTransitions.backwardTransition },
