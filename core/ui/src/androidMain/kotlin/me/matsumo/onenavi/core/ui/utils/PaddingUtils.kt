@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.debugInspectorInfo
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -25,13 +28,24 @@ operator fun PaddingValues.plus(other: PaddingValues): PaddingValues {
     )
 }
 
-@Composable
+@Stable
 fun Modifier.navigationBarsBottomPaddingOrDefault(
     defaultBottom: Dp = 8.dp,
-): Modifier {
+): Modifier = composed(
+    inspectorInfo = debugInspectorInfo {
+        name = "navigationBarsBottomPaddingOrDefault"
+        properties["defaultBottom"] = defaultBottom
+    },
+) {
     val bottom = WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
 
-    return padding(bottom = if (bottom == 0.dp) defaultBottom else bottom)
+    padding(
+        bottom = if (bottom == 0.dp) {
+            defaultBottom
+        } else {
+            bottom
+        },
+    )
 }
