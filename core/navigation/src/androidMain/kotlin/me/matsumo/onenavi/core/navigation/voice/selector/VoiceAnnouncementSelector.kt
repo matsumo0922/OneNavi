@@ -8,6 +8,7 @@ import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlan
 import me.matsumo.onenavi.core.navigation.voice.suppression.VoiceAnnouncementSpeechState
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * デバッグ表示用に、今後選抜されうる発話段とその補助情報をまとめた候補。
@@ -316,7 +317,7 @@ internal class VoiceAnnouncementSelector(
     ): Double? {
         return when (stage.kind) {
             AnnouncementStageKind.MIDDLE -> middlePreviewBoundary(stage, tick)
-            AnnouncementStageKind.FINAL -> finalPreviewBoundary(target, tick)
+            AnnouncementStageKind.FINAL -> finalPreviewBoundary(stage, target, tick)
         }
     }
 
@@ -329,10 +330,13 @@ internal class VoiceAnnouncementSelector(
         return window.enterGeometryMeters
     }
 
-    /** FINAL が到達リードタイムに達する境界を返す。すでに境界内なら現在地。 */
-    private fun finalPreviewBoundary(target: AnnouncementTarget, tick: VoiceTick): Double {
-        val leadDistanceMeters = finalLeadDistanceMeters(tick.speedMetersPerSecond)
-        val fireBoundaryMeters = target.geometryMeters - leadDistanceMeters
+    /** FINAL が名目トリガまたは到達リードタイムに達する境界を返す。すでに境界内なら現在地。 */
+    private fun finalPreviewBoundary(
+        stage: AnnouncementStage,
+        target: AnnouncementTarget,
+        tick: VoiceTick,
+    ): Double {
+        val fireBoundaryMeters = finalFireBoundaryMeters(stage, target, tick)
 
         return fireBoundaryMeters.coerceAtLeast(tick.currentCumulativeMeters)
     }
@@ -511,7 +515,7 @@ internal class VoiceAnnouncementSelector(
 
         return when (stage.kind) {
             AnnouncementStageKind.MIDDLE -> isMiddleWindowActive(stage, tick)
-            AnnouncementStageKind.FINAL -> isFinalReached(target, tick)
+            AnnouncementStageKind.FINAL -> isFinalReached(stage, target, tick)
         }
     }
 
@@ -528,12 +532,27 @@ internal class VoiceAnnouncementSelector(
         return window.contains(tick.currentCumulativeMeters)
     }
 
-    /** 直前段: 現在地が到達リードタイムぶん手前に達したかを返す。手前距離は速度から逆算する。 */
-    private fun isFinalReached(target: AnnouncementTarget, tick: VoiceTick): Boolean {
-        val leadDistanceMeters = finalLeadDistanceMeters(tick.speedMetersPerSecond)
-        val fireBoundaryMeters = target.geometryMeters - leadDistanceMeters
+    /** 直前段: 名目トリガ位置または到達リードタイムぶん手前の早い方に達したかを返す。 */
+    private fun isFinalReached(
+        stage: AnnouncementStage,
+        target: AnnouncementTarget,
+        tick: VoiceTick,
+    ): Boolean {
+        val fireBoundaryMeters = finalFireBoundaryMeters(stage, target, tick)
 
         return tick.currentCumulativeMeters >= fireBoundaryMeters
+    }
+
+    /** FINAL の発話境界を、名目トリガ位置と速度リード境界のうち route 上で手前にある方へそろえる。 */
+    private fun finalFireBoundaryMeters(
+        stage: AnnouncementStage,
+        target: AnnouncementTarget,
+        tick: VoiceTick,
+    ): Double {
+        val leadDistanceMeters = finalLeadDistanceMeters(tick.speedMetersPerSecond)
+        val leadBoundaryMeters = target.geometryMeters - leadDistanceMeters
+
+        return min(stage.triggerGeometryMeters, leadBoundaryMeters)
     }
 
     /** 速度から FINAL の手前距離を求める。速度が無い / 低速でも最小手前距離を保証する。 */

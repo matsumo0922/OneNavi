@@ -23,8 +23,7 @@ internal enum class AnnouncementStageKind {
  *
  * 発話トリガの距離は source 系 / geometry 系を分けて持つ。MIDDLE 段は [middleWindow] の距離窓に
  * 現在地が入っている間だけ発話候補になり (同一案内地点の MIDDLE 群から 1 つだけ選ばれる)、FINAL 段は
- * 実行時に到達リードタイム逆算で発話するため [middleWindow] を持たず [triggerGeometryMeters] も
- * debug / 検証用にとどまる。
+ * 名目トリガ位置と到達リードタイム逆算境界のうち route 上で手前にある方で発話するため [middleWindow] を持たない。
  *
  * @property id route 寿命内で一意な安定キー
  * @property groupKey 同一案内地点内で距離違いの代替候補を束ねるキー。外部データの group_id 由来で、

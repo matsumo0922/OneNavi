@@ -13,6 +13,7 @@ import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementTarget
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlan
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlanBuilder
+import kotlin.math.roundToInt
 
 /**
  * 案内 manager から音声案内をまとめて駆動する facade。発話プラン構築・tick 変換・発話実行系の配線を 1 つに束ね、
@@ -66,7 +67,11 @@ internal class VoiceAnnouncementController(
 
         _debugSnapshot.value = null
         logPlan(plan)
-        speechRunner.attach(plan, announceOpening = announceOpening)
+        speechRunner.attach(
+            plan = plan,
+            announceOpening = announceOpening,
+            initialCumulativeMeters = initialCumulativeMeters,
+        )
         prefetcher.attach(
             plan = plan,
             currentCumulativeMeters = initialCumulativeMeters,
@@ -123,6 +128,7 @@ internal class VoiceAnnouncementController(
     /** attach 時にプラン全体をダンプする。重複ブロック・全段構成・トリガ距離を裏取りするため。 */
     private fun logPlan(plan: VoiceAnnouncementPlan) {
         Napier.d(tag = TAG) { "plan routeId=${plan.routeId} targets=${plan.targets.size}" }
+        logCategoryDiagnostics(plan)
 
         for (targetIndex in plan.targets.indices) {
             val target = plan.targets[targetIndex]
@@ -131,6 +137,72 @@ internal class VoiceAnnouncementController(
                     "stages=${target.stages.size}"
             }
             logStages(target)
+        }
+    }
+
+    /** category ごとに stage 数・window 有無・名目トリガ距離を集計して attach 時に出力する。 */
+    private fun logCategoryDiagnostics(plan: VoiceAnnouncementPlan) {
+        val diagnosticsByCategory = linkedMapOf<String, VoiceAnnouncementCategoryPlanDiagnostics>()
+
+        for (target in plan.targets) {
+            for (stage in target.stages) {
+                recordCategoryDiagnostics(diagnosticsByCategory, target, stage)
+            }
+        }
+
+        for ((categoryName, diagnostics) in diagnosticsByCategory) {
+            Napier.d(tag = TAG) {
+                "category[$categoryName] blocks=${diagnostics.blockCount} " +
+                    "windowed=${diagnostics.windowedBlockCount} withoutWindow=${diagnostics.withoutWindowBlockCount()} " +
+                    "triggerRemainingMeters=${diagnostics.triggerRemainingMeters.sorted()}"
+            }
+        }
+    }
+
+    /** 1 stage を category 別診断値へ畳み込む。 */
+    private fun recordCategoryDiagnostics(
+        diagnosticsByCategory: MutableMap<String, VoiceAnnouncementCategoryPlanDiagnostics>,
+        target: AnnouncementTarget,
+        stage: AnnouncementStage,
+    ) {
+        val remainingMeters = target.geometryMeters - stage.triggerGeometryMeters
+        val triggerRemainingMeters = remainingMeters.coerceAtLeast(0.0).roundToInt()
+
+        if (stage.categories.isEmpty()) {
+            recordCategoryDiagnostics(
+                diagnosticsByCategory = diagnosticsByCategory,
+                categoryName = UNCATEGORIZED_CATEGORY_NAME,
+                stage = stage,
+                triggerRemainingMeters = triggerRemainingMeters,
+            )
+            return
+        }
+
+        for (category in stage.categories) {
+            recordCategoryDiagnostics(
+                diagnosticsByCategory = diagnosticsByCategory,
+                categoryName = category.name,
+                stage = stage,
+                triggerRemainingMeters = triggerRemainingMeters,
+            )
+        }
+    }
+
+    /** category 名 1 つぶんの診断値を更新する。 */
+    private fun recordCategoryDiagnostics(
+        diagnosticsByCategory: MutableMap<String, VoiceAnnouncementCategoryPlanDiagnostics>,
+        categoryName: String,
+        stage: AnnouncementStage,
+        triggerRemainingMeters: Int,
+    ) {
+        val diagnostics = diagnosticsByCategory.getOrPut(categoryName) {
+            VoiceAnnouncementCategoryPlanDiagnostics()
+        }
+        diagnostics.blockCount += 1
+        diagnostics.triggerRemainingMeters += triggerRemainingMeters
+
+        if (stage.middleWindow != null) {
+            diagnostics.windowedBlockCount += 1
         }
     }
 
@@ -152,5 +224,25 @@ internal class VoiceAnnouncementController(
 
         /** プランダンプの診断ログを絞り込むためのタグ。 */
         const val TAG = "VoiceAnnouncementPlan"
+
+        /** category が空の stage を診断ログで束ねる名前。 */
+        const val UNCATEGORIZED_CATEGORY_NAME = "Uncategorized"
+    }
+
+    /**
+     * attach 時のカテゴリ別プラン診断を集計する可変値。
+     *
+     * @property blockCount category に紐づく stage 数
+     * @property windowedBlockCount MIDDLE window を持つ stage 数
+     * @property triggerRemainingMeters stage の名目トリガ残距離リスト
+     */
+    private class VoiceAnnouncementCategoryPlanDiagnostics(
+        var blockCount: Int = 0,
+        var windowedBlockCount: Int = 0,
+        val triggerRemainingMeters: MutableList<Int> = mutableListOf(),
+    ) {
+
+        /** window を持たない stage 数。 */
+        fun withoutWindowBlockCount(): Int = blockCount - windowedBlockCount
     }
 }

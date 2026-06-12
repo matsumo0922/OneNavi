@@ -263,6 +263,7 @@ class VoiceAnnouncementSpeechRunnerTest {
             selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig()),
             policy = VoiceAnnouncementSelectionPolicy(),
             contentRenderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn),
+            config = VoiceAnnouncementConfig(),
         ),
         dispatcher = dispatcher,
         openingAnnouncementProvider = OpeningAnnouncementProvider {

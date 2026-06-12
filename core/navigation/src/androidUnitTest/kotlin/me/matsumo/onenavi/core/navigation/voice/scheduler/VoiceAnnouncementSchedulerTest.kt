@@ -128,6 +128,63 @@ class VoiceAnnouncementSchedulerTest {
     }
 
     @Test
+    fun `safety 系カテゴリの中間段はキュー消化時に窓終端後の猶予内なら発話する`() {
+        val scheduler = schedulerOf()
+        scheduler.attach(
+            planOf(
+                targetOf(index = 0, geometryMeters = 500.0, middleStage("near", 400.0)),
+                targetOf(
+                    index = 1,
+                    geometryMeters = 1_500.0,
+                    middleStageWindowed(
+                        id = "regulation",
+                        enter = 400.0,
+                        exit = 700.0,
+                        category = GuidanceCategory.Regulation,
+                    ),
+                ),
+            ),
+        )
+
+        scheduler.onTick(tickOf(current = 450.0))
+        scheduler.onTick(tickOf(current = 460.0))
+        scheduler.onTick(tickOf(current = 750.0))
+        val drained = scheduler.onSpeechFinished(VoiceAnnouncementId("near"))
+
+        assertEquals(
+            VoiceAnnouncementId("regulation"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(drained).request.stageId,
+        )
+    }
+
+    @Test
+    fun `safety 系カテゴリの中間段でも猶予を超えたキュー候補は stale として抑止する`() {
+        val scheduler = schedulerOf()
+        scheduler.attach(
+            planOf(
+                targetOf(index = 0, geometryMeters = 500.0, middleStage("near", 400.0)),
+                targetOf(
+                    index = 1,
+                    geometryMeters = 1_500.0,
+                    middleStageWindowed(
+                        id = "regulation",
+                        enter = 400.0,
+                        exit = 700.0,
+                        category = GuidanceCategory.Regulation,
+                    ),
+                ),
+            ),
+        )
+
+        scheduler.onTick(tickOf(current = 450.0))
+        scheduler.onTick(tickOf(current = 460.0))
+        scheduler.onTick(tickOf(current = 810.0))
+        val drained = scheduler.onSpeechFinished(VoiceAnnouncementId("near"))
+
+        assertNull(drained)
+    }
+
+    @Test
     fun `stale 破棄された中間段と同じ文言でも同じ案内地点の直前段は発話する`() {
         val scheduler = schedulerOf()
         scheduler.attach(
@@ -344,6 +401,54 @@ class VoiceAnnouncementSchedulerTest {
     }
 
     @Test
+    fun `attach 時点で名目トリガを大きく過ぎた FINAL は距離句の破綻を避けるため発話しない`() {
+        val scheduler = schedulerOf()
+        scheduler.attach(
+            plan = planOf(
+                targetOf(
+                    index = 0,
+                    geometryMeters = 1_000.0,
+                    finalStage(
+                        id = "regulationFinal",
+                        triggerGeometryMeters = 500.0,
+                        category = GuidanceCategory.Regulation,
+                    ),
+                ),
+            ),
+            initialCumulativeMeters = 760.0,
+        )
+
+        val command = scheduler.onTick(tickOf(current = 760.0, speed = 20.0))
+
+        assertNull(command)
+    }
+
+    @Test
+    fun `attach 時点で名目トリガを過ぎた近接 FINAL はマニューバ劣化を避けるため発話する`() {
+        val scheduler = schedulerOf()
+        scheduler.attach(
+            plan = planOf(
+                targetOf(
+                    index = 0,
+                    geometryMeters = 1_000.0,
+                    finalStage(
+                        id = "maneuverFinal",
+                        triggerGeometryMeters = 970.0,
+                    ),
+                ),
+            ),
+            initialCumulativeMeters = 985.0,
+        )
+
+        val command = scheduler.onTick(tickOf(current = 985.0, speed = 20.0))
+
+        assertEquals(
+            VoiceAnnouncementId("maneuverFinal"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(command).request.stageId,
+        )
+    }
+
+    @Test
     fun `detach 後の tick は何も発話しない`() {
         val scheduler = schedulerOf()
         scheduler.attach(planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0))))
@@ -473,11 +578,13 @@ class VoiceAnnouncementSchedulerTest {
 
     private fun schedulerOf(
         gate: VoiceAnnouncementCategoryGate = VoiceAnnouncementCategoryGate.AllOn,
+        config: VoiceAnnouncementConfig = VoiceAnnouncementConfig(),
         currentTimeMillis: () -> Long = System::currentTimeMillis,
     ): VoiceAnnouncementScheduler = VoiceAnnouncementScheduler(
-        selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig()),
+        selector = VoiceAnnouncementSelector(config),
         policy = VoiceAnnouncementSelectionPolicy(),
         contentRenderer = VoiceAnnouncementContentRenderer(gate),
+        config = config,
         currentTimeMillis = currentTimeMillis,
     )
 
@@ -531,7 +638,7 @@ class VoiceAnnouncementSchedulerTest {
 
     private fun finalStage(
         id: String,
-        triggerGeometryMeters: Double = 0.0,
+        triggerGeometryMeters: Double = Double.POSITIVE_INFINITY,
         category: GuidanceCategory = GuidanceCategory.IntersectionGuide,
         groupKey: String = "final-grp",
         text: String = id,

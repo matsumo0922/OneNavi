@@ -3,6 +3,7 @@ package me.matsumo.onenavi.core.navigation.voice.scheduler
 import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
 import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState
 import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugItem
 import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugRecentItem
@@ -14,6 +15,7 @@ import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementConten
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementRequest
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
+import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementTarget
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlan
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementPreviewSelection
@@ -45,6 +47,7 @@ internal class VoiceAnnouncementScheduler(
     private val selector: VoiceAnnouncementSelector,
     private val policy: VoiceAnnouncementSelectionPolicy,
     private val contentRenderer: VoiceAnnouncementContentRenderer,
+    private val config: VoiceAnnouncementConfig,
     private val currentTimeMillis: () -> Long = System::currentTimeMillis,
 ) {
 
@@ -59,14 +62,22 @@ internal class VoiceAnnouncementScheduler(
      * 発話プランを attach し、発話状態とキューを初期化する。route が切り替わるたびに呼ぶ。
      *
      * @param plan attach する発話プラン
+     * @param initialCumulativeMeters attach 時点の現在位置。既に大きく食い込んだ FINAL を抑止するために使う
      */
-    fun attach(plan: VoiceAnnouncementPlan) {
+    fun attach(
+        plan: VoiceAnnouncementPlan,
+        initialCumulativeMeters: Double? = null,
+    ) {
         this.plan = plan
         state = VoiceAnnouncementSpeechState()
         latestTick = null
         pendingQueue.clear()
         recentAnnouncements.clear()
         speakingDebugItems.clear()
+
+        if (initialCumulativeMeters != null) {
+            skipLateFinalStagesAtAttach(plan, initialCumulativeMeters)
+        }
     }
 
     /** 発話プラン・状態・キューを破棄する。案内終了時に呼ぶ。 */
@@ -294,8 +305,68 @@ internal class VoiceAnnouncementScheduler(
 
     /** キュー投入後に MIDDLE の有効範囲を過ぎていたら true を返す。target 通過済みは呼び出し側で判定する。 */
     private fun VoiceAnnouncementRequest.isStaleAt(tick: VoiceTick): Boolean = when (kind) {
-        AnnouncementStageKind.MIDDLE -> middleWindow?.contains(tick.currentCumulativeMeters) != true
+        AnnouncementStageKind.MIDDLE -> isMiddleRequestStaleAt(tick)
         AnnouncementStageKind.FINAL -> false
+    }
+
+    /** MIDDLE の stale 判定。safety 系 category は窓終端後も短い猶予を許す。 */
+    private fun VoiceAnnouncementRequest.isMiddleRequestStaleAt(tick: VoiceTick): Boolean {
+        val window = middleWindow ?: return true
+        val currentCumulativeMeters = tick.currentCumulativeMeters
+        if (currentCumulativeMeters < window.enterGeometryMeters) return true
+
+        val exitGeometryMeters = window.exitGeometryMeters + queuedStaleGraceMeters()
+
+        return currentCumulativeMeters >= exitGeometryMeters
+    }
+
+    /** request の category が stale 猶予対象なら猶予距離、それ以外は 0m を返す。 */
+    private fun VoiceAnnouncementRequest.queuedStaleGraceMeters(): Double =
+        if (hasQueuedStaleGraceCategory()) config.queuedStaleGraceMeters else 0.0
+
+    /** request が safety 系 category を 1 つでも含むかを返す。 */
+    private fun VoiceAnnouncementRequest.hasQueuedStaleGraceCategory(): Boolean {
+        for (categoryName in categories) {
+            if (categoryName in config.queuedStaleGraceCategoryNames) return true
+        }
+
+        return false
+    }
+
+    /** attach 時点で名目距離より深く食い込んだ FINAL を処理済みにして、距離句の破綻を避ける。 */
+    private fun skipLateFinalStagesAtAttach(
+        plan: VoiceAnnouncementPlan,
+        currentCumulativeMeters: Double,
+    ) {
+        for (target in plan.targets) {
+            for (stage in target.stages) {
+                if (!shouldSkipLateFinalStage(target, stage, currentCumulativeMeters)) continue
+
+                state = state.withStageFired(stage.id)
+                Napier.d(tag = TAG) {
+                    "attach-skip late-final stage=${stage.id.value} targetGeo=${target.geometryMeters} " +
+                        "triggerGeo=${stage.triggerGeometryMeters} current=$currentCumulativeMeters"
+                }
+            }
+        }
+    }
+
+    /** attach 時点の現在地から、距離句が大きく外れる FINAL かを返す。 */
+    private fun shouldSkipLateFinalStage(
+        target: AnnouncementTarget,
+        stage: AnnouncementStage,
+        currentCumulativeMeters: Double,
+    ): Boolean {
+        if (stage.kind != AnnouncementStageKind.FINAL) return false
+        if (currentCumulativeMeters <= stage.triggerGeometryMeters) return false
+
+        val nominalLeadMeters = target.geometryMeters - stage.triggerGeometryMeters
+        if (nominalLeadMeters < config.lateFinalSkipMinimumTriggerMeters) return false
+
+        val remainingMeters = target.geometryMeters - currentCumulativeMeters
+        val skipBoundaryMeters = nominalLeadMeters * config.lateFinalSkipRatio
+
+        return remainingMeters < skipBoundaryMeters
     }
 
     /** queue candidate と新規 selection を現在 tick の緊急度で比較する。 */
