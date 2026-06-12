@@ -107,11 +107,15 @@ val navigationModule: Module = module {
         )
     }
     single {
+        val appSettingRepository = get<AppSettingRepository>()
         VoiceAnnouncementSpeechRunner(
             scheduler = get(),
             dispatcher = get(),
             openingAnnouncementProvider = DefaultOpeningAnnouncementProvider(),
             milestoneAnnouncementProvider = DefaultMilestoneAnnouncementProvider(),
+            // 同期参照しかできない category gate / TTS 合成設定が未読込の DEFAULT を観測しないよう、
+            // 発話処理を設定の初回読了後に開始する。
+            awaitSettingsReady = { appSettingRepository.awaitInitialLoad() },
         )
     }
     single { VoiceTickFactory() }

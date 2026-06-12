@@ -35,6 +35,8 @@ import me.matsumo.onenavi.core.navigation.voice.selector.VoiceTick
  * @property dispatcher 確定発話を実際に再生する出口
  * @property openingAnnouncementProvider 案内開始時に最初に発話する固定アナウンスの供給元
  * @property milestoneAnnouncementProvider 経由地通過 / 目的地到達のマイルストーン発話の供給元
+ * @property awaitSettingsReady 発話処理の前に設定の初回読了を待つ gate。category gate / 合成設定の同期参照が
+ *   未読込の既定値を観測しないよう、event ループと固定アナウンスの再生開始をこの gate の通過後にする
  * @property scope ループと発話 coroutine を動かす scope
  */
 internal class VoiceAnnouncementSpeechRunner(
@@ -42,6 +44,7 @@ internal class VoiceAnnouncementSpeechRunner(
     private val dispatcher: VoiceAnnouncementDispatcher,
     private val openingAnnouncementProvider: OpeningAnnouncementProvider,
     private val milestoneAnnouncementProvider: MilestoneAnnouncementProvider,
+    private val awaitSettingsReady: suspend () -> Unit = {},
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
 
@@ -117,8 +120,10 @@ internal class VoiceAnnouncementSpeechRunner(
         scheduler.detach()
     }
 
-    /** event を 1 件ずつ直列に処理するループを開始する。 */
+    /** event を 1 件ずつ直列に処理するループを開始する。設定の初回読了まで event は channel に溜めて保留する。 */
     private fun launchEventLoop(channel: Channel<SpeechEvent>): Job = scope.launch {
+        awaitSettingsReady()
+
         for (event in channel) {
             handleEvent(event, channel)
         }
@@ -184,6 +189,7 @@ internal class VoiceAnnouncementSpeechRunner(
     /** 固定アナウンスを 1 件再生する。barge-in の cancel は再 throw し、それ以外の失敗はログして無音扱いにする。 */
     private suspend fun playAnnouncement(contentProvider: suspend () -> VoiceAnnouncementContent) {
         try {
+            awaitSettingsReady()
             dispatcher.speak(contentProvider())
         } catch (cancellation: CancellationException) {
             throw cancellation
