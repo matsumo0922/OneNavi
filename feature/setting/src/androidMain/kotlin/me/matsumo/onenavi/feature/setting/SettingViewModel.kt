@@ -57,6 +57,18 @@ class SettingViewModel(
         }
     }
 
+    fun setTtsVoiceNameOverride(ttsVoiceNameOverride: String) {
+        viewModelScope.launch {
+            repository.setTtsVoiceNameOverride(ttsVoiceNameOverride)
+        }
+    }
+
+    fun setTtsSpeakingRateOverride(ttsSpeakingRateOverride: Double) {
+        viewModelScope.launch {
+            repository.setTtsSpeakingRateOverride(ttsSpeakingRateOverride)
+        }
+    }
+
     fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) {
         viewModelScope.launch {
             repository.setGuidanceCategoryEnabled(categoryKey, isEnabled)

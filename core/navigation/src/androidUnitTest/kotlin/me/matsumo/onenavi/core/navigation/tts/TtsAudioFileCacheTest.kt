@@ -30,11 +30,13 @@ class TtsAudioFileCacheTest {
         val baseKey = config.cacheKeyOf(ssml)
         val textKey = config.cacheKeyOf("<speak>左です</speak>")
         val voiceKey = config.copy(voiceName = "ja-JP-Test").cacheKeyOf(ssml)
+        val speakingRateKey = config.copy(speakingRate = 0.85).cacheKeyOf(ssml)
         val sampleRateKey = config.copy(sampleRateHertz = 16_000).cacheKeyOf(ssml)
         val volumeGainKey = config.copy(volumeGainDb = 6.0).cacheKeyOf(ssml)
 
         assertNotEquals(baseKey, textKey)
         assertNotEquals(baseKey, voiceKey)
+        assertNotEquals(baseKey, speakingRateKey)
         assertNotEquals(baseKey, sampleRateKey)
         assertNotEquals(baseKey, volumeGainKey)
     }

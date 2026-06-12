@@ -219,6 +219,7 @@
     <string name="setting_developer_options_section_access">権限と表示</string>
     <string name="setting_developer_options_section_location">位置情報</string>
     <string name="setting_developer_options_section_map">地図</string>
+    <string name="setting_developer_options_section_tts">音声案内</string>
     <string name="setting_developer_options_section_android_auto">Android Auto</string>
     <string name="setting_developer_options_force_plus_privilege">Plus 権限を強制付与</string>
     <string name="setting_developer_options_force_plus_privilege_description">課金状態に関係なく Plus 相当として扱います。</string>
@@ -230,6 +231,12 @@
     <string name="setting_developer_options_fake_gps_description">すべての現在地取得が東京駅付近の固定位置になります。実走行では絶対に有効化しないでください。</string>
     <string name="setting_developer_options_map_diagnostics">地図診断を有効化</string>
     <string name="setting_developer_options_map_diagnostics_description">地図の描画密度ログと viewport 診断ログを出力します。</string>
+    <string name="setting_developer_options_tts_voice_override">TTS voice 上書き</string>
+    <string name="setting_developer_options_tts_voice_override_description">Google Cloud TTS の voice 名と speakingRate を開発者向けに上書きします。OFF の間は保存済みの値を合成に使いません。</string>
+    <string name="setting_developer_options_tts_voice_name_override">TTS voice 名</string>
+    <string name="setting_developer_options_tts_voice_name_override_description">入力後に適用すると反映します。空欄ならアプリの既定 voice を使います。例: ja-JP-Chirp3-HD-Kore</string>
+    <string name="setting_developer_options_tts_speaking_rate_override">TTS speakingRate</string>
+    <string name="setting_developer_options_tts_speaking_rate_override_description">0.25 から 2.0 の範囲で話速を上書きします。1.0 が標準です。</string>
     <string name="setting_developer_options_car_vd_debug_overlay">AA VD デバッグオーバーレイ</string>
     <string name="setting_developer_options_car_vd_debug_overlay_description">Android Auto Virtual Display の viewport、タッチ座標、診断パネルを表示します。</string>
     <string name="setting_developer_options_car_hardware_diagnostics">車両データ診断</string>
