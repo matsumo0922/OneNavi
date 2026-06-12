@@ -117,7 +117,7 @@ internal class ExtNavRerouteDetector {
     private companion object {
 
         /** attach 後にリルート発火を抑制するウォームアップ時間。 */
-        private const val REROUTE_WARMUP_MILLIS: Long = 10_000L
+        private const val REROUTE_WARMUP_MILLIS: Long = 5_000L
 
         /** リルートを許可する最小残距離 (目的地直前では再探索しない)。 */
         private const val MIN_REMAINING_METRES: Double = 100.0
