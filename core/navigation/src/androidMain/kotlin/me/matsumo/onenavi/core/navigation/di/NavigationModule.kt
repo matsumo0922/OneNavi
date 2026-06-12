@@ -98,6 +98,7 @@ val navigationModule: Module = module {
             selector = get(),
             policy = get(),
             contentRenderer = get(),
+            config = get(),
         )
     }
     single {

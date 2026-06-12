@@ -105,7 +105,7 @@ class VoiceAnnouncementSelectorTest {
             targetOf(
                 index = 0,
                 geometryMeters = 1_000.0,
-                stages = listOf(finalStage("f")),
+                stages = listOf(finalStage(id = "f", triggerGeometryMeters = 990.0)),
             ),
         )
 
@@ -118,6 +118,25 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
+    fun `単一 block の FINAL は名目トリガ距離がリード境界より手前なら名目位置で発話する`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(finalStage(id = "f500", triggerGeometryMeters = 500.0)),
+            ),
+        )
+
+        val beforeNominalTrigger = selector.select(plan, tickOf(current = 490.0, speed = 20.0), emptyState())
+        val atNominalTrigger = selector.select(plan, tickOf(current = 510.0, speed = 20.0), emptyState())
+
+        assertNull(beforeNominalTrigger)
+        assertEquals(VoiceAnnouncementId("f500"), atNominalTrigger?.stage?.id)
+        assertEquals(AnnouncementStageKind.FINAL, atNominalTrigger?.stage?.kind)
+    }
+
+    @Test
     fun `速度が無い直前段は最小手前距離で発話する`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         // 速度なし → minLead 30m 手前。target 1000m なので fire 境界は 970m。
@@ -125,7 +144,7 @@ class VoiceAnnouncementSelectorTest {
             targetOf(
                 index = 0,
                 geometryMeters = 1_000.0,
-                stages = listOf(finalStage("f")),
+                stages = listOf(finalStage(id = "f", triggerGeometryMeters = 990.0)),
             ),
         )
 
@@ -685,7 +704,7 @@ class VoiceAnnouncementSelectorTest {
     private fun finalStage(
         id: String,
         groupKey: String = "final-grp",
-        triggerGeometryMeters: Double = 0.0,
+        triggerGeometryMeters: Double = Double.POSITIVE_INFINITY,
     ): AnnouncementStage =
         stageOf(id, AnnouncementStageKind.FINAL, triggerGeometryMeters = triggerGeometryMeters, groupKey = groupKey, window = null)
 

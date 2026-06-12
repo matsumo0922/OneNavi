@@ -62,15 +62,17 @@ internal class VoiceAnnouncementSpeechRunner(
      *
      * @param plan 駆動する発話プラン
      * @param announceOpening true なら案内 tick の処理前に開始アナウンスを発話する (初回開始時のみ true)
+     * @param initialCumulativeMeters attach 時点の現在位置。途中参加で遅すぎる FINAL を抑止するため scheduler に渡す
      */
     fun attach(
         plan: VoiceAnnouncementPlan,
         announceOpening: Boolean = false,
+        initialCumulativeMeters: Double? = null,
     ) {
         detach()
         finalAnnouncementJob?.cancel()
         finalAnnouncementJob = null
-        scheduler.attach(plan)
+        scheduler.attach(plan, initialCumulativeMeters)
 
         val channel = Channel<SpeechEvent>(Channel.UNLIMITED)
         eventChannel = channel
