@@ -12,7 +12,6 @@ import com.google.android.gms.maps.model.PolylineOptions
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.model.CongestionSegment
-import me.matsumo.onenavi.core.model.CongestionSeverity
 import me.matsumo.onenavi.core.model.RoadClassSegment
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.ui.theme.RouteColors
@@ -61,16 +60,6 @@ internal enum class MapPolylineStyle(
         borderWidthDp = 7.2f,
         zIndex = 0f,
     ),
-}
-
-/**
- * 渋滞オーバーレイ本体色。NORMAL / UNKNOWN は塗り替えない（null を返す）。
- * 枠線（border）はそのまま下に残るので、本体だけ赤 / オレンジで描き換える。
- */
-private fun congestionBodyColorOf(severity: CongestionSeverity): Color? = when (severity) {
-    CongestionSeverity.TRAFFIC_JAM -> Color(0xFFE53935)
-    CongestionSeverity.SLOW -> Color(0xFFFB8C00)
-    CongestionSeverity.NORMAL, CongestionSeverity.UNKNOWN -> null
 }
 
 private const val ROUTE_BODY_Z_OFFSET = 0.5f
@@ -138,9 +127,9 @@ internal fun MapPolyline(
         }
 
         // 渋滞オーバーレイ: 本体と同じ太さで body の上に描き、border はそのまま下に透ける。
-        // NORMAL / UNKNOWN は色を変えない（congestionBodyColorOf が null を返す）。
+        // NORMAL / UNKNOWN は色を変えない（routeCongestionBodyColorOf が null を返す）。
         for (segment in congestionSegments) {
-            val overlayColor = congestionBodyColorOf(segment.severity) ?: continue
+            val overlayColor = routeCongestionBodyColorOf(segment.severity) ?: continue
             if (latLngPoints.isEmpty()) continue
 
             var startIndex = segment.startPolylinePointIndex.coerceIn(0, latLngPoints.lastIndex)

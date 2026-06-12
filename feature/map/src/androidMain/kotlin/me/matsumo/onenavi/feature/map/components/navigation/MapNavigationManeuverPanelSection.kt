@@ -28,7 +28,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,11 +40,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.common.formatYen
+import me.matsumo.onenavi.core.model.CongestionSegment
 import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.RoadClass
@@ -119,6 +120,7 @@ internal fun MapNavigationManeuverPanelSection(
                 is NavigationPanelGuidanceItem -> MapNavigationGuidancePanelRow(
                     modifier = Modifier.fillMaxWidth(),
                     item = item.guidanceItem,
+                    timelineCongestionBands = item.timelineCongestionBands,
                     meterLabel = meterLabel,
                     kilometerLabel = kilometerLabel,
                     dayLabel = dayLabel,
@@ -131,6 +133,7 @@ internal fun MapNavigationManeuverPanelSection(
                 is NavigationPanelStopItem -> MapNavigationStopPanelRow(
                     modifier = Modifier.fillMaxWidth(),
                     item = item,
+                    timelineCongestionBands = item.timelineCongestionBands,
                     meterLabel = meterLabel,
                     kilometerLabel = kilometerLabel,
                     dayLabel = dayLabel,
@@ -202,6 +205,8 @@ private sealed interface NavigationPanelItem {
     val id: String
     val distanceMeters: Int
     val roadClass: RoadClass
+    val targetCumulativeMeters: Double
+    val timelineCongestionBands: ImmutableList<TimelineCongestionBand>
 }
 
 /**
@@ -212,6 +217,8 @@ private sealed interface NavigationPanelItem {
 @Immutable
 private data class NavigationPanelGuidanceItem(
     val guidanceItem: GuidanceListItem,
+    override val targetCumulativeMeters: Double,
+    override val timelineCongestionBands: ImmutableList<TimelineCongestionBand> = persistentListOf(),
 ) : NavigationPanelItem {
     override val id: String = guidanceItem.id
     override val distanceMeters: Int = guidanceItem.distanceMeters
@@ -238,6 +245,8 @@ private data class NavigationPanelStopItem(
     override val distanceMeters: Int,
     val etaEpochMillis: Long?,
     override val roadClass: RoadClass,
+    override val targetCumulativeMeters: Double,
+    override val timelineCongestionBands: ImmutableList<TimelineCongestionBand> = persistentListOf(),
 ) : NavigationPanelItem
 
 /**
@@ -266,14 +275,49 @@ private fun buildNavigationPanelItems(
 ): List<NavigationPanelItem> {
     val panelItems = mutableListOf<NavigationPanelItem>()
     for (listItem in listItems) {
-        panelItems += NavigationPanelGuidanceItem(guidanceItem = listItem)
+        panelItems += NavigationPanelGuidanceItem(
+            guidanceItem = listItem,
+            targetCumulativeMeters = currentCumulativeMeters + listItem.distanceMeters.toDouble(),
+        )
     }
     panelItems += buildNavigationStopPanelItems(
         route = route,
         currentCumulativeMeters = currentCumulativeMeters,
         timestampMillis = timestampMillis,
     )
-    return panelItems.sortedByDescending { item -> item.distanceMeters }
+    return panelItems
+        .sortedByDescending { item -> item.distanceMeters }
+        .withTimelineCongestionBands(
+            congestionSegments = route.congestionSegments,
+            currentCumulativeMeters = currentCumulativeMeters,
+        )
+}
+
+private fun List<NavigationPanelItem>.withTimelineCongestionBands(
+    congestionSegments: ImmutableList<CongestionSegment>,
+    currentCumulativeMeters: Double,
+): List<NavigationPanelItem> {
+    if (isEmpty() || congestionSegments.isEmpty()) return this
+
+    return mapIndexed { itemIndex, item ->
+        val nextTargetMeters = getOrNull(itemIndex + 1)?.targetCumulativeMeters ?: currentCumulativeMeters
+        val congestionBands = buildTimelineCongestionBands(
+            congestionSegments = congestionSegments,
+            rowStartMeters = item.targetCumulativeMeters,
+            rowEndMeters = nextTargetMeters,
+        )
+
+        item.withTimelineCongestionBands(congestionBands)
+    }
+}
+
+private fun NavigationPanelItem.withTimelineCongestionBands(
+    congestionBands: ImmutableList<TimelineCongestionBand>,
+): NavigationPanelItem {
+    return when (this) {
+        is NavigationPanelGuidanceItem -> copy(timelineCongestionBands = congestionBands)
+        is NavigationPanelStopItem -> copy(timelineCongestionBands = congestionBands)
+    }
 }
 
 private fun buildNavigationStopPanelItems(
@@ -367,6 +411,7 @@ private fun NavigationPanelStopCandidate.toNavigationPanelStopItem(
             timestampMillis = timestampMillis,
         ),
         roadClass = route.roadClassAt(pointIndex = targetIndex),
+        targetCumulativeMeters = targetMeters,
     )
 }
 
@@ -450,6 +495,7 @@ private fun RouteDetail.roadClassAt(pointIndex: Int): RoadClass {
 @Composable
 private fun MapNavigationGuidancePanelRow(
     item: GuidanceListItem,
+    timelineCongestionBands: ImmutableList<TimelineCongestionBand>,
     meterLabel: String,
     kilometerLabel: String,
     dayLabel: String,
@@ -538,12 +584,12 @@ private fun MapNavigationGuidancePanelRow(
                         .width(16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    VerticalDivider(
+                    MapNavigationTimelineTrack(
                         modifier = Modifier
                             .requiredHeight(GuidancePanelRowMinHeight + 6.dp)
                             .offset(y = 1.dp),
-                        color = timelineColor,
-                        thickness = 8.dp,
+                        baseColor = timelineColor,
+                        congestionBands = timelineCongestionBands,
                     )
                 }
 
@@ -605,6 +651,7 @@ private fun MapNavigationGuidancePanelRow(
 @Composable
 private fun MapNavigationStopPanelRow(
     item: NavigationPanelStopItem,
+    timelineCongestionBands: ImmutableList<TimelineCongestionBand>,
     meterLabel: String,
     kilometerLabel: String,
     dayLabel: String,
@@ -678,12 +725,12 @@ private fun MapNavigationStopPanelRow(
                         .width(16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    VerticalDivider(
+                    MapNavigationTimelineTrack(
                         modifier = Modifier
                             .requiredHeight(GuidancePanelRowMinHeight + 6.dp)
                             .offset(y = 1.dp),
-                        color = timelineColor,
-                        thickness = 8.dp,
+                        baseColor = timelineColor,
+                        congestionBands = timelineCongestionBands,
                     )
                 }
 
