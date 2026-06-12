@@ -7,12 +7,15 @@ import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.SetSerializer
 import kotlinx.serialization.builtins.serializer
@@ -45,24 +48,51 @@ class AppSettingDataSource(
         it.deserialize(formatter, AppSetting.serializer(), AppSetting.DEFAULT)
     }
 
+    private val initialLoad = CompletableDeferred<Unit>()
+
+    private val mutableSetting = MutableStateFlow(AppSetting.DEFAULT)
+
     // UI 購読の有無に依存せず、プロセス起動直後から DataStore の読み込みを始めて
     // 同期的な `.value` 参照が DEFAULT を見る時間を最小化する。
-    val setting = settingFlow.stateIn(
-        scope = applicationScope,
-        started = SharingStarted.Eagerly,
-        initialValue = AppSetting.DEFAULT,
-    )
+    val setting: StateFlow<AppSetting> = mutableSetting.asStateFlow()
+
+    init {
+        applicationScope.launch {
+            settingFlow.collect(::applyLoadedSetting)
+        }
+    }
 
     /**
      * DataStore から読み込み済みの設定値を返す。
      *
-     * [setting] の `value` は購読が始まるまで [AppSetting.DEFAULT] を保持し続けるため、
+     * [setting] の `value` は初回読了まで [AppSetting.DEFAULT] を保持し続けるため、
      * 購読の有無に依存せず永続値そのものが必要な箇所ではこちらを使う。
      *
      * @return DataStore に永続化されている [AppSetting]
      */
     suspend fun currentSetting(): AppSetting = withContext(ioDispatcher) {
         settingFlow.first()
+    }
+
+    /**
+     * 初回の DataStore 読了を待ち、読み込み済みの設定値を返す。
+     *
+     * [setting] への反映は [applyLoadedSetting] で読了確定より先に行われるため、この関数が返った後は
+     * [setting] の `value` が永続値を反映していることが保証される。同期的な `value` 参照しかできない
+     * 経路の前段 gate として使う。
+     *
+     * @return 初回読了を反映した [AppSetting]
+     */
+    suspend fun awaitInitialLoad(): AppSetting {
+        initialLoad.await()
+
+        return setting.value
+    }
+
+    /** DataStore から読んだ設定を [setting] へ反映し、その後に初回読了を確定する。 */
+    private fun applyLoadedSetting(loadedSetting: AppSetting) {
+        mutableSetting.value = loadedSetting
+        initialLoad.complete(Unit)
     }
 
     @OptIn(ExperimentalUuidApi::class)
