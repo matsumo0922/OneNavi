@@ -161,8 +161,17 @@ class AppSettingDataSource(
     }
 
     suspend fun setDeveloperFeatureEnabled(feature: DeveloperFeature, isEnabled: Boolean) = withContext(ioDispatcher) {
+        val developerModeKey = booleanPreferencesKey(AppSetting::developerMode.name)
         val preferenceKey = stringPreferencesKey(AppSetting::enabledDeveloperFeatures.name)
         preference.edit { preferences ->
+            val isDeveloperMode = preferences[developerModeKey] ?: AppSetting.DEFAULT.developerMode
+            if (!isDeveloperMode) {
+                if (preferences[preferenceKey] != null) {
+                    preferences[preferenceKey] = encodeEnabledDeveloperFeatures(emptySet())
+                }
+                return@edit
+            }
+
             val current = decodeEnabledDeveloperFeatures(preferences[preferenceKey])
             val updated = if (isEnabled) current + feature else current - feature
             if (current == updated) return@edit
