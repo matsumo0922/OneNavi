@@ -156,6 +156,7 @@ compose-navigation3-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lif
 
 # Android Auto
 androidx-car-app = { module = "androidx.car.app:app", version.ref = "androidxCarApp" }
+androidx-car-app-projected = { module = "androidx.car.app:app-projected", version.ref = "androidxCarApp" }
 
 # Purchase
 purchases-core = { module = "com.revenuecat.purchases:purchases-kmp-core", version.ref = "kmpPurchase" }
