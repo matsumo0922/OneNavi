@@ -12,8 +12,10 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
+import me.matsumo.onenavi.core.model.AppSetting
 import me.matsumo.onenavi.core.model.DeveloperFeature
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -46,6 +48,24 @@ class AppSettingDataSourceTest {
         val unlockedSetting = dataSource.currentSetting()
         assertFalse(unlockedSetting.isDeveloperFeatureEnabled(DeveloperFeature.FAKE_GPS))
         assertTrue(unlockedSetting.enabledDeveloperFeatures.isEmpty())
+    }
+
+    @Test
+    fun `tts override settings trim voice name and clamp speaking rate`() = runTest {
+        val dataSource = AppSettingDataSource(
+            preferenceHelper = InMemoryPreferenceHelper(),
+            formatter = Json,
+            ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+            applicationScope = backgroundScope,
+        )
+
+        dataSource.setTtsVoiceNameOverride(" ja-JP-Chirp3-HD-Kore ")
+        dataSource.setTtsSpeakingRateOverride(AppSetting.TTS_SPEAKING_RATE_OVERRIDE_MAX + 1.0)
+
+        val setting = dataSource.currentSetting()
+
+        assertEquals("ja-JP-Chirp3-HD-Kore", setting.ttsVoiceNameOverride)
+        assertEquals(AppSetting.TTS_SPEAKING_RATE_OVERRIDE_MAX, setting.ttsSpeakingRateOverride)
     }
 }
 

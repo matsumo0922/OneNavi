@@ -73,7 +73,7 @@ val navigationModule: Module = module {
                     directory = context.cacheDir.resolve(GoogleCloudTtsSynthesisConfig.CACHE_SCHEMA_VERSION),
                 ),
                 synthesisConfigProvider = {
-                    GoogleCloudTtsSynthesisConfig(volumeGainDb = appSettingRepository.setting.value.ttsVolumeGainDb)
+                    GoogleCloudTtsSynthesisConfig.fromAppSetting(appSettingRepository.setting.value)
                 },
                 apiKey = appConfig.googleCloudTtsApiKey,
             ),

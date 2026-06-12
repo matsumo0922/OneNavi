@@ -200,6 +200,27 @@ class AppSettingDataSource(
         }
     }
 
+    suspend fun setTtsVoiceNameOverride(ttsVoiceNameOverride: String) = withContext(ioDispatcher) {
+        val resolvedVoiceName = ttsVoiceNameOverride.trim()
+        if (currentSetting().ttsVoiceNameOverride == resolvedVoiceName) return@withContext
+
+        preference.edit {
+            it[stringPreferencesKey(AppSetting::ttsVoiceNameOverride.name)] = resolvedVoiceName
+        }
+    }
+
+    suspend fun setTtsSpeakingRateOverride(ttsSpeakingRateOverride: Double) = withContext(ioDispatcher) {
+        val resolvedSpeakingRate = ttsSpeakingRateOverride.coerceIn(
+            minimumValue = AppSetting.TTS_SPEAKING_RATE_OVERRIDE_MIN,
+            maximumValue = AppSetting.TTS_SPEAKING_RATE_OVERRIDE_MAX,
+        )
+        if (currentSetting().ttsSpeakingRateOverride == resolvedSpeakingRate) return@withContext
+
+        preference.edit {
+            it[doublePreferencesKey(AppSetting::ttsSpeakingRateOverride.name)] = resolvedSpeakingRate
+        }
+    }
+
     suspend fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) = withContext(ioDispatcher) {
         val preferenceKey = stringPreferencesKey(AppSetting::disabledGuidanceCategories.name)
         // edit ブロックは単一 writer で直列実行されるため、現在の永続値を読んで add/remove することで

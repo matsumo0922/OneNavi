@@ -3,6 +3,8 @@ package me.matsumo.onenavi.core.navigation.tts
 import androidx.compose.runtime.Immutable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import me.matsumo.onenavi.core.model.AppSetting
+import me.matsumo.onenavi.core.model.DeveloperFeature
 
 /**
  * Google Cloud TTS 合成設定。
@@ -88,7 +90,36 @@ internal data class GoogleCloudTtsSynthesisConfig(
 
         /** Google Cloud TTS が許容する最大音量ゲイン。 */
         const val MAX_VOLUME_GAIN_DB = 16.0
+
+        /**
+         * 現在のアプリ設定から合成設定を作る。
+         *
+         * voice 名と話速は開発者向け機能が有効な場合だけ上書きし、通常時の既定 voice は変更しない。
+         *
+         * @param setting アプリ設定
+         * @return 合成リクエストと cache key に使う TTS 設定
+         */
+        fun fromAppSetting(setting: AppSetting): GoogleCloudTtsSynthesisConfig {
+            if (!setting.isDeveloperFeatureEnabled(DeveloperFeature.TTS_VOICE_OVERRIDE)) {
+                return GoogleCloudTtsSynthesisConfig(volumeGainDb = setting.ttsVolumeGainDb)
+            }
+
+            return GoogleCloudTtsSynthesisConfig(
+                voiceName = setting.resolvedTtsVoiceNameOverride(),
+                speakingRate = setting.ttsSpeakingRateOverride.coerceIn(
+                    minimumValue = AppSetting.TTS_SPEAKING_RATE_OVERRIDE_MIN,
+                    maximumValue = AppSetting.TTS_SPEAKING_RATE_OVERRIDE_MAX,
+                ),
+                volumeGainDb = setting.ttsVolumeGainDb,
+            )
+        }
     }
+}
+
+private fun AppSetting.resolvedTtsVoiceNameOverride(): String {
+    val resolvedVoiceName = ttsVoiceNameOverride.trim()
+
+    return resolvedVoiceName.ifBlank { GoogleCloudTtsSynthesisConfig.DEFAULT_VOICE_NAME }
 }
 
 /**

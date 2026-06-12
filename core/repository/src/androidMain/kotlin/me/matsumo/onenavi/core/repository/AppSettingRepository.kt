@@ -38,6 +38,12 @@ class AppSettingRepository(
 
     suspend fun setTtsVolumeGainDb(ttsVolumeGainDb: Double) = dataSource.setTtsVolumeGainDb(ttsVolumeGainDb)
 
+    suspend fun setTtsVoiceNameOverride(ttsVoiceNameOverride: String) =
+        dataSource.setTtsVoiceNameOverride(ttsVoiceNameOverride)
+
+    suspend fun setTtsSpeakingRateOverride(ttsSpeakingRateOverride: Double) =
+        dataSource.setTtsSpeakingRateOverride(ttsSpeakingRateOverride)
+
     suspend fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) =
         dataSource.setGuidanceCategoryEnabled(categoryKey, isEnabled)
 }
