@@ -13,6 +13,7 @@ import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.setting_other
 import me.matsumo.onenavi.core.resource.setting_other_developer_mode
 import me.matsumo.onenavi.core.resource.setting_other_developer_mode_description
+import me.matsumo.onenavi.core.resource.setting_other_developer_options_description
 import me.matsumo.onenavi.core.resource.setting_other_open_source_license
 import me.matsumo.onenavi.core.resource.setting_other_open_source_license_description
 import me.matsumo.onenavi.core.resource.setting_other_privacy_policy
@@ -29,6 +30,7 @@ internal fun SettingOthersSection(
     onTeamsOfServiceClicked: () -> Unit,
     onPrivacyPolicyClicked: () -> Unit,
     onOpenSourceLicenseClicked: () -> Unit,
+    onDeveloperOptionsClicked: () -> Unit,
     onDeveloperModeChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -59,19 +61,26 @@ internal fun SettingOthersSection(
             onClick = { onOpenSourceLicenseClicked.invoke() },
         )
 
-        SettingSwitchItem(
-            modifier = Modifier.fillMaxWidth(),
-            title = Res.string.setting_other_developer_mode,
-            description = Res.string.setting_other_developer_mode_description,
-            value = setting.developerMode,
-            onValueChanged = {
-                if (it) {
-                    isShowDeveloperModeDialog = true
-                } else {
-                    onDeveloperModeChanged.invoke(false)
-                }
-            },
-        )
+        if (setting.developerMode) {
+            SettingTextItem(
+                modifier = Modifier.fillMaxWidth(),
+                title = Res.string.setting_other_developer_mode,
+                description = Res.string.setting_other_developer_options_description,
+                onClick = { onDeveloperOptionsClicked.invoke() },
+            )
+        } else {
+            SettingSwitchItem(
+                modifier = Modifier.fillMaxWidth(),
+                title = Res.string.setting_other_developer_mode,
+                description = Res.string.setting_other_developer_mode_description,
+                value = false,
+                onValueChanged = { isEnabled ->
+                    if (isEnabled) {
+                        isShowDeveloperModeDialog = true
+                    }
+                },
+            )
+        }
     }
 
     if (isShowDeveloperModeDialog) {

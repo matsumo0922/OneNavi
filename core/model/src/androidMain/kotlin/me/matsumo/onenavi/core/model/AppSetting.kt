@@ -12,7 +12,8 @@ import me.matsumo.onenavi.core.common.serializer.ColorSerializer
  * @property useDynamicColor Dynamic Color を利用するか
  * @property seedColor アプリテーマの基準色
  * @property plusMode Plus 機能が有効か
- * @property developerMode 開発者向け機能が有効か
+ * @property developerMode 開発者向けオプションが解放されているか
+ * @property enabledDeveloperFeatures 有効化されている開発者向け機能
  * @property useMediaAudioChannelOnCar Android Auto で音声案内をメディア音量として再生するか
  * @property ttsVolumeGainDb Google Cloud TTS に渡す音量ゲイン。0dB が標準、正の値で増幅する。
  * @property disabledGuidanceCategories 発話を OFF にした案内カテゴリの識別子集合
@@ -27,6 +28,7 @@ data class AppSetting(
     val seedColor: Color,
     val plusMode: Boolean,
     val developerMode: Boolean,
+    val enabledDeveloperFeatures: Set<DeveloperFeature>,
     val useMediaAudioChannelOnCar: Boolean,
     /** Google Cloud TTS に渡す音量ゲイン。0dB が標準、正の値で増幅する。 */
     val ttsVolumeGainDb: Double,
@@ -34,7 +36,13 @@ data class AppSetting(
     val disabledGuidanceCategories: Set<String>,
     val extNavDeviceUuid: String,
 ) {
-    val hasPrivilege get() = plusMode || developerMode
+    val hasPrivilege get() = plusMode || isDeveloperFeatureEnabled(DeveloperFeature.FORCE_PLUS_PRIVILEGE)
+
+    fun isDeveloperFeatureEnabled(feature: DeveloperFeature): Boolean {
+        if (!developerMode) return false
+
+        return feature in enabledDeveloperFeatures
+    }
 
     /** アプリ設定の既定値と UI 制約値。 */
     companion object {
@@ -58,6 +66,7 @@ data class AppSetting(
             seedColor = Color(0xFF7FD0FF),
             plusMode = false,
             developerMode = false,
+            enabledDeveloperFeatures = emptySet(),
             useMediaAudioChannelOnCar = false,
             ttsVolumeGainDb = TTS_VOLUME_GAIN_DB_DEFAULT,
             // 走行に必須でない既定 OFF カテゴリ。VoiceAnnouncementCategoryGate.OneNaviDefault と揃えること。

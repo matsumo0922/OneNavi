@@ -153,8 +153,9 @@
     <string name="setting_other_privacy_policy">プライバシーポリシー</string>
     <string name="setting_other_open_source_license">オープンソースライセンス</string>
     <string name="setting_other_open_source_license_description">OSSライブラリのライセンスを表示します。</string>
-    <string name="setting_other_developer_mode">開発モード</string>
-    <string name="setting_other_developer_mode_description">[Warning] Do not enable this mode if you are not a developer.</string>
+    <string name="setting_other_developer_mode">開発者向けオプション</string>
+    <string name="setting_other_developer_mode_description">PIN を入力すると開発者向けオプションを開けます。機能は専用画面で個別に有効化します。</string>
+    <string name="setting_other_developer_options_description">機能ごとの開発者向けトグルを設定します。</string>
     <string name="setting_other_developer_mode_dialog_title">Developer Mode</string>
     <string name="setting_other_developer_mode_dialog_description">You are trying to turn on this mode. Please enter the developer\'s PIN.\n\n[Warning] When this mode is turned on, you will not be able to receive any support.</string>
     <string name="setting_other_developer_mode_pin_label">PIN</string>
@@ -210,6 +211,27 @@
     <string name="setting_voice_category_pedestrian_crossing">横断歩道や歩行者の多い場所で注意を促します。</string>
     <string name="setting_voice_category_jam_scale_trend">「渋滞が伸びています」など、渋滞の変化をお知らせします。</string>
     <string name="setting_voice_category_uphill_lane">登坂車線があるときにお知らせします。</string>
+
+    <!-- Setting Developer Options -->
+    <string name="setting_developer_options_title">開発者向けオプション</string>
+    <string name="setting_developer_options_master">開発者向けオプション</string>
+    <string name="setting_developer_options_master_description">OFF にすると、すべての開発者向け機能も OFF に戻ります。</string>
+    <string name="setting_developer_options_section_access">権限と表示</string>
+    <string name="setting_developer_options_section_location">位置情報</string>
+    <string name="setting_developer_options_section_map">地図</string>
+    <string name="setting_developer_options_section_android_auto">Android Auto</string>
+    <string name="setting_developer_options_force_plus_privilege">Plus 権限を強制付与</string>
+    <string name="setting_developer_options_force_plus_privilege_description">課金状態に関係なく Plus 相当として扱います。</string>
+    <string name="setting_developer_options_show_paywall_section">Paywall セクションを表示</string>
+    <string name="setting_developer_options_show_paywall_section_description">Plus 加入済みでも設定画面に Paywall を表示します。</string>
+    <string name="setting_developer_options_show_developer_badge">バージョンに Dev バッジを表示</string>
+    <string name="setting_developer_options_show_developer_badge_description">アプリバージョン表記に開発者向けバッジを追加します。</string>
+    <string name="setting_developer_options_fake_gps">Fake GPS</string>
+    <string name="setting_developer_options_fake_gps_description">すべての現在地取得が東京駅付近の固定位置になります。実走行では絶対に有効化しないでください。</string>
+    <string name="setting_developer_options_map_diagnostics">地図診断を有効化</string>
+    <string name="setting_developer_options_map_diagnostics_description">地図の描画密度ログと viewport 診断ログを出力します。</string>
+    <string name="setting_developer_options_car_vd_debug_overlay">AA VD デバッグオーバーレイ</string>
+    <string name="setting_developer_options_car_vd_debug_overlay_description">Android Auto Virtual Display の viewport、タッチ座標、診断パネルを表示します。</string>
 
     <!-- Setting Paywall -->
     <string name="setting_paywall_title">Pro</string>

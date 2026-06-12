@@ -47,6 +47,7 @@ import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommand
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommandEnvelope
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
+import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.ui.screen.Destination
@@ -125,7 +126,7 @@ fun MapScreen(
     val displaySurface = LocalOneNaviDisplaySurface.current
     val navBackStack = LocalNavBackStack.current
     val isMapDarkMode = shouldUseDarkTheme(appSetting.theme)
-    val shouldLogMapDiagnostics = appSetting.developerMode
+    val shouldLogMapDiagnostics = appSetting.isDeveloperFeatureEnabled(DeveloperFeature.MAP_DIAGNOSTICS)
     val isNavigating = screenState is MapScreenState.Navigating
     val isAndroidAutoVirtualDisplay = displaySurface == OneNaviDisplaySurface.AndroidAutoVirtualDisplay
     val isPhoneDisplaySurface = displaySurface == OneNaviDisplaySurface.Phone

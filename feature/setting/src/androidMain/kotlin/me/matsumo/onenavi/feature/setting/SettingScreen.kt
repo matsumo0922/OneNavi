@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.ui.screen.Destination
 import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
 import me.matsumo.onenavi.feature.setting.components.SettingTopAppBar
@@ -41,7 +42,7 @@ internal fun SettingScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = it,
         ) {
-            if (!setting.plusMode || setting.developerMode) {
+            if (!setting.hasPrivilege || setting.isDeveloperFeatureEnabled(DeveloperFeature.SHOW_PAYWALL_SECTION)) {
                 item {
                     SettingPaywallSection(
                         modifier = Modifier.fillMaxWidth(),
@@ -89,6 +90,9 @@ internal fun SettingScreen(
                     },
                     onOpenSourceLicenseClicked = {
                         navBackStack.add(Destination.Setting.License)
+                    },
+                    onDeveloperOptionsClicked = {
+                        navBackStack.add(Destination.Setting.DeveloperOptions)
                     },
                     onDeveloperModeChanged = viewModel::setDeveloperMode,
                 )

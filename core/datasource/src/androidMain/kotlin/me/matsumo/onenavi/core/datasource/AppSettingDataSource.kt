@@ -23,6 +23,7 @@ import kotlinx.serialization.json.Json
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
 import me.matsumo.onenavi.core.datasource.helper.deserialize
 import me.matsumo.onenavi.core.model.AppSetting
+import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.model.Theme
 import java.security.SecureRandom
 import kotlin.uuid.ExperimentalUuidApi
@@ -147,10 +148,26 @@ class AppSettingDataSource(
     }
 
     suspend fun setDeveloperMode(developerMode: Boolean) = withContext(ioDispatcher) {
-        if (currentSetting().developerMode == developerMode) return@withContext
+        val current = currentSetting()
+        val shouldClearDeveloperFeatures = !developerMode && current.enabledDeveloperFeatures.isNotEmpty()
+        if (current.developerMode == developerMode && !shouldClearDeveloperFeatures) return@withContext
 
         preference.edit {
             it[booleanPreferencesKey(AppSetting::developerMode.name)] = developerMode
+            if (!developerMode) {
+                it[stringPreferencesKey(AppSetting::enabledDeveloperFeatures.name)] = encodeEnabledDeveloperFeatures(emptySet())
+            }
+        }
+    }
+
+    suspend fun setDeveloperFeatureEnabled(feature: DeveloperFeature, isEnabled: Boolean) = withContext(ioDispatcher) {
+        val preferenceKey = stringPreferencesKey(AppSetting::enabledDeveloperFeatures.name)
+        preference.edit { preferences ->
+            val current = decodeEnabledDeveloperFeatures(preferences[preferenceKey])
+            val updated = if (isEnabled) current + feature else current - feature
+            if (current == updated) return@edit
+
+            preferences[preferenceKey] = encodeEnabledDeveloperFeatures(updated)
         }
     }
 
@@ -191,6 +208,19 @@ class AppSettingDataSource(
         return runCatching {
             formatter.decodeFromString(SetSerializer(String.serializer()), encoded)
         }.getOrDefault(AppSetting.DEFAULT.disabledGuidanceCategories)
+    }
+
+    /** 永続化された開発者向け機能集合をデコードする。未保存・破損時は既定値にフォールバックする。 */
+    private fun decodeEnabledDeveloperFeatures(encoded: String?): Set<DeveloperFeature> {
+        if (encoded == null) return AppSetting.DEFAULT.enabledDeveloperFeatures
+
+        return runCatching {
+            formatter.decodeFromString(SetSerializer(DeveloperFeature.serializer()), encoded)
+        }.getOrDefault(AppSetting.DEFAULT.enabledDeveloperFeatures)
+    }
+
+    private fun encodeEnabledDeveloperFeatures(features: Set<DeveloperFeature>): String {
+        return formatter.encodeToString(SetSerializer(DeveloperFeature.serializer()), features)
     }
 
     suspend fun getOrCreateExtNavDeviceUuid(): String = withContext(ioDispatcher) {

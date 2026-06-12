@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import me.matsumo.onenavi.core.model.AppSetting
+import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.setting_information
 import me.matsumo.onenavi.core.resource.setting_information_app_id
@@ -23,11 +24,12 @@ internal fun SettingInfoSection(
 ) {
     val appConfig = LocalAppConfig.current
     val clipboardManager = LocalClipboardManager.current
+    val shouldShowDeveloperBadge = setting.isDeveloperFeatureEnabled(DeveloperFeature.SHOW_DEVELOPER_BADGE)
 
     val appVersion = "${appConfig.versionName}:${appConfig.versionCode} " + when {
-        setting.plusMode && setting.developerMode -> "[P+D]"
+        setting.plusMode && shouldShowDeveloperBadge -> "[P+D]"
         setting.plusMode -> "[Plus]"
-        setting.developerMode -> "[Dev]"
+        shouldShowDeveloperBadge -> "[Dev]"
         else -> ""
     }
 

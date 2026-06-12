@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.flow.StateFlow
 import me.matsumo.onenavi.core.datasource.AppSettingDataSource
 import me.matsumo.onenavi.core.model.AppSetting
+import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.model.Theme
 
 class AppSettingRepository(
@@ -28,6 +29,9 @@ class AppSettingRepository(
     suspend fun setPlusMode(plusMode: Boolean) = dataSource.setPlusMode(plusMode)
 
     suspend fun setDeveloperMode(developerMode: Boolean) = dataSource.setDeveloperMode(developerMode)
+
+    suspend fun setDeveloperFeatureEnabled(feature: DeveloperFeature, isEnabled: Boolean) =
+        dataSource.setDeveloperFeatureEnabled(feature, isEnabled)
 
     suspend fun setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar: Boolean) =
         dataSource.setUseMediaAudioChannelOnCar(useMediaAudioChannelOnCar)
