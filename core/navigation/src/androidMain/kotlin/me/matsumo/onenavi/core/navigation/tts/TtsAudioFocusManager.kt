@@ -8,40 +8,75 @@ import android.media.AudioManager
 /**
  * 発話中だけ他アプリの音声を一時的に下げる (duck) ための AudioFocus ラッパー。
  *
- * [request] と [abandon] は 1:1 で対になるよう呼び出し側 (dispatcher の try/finally) が保証する。
- * scheduler 側がキューを持つため本実装は発話ごとに request/abandon する。連続発話で duck が
- * 往復するのが問題になれば、将来 focus を握り続ける最適化を検討する。
+ * scheduler 側がキューを持つため本実装は発話ごとに request/abandon する。割り込み発話では
+ * 後続発話の focus を先行発話の finally が解放しないよう、世代トークンで要求元を照合する。
  */
 internal class TtsAudioFocusManager(
     context: Context,
 ) {
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val focusLock = Any()
+    private val generation = TtsAudioFocusGeneration()
     private var focusRequest: AudioFocusRequest? = null
 
     /**
      * AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK で focus を要求する。
      *
      * @param channel 発話に使う音声チャンネル。focus 要求の usage も揃えて他アプリを duck させる。
+     * @return [abandon] で要求元を照合する世代トークン
      */
-    fun request(channel: NavigationAudioChannel) {
+    fun request(channel: NavigationAudioChannel): Int {
+        val newRequest = buildFocusRequest(channel)
+
+        return synchronized(focusLock) {
+            val focusToken = generation.issueToken()
+            focusRequest = newRequest
+            runCatching { audioManager.requestAudioFocus(newRequest) }
+
+            focusToken
+        }
+    }
+
+    /** [request] が返した [focusToken] が現役世代の場合だけ focus を解放する。 */
+    fun abandon(focusToken: Int) {
+        synchronized(focusLock) {
+            if (!generation.ownsFocus(focusToken)) return
+
+            val currentRequest = focusRequest ?: return
+            runCatching { audioManager.abandonAudioFocusRequest(currentRequest) }
+            focusRequest = null
+        }
+    }
+
+    private fun buildFocusRequest(channel: NavigationAudioChannel): AudioFocusRequest {
         val attributes = AudioAttributes.Builder()
             .setUsage(channel.usage)
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
             .build()
 
-        val newRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+        return AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
             .setAudioAttributes(attributes)
             .build()
+    }
+}
 
-        focusRequest = newRequest
-        runCatching { audioManager.requestAudioFocus(newRequest) }
+/**
+ * AudioFocus 要求の世代トークンを採番し、現役世代かどうかを判定する状態ホルダー。
+ */
+internal class TtsAudioFocusGeneration {
+
+    private var currentToken = 0
+
+    /** 新しい AudioFocus 要求に対応する世代トークンを発行する。 */
+    fun issueToken(): Int {
+        currentToken += 1
+
+        return currentToken
     }
 
-    /** 取得済みの focus を解放する。未取得なら何もしない。 */
-    fun abandon() {
-        val currentRequest = focusRequest ?: return
-        runCatching { audioManager.abandonAudioFocusRequest(currentRequest) }
-        focusRequest = null
+    /** [focusToken] が最新の AudioFocus 要求に対応している場合に true を返す。 */
+    fun ownsFocus(focusToken: Int): Boolean {
+        return focusToken == currentToken
     }
 }
