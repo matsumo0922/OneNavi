@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.core.navigation.tts
 
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContent
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispatcher
 
@@ -44,6 +45,9 @@ internal class GoogleCloudTtsVoiceAnnouncementDispatcher(
     override fun prefetch(content: VoiceAnnouncementContent) {
         synthesizer.prefetch(content.ssml)
     }
+
+    override fun debugFetchState(content: VoiceAnnouncementContent): VoiceAnnouncementDebugFetchState =
+        synthesizer.debugFetchState(content.ssml)
 
     override fun clearPrefetch() {
         synthesizer.clearPrefetch()

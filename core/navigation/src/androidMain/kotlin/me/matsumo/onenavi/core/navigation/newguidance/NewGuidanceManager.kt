@@ -36,6 +36,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
 import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementController
 import me.matsumo.onenavi.core.repository.RouteRepository
 
@@ -60,6 +61,7 @@ class NewGuidanceManager internal constructor(
 
     private val _state = MutableStateFlow<GuidanceState>(GuidanceState.Idle)
     private val _events = MutableSharedFlow<GuidanceEvent>(extraBufferCapacity = EVENT_BUFFER_CAPACITY)
+    private val fallbackVoiceDebugSnapshot = MutableStateFlow<VoiceAnnouncementDebugSnapshot?>(null)
 
     private var sessionJobs: List<Job> = emptyList()
     private var nextSessionId: Long = FIRST_SESSION_ID
@@ -77,6 +79,10 @@ class NewGuidanceManager internal constructor(
 
     /** Guidance 期の一度きりのイベント。 */
     val events: SharedFlow<GuidanceEvent> = _events.asSharedFlow()
+
+    /** TTS 発話予定のデバッグスナップショット。 */
+    val voiceDebugSnapshot: StateFlow<VoiceAnnouncementDebugSnapshot?> =
+        voiceController?.debugSnapshot ?: fallbackVoiceDebugSnapshot.asStateFlow()
 
     /**
      * 指定ルートで案内を開始する。

@@ -37,6 +37,8 @@ import me.matsumo.onenavi.core.resource.setting_developer_options_show_developer
 import me.matsumo.onenavi.core.resource.setting_developer_options_show_paywall_section
 import me.matsumo.onenavi.core.resource.setting_developer_options_show_paywall_section_description
 import me.matsumo.onenavi.core.resource.setting_developer_options_title
+import me.matsumo.onenavi.core.resource.setting_developer_options_tts_schedule_debug_card
+import me.matsumo.onenavi.core.resource.setting_developer_options_tts_schedule_debug_card_description
 import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
 import me.matsumo.onenavi.feature.setting.components.SettingSwitchItem
 import me.matsumo.onenavi.feature.setting.components.SettingTitleItem
@@ -135,6 +137,7 @@ private val DeveloperFeature.sectionTitle: StringResource
         DeveloperFeature.FAKE_GPS -> Res.string.setting_developer_options_section_location
         DeveloperFeature.MAP_DIAGNOSTICS -> Res.string.setting_developer_options_section_map
         DeveloperFeature.CAR_VD_DEBUG_OVERLAY -> Res.string.setting_developer_options_section_android_auto
+        DeveloperFeature.TTS_SCHEDULE_DEBUG_CARD -> Res.string.setting_developer_options_section_android_auto
     }
 
 private val DeveloperFeature.title: StringResource
@@ -145,6 +148,7 @@ private val DeveloperFeature.title: StringResource
         DeveloperFeature.FAKE_GPS -> Res.string.setting_developer_options_fake_gps
         DeveloperFeature.MAP_DIAGNOSTICS -> Res.string.setting_developer_options_map_diagnostics
         DeveloperFeature.CAR_VD_DEBUG_OVERLAY -> Res.string.setting_developer_options_car_vd_debug_overlay
+        DeveloperFeature.TTS_SCHEDULE_DEBUG_CARD -> Res.string.setting_developer_options_tts_schedule_debug_card
     }
 
 private val DeveloperFeature.description: StringResource
@@ -155,4 +159,5 @@ private val DeveloperFeature.description: StringResource
         DeveloperFeature.FAKE_GPS -> Res.string.setting_developer_options_fake_gps_description
         DeveloperFeature.MAP_DIAGNOSTICS -> Res.string.setting_developer_options_map_diagnostics_description
         DeveloperFeature.CAR_VD_DEBUG_OVERLAY -> Res.string.setting_developer_options_car_vd_debug_overlay_description
+        DeveloperFeature.TTS_SCHEDULE_DEBUG_CARD -> Res.string.setting_developer_options_tts_schedule_debug_card_description
     }

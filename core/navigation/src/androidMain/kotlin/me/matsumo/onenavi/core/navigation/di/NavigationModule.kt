@@ -120,12 +120,18 @@ val navigationModule: Module = module {
     }
     single { VoiceTickFactory() }
     single {
+        val appSettingRepository = get<AppSettingRepository>()
         VoiceAnnouncementController(
             planBuilder = get(),
             tickFactory = get(),
             speechRunner = get(),
             prefetcher = get(),
             config = get(),
+            isDebugSnapshotEnabled = {
+                appSettingRepository.setting.value.isDeveloperFeatureEnabled(
+                    me.matsumo.onenavi.core.model.DeveloperFeature.TTS_SCHEDULE_DEBUG_CARD,
+                )
+            },
         )
     }
     single {

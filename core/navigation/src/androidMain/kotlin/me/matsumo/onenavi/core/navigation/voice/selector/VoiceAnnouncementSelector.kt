@@ -10,6 +10,19 @@ import me.matsumo.onenavi.core.navigation.voice.suppression.VoiceAnnouncementSpe
 import kotlin.math.max
 
 /**
+ * デバッグ表示用に、今後選抜されうる発話段とその補助情報をまとめた候補。
+ *
+ * @property selection 既存 selector ロジックで選抜した発話段
+ * @property remainingMeters 発話境界までの残距離
+ * @property isRouteOrderBlocked route 順ゲートで現時点は抑止されているか
+ */
+internal data class VoiceAnnouncementPreviewSelection(
+    val selection: VoiceAnnouncementSelection,
+    val remainingMeters: Double,
+    val isRouteOrderBlocked: Boolean,
+)
+
+/**
  * 発話プランと現 tick・既発話状態から、その tick で発話すべき最も緊急な距離段を 1 件選ぶ。
  *
  * 位置に対する純粋な判定器で、状態は引数の [VoiceAnnouncementSpeechState] にのみ依存する。
@@ -52,6 +65,51 @@ internal class VoiceAnnouncementSelector(
         }
 
         return best
+    }
+
+    /**
+     * デバッグ表示向けに、今後選抜されうる発話段を route 順に返す。
+     *
+     * 各 target について次に発話可能になる境界 tick を仮想的に作り、実発話と同じ [selectStageForTarget] に通す。
+     * これにより MIDDLE の距離窓、FINAL の速度リード、グループ消費、汎用回避は本番選抜と共有される。
+     *
+     * @param plan 発話プラン
+     * @param tick 現在の発話判定用 tick
+     * @param state 既発話・通過済み状態
+     * @param limit 返す候補数の上限
+     * @return 現在地から近い順の発話予定
+     */
+    fun previewUpcoming(
+        plan: VoiceAnnouncementPlan,
+        tick: VoiceTick,
+        state: VoiceAnnouncementSpeechState,
+        limit: Int,
+    ): List<VoiceAnnouncementPreviewSelection> {
+        if (!tick.isRouteUsable) return emptyList()
+        if (limit <= 0) return emptyList()
+
+        val result = mutableListOf<VoiceAnnouncementPreviewSelection>()
+
+        for (targetIndex in plan.targets.indices) {
+            val target = plan.targets[targetIndex]
+
+            if (state.isTargetPassed(targetIndex)) continue
+            if (!isTargetAhead(target, tick)) continue
+
+            val isRouteOrderBlocked = !areEarlierTargetsAnnounced(plan, targetIndex, state)
+            val previewSelection = previewSelectionForTarget(
+                targetIndex = targetIndex,
+                target = target,
+                tick = tick,
+                state = state,
+                isRouteOrderBlocked = isRouteOrderBlocked,
+            )
+
+            if (previewSelection != null) result += previewSelection
+            if (result.size >= limit) return result
+        }
+
+        return result
     }
 
     /**
@@ -152,6 +210,87 @@ internal class VoiceAnnouncementSelector(
         }
 
         return best
+    }
+
+    /**
+     * 指定 target の次の発話予定を返す。route 順ゲートは候補自体を消さず、状態だけ [isRouteOrderBlocked] に載せる。
+     */
+    private fun previewSelectionForTarget(
+        targetIndex: Int,
+        target: AnnouncementTarget,
+        tick: VoiceTick,
+        state: VoiceAnnouncementSpeechState,
+        isRouteOrderBlocked: Boolean,
+    ): VoiceAnnouncementPreviewSelection? {
+        val previewBoundaries = previewBoundariesForTarget(target, tick)
+
+        for (previewBoundary in previewBoundaries) {
+            val previewTick = tick.copy(currentCumulativeMeters = previewBoundary)
+            val selection = selectStageForTarget(
+                targetIndex = targetIndex,
+                target = target,
+                tick = previewTick,
+                state = state,
+            ) ?: continue
+            val remainingMeters = (previewBoundary - tick.currentCumulativeMeters).coerceAtLeast(0.0)
+
+            return VoiceAnnouncementPreviewSelection(
+                selection = selection,
+                remainingMeters = remainingMeters,
+                isRouteOrderBlocked = isRouteOrderBlocked,
+            )
+        }
+
+        return null
+    }
+
+    /** 指定 target の候補 stage が発話可能になる未来境界を近い順に返す。 */
+    private fun previewBoundariesForTarget(
+        target: AnnouncementTarget,
+        tick: VoiceTick,
+    ): List<Double> {
+        val boundaries = mutableSetOf<Double>()
+
+        for (stage in target.stages) {
+            val boundary = previewBoundaryForStage(
+                stage = stage,
+                target = target,
+                tick = tick,
+            ) ?: continue
+
+            boundaries += boundary
+        }
+
+        return boundaries.sorted()
+    }
+
+    /** stage 種別ごとに、現 tick から次に発話可能になる geometry 累積距離を返す。 */
+    private fun previewBoundaryForStage(
+        stage: AnnouncementStage,
+        target: AnnouncementTarget,
+        tick: VoiceTick,
+    ): Double? {
+        return when (stage.kind) {
+            AnnouncementStageKind.MIDDLE -> middlePreviewBoundary(stage, tick)
+            AnnouncementStageKind.FINAL -> finalPreviewBoundary(target, tick)
+        }
+    }
+
+    /** MIDDLE が窓に入る境界を返す。すでに窓内なら現在地、窓を過ぎていれば null。 */
+    private fun middlePreviewBoundary(stage: AnnouncementStage, tick: VoiceTick): Double? {
+        val window = stage.middleWindow ?: return null
+        if (tick.currentCumulativeMeters >= window.exitGeometryMeters) return null
+        if (tick.currentCumulativeMeters >= window.enterGeometryMeters) return tick.currentCumulativeMeters
+
+        return window.enterGeometryMeters
+    }
+
+    /** FINAL が到達リードタイムに達する境界を返す。すでに境界内なら現在地。 */
+    private fun finalPreviewBoundary(target: AnnouncementTarget, tick: VoiceTick): Double {
+        val leadDistanceMeters = finalLeadDistanceMeters(tick.speedMetersPerSecond)
+        val fireBoundaryMeters = target.geometryMeters - leadDistanceMeters
+
+        return fireBoundaryMeters.coerceAtLeast(tick.currentCumulativeMeters)
     }
 
     /** target の段のうち、現 tick で発話可能 (未処理かつ [isStageSpeakable]) な段を返す。 */

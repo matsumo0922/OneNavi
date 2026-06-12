@@ -364,6 +364,65 @@ class VoiceAnnouncementSchedulerTest {
         assertNull(command)
     }
 
+    @Test
+    fun `debug snapshot は直近5件の発話予定と fetch 状態を返す`() {
+        val scheduler = schedulerOf()
+        scheduler.attach(
+            planOf(
+                targetOf(index = 0, geometryMeters = 1_000.0, middleStageWindowed("first", enter = 500.0, exit = 700.0)),
+                targetOf(index = 1, geometryMeters = 1_500.0, middleStageWindowed("second", enter = 900.0, exit = 1_100.0)),
+                targetOf(index = 2, geometryMeters = 2_000.0, finalStage("third")),
+                targetOf(index = 3, geometryMeters = 2_500.0, middleStageWindowed("fourth", enter = 1_900.0, exit = 2_100.0)),
+                targetOf(index = 4, geometryMeters = 3_000.0, middleStageWindowed("fifth", enter = 2_400.0, exit = 2_600.0)),
+                targetOf(index = 5, geometryMeters = 3_500.0, middleStageWindowed("sixth", enter = 2_900.0, exit = 3_100.0)),
+            ),
+        )
+        scheduler.onTick(tickOf(current = 300.0, speed = null))
+
+        val snapshot = scheduler.debugSnapshot {
+            me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState.CACHED
+        }
+        val items = requireNotNull(snapshot).upcomingAnnouncements
+
+        assertEquals(5, items.size)
+        assertEquals("first", items[0].stageId)
+        assertEquals(200.0, items[0].remainingMeters)
+        assertEquals(
+            me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugStageKind.MIDDLE,
+            items[0].stageKind,
+        )
+        assertEquals(
+            me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState.CACHED,
+            items[0].fetchState,
+        )
+        kotlin.test.assertFalse(items[0].isRouteOrderBlocked)
+        kotlin.test.assertTrue(items[1].isRouteOrderBlocked)
+        assertEquals("fifth", items[4].stageId)
+    }
+
+    @Test
+    fun `debug snapshot は FINAL の発話境界までの残距離を速度から逆算する`() {
+        val scheduler = schedulerOf()
+        scheduler.attach(planOf(targetOf(index = 0, geometryMeters = 1_000.0, finalStage("final"))))
+        scheduler.onTick(tickOf(current = 700.0, speed = 20.0))
+
+        val snapshot = scheduler.debugSnapshot {
+            me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState.NOT_REQUESTED
+        }
+        val item = requireNotNull(snapshot).upcomingAnnouncements.single()
+
+        assertEquals("final", item.stageId)
+        assertEquals(200.0, item.remainingMeters)
+        assertEquals(
+            me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugStageKind.FINAL,
+            item.stageKind,
+        )
+        assertEquals(
+            me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState.NOT_REQUESTED,
+            item.fetchState,
+        )
+    }
+
     private fun schedulerOf(
         gate: VoiceAnnouncementCategoryGate = VoiceAnnouncementCategoryGate.AllOn,
     ): VoiceAnnouncementScheduler = VoiceAnnouncementScheduler(
@@ -455,7 +514,7 @@ class VoiceAnnouncementSchedulerTest {
         pieces = persistentListOf(
             GuideAnnouncementPiece(text = text, ssml = null, templateRef = null, category = category),
         ),
-        categories = persistentSetOf(),
+        categories = persistentSetOf(category),
     )
 
     private fun tickOf(

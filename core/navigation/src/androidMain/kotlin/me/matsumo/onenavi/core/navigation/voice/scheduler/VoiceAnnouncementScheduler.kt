@@ -1,12 +1,18 @@
 package me.matsumo.onenavi.core.navigation.voice.scheduler
 
 import io.github.aakira.napier.Napier
+import kotlinx.collections.immutable.toImmutableList
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugItem
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugStageKind
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContent
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementRequest
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlan
+import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementPreviewSelection
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelection
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelector
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementUrgency
@@ -113,6 +119,59 @@ internal class VoiceAnnouncementScheduler(
      */
     fun onMilestoneInterrupted() {
         state = state.withSpeakingCleared()
+    }
+
+    /**
+     * デバッグ表示用に直近の発話予定を返す。
+     *
+     * @param fetchStateProvider render 済み発話内容に対する TTS 取得状態の読み取り関数
+     * @return 現在の発話予定。プランまたは tick が無い場合は null
+     */
+    fun debugSnapshot(
+        fetchStateProvider: (VoiceAnnouncementContent) -> VoiceAnnouncementDebugFetchState,
+    ): VoiceAnnouncementDebugSnapshot? {
+        val currentPlan = plan ?: return null
+        val tick = latestTick ?: return null
+        val previews = selector.previewUpcoming(
+            plan = currentPlan,
+            tick = tick,
+            state = state,
+            limit = DEBUG_SNAPSHOT_SCAN_LIMIT,
+        )
+        val items = previews
+            .mapNotNull { preview -> debugItemOf(preview, fetchStateProvider) }
+            .take(DEBUG_SNAPSHOT_ITEM_LIMIT)
+            .toImmutableList()
+
+        return VoiceAnnouncementDebugSnapshot(upcomingAnnouncements = items)
+    }
+
+    /** selector の候補を UI 表示用 item に変換する。 */
+    private fun debugItemOf(
+        preview: VoiceAnnouncementPreviewSelection,
+        fetchStateProvider: (VoiceAnnouncementContent) -> VoiceAnnouncementDebugFetchState,
+    ): VoiceAnnouncementDebugItem? {
+        val content = contentRenderer.render(preview.selection.stage) ?: return null
+        val stage = preview.selection.stage
+
+        return VoiceAnnouncementDebugItem(
+            stageId = stage.id.value,
+            targetIndex = preview.selection.targetIndex,
+            text = content.displayText,
+            remainingMeters = preview.remainingMeters,
+            stageKind = stage.kind.toDebugStageKind(),
+            fetchState = fetchStateProvider(content),
+            isRouteOrderBlocked = preview.isRouteOrderBlocked,
+            categories = stage.categories
+                .map { category -> category.name }
+                .toImmutableList(),
+        )
+    }
+
+    /** 内部 stage 種別を公開 debug model の種別へ変換する。 */
+    private fun AnnouncementStageKind.toDebugStageKind(): VoiceAnnouncementDebugStageKind = when (this) {
+        AnnouncementStageKind.MIDDLE -> VoiceAnnouncementDebugStageKind.MIDDLE
+        AnnouncementStageKind.FINAL -> VoiceAnnouncementDebugStageKind.FINAL
     }
 
     /** 通過し終えた案内地点を状態へ畳み込む。記録側が冪等に union するため毎 tick 全件渡してよい。 */
@@ -319,5 +378,11 @@ internal class VoiceAnnouncementScheduler(
 
         /** 発話判定の診断ログを絞り込むためのタグ。 */
         const val TAG = "VoiceAnnouncementDecision"
+
+        /** UI に表示する発話予定数。 */
+        const val DEBUG_SNAPSHOT_ITEM_LIMIT = 5
+
+        /** category gate で空になる段を見越して selector から読む最大候補数。 */
+        const val DEBUG_SNAPSHOT_SCAN_LIMIT = 12
     }
 }

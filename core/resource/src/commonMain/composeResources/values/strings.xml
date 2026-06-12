@@ -232,6 +232,8 @@
     <string name="setting_developer_options_map_diagnostics_description">地図の描画密度ログと viewport 診断ログを出力します。</string>
     <string name="setting_developer_options_car_vd_debug_overlay">AA VD デバッグオーバーレイ</string>
     <string name="setting_developer_options_car_vd_debug_overlay_description">Android Auto Virtual Display の viewport、タッチ座標、診断パネルを表示します。</string>
+    <string name="setting_developer_options_tts_schedule_debug_card">TTS 発話予定デバッグカード</string>
+    <string name="setting_developer_options_tts_schedule_debug_card_description">案内中の ETA カード上に直近の TTS 発話予定と取得状態を表示します。</string>
 
     <!-- Setting Paywall -->
     <string name="setting_paywall_title">Pro</string>

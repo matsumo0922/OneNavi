@@ -10,6 +10,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import me.matsumo.onenavi.core.navigation.tts.MilestoneAnnouncementProvider
 import me.matsumo.onenavi.core.navigation.tts.OpeningAnnouncementProvider
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContent
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispatcher
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementRequest
@@ -87,6 +89,25 @@ internal class VoiceAnnouncementSpeechRunner(
     }
 
     /**
+     * 現在の scheduler 状態からデバッグスナップショットを読み取る event を投入する。
+     *
+     * @param fetchStateProvider render 済み発話内容に対する TTS 取得状態の読み取り関数
+     * @param receiver 作成したスナップショットを受け取る関数
+     * @return event を投入できた場合は true
+     */
+    fun requestDebugSnapshot(
+        fetchStateProvider: (VoiceAnnouncementContent) -> VoiceAnnouncementDebugFetchState,
+        receiver: (VoiceAnnouncementDebugSnapshot?) -> Unit,
+    ): Boolean {
+        val event = SpeechEvent.DebugSnapshot(
+            fetchStateProvider = fetchStateProvider,
+            receiver = receiver,
+        )
+
+        return eventChannel?.trySend(event)?.isSuccess == true
+    }
+
+    /**
      * 経由地通過アナウンスを発話する。進行中の案内発話へ割り込み、完了まで案内 tick を保留する。
      *
      * 案内は継続するため event ループ経由で処理し、割り込み後に案内発話を再開できるよう scheduler の発話中マークを解除する。
@@ -141,10 +162,18 @@ internal class VoiceAnnouncementSpeechRunner(
                 speechJob = null
                 drainPendingTick(channel)
             }
+            is SpeechEvent.DebugSnapshot -> publishDebugSnapshot(event)
             is SpeechEvent.WaypointMilestone -> startWaypointMilestone(channel)
             is SpeechEvent.Tick -> if (awaitingExclusive) pendingTick = event.tick else execute(resolveCommand(event), channel)
             is SpeechEvent.SpeechFinished -> execute(resolveCommand(event), channel)
         }
+    }
+
+    /** scheduler の状態を読み、受け取り側へデバッグスナップショットを返す。 */
+    private fun publishDebugSnapshot(event: SpeechEvent.DebugSnapshot) {
+        val snapshot = scheduler.debugSnapshot(event.fetchStateProvider)
+
+        event.receiver(snapshot)
     }
 
     /** 排他アナウンス中に保持した最新 tick があれば、完了後に 1 件だけ再評価する。 */
@@ -158,7 +187,10 @@ internal class VoiceAnnouncementSpeechRunner(
     private fun resolveCommand(event: SpeechEvent): VoiceAnnouncementCommand? = when (event) {
         is SpeechEvent.Tick -> scheduler.onTick(event.tick)
         is SpeechEvent.SpeechFinished -> scheduler.onSpeechFinished(event.stageId)
-        is SpeechEvent.ExclusiveFinished, is SpeechEvent.WaypointMilestone -> null
+        is SpeechEvent.DebugSnapshot,
+        is SpeechEvent.ExclusiveFinished,
+        is SpeechEvent.WaypointMilestone,
+        -> null
     }
 
     /**
@@ -247,6 +279,17 @@ internal class VoiceAnnouncementSpeechRunner(
          * @property stageId 完了した発話段の id
          */
         data class SpeechFinished(val stageId: VoiceAnnouncementId) : SpeechEvent
+
+        /**
+         * デバッグスナップショットの読み取りを要求する。
+         *
+         * @property fetchStateProvider render 済み発話内容に対する TTS 取得状態の読み取り関数
+         * @property receiver 作成したスナップショットを受け取る関数
+         */
+        data class DebugSnapshot(
+            val fetchStateProvider: (VoiceAnnouncementContent) -> VoiceAnnouncementDebugFetchState,
+            val receiver: (VoiceAnnouncementDebugSnapshot?) -> Unit,
+        ) : SpeechEvent
 
         /** 経由地通過アナウンスの発話を要求する。 */
         data object WaypointMilestone : SpeechEvent
