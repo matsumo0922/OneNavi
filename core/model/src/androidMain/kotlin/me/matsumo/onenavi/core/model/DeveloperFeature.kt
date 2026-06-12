@@ -25,4 +25,7 @@ enum class DeveloperFeature {
 
     /** Android Auto Virtual Display の診断オーバーレイを表示する。 */
     CAR_VD_DEBUG_OVERLAY,
+
+    /** Android Auto host から取得した車両ハードウェア値の診断一覧を表示する。 */
+    CAR_HARDWARE_DIAGNOSTICS,
 }

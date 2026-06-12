@@ -344,6 +344,124 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
+    fun `合成 fixture では遠距離予告窓が先行 target の最寄り窓より前なら先に発話される`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val routeMeters = 60_000.0
+        val mergeNoticeId = VoiceAnnouncementId("mergeNotice")
+        val farJunctionAdvanceId = VoiceAnnouncementId("farJunctionAdvance")
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = geometryFromRemaining(routeMeters, remainingMeters = 55_321.0),
+                stages = listOf(
+                    middleStageFromRemaining(
+                        id = mergeNoticeId.value,
+                        routeMeters = routeMeters,
+                        enterRemainingMeters = 55_721.0,
+                        exitRemainingMeters = 55_521.0,
+                        groupKey = "mergeGroup",
+                    ),
+                ),
+            ),
+            targetOf(
+                index = 1,
+                geometryMeters = geometryFromRemaining(routeMeters, remainingMeters = 55_042.0),
+                stages = listOf(
+                    middleStageFromRemaining(
+                        id = farJunctionAdvanceId.value,
+                        routeMeters = routeMeters,
+                        enterRemainingMeters = 58_092.0,
+                        exitRemainingMeters = 57_742.0,
+                        groupKey = "junctionGroup",
+                    ),
+                ),
+            ),
+        )
+
+        val selectedStageIds = simulateSelections(
+            selector = selector,
+            plan = plan,
+            currentCumulativeMetersList = listOf(
+                geometryFromRemaining(routeMeters, remainingMeters = 58_000.0),
+                geometryFromRemaining(routeMeters, remainingMeters = 55_650.0),
+            ),
+        )
+
+        assertEquals(listOf(farJunctionAdvanceId, mergeNoticeId), selectedStageIds)
+    }
+
+    @Test
+    fun `近接チェーンの重複窓は先行 target が未発話なら後続 target を通さない`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val firstNearId = VoiceAnnouncementId("firstNear")
+        val secondNearId = VoiceAnnouncementId("secondNear")
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage(
+                        id = firstNearId.value,
+                        enter = 900.0,
+                        exit = 980.0,
+                        groupKey = "firstGroup",
+                    ),
+                ),
+            ),
+            targetOf(
+                index = 1,
+                geometryMeters = 1_100.0,
+                stages = listOf(
+                    middleStage(
+                        id = secondNearId.value,
+                        enter = 850.0,
+                        exit = 950.0,
+                        groupKey = "secondGroup",
+                    ),
+                ),
+            ),
+        )
+
+        val blockedBeforeFirstWindow = selector.select(plan, tickOf(current = 875.0), emptyState())
+        val selectedStageIds = simulateSelections(
+            selector = selector,
+            plan = plan,
+            currentCumulativeMetersList = listOf(875.0, 920.0, 930.0),
+        )
+
+        assertNull(blockedBeforeFirstWindow)
+        assertEquals(listOf(firstNearId, secondNearId), selectedStageIds)
+    }
+
+    @Test
+    fun `FINAL 段は窓を持たないため互いに素バイパスを使わない`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage(
+                        id = "firstNear",
+                        enter = 990.0,
+                        exit = 1_000.0,
+                        groupKey = "firstGroup",
+                    ),
+                ),
+            ),
+            targetOf(
+                index = 1,
+                geometryMeters = 1_010.0,
+                stages = listOf(finalStage("secondFinal")),
+            ),
+        )
+
+        val selection = selector.select(plan, tickOf(current = 985.0), emptyState())
+
+        assertNull(selection)
+    }
+
+    @Test
     fun `route が発話不能なら何も選ばない`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         val plan = planOf(
@@ -428,6 +546,30 @@ class VoiceAnnouncementSelectorTest {
         assertTrue(passed.isEmpty())
     }
 
+    private fun simulateSelections(
+        selector: VoiceAnnouncementSelector,
+        plan: VoiceAnnouncementPlan,
+        currentCumulativeMetersList: List<Double>,
+    ): List<VoiceAnnouncementId> {
+        var state = emptyState()
+        val selectedStageIds = mutableListOf<VoiceAnnouncementId>()
+
+        for (currentCumulativeMeters in currentCumulativeMetersList) {
+            val tick = tickOf(current = currentCumulativeMeters)
+            val passedTargetIndices = selector.passedTargetIndices(plan, tick)
+
+            for (passedTargetIndex in passedTargetIndices) {
+                state = state.withTargetPassed(passedTargetIndex)
+            }
+
+            val selection = selector.select(plan, tick, state) ?: continue
+            selectedStageIds += selection.stage.id
+            state = state.withStageFired(selection.stage.id)
+        }
+
+        return selectedStageIds
+    }
+
     private fun planOf(vararg targets: AnnouncementTarget): VoiceAnnouncementPlan =
         VoiceAnnouncementPlan(
             routeId = "R",
@@ -438,11 +580,32 @@ class VoiceAnnouncementSelectorTest {
         index: Int,
         geometryMeters: Double,
         stages: List<AnnouncementStage>,
-    ): AnnouncementTarget = AnnouncementTarget(
-        guidancePointIndex = index,
-        geometryMeters = geometryMeters,
-        stages = stages.toImmutableList(),
-    )
+    ): AnnouncementTarget =
+        AnnouncementTarget(
+            guidancePointIndex = index,
+            geometryMeters = geometryMeters,
+            stages = stages.toImmutableList(),
+        )
+
+    private fun middleStageFromRemaining(
+        id: String,
+        routeMeters: Double,
+        enterRemainingMeters: Double,
+        exitRemainingMeters: Double,
+        groupKey: String,
+    ): AnnouncementStage {
+        val enterGeometryMeters = geometryFromRemaining(routeMeters, enterRemainingMeters)
+        val exitGeometryMeters = geometryFromRemaining(routeMeters, exitRemainingMeters)
+
+        return middleStage(
+            id = id,
+            enter = enterGeometryMeters,
+            exit = exitGeometryMeters,
+            groupKey = groupKey,
+        )
+    }
+
+    private fun geometryFromRemaining(routeMeters: Double, remainingMeters: Double): Double = routeMeters - remainingMeters
 
     // 同一案内地点の距離違い候補は既定で同一 groupKey に束ね、グループ消費 (1 グループ 1 発話) を再現する。
     private fun middleStage(
