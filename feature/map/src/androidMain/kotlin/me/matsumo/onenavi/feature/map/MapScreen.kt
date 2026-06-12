@@ -76,6 +76,7 @@ import me.matsumo.onenavi.feature.map.state.MapUiEvent
 import me.matsumo.onenavi.feature.map.state.MapUiState
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
 import me.matsumo.onenavi.feature.map.state.rememberMapCameraState
+import me.matsumo.onenavi.feature.map.state.resolveMapContentInsets
 import me.matsumo.onenavi.feature.map.state.resolveMapPanelLayout
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -99,15 +100,20 @@ fun MapScreen(
 
     val mapHostViewport = LocalMapHostViewport.current
     val hostStableInsets = mapHostViewport.stableInsets
-    val navigationBarHeightDp = maxOf(
-        WindowInsets.navigationBars
+    val systemBarInsets = MapHostInsets(
+        top = WindowInsets.statusBars
+            .asPaddingValues()
+            .calculateTopPadding(),
+        bottom = WindowInsets.navigationBars
             .asPaddingValues()
             .calculateBottomPadding(),
-        hostStableInsets.bottom,
     )
-    val statusBarHeightDp = WindowInsets.statusBars
-        .asPaddingValues()
-        .calculateTopPadding()
+    val mapContentInsets = resolveMapContentInsets(
+        systemBarInsets = systemBarInsets,
+        hostStableInsets = hostStableInsets,
+    )
+    val navigationBarHeightDp = mapContentInsets.bottom
+    val statusBarHeightDp = mapContentInsets.top
 
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
     var allowSheetHide by remember { mutableStateOf(false) }
@@ -259,6 +265,7 @@ fun MapScreen(
                 shouldLogDiagnostics = shouldLogMapDiagnostics,
                 controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
+                contentInsets = mapContentInsets,
                 viewportPadding = mapViewportPadding,
                 scaffoldState = scaffoldState,
                 destinationSearchRequestId = destinationSearchRequestId,
@@ -294,6 +301,7 @@ fun MapScreen(
                 shouldLogDiagnostics = shouldLogMapDiagnostics,
                 controlsTopPadding = controlsTopPadding,
                 controlsBottomPadding = controlsBottomPadding,
+                contentInsets = mapContentInsets,
                 viewportPadding = mapViewportPadding,
                 scaffoldState = scaffoldState,
                 destinationSearchRequestId = destinationSearchRequestId,
@@ -382,6 +390,7 @@ private fun MapScreenCompactLayout(
     shouldLogDiagnostics: Boolean,
     controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
+    contentInsets: MapHostInsets,
     viewportPadding: MapHostInsets,
     scaffoldState: BottomSheetScaffoldState,
     destinationSearchRequestId: Long?,
@@ -439,6 +448,7 @@ private fun MapScreenCompactLayout(
                 guidanceState = guidanceState,
                 cameraState = cameraState,
                 panelLayout = panelLayout,
+                contentInsets = contentInsets,
                 destinationSearchRequestId = destinationSearchRequestId,
                 onDestinationSearchRequestConsumed = onDestinationSearchRequestConsumed,
                 onUiEvent = onUiEvent,
@@ -474,6 +484,7 @@ private fun MapScreenSplitLayout(
     shouldLogDiagnostics: Boolean,
     controlsTopPadding: Dp,
     controlsBottomPadding: Dp,
+    contentInsets: MapHostInsets,
     viewportPadding: MapHostInsets,
     scaffoldState: BottomSheetScaffoldState,
     destinationSearchRequestId: Long?,
@@ -551,6 +562,7 @@ private fun MapScreenSplitLayout(
                     guidanceState = guidanceState,
                     cameraState = cameraState,
                     panelLayout = panelLayout,
+                    contentInsets = contentInsets,
                     destinationSearchRequestId = destinationSearchRequestId,
                     onDestinationSearchRequestConsumed = onDestinationSearchRequestConsumed,
                     onUiEvent = onUiEvent,
@@ -676,6 +688,7 @@ private fun MapScreenContent(
     guidanceState: GuidanceState,
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
+    contentInsets: MapHostInsets,
     destinationSearchRequestId: Long?,
     onDestinationSearchRequestConsumed: (Long) -> Unit,
     onUiEvent: (MapUiEvent) -> Unit,
@@ -726,6 +739,7 @@ private fun MapScreenContent(
                 overlayState = uiState.overlayState,
                 panelLayout = panelLayout,
                 navigationCardHeight = navigationCardHeightDp,
+                contentInsets = contentInsets,
                 onUiEvent = onUiEvent,
             )
         }
@@ -827,8 +841,8 @@ private fun MapScreenBottomSheetContent(
  * Android Auto VD では host top inset や検索バー高さで controls を下げず、固定の端余白だけで配置する。
  * 分割レイアウトではトップパネルは UI 帯ペイン内に収まり controls カラムへ被らないため status bar 分のみ。
  * Compact ではトップバー（検索バー / 案内パネル）が地図に重なるため、その下端へ揃える。トップバーは
- * `.statusBarsPadding()` の内側で高さ計測されるため [topAppBarHeight] は status bar を含まない。よって
- * 下端 = status bar + トップバー高さ。トップバー未表示時（0dp）は status bar 分だけ確保される。
+ * system / host inset padding の内側で高さ計測されるため [topAppBarHeight] は上 inset を含まない。よって
+ * 下端 = 上 inset + トップバー高さ。トップバー未表示時（0dp）は上 inset 分だけ確保される。
  *
  * @param isAndroidAutoVirtualDisplay Android Auto VD 上の表示か
  * @param isSplit 分割レイアウトか

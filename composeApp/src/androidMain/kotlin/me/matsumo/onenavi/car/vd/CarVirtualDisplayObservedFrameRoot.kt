@@ -91,12 +91,3 @@ internal fun CarVirtualDisplayViewport.toMapHostViewport(density: Density): MapH
         )
     }
 }
-
-private fun MapHostInsets.maxWith(other: MapHostInsets): MapHostInsets {
-    return MapHostInsets(
-        start = maxOf(start, other.start),
-        top = maxOf(top, other.top),
-        end = maxOf(end, other.end),
-        bottom = maxOf(bottom, other.bottom),
-    )
-}

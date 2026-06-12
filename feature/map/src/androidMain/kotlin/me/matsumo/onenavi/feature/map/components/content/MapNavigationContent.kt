@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,7 +28,6 @@ import me.matsumo.onenavi.core.resource.common_cancel
 import me.matsumo.onenavi.core.resource.common_ok
 import me.matsumo.onenavi.core.resource.home_map_navigation_cancel_dialog_message
 import me.matsumo.onenavi.core.resource.home_map_navigation_cancel_dialog_title
-import me.matsumo.onenavi.core.ui.utils.navigationBarsBottomPaddingOrDefault
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationAlternativesCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationEtaCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationManeuverPanel
@@ -37,6 +35,7 @@ import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationRerouti
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSearchResultsCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSelectedWaypointCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationWaypointEditorCard
+import me.matsumo.onenavi.feature.map.state.MapHostInsets
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapPanelLayout
 import me.matsumo.onenavi.feature.map.state.MapUiEvent
@@ -56,6 +55,7 @@ internal fun MapNavigationContent(
     overlayState: MapOverlayState,
     panelLayout: MapPanelLayout,
     navigationCardHeight: Dp,
+    contentInsets: MapHostInsets,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -126,7 +126,11 @@ internal fun MapNavigationContent(
         val topPanelModifier = Modifier
             .fillMaxWidth()
             .heightIn(max = topPanelMaxHeight)
-            .statusBarsPadding()
+            .padding(
+                start = contentInsets.start,
+                top = contentInsets.top,
+                end = contentInsets.end,
+            )
             .onGloballyPositioned { coordinates ->
                 onUiEvent(MapUiEvent.OnTopAppBarHeightChanged(coordinates.size.height))
             }
@@ -165,8 +169,10 @@ internal fun MapNavigationContent(
                         .onGloballyPositioned { coordinates ->
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
-                        .navigationBarsBottomPaddingOrDefault()
-                        .padding(horizontal = horizontalContentPadding)
+                        .navigationBottomCardPadding(
+                            contentInsets = contentInsets,
+                            horizontalPadding = horizontalContentPadding,
+                        )
                         .height(bottomFloatingCardHeight),
                     place = addWaypointSelected.place,
                     routePreviewState = addWaypointSelected.routePreviewState,
@@ -188,8 +194,10 @@ internal fun MapNavigationContent(
                         .onGloballyPositioned { coordinates ->
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
-                        .navigationBarsBottomPaddingOrDefault()
-                        .padding(horizontal = horizontalContentPadding)
+                        .navigationBottomCardPadding(
+                            contentInsets = contentInsets,
+                            horizontalPadding = horizontalContentPadding,
+                        )
                         .height(bottomFloatingCardHeight),
                     query = addWaypointSearchResults.query,
                     results = addWaypointSearchResults.results,
@@ -208,8 +216,10 @@ internal fun MapNavigationContent(
                         .onGloballyPositioned { coordinates ->
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
-                        .navigationBarsBottomPaddingOrDefault()
-                        .padding(horizontal = horizontalContentPadding)
+                        .navigationBottomCardPadding(
+                            contentInsets = contentInsets,
+                            horizontalPadding = horizontalContentPadding,
+                        )
                         .height(bottomFloatingCardHeight),
                     routePreviewState = alternativesRoutePreviewState,
                     onCloseClicked = {
@@ -227,8 +237,10 @@ internal fun MapNavigationContent(
                         .onGloballyPositioned { coordinates ->
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
-                        .navigationBarsBottomPaddingOrDefault()
-                        .padding(horizontal = horizontalContentPadding)
+                        .navigationBottomCardPadding(
+                            contentInsets = contentInsets,
+                            horizontalPadding = horizontalContentPadding,
+                        )
                         .height(bottomFloatingCardHeight),
                     originWaypoint = navigationWaypointEditor.originWaypoint,
                     waypoints = navigationWaypointEditor.waypoints,
@@ -248,8 +260,10 @@ internal fun MapNavigationContent(
                         .onGloballyPositioned { coordinates ->
                             onUiEvent(MapUiEvent.OnNavigationCardHeightChanged(coordinates.size.height))
                         }
-                        .navigationBarsBottomPaddingOrDefault()
-                        .padding(horizontal = horizontalContentPadding),
+                        .navigationBottomCardPadding(
+                            contentInsets = contentInsets,
+                            horizontalPadding = horizontalContentPadding,
+                        ),
                     progress = etaProgress,
                     geometry = etaRoute.geometry,
                     roadClassSegments = etaRoute.roadClassSegments,
@@ -284,6 +298,20 @@ internal fun MapNavigationContent(
 
 /** 分割レイアウトで下部 overlay カードへ最低限確保する高さ。 */
 private val MAP_NAVIGATION_SPLIT_BOTTOM_CARD_MIN_HEIGHT = 240.dp
+
+/** 下部 navigation card が system / host inset なしでも確保する下余白。 */
+private val MAP_NAVIGATION_BOTTOM_CARD_DEFAULT_PADDING = 8.dp
+
+private fun Modifier.navigationBottomCardPadding(
+    contentInsets: MapHostInsets,
+    horizontalPadding: Dp,
+): Modifier {
+    return padding(
+        start = contentInsets.start + horizontalPadding,
+        end = contentInsets.end + horizontalPadding,
+        bottom = contentInsets.bottom.coerceAtLeast(MAP_NAVIGATION_BOTTOM_CARD_DEFAULT_PADDING),
+    )
+}
 
 @Composable
 private fun MapNavigationCancelDialog(
