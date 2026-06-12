@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.core.model
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import kotlinx.serialization.Serializable
 import me.matsumo.onenavi.core.common.serializer.ColorSerializer
@@ -16,9 +17,12 @@ import me.matsumo.onenavi.core.common.serializer.ColorSerializer
  * @property enabledDeveloperFeatures 有効化されている開発者向け機能
  * @property useMediaAudioChannelOnCar Android Auto で音声案内をメディア音量として再生するか
  * @property ttsVolumeGainDb Google Cloud TTS に渡す音量ゲイン。0dB が標準、正の値で増幅する。
+ * @property isSpeedAdaptiveTtsGainEnabled 速度に連動して再生時の追加ゲインを掛けるか
+ * @property speedAdaptiveTtsGainMaxDb 速度連動ゲインが上限速度で掛ける最大追加ゲイン
  * @property disabledGuidanceCategories 発話を OFF にした案内カテゴリの識別子集合
  * @property extNavDeviceUuid 外部ナビ API ライブラリ向けの端末識別子
  */
+@Immutable
 @Serializable
 data class AppSetting(
     val id: String,
@@ -32,6 +36,10 @@ data class AppSetting(
     val useMediaAudioChannelOnCar: Boolean,
     /** Google Cloud TTS に渡す音量ゲイン。0dB が標準、正の値で増幅する。 */
     val ttsVolumeGainDb: Double,
+    /** 速度に連動して AudioTrack 書き込み前の PCM に追加ゲインを掛けるか。 */
+    val isSpeedAdaptiveTtsGainEnabled: Boolean,
+    /** 速度連動ゲインが上限速度で掛ける最大追加ゲイン。 */
+    val speedAdaptiveTtsGainMaxDb: Double,
     /** 発話を OFF にした案内カテゴリの識別子集合 (外部ナビ API の category 名)。未登録カテゴリは ON 扱い。 */
     val disabledGuidanceCategories: Set<String>,
     val extNavDeviceUuid: String,
@@ -58,6 +66,21 @@ data class AppSetting(
         /** TTS 音量ゲイン slider のステップ数。両端を除く 1dB 刻みの目盛り数。 */
         const val TTS_VOLUME_GAIN_DB_STEPS = 19
 
+        /** 速度連動 TTS ゲインが既定で有効か。 */
+        const val SPEED_ADAPTIVE_TTS_GAIN_ENABLED_DEFAULT = false
+
+        /** 速度連動 TTS ゲイン最大量の既定値。 */
+        const val SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_DEFAULT = 6.0
+
+        /** 設定 UI で選べる速度連動 TTS ゲイン最大量の最小値。 */
+        const val SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_MIN = 0.0
+
+        /** 設定 UI で選べる速度連動 TTS ゲイン最大量の最大値。 */
+        const val SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_MAX = 10.0
+
+        /** 速度連動 TTS ゲイン最大量 slider のステップ数。両端を除く 1dB 刻みの目盛り数。 */
+        const val SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_STEPS = 9
+
         /** アプリ設定の既定値。 */
         val DEFAULT = AppSetting(
             id = "",
@@ -69,6 +92,8 @@ data class AppSetting(
             enabledDeveloperFeatures = emptySet(),
             useMediaAudioChannelOnCar = false,
             ttsVolumeGainDb = TTS_VOLUME_GAIN_DB_DEFAULT,
+            isSpeedAdaptiveTtsGainEnabled = SPEED_ADAPTIVE_TTS_GAIN_ENABLED_DEFAULT,
+            speedAdaptiveTtsGainMaxDb = SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_DEFAULT,
             // 走行に必須でない既定 OFF カテゴリ。VoiceAnnouncementCategoryGate.OneNaviDefault と揃えること。
             disabledGuidanceCategories = setOf("Curve", "Scenic", "AccidentBlackSpot", "Merge"),
             extNavDeviceUuid = "",

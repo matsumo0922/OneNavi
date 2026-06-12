@@ -200,6 +200,26 @@ class AppSettingDataSource(
         }
     }
 
+    suspend fun setSpeedAdaptiveTtsGainEnabled(isEnabled: Boolean) = withContext(ioDispatcher) {
+        if (currentSetting().isSpeedAdaptiveTtsGainEnabled == isEnabled) return@withContext
+
+        preference.edit {
+            it[booleanPreferencesKey(AppSetting::isSpeedAdaptiveTtsGainEnabled.name)] = isEnabled
+        }
+    }
+
+    suspend fun setSpeedAdaptiveTtsGainMaxDb(maxGainDb: Double) = withContext(ioDispatcher) {
+        val resolvedMaxGainDb = maxGainDb.coerceIn(
+            minimumValue = AppSetting.SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_MIN,
+            maximumValue = AppSetting.SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_MAX,
+        )
+        if (currentSetting().speedAdaptiveTtsGainMaxDb == resolvedMaxGainDb) return@withContext
+
+        preference.edit {
+            it[doublePreferencesKey(AppSetting::speedAdaptiveTtsGainMaxDb.name)] = resolvedMaxGainDb
+        }
+    }
+
     suspend fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) = withContext(ioDispatcher) {
         val preferenceKey = stringPreferencesKey(AppSetting::disabledGuidanceCategories.name)
         // edit ブロックは単一 writer で直列実行されるため、現在の永続値を読んで add/remove することで

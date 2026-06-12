@@ -12,8 +12,10 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
+import me.matsumo.onenavi.core.model.AppSetting
 import me.matsumo.onenavi.core.model.DeveloperFeature
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -46,6 +48,24 @@ class AppSettingDataSourceTest {
         val unlockedSetting = dataSource.currentSetting()
         assertFalse(unlockedSetting.isDeveloperFeatureEnabled(DeveloperFeature.FAKE_GPS))
         assertTrue(unlockedSetting.enabledDeveloperFeatures.isEmpty())
+    }
+
+    @Test
+    fun `speed adaptive TTS gain settings are persisted with clamped max gain`() = runTest {
+        val dataSource = AppSettingDataSource(
+            preferenceHelper = InMemoryPreferenceHelper(),
+            formatter = Json,
+            ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+            applicationScope = backgroundScope,
+        )
+
+        dataSource.setSpeedAdaptiveTtsGainEnabled(true)
+        dataSource.setSpeedAdaptiveTtsGainMaxDb(99.0)
+
+        val setting = dataSource.currentSetting()
+
+        assertTrue(setting.isSpeedAdaptiveTtsGainEnabled)
+        assertEquals(AppSetting.SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_MAX, setting.speedAdaptiveTtsGainMaxDb)
     }
 }
 

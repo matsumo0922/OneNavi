@@ -15,6 +15,10 @@ import me.matsumo.onenavi.core.resource.setting_sound_category
 import me.matsumo.onenavi.core.resource.setting_sound_category_description
 import me.matsumo.onenavi.core.resource.setting_sound_media_channel
 import me.matsumo.onenavi.core.resource.setting_sound_media_channel_description
+import me.matsumo.onenavi.core.resource.setting_sound_speed_adaptive_tts_gain
+import me.matsumo.onenavi.core.resource.setting_sound_speed_adaptive_tts_gain_description
+import me.matsumo.onenavi.core.resource.setting_sound_speed_adaptive_tts_gain_max
+import me.matsumo.onenavi.core.resource.setting_sound_speed_adaptive_tts_gain_max_description
 import me.matsumo.onenavi.core.resource.setting_sound_tts_volume_gain
 import me.matsumo.onenavi.core.resource.setting_sound_tts_volume_gain_description
 import me.matsumo.onenavi.feature.setting.components.SettingSliderItem
@@ -29,6 +33,8 @@ internal fun SettingSoundSection(
     setting: AppSetting,
     onUseMediaAudioChannelOnCarChanged: (Boolean) -> Unit,
     onTtsVolumeGainDbChanged: (Double) -> Unit,
+    onSpeedAdaptiveTtsGainEnabledChanged: (Boolean) -> Unit,
+    onSpeedAdaptiveTtsGainMaxDbChanged: (Double) -> Unit,
     onVoiceCategoryClicked: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -36,6 +42,9 @@ internal fun SettingSoundSection(
     // 操作確定時 (onValueChangeFinished) にだけ永続化する。
     var ttsVolumeGainDbDraft by remember(setting.ttsVolumeGainDb) {
         mutableDoubleStateOf(setting.ttsVolumeGainDb)
+    }
+    var speedAdaptiveTtsGainMaxDbDraft by remember(setting.speedAdaptiveTtsGainMaxDb) {
+        mutableDoubleStateOf(setting.speedAdaptiveTtsGainMaxDb)
     }
 
     Column(modifier) {
@@ -68,6 +77,31 @@ internal fun SettingSoundSection(
             steps = AppSetting.TTS_VOLUME_GAIN_DB_STEPS,
         )
 
+        SettingSwitchItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = Res.string.setting_sound_speed_adaptive_tts_gain,
+            description = Res.string.setting_sound_speed_adaptive_tts_gain_description,
+            value = setting.isSpeedAdaptiveTtsGainEnabled,
+            onValueChanged = onSpeedAdaptiveTtsGainEnabledChanged,
+        )
+
+        SettingSliderItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = Res.string.setting_sound_speed_adaptive_tts_gain_max,
+            description = Res.string.setting_sound_speed_adaptive_tts_gain_max_description,
+            valueLabel = formatTtsVolumeGainDb(speedAdaptiveTtsGainMaxDbDraft),
+            value = speedAdaptiveTtsGainMaxDbDraft.toFloat(),
+            onValueChanged = { maxGainDb ->
+                speedAdaptiveTtsGainMaxDbDraft = roundTtsVolumeGainDb(maxGainDb)
+            },
+            onValueChangeFinished = {
+                onSpeedAdaptiveTtsGainMaxDbChanged(speedAdaptiveTtsGainMaxDbDraft)
+            },
+            valueRange = SpeedAdaptiveTtsGainMaxDbRange,
+            steps = AppSetting.SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_STEPS,
+            isEnabled = setting.isSpeedAdaptiveTtsGainEnabled,
+        )
+
         SettingTextItem(
             modifier = Modifier.fillMaxWidth(),
             title = Res.string.setting_sound_category,
@@ -89,3 +123,9 @@ private fun formatTtsVolumeGainDb(volumeGainDb: Double): String {
 
 private fun roundTtsVolumeGainDb(volumeGainDb: Float): Double =
     volumeGainDb.roundToInt().toDouble()
+
+/** 速度連動 TTS ゲイン最大量 slider の範囲。 */
+private val SpeedAdaptiveTtsGainMaxDbRange =
+    AppSetting.SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_MIN.toFloat().rangeTo(
+        AppSetting.SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_MAX.toFloat(),
+    )

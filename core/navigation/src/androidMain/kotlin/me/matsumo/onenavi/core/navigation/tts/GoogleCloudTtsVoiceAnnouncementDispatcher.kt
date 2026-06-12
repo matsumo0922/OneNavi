@@ -16,6 +16,7 @@ import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispat
  * @property chimePlayer ローカル案内効果音プレイヤー
  * @property audioFocusManager 発話中の AudioFocus 管理
  * @property audioChannelResolver 発話ごとの出力チャンネル決定
+ * @property speedAdaptiveGainProvider 速度に連動する再生時追加ゲイン provider
  */
 internal class GoogleCloudTtsVoiceAnnouncementDispatcher(
     private val synthesizer: CachedGoogleCloudTtsSynthesizer,
@@ -23,6 +24,7 @@ internal class GoogleCloudTtsVoiceAnnouncementDispatcher(
     private val chimePlayer: GuidanceChimePlayer,
     private val audioFocusManager: TtsAudioFocusManager,
     private val audioChannelResolver: NavigationAudioChannelResolver,
+    private val speedAdaptiveGainProvider: SpeedAdaptiveGainProvider,
 ) : VoiceAnnouncementDispatcher {
 
     override suspend fun speak(content: VoiceAnnouncementContent) {
@@ -32,11 +34,24 @@ internal class GoogleCloudTtsVoiceAnnouncementDispatcher(
         if (content.cue == null && speechAudio == null) return
 
         val channel = audioChannelResolver.resolve()
+        val clientGainDb = speedAdaptiveGainProvider.currentGainDb()
         val focusToken = audioFocusManager.request(channel)
 
         try {
-            content.cue?.let { cue -> chimePlayer.playAndAwait(cue, channel) }
-            speechAudio?.let { audio -> audioPlayer.playAndAwait(audio, channel = channel) }
+            content.cue?.let { cue ->
+                chimePlayer.playAndAwait(
+                    cue = cue,
+                    channel = channel,
+                    clientGainDb = clientGainDb,
+                )
+            }
+            speechAudio?.let { audio ->
+                audioPlayer.playAndAwait(
+                    audio = audio,
+                    channel = channel,
+                    clientGainDb = clientGainDb,
+                )
+            }
         } finally {
             audioFocusManager.abandon(focusToken)
         }

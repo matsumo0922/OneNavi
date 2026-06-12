@@ -38,6 +38,12 @@ class AppSettingRepository(
 
     suspend fun setTtsVolumeGainDb(ttsVolumeGainDb: Double) = dataSource.setTtsVolumeGainDb(ttsVolumeGainDb)
 
+    suspend fun setSpeedAdaptiveTtsGainEnabled(isEnabled: Boolean) =
+        dataSource.setSpeedAdaptiveTtsGainEnabled(isEnabled)
+
+    suspend fun setSpeedAdaptiveTtsGainMaxDb(maxGainDb: Double) =
+        dataSource.setSpeedAdaptiveTtsGainMaxDb(maxGainDb)
+
     suspend fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) =
         dataSource.setGuidanceCategoryEnabled(categoryKey, isEnabled)
 }

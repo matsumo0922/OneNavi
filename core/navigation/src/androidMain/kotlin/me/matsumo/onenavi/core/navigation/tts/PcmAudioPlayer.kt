@@ -19,13 +19,16 @@ internal class PcmAudioPlayer {
      * @param audio WAV ヘッダ付きの PCM バイト列
      * @param contentType 再生する音の種別
      * @param channel 出力する音声チャンネル (usage)
+     * @param clientGainDb 再生直前に PCM へ追加するクライアント側ゲイン
      */
     suspend fun playAndAwait(
         audio: ByteArray,
         contentType: Int = AudioAttributes.CONTENT_TYPE_SPEECH,
         channel: NavigationAudioChannel = NavigationAudioChannel.Guidance,
+        clientGainDb: Double = 0.0,
     ) {
         val wavAudio = WavPcm16Audio.parse(audio).getOrElse { return }
+        val pcm = PcmAudioGainProcessor.applyClientGainDb(wavAudio.pcm, clientGainDb)
 
         val track = AudioTrack.Builder()
             .setAudioAttributes(
@@ -41,14 +44,14 @@ internal class PcmAudioPlayer {
                     .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                     .build(),
             )
-            .setBufferSizeInBytes(wavAudio.pcm.size)
+            .setBufferSizeInBytes(pcm.size)
             .setTransferMode(AudioTrack.MODE_STATIC)
             .build()
 
         try {
-            track.write(wavAudio.pcm, 0, wavAudio.pcm.size)
+            track.write(pcm, 0, pcm.size)
 
-            val totalFrames = wavAudio.pcm.size / wavAudio.bytesPerFrame
+            val totalFrames = pcm.size / wavAudio.bytesPerFrame
             val completion = CompletableDeferred<Unit>()
 
             track.setNotificationMarkerPosition(totalFrames)

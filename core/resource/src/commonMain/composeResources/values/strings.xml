@@ -171,6 +171,10 @@
     <string name="setting_sound_media_channel_description">Android Auto 接続中、ナビ音声を通知ではなくメディア枠で再生します。車種によっては高音質化処理が適用されます。再生中の音楽は小さく流れ続けます。</string>
     <string name="setting_sound_tts_volume_gain">音声案内の増幅</string>
     <string name="setting_sound_tts_volume_gain_description">Google Cloud TTS の音量ゲインを調整します。0 dB が標準、+10 dB までが推奨上限です。</string>
+    <string name="setting_sound_speed_adaptive_tts_gain">速度連動ブースト</string>
+    <string name="setting_sound_speed_adaptive_tts_gain_description">走行速度が高いとき、再生直前に案内音声とチャイムを追加で増幅します。</string>
+    <string name="setting_sound_speed_adaptive_tts_gain_max">最大ブースト量</string>
+    <string name="setting_sound_speed_adaptive_tts_gain_max_description">100km/h 付近で加える最大ブースト量です。60km/h 以下では 0 dB にします。</string>
     <string name="setting_sound_category">案内カテゴリ別の発話</string>
     <string name="setting_sound_category_description">案内の種類ごとに、発話する・しないを選べます。</string>
 
