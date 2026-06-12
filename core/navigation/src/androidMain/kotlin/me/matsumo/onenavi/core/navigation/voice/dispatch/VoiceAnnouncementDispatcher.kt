@@ -1,5 +1,7 @@
 package me.matsumo.onenavi.core.navigation.voice.dispatch
 
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState
+
 /**
  * 確定した発話内容を実際の音声出力へ流す出口。TTS エンジン / MediaPlayer / AudioFocus 等の実装詳細を
  * scheduler から切り離すための抽象。
@@ -25,6 +27,18 @@ internal interface VoiceAnnouncementDispatcher {
      * @param content category gate / 結合を適用済みの発話内容
      */
     fun prefetch(content: VoiceAnnouncementContent) = Unit
+
+    /**
+     * デバッグ表示向けに TTS 音声の取得状態を返す。
+     *
+     * 既定実装は状態を持たない dispatcher 用に未取得扱いを返す。実際の合成・キャッシュを持つ dispatcher だけが
+     * 必要に応じて override する。
+     *
+     * @param content category gate / 結合を適用済みの発話内容
+     * @return 現時点で観測できる TTS 音声の取得状態
+     */
+    fun debugFetchState(content: VoiceAnnouncementContent): VoiceAnnouncementDebugFetchState =
+        VoiceAnnouncementDebugFetchState.NOT_REQUESTED
 
     /**
      * 現在の route に紐づく事前準備キューを破棄する。

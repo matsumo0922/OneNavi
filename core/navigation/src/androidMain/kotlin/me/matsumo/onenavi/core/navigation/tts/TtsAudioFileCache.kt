@@ -44,6 +44,24 @@ internal class TtsAudioFileCache(
     }
 
     /**
+     * 指定 key の音声が有効なキャッシュとして存在するかを返す。
+     *
+     * @param cacheKey 音声設定と SSML から作った安定キー
+     * @return 空ではない保存済みファイルがあれば true
+     */
+    @Synchronized
+    fun contains(cacheKey: String): Boolean {
+        if (directory.isDirectory) cleanupTemporaryFiles()
+
+        val file = fileFor(cacheKey)
+        if (!file.isFile) return false
+        if (file.length() > 0L) return true
+
+        runCatching { file.delete() }
+        return false
+    }
+
+    /**
      * 指定 key の音声を保存する。
      *
      * @param cacheKey 音声設定と SSML から作った安定キー

@@ -10,11 +10,13 @@ import androidx.compose.runtime.Immutable
  *
  * @property ssml TTS に渡す SSML。効果音だけを鳴らす場合は null
  * @property cue TTS 前に鳴らす案内効果音。効果音が無い場合は null
+ * @property displayText デバッグ表示で読むための plain text
  */
 @Immutable
 internal data class VoiceAnnouncementContent(
     val ssml: String?,
     val cue: VoiceAnnouncementCue?,
+    val displayText: String = ssml.orEmpty(),
 ) {
 
     /** 同一内容の二重発話を防ぐための安定キー。 */

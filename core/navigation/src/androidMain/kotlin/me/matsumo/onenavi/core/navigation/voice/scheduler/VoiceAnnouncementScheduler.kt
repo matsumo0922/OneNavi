@@ -1,12 +1,22 @@
 package me.matsumo.onenavi.core.navigation.voice.scheduler
 
 import io.github.aakira.napier.Napier
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugItem
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugRecentItem
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugResult
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugStageKind
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContent
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementRequest
+import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlan
+import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementPreviewSelection
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelection
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelector
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementUrgency
@@ -35,12 +45,15 @@ internal class VoiceAnnouncementScheduler(
     private val selector: VoiceAnnouncementSelector,
     private val policy: VoiceAnnouncementSelectionPolicy,
     private val contentRenderer: VoiceAnnouncementContentRenderer,
+    private val currentTimeMillis: () -> Long = System::currentTimeMillis,
 ) {
 
     private var plan: VoiceAnnouncementPlan? = null
     private var state = VoiceAnnouncementSpeechState()
     private var latestTick: VoiceTick? = null
     private val pendingQueue = ArrayDeque<VoiceAnnouncementRequest>()
+    private val recentAnnouncements = ArrayDeque<VoiceAnnouncementDebugRecentItem>()
+    private val speakingDebugItems = mutableMapOf<VoiceAnnouncementId, VoiceAnnouncementDebugPendingItem>()
 
     /**
      * 発話プランを attach し、発話状態とキューを初期化する。route が切り替わるたびに呼ぶ。
@@ -52,6 +65,8 @@ internal class VoiceAnnouncementScheduler(
         state = VoiceAnnouncementSpeechState()
         latestTick = null
         pendingQueue.clear()
+        recentAnnouncements.clear()
+        speakingDebugItems.clear()
     }
 
     /** 発話プラン・状態・キューを破棄する。案内終了時に呼ぶ。 */
@@ -60,6 +75,8 @@ internal class VoiceAnnouncementScheduler(
         state = VoiceAnnouncementSpeechState()
         latestTick = null
         pendingQueue.clear()
+        recentAnnouncements.clear()
+        speakingDebugItems.clear()
     }
 
     /**
@@ -96,7 +113,11 @@ internal class VoiceAnnouncementScheduler(
      * @param stageId 完了した発話段の id
      * @return キュー消化による次発話指示。無ければ null
      */
-    fun onSpeechFinished(stageId: VoiceAnnouncementId): VoiceAnnouncementCommand? {
+    fun onSpeechFinished(
+        stageId: VoiceAnnouncementId,
+        wasSpoken: Boolean = true,
+    ): VoiceAnnouncementCommand? {
+        recordSpeechFinished(stageId, wasSpoken)
         state = state.withSpeakingFinished(stageId)
         if (state.speaking != null) return null
 
@@ -112,7 +133,67 @@ internal class VoiceAnnouncementScheduler(
      * 再選択されない。
      */
     fun onMilestoneInterrupted() {
+        recordCurrentSpeechNotSpoken()
         state = state.withSpeakingCleared()
+    }
+
+    /**
+     * デバッグ表示用に直近の発話予定を返す。
+     *
+     * @param fetchStateProvider render 済み発話内容に対する TTS 取得状態の読み取り関数
+     * @return 現在の発話予定。プランまたは tick が無い場合は null
+     */
+    fun debugSnapshot(
+        fetchStateProvider: (VoiceAnnouncementContent) -> VoiceAnnouncementDebugFetchState,
+    ): VoiceAnnouncementDebugSnapshot? {
+        val currentPlan = plan ?: return null
+        val tick = latestTick ?: return null
+        val nowMillis = currentTimeMillis()
+        dropExpiredRecentAnnouncements(nowMillis)
+
+        val previews = selector.previewUpcoming(
+            plan = currentPlan,
+            tick = tick,
+            state = state,
+            limit = DEBUG_SNAPSHOT_SCAN_LIMIT,
+        )
+        val items = previews
+            .mapNotNull { preview -> debugItemOf(preview, fetchStateProvider) }
+            .take(DEBUG_SNAPSHOT_ITEM_LIMIT)
+            .toImmutableList()
+
+        return VoiceAnnouncementDebugSnapshot(
+            upcomingAnnouncements = items,
+            recentAnnouncements = recentAnnouncements.toImmutableList(),
+        )
+    }
+
+    /** selector の候補を UI 表示用 item に変換する。 */
+    private fun debugItemOf(
+        preview: VoiceAnnouncementPreviewSelection,
+        fetchStateProvider: (VoiceAnnouncementContent) -> VoiceAnnouncementDebugFetchState,
+    ): VoiceAnnouncementDebugItem? {
+        val content = contentRenderer.render(preview.selection.stage) ?: return null
+        val stage = preview.selection.stage
+
+        return VoiceAnnouncementDebugItem(
+            stageId = stage.id.value,
+            targetIndex = preview.selection.targetIndex,
+            text = content.displayText,
+            remainingMeters = preview.remainingMeters,
+            stageKind = stage.kind.toDebugStageKind(),
+            fetchState = fetchStateProvider(content),
+            isRouteOrderBlocked = preview.isRouteOrderBlocked,
+            categories = stage.categories
+                .map { category -> category.name }
+                .toImmutableList(),
+        )
+    }
+
+    /** 内部 stage 種別を公開 debug model の種別へ変換する。 */
+    private fun AnnouncementStageKind.toDebugStageKind(): VoiceAnnouncementDebugStageKind = when (this) {
+        AnnouncementStageKind.MIDDLE -> VoiceAnnouncementDebugStageKind.MIDDLE
+        AnnouncementStageKind.FINAL -> VoiceAnnouncementDebugStageKind.FINAL
     }
 
     /** 通過し終えた案内地点を状態へ畳み込む。記録側が冪等に union するため毎 tick 全件渡してよい。 */
@@ -140,12 +221,14 @@ internal class VoiceAnnouncementScheduler(
         val content = contentRenderer.render(selection.stage)
         if (content == null) {
             logSkippedEmpty(selection, tick)
+            recordSelectionNotSpoken(selection, stageText(selection.stage))
             state = state.withStageFired(selection.stage.id)
             return null
         }
 
         if (state.isContentSpoken(selection.targetIndex, content.dedupeKey)) {
             logSkippedDuplicateContent(selection, content, tick)
+            recordSelectionNotSpoken(selection, content.displayText)
             state = state.withStageFired(selection.stage.id)
             return null
         }
@@ -184,11 +267,13 @@ internal class VoiceAnnouncementScheduler(
             val request = pendingQueue.first()
             if (state.isTargetPassed(request.targetIndex)) {
                 pendingQueue.removeFirst()
+                recordRequestNotSpoken(request)
                 Napier.d(tag = TAG) { "drain-skip passed stage=${request.stageId.value} target=${request.targetIndex}" }
                 continue
             }
             if (request.isStaleAt(tick)) {
                 pendingQueue.removeFirst()
+                recordRequestNotSpoken(request)
                 Napier.d(tag = TAG) {
                     "drain-skip stale stage=${request.stageId.value} kind=${request.kind} current=${tick.currentCumulativeMeters}"
                 }
@@ -196,6 +281,7 @@ internal class VoiceAnnouncementScheduler(
             }
             if (state.isContentSpoken(request.targetIndex, request.content.dedupeKey)) {
                 pendingQueue.removeFirst()
+                recordRequestNotSpoken(request)
                 logSkippedQueuedDuplicateContent(request, tick)
                 continue
             }
@@ -239,15 +325,18 @@ internal class VoiceAnnouncementScheduler(
         state = state
             .withContentSpoken(request.targetIndex, request.content.dedupeKey)
             .withSpeakingStarted(speakingOf(request))
+        speakingDebugItems[request.stageId] = pendingDebugItemOf(request)
 
         return VoiceAnnouncementCommand.StartSpeaking(request)
     }
 
     /** 発話中を中断する前提で発話中マークを差し替え、中断+開始指示を返す。 */
     private fun interruptAndSpeak(request: VoiceAnnouncementRequest): VoiceAnnouncementCommand {
+        recordCurrentSpeechNotSpoken()
         state = state
             .withContentSpoken(request.targetIndex, request.content.dedupeKey)
             .withSpeakingStarted(speakingOf(request))
+        speakingDebugItems[request.stageId] = pendingDebugItemOf(request)
 
         return VoiceAnnouncementCommand.InterruptAndSpeak(request)
     }
@@ -266,6 +355,106 @@ internal class VoiceAnnouncementScheduler(
         targetGeometryMeters = request.targetGeometryMeters,
         kind = request.kind,
     )
+
+    /** 発話完了通知を debug 表示用の直近結果へ反映する。 */
+    private fun recordSpeechFinished(stageId: VoiceAnnouncementId, wasSpoken: Boolean) {
+        val pendingItem = speakingDebugItems.remove(stageId) ?: return
+        val result = if (wasSpoken) {
+            VoiceAnnouncementDebugResult.SPOKEN
+        } else {
+            VoiceAnnouncementDebugResult.NOT_SPOKEN
+        }
+
+        addRecentAnnouncement(pendingItem, result)
+    }
+
+    /** 現在発話中の段を未発話終了として記録する。 */
+    private fun recordCurrentSpeechNotSpoken() {
+        val stageId = state.speaking?.stageId ?: return
+        val pendingItem = speakingDebugItems.remove(stageId) ?: return
+
+        addRecentAnnouncement(pendingItem, VoiceAnnouncementDebugResult.NOT_SPOKEN)
+    }
+
+    /** 選択済みだが実発話しない段を未発話終了として記録する。 */
+    private fun recordSelectionNotSpoken(selection: VoiceAnnouncementSelection, text: String) {
+        addRecentAnnouncement(
+            item = pendingDebugItemOf(selection, text),
+            result = VoiceAnnouncementDebugResult.NOT_SPOKEN,
+        )
+    }
+
+    /** キューから破棄した段を未発話終了として記録する。 */
+    private fun recordRequestNotSpoken(request: VoiceAnnouncementRequest) {
+        speakingDebugItems.remove(request.stageId)
+        addRecentAnnouncement(
+            item = pendingDebugItemOf(request),
+            result = VoiceAnnouncementDebugResult.NOT_SPOKEN,
+        )
+    }
+
+    /** 直近結果を追加し、表示期限を過ぎた結果を落とす。 */
+    private fun addRecentAnnouncement(
+        item: VoiceAnnouncementDebugPendingItem,
+        result: VoiceAnnouncementDebugResult,
+    ) {
+        val nowMillis = currentTimeMillis()
+        dropExpiredRecentAnnouncements(nowMillis)
+        recentAnnouncements.addLast(
+            VoiceAnnouncementDebugRecentItem(
+                stageId = item.stageId.value,
+                targetIndex = item.targetIndex,
+                text = item.text,
+                stageKind = item.stageKind,
+                result = result,
+                completedAtEpochMillis = nowMillis,
+                categories = item.categories,
+            ),
+        )
+
+        while (recentAnnouncements.size > DEBUG_RECENT_SNAPSHOT_ITEM_LIMIT) {
+            recentAnnouncements.removeFirst()
+        }
+    }
+
+    /** 表示期限を過ぎた直近結果を取り除く。 */
+    private fun dropExpiredRecentAnnouncements(nowMillis: Long) {
+        while (recentAnnouncements.isNotEmpty()) {
+            val recentItem = recentAnnouncements.first()
+            val elapsedMillis = nowMillis - recentItem.completedAtEpochMillis
+            if (elapsedMillis <= DEBUG_RECENT_RESULT_RETENTION_MILLIS) return
+
+            recentAnnouncements.removeFirst()
+        }
+    }
+
+    /** 発話リクエストを結果確定前の debug 表示素材に変換する。 */
+    private fun pendingDebugItemOf(request: VoiceAnnouncementRequest): VoiceAnnouncementDebugPendingItem =
+        VoiceAnnouncementDebugPendingItem(
+            stageId = request.stageId,
+            targetIndex = request.targetIndex,
+            text = request.content.displayText,
+            stageKind = request.kind.toDebugStageKind(),
+            categories = request.categories,
+        )
+
+    /** 選択結果を結果確定前の debug 表示素材に変換する。 */
+    private fun pendingDebugItemOf(
+        selection: VoiceAnnouncementSelection,
+        text: String,
+    ): VoiceAnnouncementDebugPendingItem = VoiceAnnouncementDebugPendingItem(
+        stageId = selection.stage.id,
+        targetIndex = selection.targetIndex,
+        text = text,
+        stageKind = selection.stage.kind.toDebugStageKind(),
+        categories = selection.stage.categories
+            .map { category -> category.name }
+            .toImmutableList(),
+    )
+
+    /** stage の raw piece から fallback 表示文を作る。 */
+    private fun stageText(stage: AnnouncementStage): String =
+        stage.pieces.joinToString(separator = "") { piece -> piece.text }
 
     // ---------------------------------------------------------------------
     // 診断ログ (issue #41 Phase 3 実機検証用、確認後に撤去予定)
@@ -315,9 +504,38 @@ internal class VoiceAnnouncementScheduler(
         }
     }
 
+    /**
+     * 発話結果が確定するまで保持する debug 表示素材。
+     *
+     * @property stageId 発話段 id
+     * @property targetIndex 発話対象の plan 内 index
+     * @property text UI に出す読み上げ文
+     * @property stageKind 発話段の種別
+     * @property categories 発話段に紐づく category 名
+     */
+    private data class VoiceAnnouncementDebugPendingItem(
+        val stageId: VoiceAnnouncementId,
+        val targetIndex: Int,
+        val text: String,
+        val stageKind: VoiceAnnouncementDebugStageKind,
+        val categories: ImmutableList<String>,
+    )
+
     private companion object {
 
         /** 発話判定の診断ログを絞り込むためのタグ。 */
         const val TAG = "VoiceAnnouncementDecision"
+
+        /** UI に表示する発話予定数。 */
+        const val DEBUG_SNAPSHOT_ITEM_LIMIT = 5
+
+        /** category gate で空になる段を見越して selector から読む最大候補数。 */
+        const val DEBUG_SNAPSHOT_SCAN_LIMIT = 12
+
+        /** 発話結果を debug card に残す時間。 */
+        const val DEBUG_RECENT_RESULT_RETENTION_MILLIS = 3_000L
+
+        /** debug card に残す直近結果数。 */
+        const val DEBUG_RECENT_SNAPSHOT_ITEM_LIMIT = 3
     }
 }

@@ -1,6 +1,8 @@
 package me.matsumo.onenavi.core.navigation.voice.dispatch
 
 import androidx.compose.runtime.Immutable
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementDistanceWindow
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStageKind
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementId
@@ -18,6 +20,7 @@ import me.matsumo.onenavi.core.navigation.voice.selector.VoiceAnnouncementSelect
  * @property kind 距離段の種別。発話中の緊急度 tie-break に使う
  * @property middleWindow MIDDLE 段の有効窓。キュー消化時に古くなった予告を捨てるために使う
  * @property content 読み上げる確定内容
+ * @property categories 発話段に紐づく category 名
  */
 @Immutable
 internal data class VoiceAnnouncementRequest(
@@ -27,6 +30,7 @@ internal data class VoiceAnnouncementRequest(
     val kind: AnnouncementStageKind,
     val middleWindow: AnnouncementDistanceWindow?,
     val content: VoiceAnnouncementContent,
+    val categories: ImmutableList<String>,
 ) {
 
     internal companion object {
@@ -47,6 +51,9 @@ internal data class VoiceAnnouncementRequest(
             kind = selection.stage.kind,
             middleWindow = selection.stage.middleWindow,
             content = content,
+            categories = selection.stage.categories
+                .map { category -> category.name }
+                .toImmutableList(),
         )
     }
 }

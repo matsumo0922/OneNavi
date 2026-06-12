@@ -31,6 +31,21 @@ class VoiceAnnouncementContentRendererTest {
     }
 
     @Test
+    fun `有効な素片を読点で繋いだ debug 表示テキストを作る`() {
+        val gate = VoiceAnnouncementCategoryGate.of(GuidanceCategory.Curve to false)
+        val renderer = VoiceAnnouncementContentRenderer(gate)
+        val stage = stageOf(
+            pieceOf(text = "ポーン300m先 ", category = GuidanceCategory.IntersectionGuide),
+            pieceOf(text = "右方向です", category = GuidanceCategory.IntersectionGuide),
+            pieceOf(text = "急カーブ注意", category = GuidanceCategory.Curve),
+        )
+
+        val content = renderer.render(stage)
+
+        assertEquals("300m先 、右方向です", content?.displayText)
+    }
+
+    @Test
     fun `直前が句読点で終わる素片には読点を重ねない`() {
         val renderer = VoiceAnnouncementContentRenderer(VoiceAnnouncementCategoryGate.AllOn)
         val stage = stageOf(

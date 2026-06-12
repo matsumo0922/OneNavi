@@ -42,10 +42,16 @@ internal class VoiceAnnouncementContentRenderer(
         val rawSsml = fragments
             .reduceOrNull { joined, fragment -> joined + separatorBefore(fragment, previous = joined) + fragment }
         val ssml = rawSsml?.let(PhonemeConverter::toGoogleCloudSsml)
+        val displayText = enabledPieces
+            .map { piece -> displayTextOf(piece) }
+            .filter { text -> text.isNotBlank() }
+            .reduceOrNull { joined, text -> joined + separatorBefore(text, previous = joined) + text }
+            .orEmpty()
         val cue = if (enabledPieces.any { piece -> piece.hasChimeCue() }) VoiceAnnouncementCue.CHIME else null
         val content = VoiceAnnouncementContent(
             ssml = ssml,
             cue = cue,
+            displayText = displayText,
         )
 
         return content.takeIf { it.hasOutput }
@@ -62,6 +68,10 @@ internal class VoiceAnnouncementContentRenderer(
     /** 素片を SSML 断片にする。SSML を持つ素片はそのまま、持たない素片は text を escape して取り込む。 */
     private fun ssmlFragmentOf(piece: GuideAnnouncementPiece): String =
         piece.ssml?.removeChimeText() ?: escapeSsmlText(piece.text.removeChimeText())
+
+    /** デバッグ表示用に素片の plain text を返す。 */
+    private fun displayTextOf(piece: GuideAnnouncementPiece): String =
+        piece.text.removeChimeText()
 
     /** 素片にローカル効果音へ差し替えるチャイム表現が含まれるか。 */
     private fun GuideAnnouncementPiece.hasChimeCue(): Boolean =
