@@ -234,7 +234,7 @@
     <string name="setting_developer_options_tts_voice_override">TTS voice 上書き</string>
     <string name="setting_developer_options_tts_voice_override_description">Google Cloud TTS の voice 名と speakingRate を開発者向けに上書きします。OFF の間は保存済みの値を合成に使いません。</string>
     <string name="setting_developer_options_tts_voice_name_override">TTS voice 名</string>
-    <string name="setting_developer_options_tts_voice_name_override_description">空欄ならアプリの既定 voice を使います。例: ja-JP-Chirp3-HD-Kore</string>
+    <string name="setting_developer_options_tts_voice_name_override_description">入力後に適用すると反映します。空欄ならアプリの既定 voice を使います。例: ja-JP-Chirp3-HD-Kore</string>
     <string name="setting_developer_options_tts_speaking_rate_override">TTS speakingRate</string>
     <string name="setting_developer_options_tts_speaking_rate_override_description">0.25 から 2.0 の範囲で話速を上書きします。1.0 が標準です。</string>
     <string name="setting_developer_options_car_vd_debug_overlay">AA VD デバッグオーバーレイ</string>

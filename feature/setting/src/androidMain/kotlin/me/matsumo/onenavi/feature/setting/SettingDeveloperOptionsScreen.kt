@@ -2,12 +2,15 @@ package me.matsumo.onenavi.feature.setting
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -17,6 +20,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -24,6 +28,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.matsumo.onenavi.core.common.car.CarHardwareConnectionStatus
@@ -38,6 +44,7 @@ import me.matsumo.onenavi.core.common.car.CarHardwareValueSnapshot
 import me.matsumo.onenavi.core.model.AppSetting
 import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.resource.Res
+import me.matsumo.onenavi.core.resource.common_apply
 import me.matsumo.onenavi.core.resource.setting_developer_options_car_hardware_diagnostics
 import me.matsumo.onenavi.core.resource.setting_developer_options_car_hardware_diagnostics_connection
 import me.matsumo.onenavi.core.resource.setting_developer_options_car_hardware_diagnostics_description
@@ -250,8 +257,20 @@ private fun SettingDeveloperOptionsVoiceNameItem(
     onVoiceNameChanged: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val focusManager = LocalFocusManager.current
+    val savedVoiceName = voiceName.trim()
     var voiceNameDraft by remember(voiceName) {
-        mutableStateOf(voiceName)
+        mutableStateOf(savedVoiceName)
+    }
+    val resolvedVoiceNameDraft = voiceNameDraft.trim()
+    val hasPendingVoiceName = resolvedVoiceNameDraft != savedVoiceName
+
+    fun applyVoiceNameOverride() {
+        voiceNameDraft = resolvedVoiceNameDraft
+
+        if (hasPendingVoiceName) {
+            onVoiceNameChanged(resolvedVoiceNameDraft)
+        }
     }
 
     Column(
@@ -263,7 +282,6 @@ private fun SettingDeveloperOptionsVoiceNameItem(
             value = voiceNameDraft,
             onValueChange = { updatedVoiceName ->
                 voiceNameDraft = updatedVoiceName
-                onVoiceNameChanged(updatedVoiceName)
             },
             label = {
                 Text(text = stringResource(Res.string.setting_developer_options_tts_voice_name_override))
@@ -275,8 +293,30 @@ private fun SettingDeveloperOptionsVoiceNameItem(
                     ),
                 )
             },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    applyVoiceNameOverride()
+                    focusManager.clearFocus()
+                },
+            ),
             singleLine = true,
         )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(
+                enabled = hasPendingVoiceName,
+                onClick = {
+                    applyVoiceNameOverride()
+                    focusManager.clearFocus()
+                },
+            ) {
+                Text(text = stringResource(Res.string.common_apply))
+            }
+        }
     }
 }
 
