@@ -584,7 +584,7 @@ private fun MapNavigationGuidancePanelRow(
                         Text(
                             text = etaText,
                             color = panelColors.onPrimary,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                         )
@@ -593,7 +593,7 @@ private fun MapNavigationGuidancePanelRow(
                     Text(
                         text = distanceText,
                         color = panelColors.onPrimary,
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                     )
                 }
@@ -786,7 +786,7 @@ private fun MapNavigationGuidancePanelDetail(
             modifier = modifier,
             text = stringResource(Res.string.home_map_navigation_panel_direction_sign, detail.text),
             color = secondaryContentColor,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -795,7 +795,7 @@ private fun MapNavigationGuidancePanelDetail(
             modifier = modifier,
             text = formatYen(detail.amountYen),
             color = secondaryContentColor,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -804,7 +804,7 @@ private fun MapNavigationGuidancePanelDetail(
             modifier = modifier,
             text = stringResource(detail.kind.boundaryLabel()),
             color = secondaryContentColor,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -813,7 +813,7 @@ private fun MapNavigationGuidancePanelDetail(
             modifier = modifier,
             text = detail.text,
             color = secondaryContentColor,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

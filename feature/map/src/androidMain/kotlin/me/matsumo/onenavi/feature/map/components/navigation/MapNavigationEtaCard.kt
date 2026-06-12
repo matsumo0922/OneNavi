@@ -150,7 +150,9 @@ internal fun MapNavigationEtaCard(
             }
 
             MapNavigationEtaActionRow(
-                modifier = Modifier.align(Alignment.End),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.End),
                 onCloseClicked = onCloseClicked,
                 onAlternativesClicked = onAlternativesClicked,
                 onAddWaypointClicked = onAddWaypointClicked,
@@ -170,7 +172,7 @@ private fun MapNavigationEtaActionRow(
 ) {
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MapNavigationEtaActionButton(

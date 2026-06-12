@@ -81,6 +81,7 @@ internal fun SettingOthersSection(
         SettingDeveloperModeDialog(
             onDeveloperModeEnabled = {
                 onDeveloperModeChanged.invoke(true)
+                onDeveloperOptionsClicked.invoke()
                 isShowDeveloperModeDialog = false
             },
             onDismissRequest = {

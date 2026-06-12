@@ -72,9 +72,9 @@ private fun MapNavigationCurrentSpeedColumn(
         horizontalAlignment = Alignment.End,
     ) {
         Text(
-            text = "$speedText$SPEED_UNIT_KM",
+            text = "$speedText $SPEED_UNIT_KM",
             color = MaterialTheme.colorScheme.onSurface,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.End,
         )
@@ -82,7 +82,7 @@ private fun MapNavigationCurrentSpeedColumn(
         Text(
             text = SPEED_LABEL,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.End,
         )
     }
@@ -126,7 +126,7 @@ private fun MapNavigationSpeedLimitSign(
 private const val SPEED_UNKNOWN_PLACEHOLDER = "--"
 
 /** 速度表示で使う単位。 */
-private const val SPEED_UNIT_KM = "km"
+private const val SPEED_UNIT_KM = "km/h"
 
 /** 速度表示の補助ラベル。 */
 private const val SPEED_LABEL = "speed"
