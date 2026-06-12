@@ -1,7 +1,13 @@
 package me.matsumo.onenavi.feature.map.components.navigation
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +26,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,32 +97,20 @@ internal fun MapNavigationManeuverPanel(
     val isGuideImageInVisibleRange = banner.primary.distanceToManeuverMeters <= NAVIGATION_GUIDE_IMAGE_VISIBILITY_METERS
     val visibleGuideImage = guideImage.takeIf { isGuideImageInVisibleRange }
     val shouldPreferFollowupHint = hasGuideImageKey && !isGuideImageInVisibleRange
-    val hasLanes = laneCells != null
-    val hasPrioritizedHint = shouldPreferFollowupHint && followupCallout != null
-    val hasHint = followupCallout != null
-    val hasGuideImage = visibleGuideImage != null
     val hasPanelItems = banner.hasMoreEvents || route.geometry.isNotEmpty()
+    val bottomContent = maneuverBottomContent(
+        visibleGuideImage = visibleGuideImage,
+        hasPanelItems = hasPanelItems,
+        showPanel = showPanel,
+        shouldPreferFollowupHint = shouldPreferFollowupHint,
+        laneCells = laneCells,
+        followupCallout = followupCallout,
+    )
     val bottomSectionMaxHeight = navigationManeuverBottomSectionMaxHeight(
         isSplit = isSplit,
         availableHeight = availableHeight,
     )
-    val topShape = when {
-        hasGuideImage || showPanel -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-        hasPrioritizedHint -> RoundedCornerShape(
-            topStart = 16.dp,
-            topEnd = 16.dp,
-            bottomStart = 0.dp,
-            bottomEnd = 16.dp,
-        )
-        hasLanes -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-        hasHint -> RoundedCornerShape(
-            topStart = 16.dp,
-            topEnd = 16.dp,
-            bottomStart = 0.dp,
-            bottomEnd = 16.dp,
-        )
-        else -> RoundedCornerShape(16.dp)
-    }
+    val topShape = navigationManeuverTopShape(content = bottomContent)
 
     Column(
         modifier = modifier
@@ -132,33 +128,22 @@ internal fun MapNavigationManeuverPanel(
             onShowPanelItemsClicked = { showPanel = !showPanel },
         )
 
-        if (hasPanelItems && showPanel) {
-            MapNavigationManeuverPanelSection(
-                modifier = Modifier.fillMaxWidth(),
-                route = route,
-                listItems = listItems,
-                meterLabel = meterLabel,
-                kilometerLabel = kilometerLabel,
-                dayLabel = dayLabel,
-                hourLabel = hourLabel,
-                minuteLabel = minuteLabel,
-                timestampMillis = progress.locationTimestampMillis,
-                currentCumulativeMeters = progress.currentCumulativeMeters,
-                isSplit = isSplit,
-                availableHeight = availableHeight,
-            )
-        } else {
-            MapNavigationManeuverBottomSection(
-                modifier = Modifier.fillMaxWidth(),
-                guideImage = visibleGuideImage,
-                shouldPreferFollowupHint = shouldPreferFollowupHint,
-                laneCells = laneCells,
-                followupCallout = followupCallout,
-                followupLabel = followupLabel,
-                roadClass = banner.roadClass,
-                maxHeight = bottomSectionMaxHeight,
-            )
-        }
+        MapNavigationManeuverBottomContainer(
+            modifier = Modifier.fillMaxWidth(),
+            content = bottomContent,
+            route = route,
+            listItems = listItems,
+            meterLabel = meterLabel,
+            kilometerLabel = kilometerLabel,
+            dayLabel = dayLabel,
+            hourLabel = hourLabel,
+            minuteLabel = minuteLabel,
+            timestampMillis = progress.locationTimestampMillis,
+            currentCumulativeMeters = progress.currentCumulativeMeters,
+            followupLabel = followupLabel,
+            roadClass = banner.roadClass,
+            maxHeight = bottomSectionMaxHeight,
+        )
     }
 }
 
@@ -215,6 +200,294 @@ private fun navigationManeuverBottomSectionMaxHeight(
     }
 
     return ManeuverGuideImageMaxHeight
+}
+
+private fun maneuverBottomContent(
+    visibleGuideImage: NavigationGuideImage?,
+    hasPanelItems: Boolean,
+    showPanel: Boolean,
+    shouldPreferFollowupHint: Boolean,
+    laneCells: ImmutableList<LaneCell>?,
+    followupCallout: ManeuverCallout?,
+): ManeuverBottomContent {
+    return when (
+        resolveManeuverBottomContentType(
+            hasVisibleGuideImage = visibleGuideImage != null,
+            hasPanelItems = hasPanelItems,
+            showPanel = showPanel,
+            shouldPreferFollowupHint = shouldPreferFollowupHint,
+            hasLaneCells = laneCells != null,
+            hasFollowupCallout = followupCallout != null,
+        )
+    ) {
+        ManeuverBottomContentType.GuideImage -> ManeuverBottomContent.GuideImage(
+            guideImage = requireNotNull(visibleGuideImage),
+        )
+        ManeuverBottomContentType.Panel -> ManeuverBottomContent.Panel
+        ManeuverBottomContentType.Followup -> ManeuverBottomContent.Followup(
+            maneuver = requireNotNull(followupCallout),
+        )
+        ManeuverBottomContentType.Lanes -> ManeuverBottomContent.Lanes(
+            lanes = requireNotNull(laneCells),
+        )
+        ManeuverBottomContentType.None -> ManeuverBottomContent.None
+    }
+}
+
+/**
+ * Maneuver カード下段に表示するコンテンツ種別を優先度順に解決する。
+ */
+internal fun resolveManeuverBottomContentType(
+    hasVisibleGuideImage: Boolean,
+    hasPanelItems: Boolean,
+    showPanel: Boolean,
+    shouldPreferFollowupHint: Boolean,
+    hasLaneCells: Boolean,
+    hasFollowupCallout: Boolean,
+): ManeuverBottomContentType {
+    return when {
+        hasVisibleGuideImage -> ManeuverBottomContentType.GuideImage
+        hasPanelItems && showPanel -> ManeuverBottomContentType.Panel
+        shouldPreferFollowupHint && hasFollowupCallout -> ManeuverBottomContentType.Followup
+        hasLaneCells -> ManeuverBottomContentType.Lanes
+        hasFollowupCallout -> ManeuverBottomContentType.Followup
+        else -> ManeuverBottomContentType.None
+    }
+}
+
+/**
+ * Maneuver カード下段に表示するコンテンツ種別。
+ */
+internal enum class ManeuverBottomContentType {
+
+    /** 案内画像。 */
+    GuideImage,
+
+    /** 案内地点リストのパネル。 */
+    Panel,
+
+    /** 通常のフォローアップ案内。 */
+    Followup,
+
+    /** 推奨レーン。 */
+    Lanes,
+
+    /** 下段なし。 */
+    None,
+}
+
+private fun navigationManeuverTopShape(content: ManeuverBottomContent): Shape {
+    if (content.isWideContent()) {
+        return RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+    }
+
+    if (content is ManeuverBottomContent.Followup) {
+        return RoundedCornerShape(
+            topStart = 16.dp,
+            topEnd = 16.dp,
+            bottomStart = 0.dp,
+            bottomEnd = 16.dp,
+        )
+    }
+
+    return RoundedCornerShape(16.dp)
+}
+
+@Composable
+private fun MapNavigationManeuverBottomContainer(
+    content: ManeuverBottomContent,
+    route: RouteDetail,
+    listItems: ImmutableList<GuidanceListItem>,
+    meterLabel: String,
+    kilometerLabel: String,
+    dayLabel: String,
+    hourLabel: String,
+    minuteLabel: String,
+    timestampMillis: Long,
+    currentCumulativeMeters: Double,
+    followupLabel: String,
+    roadClass: RoadClass,
+    maxHeight: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val panelColors = RouteColors.maneuver(roadClass)
+    val bottomShape = content.bottomShape()
+
+    Surface(
+        modifier = modifier
+            .maneuverBottomContainerLayout(
+                content = content,
+                maxHeight = maxHeight,
+            )
+            .animateContentSize(),
+        shape = bottomShape,
+        color = panelColors.container,
+    ) {
+        AnimatedContent(
+            targetState = content,
+            transitionSpec = { fadeIn().togetherWith(fadeOut()) },
+            contentKey = { targetContent -> targetContent::class },
+            label = "ManeuverBottomContent",
+        ) { targetContent ->
+            MapNavigationManeuverBottomContent(
+                content = targetContent,
+                route = route,
+                listItems = listItems,
+                meterLabel = meterLabel,
+                kilometerLabel = kilometerLabel,
+                dayLabel = dayLabel,
+                hourLabel = hourLabel,
+                minuteLabel = minuteLabel,
+                timestampMillis = timestampMillis,
+                currentCumulativeMeters = currentCumulativeMeters,
+                followupLabel = followupLabel,
+                panelColors = panelColors,
+                maxHeight = maxHeight,
+            )
+        }
+    }
+}
+
+private fun Modifier.maneuverBottomContainerLayout(
+    content: ManeuverBottomContent,
+    maxHeight: Dp,
+): Modifier {
+    val constrainedModifier = heightIn(max = maxHeight)
+
+    if (content is ManeuverBottomContent.Followup) {
+        return constrainedModifier.wrapContentWidth(Alignment.Start)
+    }
+
+    return constrainedModifier.fillMaxWidth()
+}
+
+@Composable
+private fun MapNavigationManeuverBottomContent(
+    content: ManeuverBottomContent,
+    route: RouteDetail,
+    listItems: ImmutableList<GuidanceListItem>,
+    meterLabel: String,
+    kilometerLabel: String,
+    dayLabel: String,
+    hourLabel: String,
+    minuteLabel: String,
+    timestampMillis: Long,
+    currentCumulativeMeters: Double,
+    followupLabel: String,
+    panelColors: RouteColors.ManeuverColors,
+    maxHeight: Dp,
+    modifier: Modifier = Modifier,
+) {
+    when (content) {
+        is ManeuverBottomContent.GuideImage -> MapNavigationManeuverGuideImage(
+            modifier = modifier
+                .fillMaxWidth()
+                .heightIn(max = maxHeight),
+            guideImage = content.guideImage,
+        )
+
+        ManeuverBottomContent.Panel -> MapNavigationManeuverPanelSection(
+            modifier = modifier.fillMaxWidth(),
+            route = route,
+            listItems = listItems,
+            meterLabel = meterLabel,
+            kilometerLabel = kilometerLabel,
+            dayLabel = dayLabel,
+            hourLabel = hourLabel,
+            minuteLabel = minuteLabel,
+            timestampMillis = timestampMillis,
+            currentCumulativeMeters = currentCumulativeMeters,
+        )
+
+        is ManeuverBottomContent.Lanes -> MapNavigationManeuverLaneRow(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            lanes = content.lanes,
+            activeTint = panelColors.onContainer,
+            inactiveTint = panelColors.onContainer.copy(alpha = ManeuverLaneInactiveAlpha),
+        )
+
+        is ManeuverBottomContent.Followup -> MapNavigationManeuverFollowupHint(
+            modifier = modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            maneuver = content.maneuver,
+            label = followupLabel,
+            contentColor = panelColors.onContainer,
+        )
+
+        ManeuverBottomContent.None -> Box(modifier = modifier.fillMaxWidth())
+    }
+}
+
+/**
+ * Maneuver カード下段の表示内容。優先度解決済みの結果だけを保持する。
+ */
+@Stable
+private sealed interface ManeuverBottomContent {
+
+    /**
+     * 案内画像。
+     *
+     * @property guideImage 表示する案内画像。
+     */
+    @Stable
+    data class GuideImage(
+        val guideImage: NavigationGuideImage,
+    ) : ManeuverBottomContent
+
+    /** 案内地点リストのパネル。 */
+    @Stable
+    data object Panel : ManeuverBottomContent
+
+    /**
+     * 推奨レーン。
+     *
+     * @property lanes 表示するレーンセル一覧。
+     */
+    @Immutable
+    data class Lanes(
+        val lanes: ImmutableList<LaneCell>,
+    ) : ManeuverBottomContent
+
+    /**
+     * 通常のフォローアップ案内。
+     *
+     * @property maneuver 表示するフォローアップ案内。
+     */
+    @Stable
+    data class Followup(
+        val maneuver: ManeuverCallout,
+    ) : ManeuverBottomContent
+
+    /** 下段なし。 */
+    @Stable
+    data object None : ManeuverBottomContent
+}
+
+private fun ManeuverBottomContent.bottomShape(): Shape {
+    if (this is ManeuverBottomContent.Followup) {
+        return RoundedCornerShape(
+            topStart = 0.dp,
+            topEnd = 0.dp,
+            bottomStart = 16.dp,
+            bottomEnd = 16.dp,
+        )
+    }
+
+    return RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
+}
+
+private fun ManeuverBottomContent.isWideContent(): Boolean {
+    return when (this) {
+        is ManeuverBottomContent.GuideImage,
+        ManeuverBottomContent.Panel,
+        is ManeuverBottomContent.Lanes,
+        -> true
+
+        is ManeuverBottomContent.Followup,
+        ManeuverBottomContent.None,
+        -> false
+    }
 }
 
 @Composable
@@ -354,102 +627,6 @@ private fun MapNavigationReroutingTopSection(
 }
 
 @Composable
-private fun MapNavigationManeuverBottomSection(
-    guideImage: NavigationGuideImage?,
-    shouldPreferFollowupHint: Boolean,
-    laneCells: ImmutableList<LaneCell>?,
-    followupCallout: ManeuverCallout?,
-    followupLabel: String,
-    roadClass: RoadClass,
-    maxHeight: Dp,
-    modifier: Modifier = Modifier,
-) {
-    when {
-        guideImage != null -> {
-            val panelColors = RouteColors.maneuver(roadClass)
-            Surface(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .heightIn(max = maxHeight),
-                shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
-                color = panelColors.container,
-            ) {
-                MapNavigationManeuverGuideImage(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = maxHeight),
-                    guideImage = guideImage,
-                )
-            }
-        }
-
-        shouldPreferFollowupHint && followupCallout != null -> {
-            val panelColors = RouteColors.maneuver(roadClass)
-            Surface(
-                modifier = modifier
-                    .heightIn(max = maxHeight)
-                    .wrapContentWidth(Alignment.Start),
-                shape = RoundedCornerShape(
-                    topStart = 0.dp,
-                    topEnd = 0.dp,
-                    bottomStart = 16.dp,
-                    bottomEnd = 16.dp,
-                ),
-                color = panelColors.container,
-            ) {
-                MapNavigationManeuverFollowupHint(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    maneuver = followupCallout,
-                    label = followupLabel,
-                    contentColor = panelColors.onContainer,
-                )
-            }
-        }
-
-        laneCells != null -> {
-            val panelColors = RouteColors.maneuver(roadClass)
-            Surface(
-                modifier = modifier.heightIn(max = maxHeight),
-                shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
-                color = panelColors.container,
-            ) {
-                MapNavigationManeuverLaneRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    lanes = laneCells,
-                    activeTint = panelColors.onContainer,
-                    inactiveTint = panelColors.onContainer.copy(alpha = ManeuverLaneInactiveAlpha),
-                )
-            }
-        }
-
-        followupCallout != null -> {
-            val panelColors = RouteColors.maneuver(roadClass)
-            Surface(
-                modifier = modifier
-                    .heightIn(max = maxHeight)
-                    .wrapContentWidth(Alignment.Start),
-                shape = RoundedCornerShape(
-                    topStart = 0.dp,
-                    topEnd = 0.dp,
-                    bottomStart = 16.dp,
-                    bottomEnd = 16.dp,
-                ),
-                color = panelColors.container,
-            ) {
-                MapNavigationManeuverFollowupHint(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    maneuver = followupCallout,
-                    label = followupLabel,
-                    contentColor = panelColors.onContainer,
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun MapNavigationManeuverGuideImage(
     guideImage: NavigationGuideImage,
     modifier: Modifier = Modifier,
@@ -537,7 +714,10 @@ private fun formatGuidanceDistance(
     )
 }
 
+/** マニューバレーンアイコンの標準サイズ。 */
 private val ManeuverLaneIconSize = 36.dp
+
+/** マニューバレーンアイコン同士の標準間隔。 */
 private val ManeuverLaneIconSpacing = 12.dp
 
 /** マニューバレーンの非推奨矢印に適用する透明度。 */
