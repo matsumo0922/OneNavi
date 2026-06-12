@@ -15,6 +15,7 @@ kotlin {
             api(project.dependencies.platform(libs.koin.bom))
             api(project.dependencies.platform(libs.firebase.bom))
 
+            api(libs.compose.runtime)
             api(libs.bundles.infra)
             api(libs.bundles.koin)
             api(libs.bundles.firebase)

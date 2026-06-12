@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
+import me.matsumo.onenavi.core.common.car.CarHardwareDiagnosticsState
 import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.model.Theme
 import me.matsumo.onenavi.core.repository.AppSettingRepository
@@ -12,6 +13,7 @@ class SettingViewModel(
     private val repository: AppSettingRepository,
 ) : ViewModel() {
     val setting = repository.setting
+    val carHardwareDiagnostics = CarHardwareDiagnosticsState.snapshot
 
     fun setTheme(theme: Theme) {
         viewModelScope.launch {

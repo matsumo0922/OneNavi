@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 800px; height: 1280px; }
+      body {
+        font-family: system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif;
+        color: #1b1c1f;
+        background: #f8f7fb;
+      }
+      .topbar {
+        height: 72px;
+        display: grid;
+        grid-template-columns: 72px 1fr 72px;
+        align-items: center;
+        background: #ffffff;
+        border-bottom: 1px solid #dfdfe5;
+      }
+      .back {
+        width: 44px;
+        height: 44px;
+        margin-left: 14px;
+        border-radius: 22px;
+        display: grid;
+        place-items: center;
+        color: #285ea8;
+        font-size: 28px;
+      }
+      .title {
+        text-align: center;
+        font-size: 20px;
+        font-weight: 750;
+      }
+      main {
+        width: 620px;
+        margin: 0 auto;
+        padding: 22px 0 48px;
+      }
+      .section {
+        padding: 28px 0 12px;
+        color: #285ea8;
+        font-size: 13px;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+      .row {
+        padding: 16px 0;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 20px;
+        align-items: center;
+        border-bottom: 1px solid #ececf2;
+      }
+      .label {
+        font-size: 17px;
+        font-weight: 700;
+      }
+      .desc {
+        margin-top: 5px;
+        color: #5d6472;
+        font-size: 13px;
+        line-height: 1.55;
+        white-space: pre-line;
+      }
+      .switch {
+        width: 50px;
+        height: 30px;
+        border-radius: 16px;
+        background: #285ea8;
+        position: relative;
+      }
+      .switch::after {
+        content: "";
+        position: absolute;
+        right: 3px;
+        top: 3px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #ffffff;
+      }
+      .mono {
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="back">‹</div>
+      <div class="title">開発者向けオプション</div>
+      <div></div>
+    </div>
+    <main>
+      <div class="section">Android Auto</div>
+      <div class="row">
+        <div>
+          <div class="label">車両データ診断</div>
+          <div class="desc">Android Auto host から取得した車速、ETC、燃料/電池、車両位置の値と STATUS_* を表示します。</div>
+        </div>
+        <div class="switch"></div>
+      </div>
+      <div class="section">車両データ診断</div>
+      <div class="row">
+        <div>
+          <div class="label">接続状態</div>
+          <div class="desc mono">CONNECTED</div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <div class="label">車速</div>
+          <div class="desc mono">raw: 13.82 m/s (49.8 km/h) / STATUS_SUCCESS / t=840120ms
+display: 13.20 m/s (47.5 km/h) / STATUS_SUCCESS / t=840120ms
+unit: KILOMETERS_PER_HOUR / STATUS_SUCCESS / t=840120ms</div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <div class="label">ETC カード</div>
+          <div class="desc mono">cardState: VALID / STATUS_SUCCESS / t=840121ms</div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <div class="label">燃料 / 電池</div>
+          <div class="desc mono">batteryPercent: 値なし / STATUS_UNIMPLEMENTED / t=0ms
+fuelPercent: 62.0 / STATUS_SUCCESS / t=840122ms
+energyIsLow: false / STATUS_SUCCESS / t=840122ms
+rangeRemaining: 382000.0m / STATUS_SUCCESS / t=840122ms</div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <div class="label">車両位置</div>
+          <div class="desc mono">lat/lng: 35.681236, 139.767125
+provider: fused
+accuracy: 4.2m
+speed: 13.10 m/s (47.2 km/h)
+STATUS_SUCCESS / t=840123ms</div>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
