@@ -42,6 +42,7 @@ import me.matsumo.onenavi.core.navigation.voice.suppression.VoiceAnnouncementSpe
  * 2. 最緊急の発話候補を 1 件選ぶ ([VoiceAnnouncementSelector.select])。
  * 3. PLAY / BARGE_IN / ENQUEUE を判定し ([VoiceAnnouncementSelectionPolicy])、選ばれた段を必ず処理済みにする。
  *    level トリガなので処理済みにしないと同じ段が鳴り続ける。
+ * 4. MIDDLE を発話中にした場合は同じ tick で他に発話可能な MIDDLE を再選抜し、後続発話としてキューへ積む。
  */
 internal class VoiceAnnouncementScheduler(
     private val selector: VoiceAnnouncementSelector,
@@ -105,14 +106,14 @@ internal class VoiceAnnouncementScheduler(
         if (state.speaking == null) {
             queueCandidateAt(tick)?.let { queuedRequest ->
                 if (selection == null || !selection.isMoreUrgentThan(queuedRequest, tick)) {
-                    return dispatchQueuedRequest(queuedRequest)
+                    return dispatchQueuedRequest(currentPlan, queuedRequest, tick)
                 }
             }
         }
 
         if (selection == null) return null
 
-        return dispatchSelection(selection, tick)
+        return dispatchSelection(currentPlan, selection, tick)
     }
 
     /**
@@ -226,6 +227,7 @@ internal class VoiceAnnouncementScheduler(
      * 同一文言抑止に対応)。発話に進む場合は実発話開始時に内容キーを発話済みとして記録する。
      */
     private fun dispatchSelection(
+        plan: VoiceAnnouncementPlan,
         selection: VoiceAnnouncementSelection,
         tick: VoiceTick,
     ): VoiceAnnouncementCommand? {
@@ -249,9 +251,19 @@ internal class VoiceAnnouncementScheduler(
         logDecision(decision, selection, tick)
 
         return when (decision) {
-            VoiceAnnouncementDispatchDecision.PLAY -> startSpeaking(request)
+            VoiceAnnouncementDispatchDecision.PLAY -> {
+                val command = startSpeaking(request)
+                enqueueDeferredMiddleCandidates(plan, tick, request)
+
+                command
+            }
             VoiceAnnouncementDispatchDecision.BARGE_IN -> interruptAndSpeak(request)
-            VoiceAnnouncementDispatchDecision.ENQUEUE -> enqueue(request)
+            VoiceAnnouncementDispatchDecision.ENQUEUE -> {
+                enqueue(request)
+                enqueueDeferredMiddleCandidates(plan, tick, request)
+
+                null
+            }
         }
     }
 
@@ -261,9 +273,10 @@ internal class VoiceAnnouncementScheduler(
      * MIDDLE は距離窓にいる間だけ有効な予告なので、発話待ちの間に窓を過ぎたものはここで捨てる。
      */
     private fun dispatchNextFromQueue(tick: VoiceTick): VoiceAnnouncementCommand? {
+        val currentPlan = plan ?: return null
         val request = queueCandidateAt(tick) ?: return null
 
-        return dispatchQueuedRequest(request)
+        return dispatchQueuedRequest(currentPlan, request, tick)
     }
 
     /**
@@ -309,28 +322,15 @@ internal class VoiceAnnouncementScheduler(
         AnnouncementStageKind.FINAL -> false
     }
 
-    /** MIDDLE の stale 判定。safety 系 category は窓終端後も短い猶予を許す。 */
+    /** MIDDLE の stale 判定。ENQUEUE 済み候補は窓終端後も短い猶予を許す。 */
     private fun VoiceAnnouncementRequest.isMiddleRequestStaleAt(tick: VoiceTick): Boolean {
         val window = middleWindow ?: return true
         val currentCumulativeMeters = tick.currentCumulativeMeters
         if (currentCumulativeMeters < window.enterGeometryMeters) return true
 
-        val exitGeometryMeters = window.exitGeometryMeters + queuedStaleGraceMeters()
+        val exitGeometryMeters = window.exitGeometryMeters + config.queuedStaleGraceMeters
 
         return currentCumulativeMeters >= exitGeometryMeters
-    }
-
-    /** request の category が stale 猶予対象なら猶予距離、それ以外は 0m を返す。 */
-    private fun VoiceAnnouncementRequest.queuedStaleGraceMeters(): Double =
-        if (hasQueuedStaleGraceCategory()) config.queuedStaleGraceMeters else 0.0
-
-    /** request が safety 系 category を 1 つでも含むかを返す。 */
-    private fun VoiceAnnouncementRequest.hasQueuedStaleGraceCategory(): Boolean {
-        for (categoryName in categories) {
-            if (categoryName in config.queuedStaleGraceCategoryNames) return true
-        }
-
-        return false
     }
 
     /** attach 時点で名目距離より深く食い込んだ FINAL を処理済みにして、距離句の破綻を避ける。 */
@@ -384,11 +384,61 @@ internal class VoiceAnnouncementScheduler(
     }
 
     /** キュー先頭の候補を取り出して発話開始指示にする。 */
-    private fun dispatchQueuedRequest(request: VoiceAnnouncementRequest): VoiceAnnouncementCommand {
+    private fun dispatchQueuedRequest(
+        plan: VoiceAnnouncementPlan,
+        request: VoiceAnnouncementRequest,
+        tick: VoiceTick,
+    ): VoiceAnnouncementCommand {
         pendingQueue.removeFirst()
         Napier.d(tag = TAG) { "drain stage=${request.stageId.value}" }
+        val command = startSpeaking(request)
+        enqueueDeferredMiddleCandidates(plan, tick, request)
 
-        return startSpeaking(request)
+        return command
+    }
+
+    /** MIDDLE が発話中の同一 tick で発話可能な別 MIDDLE を、発話終了後の後続発話としてキューへ積む。 */
+    private fun enqueueDeferredMiddleCandidates(
+        plan: VoiceAnnouncementPlan,
+        tick: VoiceTick,
+        request: VoiceAnnouncementRequest,
+    ) {
+        if (request.kind != AnnouncementStageKind.MIDDLE) return
+
+        while (true) {
+            val selection = selector.select(plan, tick, state) ?: return
+            if (selection.stage.kind != AnnouncementStageKind.MIDDLE) return
+            if (!enqueueDeferredMiddleCandidate(selection, tick)) return
+        }
+    }
+
+    /** 同一 tick の MIDDLE 候補 1 件を queue へ積めるなら積み、続行可否を返す。 */
+    private fun enqueueDeferredMiddleCandidate(
+        selection: VoiceAnnouncementSelection,
+        tick: VoiceTick,
+    ): Boolean {
+        val content = contentRenderer.render(selection.stage)
+        if (content == null) {
+            logSkippedEmpty(selection, tick)
+            recordSelectionNotSpoken(selection, stageText(selection.stage))
+            state = state.withStageFired(selection.stage.id)
+            return true
+        }
+
+        if (state.isContentSpoken(selection.targetIndex, content.dedupeKey)) {
+            logSkippedDuplicateContent(selection, content, tick)
+            recordSelectionNotSpoken(selection, content.displayText)
+            state = state.withStageFired(selection.stage.id)
+            return true
+        }
+
+        val decision = policy.decide(state, selection, tick)
+        if (decision != VoiceAnnouncementDispatchDecision.ENQUEUE) return false
+
+        logDecision(decision, selection, tick)
+        enqueue(VoiceAnnouncementRequest.from(selection, content))
+
+        return true
     }
 
     /** 発話中マークを立てて開始指示を返す。発話中が無い前提 (PLAY / キュー消化) で使う。 */

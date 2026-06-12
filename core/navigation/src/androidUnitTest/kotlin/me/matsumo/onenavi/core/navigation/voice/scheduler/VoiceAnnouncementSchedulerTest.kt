@@ -50,7 +50,7 @@ class VoiceAnnouncementSchedulerTest {
 
         // near の方が緊急なので先に発話開始。
         val first = scheduler.onTick(tickOf(current = 450.0))
-        // 発話中に far が trigger するが near より非緊急 → キューへ積むだけ (指示なし)。
+        // far は near 開始 tick で後続キューへ積まれているため、発話中 tick は指示なし。
         val whileSpeaking = scheduler.onTick(tickOf(current = 460.0))
         // near の発話完了でキューの far を消化する。
         val drained = scheduler.onSpeechFinished(VoiceAnnouncementId("near"))
@@ -58,6 +58,80 @@ class VoiceAnnouncementSchedulerTest {
         assertEquals(VoiceAnnouncementId("near"), assertIs<VoiceAnnouncementCommand.StartSpeaking>(first).request.stageId)
         assertNull(whileSpeaking)
         assertEquals(VoiceAnnouncementId("far"), assertIs<VoiceAnnouncementCommand.StartSpeaking>(drained).request.stageId)
+    }
+
+    @Test
+    fun `lane guidance と同時に有効な川口JCTの 3km 1km 手前 MIDDLE は後続発話として保持される`() {
+        val scheduler = schedulerOf()
+        scheduler.attach(
+            planOf(
+                targetOf(
+                    index = 0,
+                    geometryMeters = 7_000.0,
+                    middleStageWindowed(
+                        id = "lane3km",
+                        enter = 6_900.0,
+                        exit = 7_000.0,
+                        category = GuidanceCategory.HighwayRecommendedLane,
+                        groupKey = "lane3km",
+                    ),
+                ),
+                targetOf(
+                    index = 1,
+                    geometryMeters = 9_000.0,
+                    middleStageWindowed(
+                        id = "lane1km",
+                        enter = 8_900.0,
+                        exit = 9_000.0,
+                        category = GuidanceCategory.HighwayRecommendedLane,
+                        groupKey = "lane1km",
+                    ),
+                ),
+                targetOf(
+                    index = 2,
+                    geometryMeters = 10_000.0,
+                    middleStageWindowed(
+                        id = "kawaguchi3km",
+                        enter = 6_900.0,
+                        exit = 6_960.0,
+                        groupKey = "kawaguchi3km",
+                        text = "およそ3km先、川口JCTです",
+                    ),
+                    middleStageWindowed(
+                        id = "kawaguchi1km",
+                        enter = 8_900.0,
+                        exit = 8_960.0,
+                        groupKey = "kawaguchi1km",
+                        text = "およそ1km先、川口JCTです",
+                    ),
+                ),
+            ),
+        )
+
+        val lane3km = scheduler.onTick(tickOf(current = 6_920.0))
+        scheduler.onTick(tickOf(current = 7_010.0))
+        val junction3km = scheduler.onSpeechFinished(VoiceAnnouncementId("lane3km"))
+        scheduler.onSpeechFinished(VoiceAnnouncementId("kawaguchi3km"))
+        val lane1km = scheduler.onTick(tickOf(current = 8_920.0))
+        scheduler.onTick(tickOf(current = 9_010.0))
+        val junction1km = scheduler.onSpeechFinished(VoiceAnnouncementId("lane1km"))
+
+        assertEquals(
+            VoiceAnnouncementId("lane3km"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(lane3km).request.stageId,
+        )
+        assertEquals(
+            VoiceAnnouncementId("kawaguchi3km"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(junction3km).request.stageId,
+        )
+        assertEquals(
+            VoiceAnnouncementId("lane1km"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(lane1km).request.stageId,
+        )
+        assertEquals(
+            VoiceAnnouncementId("kawaguchi1km"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(junction1km).request.stageId,
+        )
     }
 
     @Test
@@ -110,7 +184,7 @@ class VoiceAnnouncementSchedulerTest {
     }
 
     @Test
-    fun `キュー消化時に距離窓を過ぎた中間段の発話は抑止する`() {
+    fun `キュー消化時に猶予を超えて距離窓を過ぎた中間段の発話は抑止する`() {
         val scheduler = schedulerOf()
         scheduler.attach(
             planOf(
@@ -121,14 +195,14 @@ class VoiceAnnouncementSchedulerTest {
 
         scheduler.onTick(tickOf(current = 450.0)) // near を発話開始
         scheduler.onTick(tickOf(current = 460.0)) // far は窓内だが near より非緊急なのでキューへ
-        scheduler.onTick(tickOf(current = 750.0)) // far の target は未通過だが、距離窓は通過済み
+        scheduler.onTick(tickOf(current = 810.0)) // far の target は未通過だが、距離窓と猶予は通過済み
         val drained = scheduler.onSpeechFinished(VoiceAnnouncementId("near"))
 
         assertNull(drained)
     }
 
     @Test
-    fun `safety 系カテゴリの中間段はキュー消化時に窓終端後の猶予内なら発話する`() {
+    fun `中間段はキュー消化時に窓終端後の猶予内なら発話する`() {
         val scheduler = schedulerOf()
         scheduler.attach(
             planOf(
@@ -137,10 +211,9 @@ class VoiceAnnouncementSchedulerTest {
                     index = 1,
                     geometryMeters = 1_500.0,
                     middleStageWindowed(
-                        id = "regulation",
+                        id = "guide",
                         enter = 400.0,
                         exit = 700.0,
-                        category = GuidanceCategory.Regulation,
                     ),
                 ),
             ),
@@ -152,13 +225,13 @@ class VoiceAnnouncementSchedulerTest {
         val drained = scheduler.onSpeechFinished(VoiceAnnouncementId("near"))
 
         assertEquals(
-            VoiceAnnouncementId("regulation"),
+            VoiceAnnouncementId("guide"),
             assertIs<VoiceAnnouncementCommand.StartSpeaking>(drained).request.stageId,
         )
     }
 
     @Test
-    fun `safety 系カテゴリの中間段でも猶予を超えたキュー候補は stale として抑止する`() {
+    fun `中間段でも猶予を超えたキュー候補は stale として抑止する`() {
         val scheduler = schedulerOf()
         scheduler.attach(
             planOf(
@@ -167,10 +240,9 @@ class VoiceAnnouncementSchedulerTest {
                     index = 1,
                     geometryMeters = 1_500.0,
                     middleStageWindowed(
-                        id = "regulation",
+                        id = "guide",
                         enter = 400.0,
                         exit = 700.0,
-                        category = GuidanceCategory.Regulation,
                     ),
                 ),
             ),
@@ -211,7 +283,7 @@ class VoiceAnnouncementSchedulerTest {
 
         scheduler.onTick(tickOf(current = 550.0)) // near を発話開始
         scheduler.onTick(tickOf(current = 560.0)) // queuedMiddle をキューへ
-        scheduler.onTick(tickOf(current = 750.0)) // queuedMiddle は target 手前だが距離窓を通過済み
+        scheduler.onTick(tickOf(current = 810.0)) // queuedMiddle は target 手前だが距離窓と猶予を通過済み
         val staleDrain = scheduler.onSpeechFinished(VoiceAnnouncementId("near"))
         val finalCommand = scheduler.onTick(tickOf(current = 975.0))
 
@@ -256,7 +328,7 @@ class VoiceAnnouncementSchedulerTest {
 
         scheduler.onTick(tickOf(current = 550.0)) // near を発話開始
         scheduler.onTick(tickOf(current = 560.0)) // stale をキューへ
-        scheduler.onTick(tickOf(current = 750.0)) // valid をキューへ。stale は target 手前だが窓を通過済み
+        scheduler.onTick(tickOf(current = 800.0)) // valid をキューへ。stale は target 手前だが窓と猶予の境界に到達済み
         val drained = scheduler.onSpeechFinished(VoiceAnnouncementId("near"))
 
         assertEquals(

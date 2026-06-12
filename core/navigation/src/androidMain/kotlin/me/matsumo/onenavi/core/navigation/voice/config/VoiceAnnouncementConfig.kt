@@ -1,8 +1,6 @@
 package me.matsumo.onenavi.core.navigation.voice.config
 
 import androidx.compose.runtime.Immutable
-import kotlinx.collections.immutable.ImmutableSet
-import kotlinx.collections.immutable.persistentSetOf
 
 /**
  * 音声案内スケジューラの挙動を定数で差し替えるための設定。
@@ -17,8 +15,7 @@ import kotlinx.collections.immutable.persistentSetOf
  * @property minLeadMeters 低速時に直前段が遅れないよう保証する最小手前距離 (m)
  * @property lateFinalSkipRatio attach 時点で名目 FINAL トリガを過ぎていた場合に、距離句の破綻を避けるため skip する残距離割合
  * @property lateFinalSkipMinimumTriggerMeters 途中参加 skip の対象にする FINAL 名目手前距離の下限 (m)
- * @property queuedStaleGraceMeters safety 系 MIDDLE をキュー消化時に窓終端からどれだけ猶予するか (m)
- * @property queuedStaleGraceCategoryNames stale 猶予を適用する safety 系 category 名
+ * @property queuedStaleGraceMeters ENQUEUE 済み MIDDLE をキュー消化時に窓終端からどれだけ猶予するか (m)
  * @property ordering 緊急度同値時の tie-break 並び順
  */
 @Immutable
@@ -30,7 +27,6 @@ internal data class VoiceAnnouncementConfig(
     val lateFinalSkipRatio: Double = DEFAULT_LATE_FINAL_SKIP_RATIO,
     val lateFinalSkipMinimumTriggerMeters: Double = DEFAULT_LATE_FINAL_SKIP_MINIMUM_TRIGGER_METERS,
     val queuedStaleGraceMeters: Double = DEFAULT_QUEUED_STALE_GRACE_METERS,
-    val queuedStaleGraceCategoryNames: ImmutableSet<String> = DEFAULT_QUEUED_STALE_GRACE_CATEGORY_NAMES,
     val ordering: VoiceAnnouncementOrdering = VoiceAnnouncementOrdering.RouteOrder,
 ) {
 
@@ -48,33 +44,7 @@ internal data class VoiceAnnouncementConfig(
         /** 「まもなく」相当の近接 FINAL を途中参加 skip から外すための名目手前距離下限 (m)。 */
         const val DEFAULT_LATE_FINAL_SKIP_MINIMUM_TRIGGER_METERS: Double = 100.0
 
-        /** safety 系 MIDDLE の ENQUEUE 後 stale 判定に足す既定猶予距離 (m)。 */
+        /** MIDDLE の ENQUEUE 後 stale 判定に足す既定猶予距離 (m)。 */
         const val DEFAULT_QUEUED_STALE_GRACE_METERS: Double = 100.0
-
-        /** ENQUEUE 後 stale 猶予を付ける safety 系 category 名の既定集合。 */
-        val DEFAULT_QUEUED_STALE_GRACE_CATEGORY_NAMES: ImmutableSet<String> = persistentSetOf(
-            "AccidentBlackSpot",
-            "Flood",
-            "HighwayConstructionPr",
-            "HighwayLaneReduction",
-            "HighwayRecommendedLane",
-            "HighwayRecommendedLaneJamAware",
-            "JamScaleTrend",
-            "LocalLaneExclusive",
-            "MergeAttention",
-            "OncomingCar",
-            "PedestrianCrossing",
-            "PoliceTrap",
-            "RailwayCrossing",
-            "Regulation",
-            "RegulationBreak",
-            "SpeedAdjustment",
-            "StopLine",
-            "TrafficJam",
-            "VehicleHeight",
-            "WrongEntry",
-            "WrongWayDriving",
-            "Zone30",
-        )
     }
 }
