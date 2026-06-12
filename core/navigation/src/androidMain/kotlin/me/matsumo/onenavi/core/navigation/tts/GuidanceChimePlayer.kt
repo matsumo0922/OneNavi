@@ -27,16 +27,19 @@ internal class GuidanceChimePlayer(
      *
      * @param cue 再生する案内効果音
      * @param channel 出力する音声チャンネル (usage)。発話と揃えて duck を一貫させる。
+     * @param clientGainDb 再生直前に PCM へ追加するクライアント側ゲイン
      */
     suspend fun playAndAwait(
         cue: VoiceAnnouncementCue,
         channel: NavigationAudioChannel,
+        clientGainDb: Double = 0.0,
     ) {
         when (cue) {
             VoiceAnnouncementCue.CHIME -> audioPlayer.playAndAwait(
                 audio = guidanceChimeAudio,
                 contentType = AudioAttributes.CONTENT_TYPE_SONIFICATION,
                 channel = channel,
+                clientGainDb = clientGainDb,
             )
         }
     }

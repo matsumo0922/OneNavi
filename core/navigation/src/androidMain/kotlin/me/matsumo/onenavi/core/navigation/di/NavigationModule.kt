@@ -27,6 +27,7 @@ import me.matsumo.onenavi.core.navigation.tts.GoogleCloudTtsVoiceAnnouncementDis
 import me.matsumo.onenavi.core.navigation.tts.GuidanceChimePlayer
 import me.matsumo.onenavi.core.navigation.tts.NavigationAudioChannelResolver
 import me.matsumo.onenavi.core.navigation.tts.PcmAudioPlayer
+import me.matsumo.onenavi.core.navigation.tts.SpeedAdaptiveGainProvider
 import me.matsumo.onenavi.core.navigation.tts.TtsAudioFileCache
 import me.matsumo.onenavi.core.navigation.tts.TtsAudioFocusManager
 import me.matsumo.onenavi.core.navigation.tts.TtsSigningCertificate
@@ -61,6 +62,12 @@ val navigationModule: Module = module {
         val context = androidContext()
         val audioPlayer = PcmAudioPlayer()
         val appSettingRepository = get<AppSettingRepository>()
+        val currentLocationDataSource =
+            get<me.matsumo.onenavi.core.datasource.location.CurrentLocationDataSource>()
+        val speedAdaptiveGainProvider = SpeedAdaptiveGainProvider(
+            settingProvider = { appSettingRepository.setting.value },
+            speedStateProvider = { currentLocationDataSource.vehicleSpeedState.value },
+        )
         GoogleCloudTtsVoiceAnnouncementDispatcher(
             synthesizer = CachedGoogleCloudTtsSynthesizer(
                 backend = GoogleCloudTtsApi(
@@ -84,6 +91,7 @@ val navigationModule: Module = module {
             ),
             audioFocusManager = TtsAudioFocusManager(context),
             audioChannelResolver = NavigationAudioChannelResolver(appSettingRepository = get()),
+            speedAdaptiveGainProvider = speedAdaptiveGainProvider,
         )
     }
     single { VoiceAnnouncementCategoryGateResolver(appSettingRepository = get()) }

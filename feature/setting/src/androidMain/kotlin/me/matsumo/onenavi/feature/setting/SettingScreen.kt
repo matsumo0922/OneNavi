@@ -67,6 +67,8 @@ internal fun SettingScreen(
                     setting = setting,
                     onUseMediaAudioChannelOnCarChanged = viewModel::setUseMediaAudioChannelOnCar,
                     onTtsVolumeGainDbChanged = viewModel::setTtsVolumeGainDb,
+                    onSpeedAdaptiveTtsGainEnabledChanged = viewModel::setSpeedAdaptiveTtsGainEnabled,
+                    onSpeedAdaptiveTtsGainMaxDbChanged = viewModel::setSpeedAdaptiveTtsGainMaxDb,
                     onVoiceCategoryClicked = { navBackStack.add(Destination.Setting.VoiceCategory) },
                 )
             }

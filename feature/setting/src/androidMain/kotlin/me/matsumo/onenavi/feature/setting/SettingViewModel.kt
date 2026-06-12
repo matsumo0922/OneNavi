@@ -57,6 +57,18 @@ class SettingViewModel(
         }
     }
 
+    fun setSpeedAdaptiveTtsGainEnabled(isEnabled: Boolean) {
+        viewModelScope.launch {
+            repository.setSpeedAdaptiveTtsGainEnabled(isEnabled)
+        }
+    }
+
+    fun setSpeedAdaptiveTtsGainMaxDb(maxGainDb: Double) {
+        viewModelScope.launch {
+            repository.setSpeedAdaptiveTtsGainMaxDb(maxGainDb)
+        }
+    }
+
     fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) {
         viewModelScope.launch {
             repository.setGuidanceCategoryEnabled(categoryKey, isEnabled)
