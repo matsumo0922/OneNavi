@@ -19,7 +19,6 @@ import me.matsumo.onenavi.core.resource.setting_other_open_source_license_descri
 import me.matsumo.onenavi.core.resource.setting_other_privacy_policy
 import me.matsumo.onenavi.core.resource.setting_other_team_of_service
 import me.matsumo.onenavi.feature.setting.components.SettingDeveloperModeDialog
-import me.matsumo.onenavi.feature.setting.components.SettingSwitchItem
 import me.matsumo.onenavi.feature.setting.components.SettingTextItem
 import me.matsumo.onenavi.feature.setting.components.SettingTitleItem
 import org.jetbrains.compose.resources.stringResource
@@ -69,16 +68,11 @@ internal fun SettingOthersSection(
                 onClick = { onDeveloperOptionsClicked.invoke() },
             )
         } else {
-            SettingSwitchItem(
+            SettingTextItem(
                 modifier = Modifier.fillMaxWidth(),
                 title = Res.string.setting_other_developer_mode,
                 description = Res.string.setting_other_developer_mode_description,
-                value = false,
-                onValueChanged = { isEnabled ->
-                    if (isEnabled) {
-                        isShowDeveloperModeDialog = true
-                    }
-                },
+                onClick = { isShowDeveloperModeDialog = true },
             )
         }
     }

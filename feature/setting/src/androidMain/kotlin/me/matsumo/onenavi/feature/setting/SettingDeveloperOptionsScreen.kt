@@ -84,11 +84,8 @@ internal fun SettingDeveloperOptionsScreen(
                     description = Res.string.setting_developer_options_master_description,
                     value = setting.developerMode,
                     onValueChanged = { isEnabled ->
-                        if (!isEnabled) {
-                            viewModel.setDeveloperMode(false)
-                        }
+                        viewModel.setDeveloperMode(isEnabled)
                     },
-                    isEnabled = setting.developerMode,
                 )
             }
 
