@@ -162,6 +162,7 @@ internal class VehicleSpeedEstimator {
         return speedMps
     }
 
+    /** 速度推定で使う定数群。 */
     private companion object {
 
         /** 1 秒あたりのナノ秒。 */

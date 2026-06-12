@@ -92,6 +92,7 @@ class VehicleSpeedEstimatorTest {
         elapsedRealtimeNanos = elapsedRealtimeNanos,
     )
 
+    /** 速度推定テストで使う定数群。 */
     private companion object {
 
         /** テストで使う基準緯度。 */
