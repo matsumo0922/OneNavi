@@ -31,13 +31,13 @@ internal class GoogleCloudTtsVoiceAnnouncementDispatcher(
         if (content.cue == null && speechAudio == null) return
 
         val channel = audioChannelResolver.resolve()
-        audioFocusManager.request(channel)
+        val focusToken = audioFocusManager.request(channel)
 
         try {
             content.cue?.let { cue -> chimePlayer.playAndAwait(cue, channel) }
             speechAudio?.let { audio -> audioPlayer.playAndAwait(audio, channel = channel) }
         } finally {
-            audioFocusManager.abandon()
+            audioFocusManager.abandon(focusToken)
         }
     }
 
