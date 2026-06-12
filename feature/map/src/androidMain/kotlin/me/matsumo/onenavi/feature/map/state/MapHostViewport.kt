@@ -14,6 +14,16 @@ data class MapHostInsets(
     val bottom: Dp = 0.dp,
 ) {
 
+    /** 各辺ごとに大きい inset を採用した値を返す。 */
+    fun maxWith(other: MapHostInsets): MapHostInsets {
+        return MapHostInsets(
+            start = maxOf(start, other.start),
+            top = maxOf(top, other.top),
+            end = maxOf(end, other.end),
+            bottom = maxOf(bottom, other.bottom),
+        )
+    }
+
     /** 左右に追加の inset を足した値を返す。 */
     fun withAddedHorizontal(inset: Dp): MapHostInsets {
         return copy(
@@ -47,3 +57,8 @@ data class MapHostViewport(
 
 /** 現在の地図 host viewport を提供する CompositionLocal。 */
 val LocalMapHostViewport = staticCompositionLocalOf { MapHostViewport.Zero }
+
+/** 地図 overlay UI が避けるべき inset を system bars と host stable insets から解決する。 */
+internal fun resolveMapContentInsets(systemBarInsets: MapHostInsets, hostStableInsets: MapHostInsets): MapHostInsets {
+    return systemBarInsets.maxWith(hostStableInsets)
+}
