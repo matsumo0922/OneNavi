@@ -1,10 +1,14 @@
 package me.matsumo.onenavi.core.navigation.voice.scheduler
 
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavProgressSnapshot
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDistanceContext
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRoutePayload
 import me.matsumo.onenavi.core.navigation.voice.config.VoiceAnnouncementConfig
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementTarget
 import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlan
@@ -22,6 +26,7 @@ import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlanBuilde
  * @property speechRunner 発話プランと tick を受けて発話を再生する実行系
  * @property prefetcher 近傍発話の音声合成を事前に走らせる先読み部品
  * @property config category gate / リードタイム等の発話設定
+ * @property isDebugSnapshotEnabled デバッグスナップショットを計算してよい場合に true を返す
  */
 internal class VoiceAnnouncementController(
     private val planBuilder: VoiceAnnouncementPlanBuilder,
@@ -29,7 +34,13 @@ internal class VoiceAnnouncementController(
     private val speechRunner: VoiceAnnouncementSpeechRunner,
     private val prefetcher: VoiceAnnouncementPrefetcher,
     private val config: VoiceAnnouncementConfig,
+    private val isDebugSnapshotEnabled: () -> Boolean = { false },
 ) {
+
+    private val _debugSnapshot = MutableStateFlow<VoiceAnnouncementDebugSnapshot?>(null)
+
+    /** UI が読む TTS 発話予定のデバッグスナップショット。 */
+    val debugSnapshot: StateFlow<VoiceAnnouncementDebugSnapshot?> = _debugSnapshot.asStateFlow()
 
     /**
      * 音声案内を開始する。発話プランを構築して実行系へ attach する。
@@ -53,6 +64,7 @@ internal class VoiceAnnouncementController(
         val initialCumulativeMeters = initialSnapshot
             ?.let { snapshot -> tickFactory.from(snapshot).currentCumulativeMeters }
 
+        _debugSnapshot.value = null
         logPlan(plan)
         speechRunner.attach(plan, announceOpening = announceOpening)
         prefetcher.attach(
@@ -70,6 +82,7 @@ internal class VoiceAnnouncementController(
         val tick = tickFactory.from(snapshot)
         speechRunner.submit(tick)
         prefetcher.onTick(tick)
+        requestDebugSnapshotIfEnabled()
     }
 
     /** 経由地通過アナウンスを発話する。進行中の案内発話へ割り込んでから発話する。 */
@@ -86,6 +99,21 @@ internal class VoiceAnnouncementController(
     fun stop() {
         speechRunner.detach()
         prefetcher.detach()
+        _debugSnapshot.value = null
+    }
+
+    /** feature toggle が有効な場合だけ、発話実行系へ debug snapshot の読み取りを依頼する。 */
+    private fun requestDebugSnapshotIfEnabled() {
+        if (!isDebugSnapshotEnabled()) {
+            _debugSnapshot.value = null
+            return
+        }
+
+        val isRequested = speechRunner.requestDebugSnapshot(
+            fetchStateProvider = prefetcher::fetchStateOf,
+            receiver = { snapshot -> _debugSnapshot.value = snapshot },
+        )
+        if (!isRequested) _debugSnapshot.value = null
     }
 
     // ---------------------------------------------------------------------

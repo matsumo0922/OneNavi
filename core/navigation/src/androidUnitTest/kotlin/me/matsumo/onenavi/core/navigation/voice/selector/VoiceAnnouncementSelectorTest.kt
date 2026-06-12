@@ -13,6 +13,7 @@ import me.matsumo.onenavi.core.navigation.voice.plan.VoiceAnnouncementPlan
 import me.matsumo.onenavi.core.navigation.voice.suppression.VoiceAnnouncementSpeechState
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -256,6 +257,63 @@ class VoiceAnnouncementSelectorTest {
         val selection = selector.select(plan, tickOf(current = 950.0), consumed)
 
         assertEquals(VoiceAnnouncementId("bEarly"), selection?.stage?.id)
+    }
+
+    @Test
+    fun `debug preview は次の発話境界までの残距離と route 順ゲート状態を返す`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(middleStage("first", enter = 500.0, exit = 700.0)),
+            ),
+            targetOf(
+                index = 1,
+                geometryMeters = 2_000.0,
+                stages = listOf(middleStage("second", enter = 800.0, exit = 1_000.0)),
+            ),
+        )
+
+        val previews = selector.previewUpcoming(
+            plan = plan,
+            tick = tickOf(current = 300.0),
+            state = emptyState(),
+            limit = 2,
+        )
+
+        assertEquals(2, previews.size)
+        assertEquals(VoiceAnnouncementId("first"), previews[0].selection.stage.id)
+        assertEquals(200.0, previews[0].remainingMeters)
+        assertFalse(previews[0].isRouteOrderBlocked)
+        assertEquals(VoiceAnnouncementId("second"), previews[1].selection.stage.id)
+        assertEquals(500.0, previews[1].remainingMeters)
+        assertTrue(previews[1].isRouteOrderBlocked)
+    }
+
+    @Test
+    fun `debug preview は未来境界でも汎用候補より具体候補を優先する`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("generic", enter = 500.0, exit = 700.0, groupKey = "grp", isGeneric = true),
+                    middleStage("specific", enter = 500.0, exit = 700.0, groupKey = "grp", isGeneric = false),
+                ),
+            ),
+        )
+
+        val previews = selector.previewUpcoming(
+            plan = plan,
+            tick = tickOf(current = 300.0),
+            state = emptyState(),
+            limit = 1,
+        )
+
+        assertEquals(VoiceAnnouncementId("specific"), previews.single().selection.stage.id)
+        assertEquals(200.0, previews.single().remainingMeters)
     }
 
     @Test

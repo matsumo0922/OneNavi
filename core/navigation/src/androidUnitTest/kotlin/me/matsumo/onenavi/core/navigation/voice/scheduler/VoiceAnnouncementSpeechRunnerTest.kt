@@ -47,6 +47,33 @@ class VoiceAnnouncementSpeechRunnerTest {
     }
 
     @Test
+    fun `debug snapshot request は tick 処理後の発話予定を返す`() = runTest {
+        val dispatcher = GatingDispatcher()
+        val runner = runnerOf(dispatcher, this)
+        var debugSnapshot: me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot? = null
+        runner.attach(planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m500", 500.0))))
+
+        runner.submit(tickOf(current = 300.0))
+        val isRequested = runner.requestDebugSnapshot(
+            fetchStateProvider = {
+                me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState.IN_FLIGHT
+            },
+            receiver = { snapshot -> debugSnapshot = snapshot },
+        )
+        advanceUntilIdle()
+        runner.detach()
+
+        kotlin.test.assertTrue(isRequested)
+        val item = requireNotNull(debugSnapshot).upcomingAnnouncements.single()
+        assertEquals("m500", item.stageId)
+        assertEquals(200.0, item.remainingMeters)
+        assertEquals(
+            me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState.IN_FLIGHT,
+            item.fetchState,
+        )
+    }
+
+    @Test
     fun `発話中に積まれた候補を発話完了後に再生する`() = runTest {
         val dispatcher = GatingDispatcher()
         val runner = runnerOf(dispatcher, this)

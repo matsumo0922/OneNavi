@@ -1,6 +1,8 @@
 package me.matsumo.onenavi.feature.map.components.content
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -24,6 +26,7 @@ import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import me.matsumo.onenavi.core.datasource.location.VehicleSpeedState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_cancel
 import me.matsumo.onenavi.core.resource.common_ok
@@ -35,6 +38,7 @@ import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationManeuve
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationReroutingPanel
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSearchResultsCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationSelectedWaypointCard
+import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationTtsDebugCard
 import me.matsumo.onenavi.feature.map.components.navigation.MapNavigationWaypointEditorCard
 import me.matsumo.onenavi.feature.map.state.MapHostInsets
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
@@ -55,6 +59,7 @@ internal fun MapNavigationContent(
     vehicleSpeedState: VehicleSpeedState,
     navigationGuideImage: NavigationGuideImage?,
     overlayState: MapOverlayState,
+    ttsDebugSnapshot: VoiceAnnouncementDebugSnapshot?,
     panelLayout: MapPanelLayout,
     navigationCardHeight: Dp,
     contentInsets: MapHostInsets,
@@ -255,7 +260,7 @@ internal fun MapNavigationContent(
                     },
                 )
             } else if (etaProgress != null && etaRoute != null) {
-                MapNavigationEtaCard(
+                Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
@@ -266,21 +271,33 @@ internal fun MapNavigationContent(
                             contentInsets = contentInsets,
                             horizontalPadding = horizontalContentPadding,
                         ),
-                    progress = etaProgress,
-                    congestionSegments = etaRoute.congestionSegments,
-                    displaySpeedKmh = vehicleSpeedState.displaySpeedKmh,
-                    speedLimitKmh = etaProgress.currentSpeedLimitKmh,
-                    onCloseClicked = ::cancelNavigation,
-                    onAlternativesClicked = {
-                        onUiEvent(MapUiEvent.OnNavigationAlternativesClicked)
-                    },
-                    onAddWaypointClicked = {
-                        onUiEvent(MapUiEvent.OnAddWaypointRequested)
-                    },
-                    onRoutePreviewClicked = {
-                        onUiEvent(MapUiEvent.OnNavigationRoutePreviewClicked)
-                    },
-                )
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ttsDebugSnapshot?.let { snapshot ->
+                        MapNavigationTtsDebugCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            snapshot = snapshot,
+                        )
+                    }
+
+                    MapNavigationEtaCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        progress = etaProgress,
+                        congestionSegments = etaRoute.congestionSegments,
+                        displaySpeedKmh = vehicleSpeedState.displaySpeedKmh,
+                        speedLimitKmh = etaProgress.currentSpeedLimitKmh,
+                        onCloseClicked = ::cancelNavigation,
+                        onAlternativesClicked = {
+                            onUiEvent(MapUiEvent.OnNavigationAlternativesClicked)
+                        },
+                        onAddWaypointClicked = {
+                            onUiEvent(MapUiEvent.OnAddWaypointRequested)
+                        },
+                        onRoutePreviewClicked = {
+                            onUiEvent(MapUiEvent.OnNavigationRoutePreviewClicked)
+                        },
+                    )
+                }
             }
         }
     }

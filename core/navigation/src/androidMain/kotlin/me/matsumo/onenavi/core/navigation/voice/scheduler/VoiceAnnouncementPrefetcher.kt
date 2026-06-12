@@ -1,5 +1,7 @@
 package me.matsumo.onenavi.core.navigation.voice.scheduler
 
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState
+import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContent
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementContentRenderer
 import me.matsumo.onenavi.core.navigation.voice.dispatch.VoiceAnnouncementDispatcher
 import me.matsumo.onenavi.core.navigation.voice.plan.AnnouncementStage
@@ -53,6 +55,15 @@ internal class VoiceAnnouncementPrefetcher(
 
         prefetchFrom(currentCumulativeMeters = tick.currentCumulativeMeters)
     }
+
+    /**
+     * デバッグ表示向けに、発話内容の TTS 音声取得状態を返す。
+     *
+     * @param content category gate / 結合を適用済みの発話内容
+     * @return dispatcher が保持する TTS 音声取得状態
+     */
+    fun fetchStateOf(content: VoiceAnnouncementContent): VoiceAnnouncementDebugFetchState =
+        dispatcher.debugFetchState(content)
 
     /** 発話プランと先読み済み状態を破棄する。 */
     fun detach() {

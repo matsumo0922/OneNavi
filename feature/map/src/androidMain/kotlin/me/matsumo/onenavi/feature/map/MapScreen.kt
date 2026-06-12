@@ -51,6 +51,7 @@ import me.matsumo.onenavi.core.datasource.location.VehicleSpeedState
 import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
 import me.matsumo.onenavi.core.ui.screen.Destination
 import me.matsumo.onenavi.core.ui.theme.LocalAppSetting
 import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
@@ -99,6 +100,7 @@ fun MapScreen(
     val guidanceState by viewModel.newGuidanceState.collectAsStateWithLifecycle()
     val vehicleLocationState by viewModel.vehicleLocationState.collectAsStateWithLifecycle()
     val vehicleSpeedState by viewModel.vehicleSpeedState.collectAsStateWithLifecycle()
+    val ttsScheduleDebugSnapshot by viewModel.ttsDebugSnapshot.collectAsStateWithLifecycle()
     val phoneCommand by carPhoneSessionCoordinator.phoneCommand.collectAsStateWithLifecycle()
 
     val mapHostViewport = LocalMapHostViewport.current
@@ -135,6 +137,8 @@ fun MapScreen(
     val navBackStack = LocalNavBackStack.current
     val isMapDarkMode = shouldUseDarkTheme(appSetting.theme)
     val shouldLogMapDiagnostics = appSetting.isDeveloperFeatureEnabled(DeveloperFeature.MAP_DIAGNOSTICS)
+    val shouldShowTtsDebugCard = appSetting.isDeveloperFeatureEnabled(DeveloperFeature.TTS_SCHEDULE_DEBUG_CARD)
+    val visibleTtsDebugSnapshot = ttsScheduleDebugSnapshot.takeIf { shouldShowTtsDebugCard }
     val isNavigating = screenState is MapScreenState.Navigating
     val isAndroidAutoVirtualDisplay = displaySurface == OneNaviDisplaySurface.AndroidAutoVirtualDisplay
     val isPhoneDisplaySurface = displaySurface == OneNaviDisplaySurface.Phone
@@ -259,6 +263,7 @@ fun MapScreen(
                 screenState = screenState,
                 routePreviewState = routePreviewState,
                 guidanceState = guidanceState,
+                ttsDebugSnapshot = visibleTtsDebugSnapshot,
                 vehicleLocationState = vehicleLocationState,
                 vehicleSpeedState = vehicleSpeedState,
                 googleMap = googleMap,
@@ -296,6 +301,7 @@ fun MapScreen(
                 screenState = screenState,
                 routePreviewState = routePreviewState,
                 guidanceState = guidanceState,
+                ttsDebugSnapshot = visibleTtsDebugSnapshot,
                 vehicleLocationState = vehicleLocationState,
                 vehicleSpeedState = vehicleSpeedState,
                 googleMap = googleMap,
@@ -386,6 +392,7 @@ private fun MapScreenCompactLayout(
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
     guidanceState: GuidanceState,
+    ttsDebugSnapshot: VoiceAnnouncementDebugSnapshot?,
     vehicleLocationState: VehicleLocationState?,
     vehicleSpeedState: VehicleSpeedState,
     googleMap: GoogleMap?,
@@ -453,6 +460,7 @@ private fun MapScreenCompactLayout(
                 screenState = screenState,
                 guidanceState = guidanceState,
                 vehicleSpeedState = vehicleSpeedState,
+                ttsDebugSnapshot = ttsDebugSnapshot,
                 cameraState = cameraState,
                 panelLayout = panelLayout,
                 contentInsets = contentInsets,
@@ -482,6 +490,7 @@ private fun MapScreenSplitLayout(
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
     guidanceState: GuidanceState,
+    ttsDebugSnapshot: VoiceAnnouncementDebugSnapshot?,
     vehicleLocationState: VehicleLocationState?,
     vehicleSpeedState: VehicleSpeedState,
     googleMap: GoogleMap?,
@@ -569,6 +578,7 @@ private fun MapScreenSplitLayout(
                     screenState = screenState,
                     guidanceState = guidanceState,
                     vehicleSpeedState = vehicleSpeedState,
+                    ttsDebugSnapshot = ttsDebugSnapshot,
                     cameraState = cameraState,
                     panelLayout = panelLayout,
                     contentInsets = contentInsets,
@@ -696,6 +706,7 @@ private fun MapScreenContent(
     screenState: MapScreenState,
     guidanceState: GuidanceState,
     vehicleSpeedState: VehicleSpeedState,
+    ttsDebugSnapshot: VoiceAnnouncementDebugSnapshot?,
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
     contentInsets: MapHostInsets,
@@ -748,6 +759,7 @@ private fun MapScreenContent(
                 vehicleSpeedState = vehicleSpeedState,
                 navigationGuideImage = uiState.navigationGuideImage,
                 overlayState = uiState.overlayState,
+                ttsDebugSnapshot = ttsDebugSnapshot,
                 panelLayout = panelLayout,
                 navigationCardHeight = navigationCardHeightDp,
                 contentInsets = contentInsets,

@@ -12,6 +12,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState
 
 /**
  * Google Cloud TTS の合成結果をファイルキャッシュし、近傍発話の先読みを行う合成器。
@@ -79,6 +80,27 @@ internal class CachedGoogleCloudTtsSynthesizer(
 
         if (!prefetchChannel.trySend(queuedRequest).isSuccess) {
             unmarkPrefetchQueued(queuedRequest)
+        }
+    }
+
+    /**
+     * 指定 SSML の TTS 音声取得状態をデバッグ表示向けに返す。
+     *
+     * @param ssml 合成対象 SSML
+     * @return キャッシュ / in-flight request から分かる現在の取得状態
+     */
+    fun debugFetchState(ssml: String?): VoiceAnnouncementDebugFetchState {
+        val request = synthesisRequestOf(ssml) ?: return VoiceAnnouncementDebugFetchState.NOT_REQUESTED
+        if (cache.contains(request.cacheKey)) return VoiceAnnouncementDebugFetchState.CACHED
+
+        val isInFlight = synchronized(lock) {
+            request.cacheKey in inFlight
+        }
+
+        return if (isInFlight) {
+            VoiceAnnouncementDebugFetchState.IN_FLIGHT
+        } else {
+            VoiceAnnouncementDebugFetchState.NOT_REQUESTED
         }
     }
 

@@ -44,6 +44,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuideImageKey
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
 import me.matsumo.onenavi.core.repository.SearchRepository
 import me.matsumo.onenavi.feature.map.location.VehicleLocationDataSource
 import me.matsumo.onenavi.feature.map.state.ExtNavNavigationGuideImageLoader
@@ -100,6 +101,9 @@ class MapViewModel(
 
     /** core 層で推定した表示用の自車速度。 */
     val vehicleSpeedState: StateFlow<VehicleSpeedState> = currentLocationDataSource.vehicleSpeedState
+
+    /** TTS 発話予定のデバッグスナップショット。 */
+    val ttsDebugSnapshot: StateFlow<VoiceAnnouncementDebugSnapshot?> = newGuidanceManager.voiceDebugSnapshot
 
     /**
      * 地図 UI が読む自車位置。

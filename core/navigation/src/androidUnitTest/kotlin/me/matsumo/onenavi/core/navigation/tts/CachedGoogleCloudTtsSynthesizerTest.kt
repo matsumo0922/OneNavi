@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugFetchState
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -183,6 +184,71 @@ class CachedGoogleCloudTtsSynthesizerTest {
 
         assertEquals(listOf(0.0, 6.0), backend.configs.map { it.volumeGainDb })
         assertEquals(2, backend.calls.size)
+    }
+
+    @Test
+    fun `debugFetchState は cache hit を CACHED と判定する`() = runTest {
+        val backend = FakeBackend()
+        val config = GoogleCloudTtsSynthesisConfig()
+        val cache = cacheOf()
+        val synthesizer = synthesizerOf(
+            backend = backend,
+            cache = cache,
+            config = config,
+        )
+        cache.write(config.cacheKeyOf(SSML), AUDIO)
+
+        val fetchState = synthesizer.debugFetchState(SSML)
+
+        assertEquals(VoiceAnnouncementDebugFetchState.CACHED, fetchState)
+    }
+
+    @Test
+    fun `debugFetchState は synthesize 中を IN_FLIGHT と判定する`() = runTest {
+        val backend = FakeBackend()
+        val gate = CompletableDeferred<Unit>()
+        backend.gate = gate
+        val synthesizer = synthesizerOf(backend)
+
+        val audio = async { synthesizer.synthesize(SSML) }
+        advanceUntilIdle()
+        val fetchState = synthesizer.debugFetchState(SSML)
+
+        gate.complete(Unit)
+
+        assertEquals(VoiceAnnouncementDebugFetchState.IN_FLIGHT, fetchState)
+        assertContentEquals(audioOf(SSML), audio.await())
+    }
+
+    @Test
+    fun `debugFetchState は prefetch 中を IN_FLIGHT と判定する`() = runTest {
+        val backend = FakeBackend()
+        val gate = CompletableDeferred<Unit>()
+        backend.gate = gate
+        val synthesizer = synthesizerOf(backend)
+
+        synthesizer.prefetch(SSML)
+        advanceUntilIdle()
+        val fetchState = synthesizer.debugFetchState(SSML)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(VoiceAnnouncementDebugFetchState.IN_FLIGHT, fetchState)
+    }
+
+    @Test
+    fun `debugFetchState は未投入と空 SSML を NOT_REQUESTED と判定する`() = runTest {
+        val backend = FakeBackend()
+        val synthesizer = synthesizerOf(backend)
+
+        val missingFetchState = synthesizer.debugFetchState(SSML)
+        val blankFetchState = synthesizer.debugFetchState("")
+        val nullFetchState = synthesizer.debugFetchState(null)
+
+        assertEquals(VoiceAnnouncementDebugFetchState.NOT_REQUESTED, missingFetchState)
+        assertEquals(VoiceAnnouncementDebugFetchState.NOT_REQUESTED, blankFetchState)
+        assertEquals(VoiceAnnouncementDebugFetchState.NOT_REQUESTED, nullFetchState)
     }
 
     private fun TestScope.synthesizerOf(
