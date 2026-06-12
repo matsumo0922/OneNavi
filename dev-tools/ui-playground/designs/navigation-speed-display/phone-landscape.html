@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        width: 915px;
+        height: 412px;
+        overflow: hidden;
+        font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+        color: #1c1b1f;
+        background: #d9e5da;
+      }
+      .screen {
+        position: relative;
+        width: 915px;
+        height: 412px;
+        background:
+          linear-gradient(24deg, transparent 0 44%, rgba(255,255,255,0.92) 44.2% 50%, transparent 50.2%),
+          linear-gradient(111deg, transparent 0 54%, rgba(255,255,255,0.78) 54.2% 59%, transparent 59.2%),
+          linear-gradient(0deg, rgba(88, 130, 96, 0.18) 0 1px, transparent 1px 96px),
+          linear-gradient(90deg, rgba(88, 130, 96, 0.16) 0 1px, transparent 1px 96px),
+          #d9e5da;
+        background-size: auto, auto, 96px 96px, 96px 96px, auto;
+      }
+      .top-panel {
+        position: absolute;
+        top: 18px;
+        left: 18px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 390px;
+        min-height: 92px;
+        padding: 14px;
+        border-radius: 8px;
+        background: #fefbff;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+      }
+      .turn {
+        display: grid;
+        place-items: center;
+        width: 62px;
+        height: 62px;
+        color: #ffffff;
+        font-size: 35px;
+        font-weight: 800;
+        border-radius: 8px;
+        background: #1f7a3f;
+      }
+      .distance {
+        font-size: 29px;
+        font-weight: 850;
+        line-height: 1;
+      }
+      .road {
+        margin-top: 4px;
+        font-size: 15px;
+        color: #5f5d63;
+      }
+      .speed-row {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .speed-current {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        min-width: 52px;
+      }
+      .speed-value {
+        font-size: 18px;
+        font-weight: 850;
+        line-height: 1;
+        letter-spacing: 0;
+      }
+      .speed-label {
+        margin-top: 2px;
+        font-size: 13px;
+        color: #5f5d63;
+        letter-spacing: 0;
+      }
+      .limit-sign {
+        display: grid;
+        place-items: center;
+        width: 48px;
+        height: 48px;
+        border: 3px solid #d5222a;
+        border-radius: 50%;
+        color: #1c1b1f;
+        background: #ffffff;
+        font-size: 20px;
+        font-weight: 850;
+      }
+      .controls {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .control {
+        display: grid;
+        place-items: center;
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: #fefbff;
+        color: #38363b;
+        font-size: 24px;
+        font-weight: 800;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+      }
+      .eta-card {
+        position: absolute;
+        left: 18px;
+        right: 18px;
+        bottom: 14px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 16px;
+        border-radius: 8px;
+        background: #fefbff;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+      }
+      .eta-main {
+        font-size: 30px;
+        font-weight: 850;
+        color: #1b7f45;
+      }
+      .eta-sub {
+        font-size: 15px;
+        color: #5f5d63;
+      }
+      .eta-text {
+        min-width: 0;
+      }
+      .eta-actions {
+        display: flex;
+        gap: 4px;
+      }
+      .action {
+        display: grid;
+        place-items: center;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        color: #5f5d63;
+        font-size: 20px;
+        font-weight: 800;
+      }
+      .action-close {
+        width: 64px;
+        color: #241a00;
+        background: #ffdea8;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="screen">
+      <section class="top-panel">
+        <div class="turn">↱</div>
+        <div>
+          <div class="distance">300 m</div>
+          <div class="road">青山通りを左方向</div>
+        </div>
+      </section>
+
+      <nav class="controls" aria-label="地図操作">
+        <div class="control">+</div>
+        <div class="control">−</div>
+      </nav>
+
+      <section class="eta-card">
+        <div class="eta-text">
+          <div class="eta-main">18分</div>
+          <div class="eta-sub">8.4 km · 12:48 到着予定</div>
+        </div>
+        <div class="speed-row" aria-label="速度">
+          <div class="limit-sign" aria-label="制限速度 50 km/h">50</div>
+          <div class="speed-current" aria-label="現在速度 48 km/h">
+            <div class="speed-value">48km</div>
+            <div class="speed-label">speed</div>
+          </div>
+        </div>
+        <nav class="eta-actions" aria-label="ナビ操作">
+          <div class="action">⇄</div>
+          <div class="action">＋</div>
+          <div class="action">↗</div>
+          <div class="action action-close">×</div>
+        </nav>
+      </section>
+    </main>
+  </body>
+</html>

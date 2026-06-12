@@ -12,6 +12,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.Intersection
 import me.matsumo.drive.supporter.api.guidance.domain.ManeuverDirection
 import me.matsumo.drive.supporter.api.guidance.domain.ManeuverHint
 import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
+import me.matsumo.drive.supporter.api.guidance.domain.SpeedLimit
 import me.matsumo.drive.supporter.api.guidance.domain.SsmlPhrase
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.RouteDetail
@@ -61,6 +62,23 @@ class ExtNavGuidanceTrackerTest {
         assertEquals(GuidanceListDetail.Toll(amountYen = 320), tollGateItem.detail)
     }
 
+    @Test
+    fun `次の主案内地点の制限速度を現在区間の制限速度として返す`() {
+        val tracker = ExtNavGuidanceTracker()
+        val route = buildRoute()
+        tracker.attach(
+            payload = ExtNavRoutePayload(
+                id = route.id,
+                routeGuidance = buildRouteGuidance(turnSpeedLimitKmh = 80),
+            ),
+            route = route,
+        )
+
+        tracker.onLocation(locationAt(route.origin))
+
+        assertEquals(80, tracker.snapshot.value?.progress?.currentSpeedLimitKmh)
+    }
+
     private fun buildRoute(): RouteDetail {
         val origin = RoutePoint(latitude = ORIGIN_LATITUDE, longitude = ORIGIN_LONGITUDE)
         val tollGate = RoutePoint(latitude = ORIGIN_LATITUDE, longitude = ORIGIN_LONGITUDE + 0.002)
@@ -80,7 +98,9 @@ class ExtNavGuidanceTrackerTest {
         )
     }
 
-    private fun buildRouteGuidance(): RouteGuidance = RouteGuidance(
+    private fun buildRouteGuidance(
+        turnSpeedLimitKmh: Int? = null,
+    ): RouteGuidance = RouteGuidance(
         index = 1,
         priority = null,
         summary = DsrRouteSummary(
@@ -115,6 +135,7 @@ class ExtNavGuidanceTrackerTest {
                 category = GuidanceCategory.TunnelBranch,
                 facilityKind = null,
                 direction = ManeuverDirection.SlantRight,
+                speedLimitKmh = turnSpeedLimitKmh,
             ),
             buildGuidancePoint(
                 index = 3,
@@ -151,6 +172,7 @@ class ExtNavGuidanceTrackerTest {
         category: GuidanceCategory,
         facilityKind: GuidanceFacilityKind?,
         direction: ManeuverDirection,
+        speedLimitKmh: Int? = null,
     ): GuidancePoint = GuidancePoint(
         index = index,
         gpType = 0,
@@ -168,19 +190,28 @@ class ExtNavGuidanceTrackerTest {
         maneuver = buildManeuverHint(
             facilityKind = facilityKind,
             direction = direction,
+            speedLimitKmh = speedLimitKmh,
         ),
     )
 
     private fun buildManeuverHint(
         facilityKind: GuidanceFacilityKind?,
         direction: ManeuverDirection,
+        speedLimitKmh: Int?,
     ): ManeuverHint = ManeuverHint(
         angleIn = 0,
         angleOut = 0,
         direction = direction,
         laneInfo = null,
         specialNode = null,
-        speedLimit = null,
+        speedLimit = speedLimitKmh?.let { limit ->
+            SpeedLimit(
+                kind = 0,
+                value = limit,
+                delta = 0,
+                limit = limit,
+            )
+        },
         flagsGroup = persistentListOf(),
         mergeSide = null,
         facilityHint = facilityKind?.let { kind -> GuidanceFacilityHint(kind = kind) },

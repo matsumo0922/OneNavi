@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
+import me.matsumo.onenavi.core.datasource.location.VehicleSpeedState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
 import me.matsumo.onenavi.core.resource.Res
@@ -55,6 +56,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun MapNavigationContent(
     guidanceState: GuidanceState,
+    vehicleSpeedState: VehicleSpeedState,
     navigationGuideImage: NavigationGuideImage?,
     overlayState: MapOverlayState,
     ttsDebugSnapshot: VoiceAnnouncementDebugSnapshot?,
@@ -281,9 +283,9 @@ internal fun MapNavigationContent(
                     MapNavigationEtaCard(
                         modifier = Modifier.fillMaxWidth(),
                         progress = etaProgress,
-                        geometry = etaRoute.geometry,
-                        roadClassSegments = etaRoute.roadClassSegments,
                         congestionSegments = etaRoute.congestionSegments,
+                        displaySpeedKmh = vehicleSpeedState.displaySpeedKmh,
+                        speedLimitKmh = etaProgress.currentSpeedLimitKmh,
                         onCloseClicked = ::cancelNavigation,
                         onAlternativesClicked = {
                             onUiEvent(MapUiEvent.OnNavigationAlternativesClicked)

@@ -47,6 +47,7 @@ import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommand
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommandEnvelope
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
+import me.matsumo.onenavi.core.datasource.location.VehicleSpeedState
 import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
@@ -98,6 +99,7 @@ fun MapScreen(
     val routePreviewState by viewModel.newRoutePreviewState.collectAsStateWithLifecycle()
     val guidanceState by viewModel.newGuidanceState.collectAsStateWithLifecycle()
     val vehicleLocationState by viewModel.vehicleLocationState.collectAsStateWithLifecycle()
+    val vehicleSpeedState by viewModel.vehicleSpeedState.collectAsStateWithLifecycle()
     val ttsScheduleDebugSnapshot by viewModel.ttsDebugSnapshot.collectAsStateWithLifecycle()
     val phoneCommand by carPhoneSessionCoordinator.phoneCommand.collectAsStateWithLifecycle()
 
@@ -263,6 +265,7 @@ fun MapScreen(
                 guidanceState = guidanceState,
                 ttsDebugSnapshot = visibleTtsDebugSnapshot,
                 vehicleLocationState = vehicleLocationState,
+                vehicleSpeedState = vehicleSpeedState,
                 googleMap = googleMap,
                 cameraState = cameraState,
                 panelLayout = panelLayout,
@@ -300,6 +303,7 @@ fun MapScreen(
                 guidanceState = guidanceState,
                 ttsDebugSnapshot = visibleTtsDebugSnapshot,
                 vehicleLocationState = vehicleLocationState,
+                vehicleSpeedState = vehicleSpeedState,
                 googleMap = googleMap,
                 cameraState = cameraState,
                 panelLayout = panelLayout,
@@ -390,6 +394,7 @@ private fun MapScreenCompactLayout(
     guidanceState: GuidanceState,
     ttsDebugSnapshot: VoiceAnnouncementDebugSnapshot?,
     vehicleLocationState: VehicleLocationState?,
+    vehicleSpeedState: VehicleSpeedState,
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
@@ -454,6 +459,7 @@ private fun MapScreenCompactLayout(
                 uiState = uiState,
                 screenState = screenState,
                 guidanceState = guidanceState,
+                vehicleSpeedState = vehicleSpeedState,
                 ttsDebugSnapshot = ttsDebugSnapshot,
                 cameraState = cameraState,
                 panelLayout = panelLayout,
@@ -486,6 +492,7 @@ private fun MapScreenSplitLayout(
     guidanceState: GuidanceState,
     ttsDebugSnapshot: VoiceAnnouncementDebugSnapshot?,
     vehicleLocationState: VehicleLocationState?,
+    vehicleSpeedState: VehicleSpeedState,
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
@@ -570,6 +577,7 @@ private fun MapScreenSplitLayout(
                     uiState = uiState,
                     screenState = screenState,
                     guidanceState = guidanceState,
+                    vehicleSpeedState = vehicleSpeedState,
                     ttsDebugSnapshot = ttsDebugSnapshot,
                     cameraState = cameraState,
                     panelLayout = panelLayout,
@@ -697,6 +705,7 @@ private fun MapScreenContent(
     uiState: MapUiState,
     screenState: MapScreenState,
     guidanceState: GuidanceState,
+    vehicleSpeedState: VehicleSpeedState,
     ttsDebugSnapshot: VoiceAnnouncementDebugSnapshot?,
     cameraState: MapCameraState,
     panelLayout: MapPanelLayout,
@@ -747,6 +756,7 @@ private fun MapScreenContent(
             MapNavigationContent(
                 modifier = modifier,
                 guidanceState = guidanceState,
+                vehicleSpeedState = vehicleSpeedState,
                 navigationGuideImage = uiState.navigationGuideImage,
                 overlayState = uiState.overlayState,
                 ttsDebugSnapshot = ttsDebugSnapshot,
