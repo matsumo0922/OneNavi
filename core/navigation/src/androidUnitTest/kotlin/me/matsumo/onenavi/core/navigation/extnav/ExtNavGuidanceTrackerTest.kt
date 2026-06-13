@@ -23,6 +23,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 /**
  * [ExtNavGuidanceTracker] の案内地点分類テスト。
@@ -63,7 +64,7 @@ class ExtNavGuidanceTrackerTest {
     }
 
     @Test
-    fun `次の主案内地点の制限速度を現在区間の制限速度として返す`() {
+    fun `次の主案内地点に field 27 由来の値があっても現在区間の制限速度として返さない`() {
         val tracker = ExtNavGuidanceTracker()
         val route = buildRoute()
         tracker.attach(
@@ -76,7 +77,7 @@ class ExtNavGuidanceTrackerTest {
 
         tracker.onLocation(locationAt(route.origin))
 
-        assertEquals(80, tracker.snapshot.value?.progress?.currentSpeedLimitKmh)
+        assertNull(tracker.snapshot.value?.progress?.currentSpeedLimitKmh)
     }
 
     private fun buildRoute(): RouteDetail {
