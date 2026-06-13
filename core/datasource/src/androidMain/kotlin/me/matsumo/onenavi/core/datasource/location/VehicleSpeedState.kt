@@ -9,6 +9,9 @@ enum class VehicleSpeedSource {
     /** 端末の位置情報 provider が返した速度。 */
     LOCATION,
 
+    /** 車両ハードウェア API が返した速度。 */
+    CAR_HARDWARE,
+
     /** 連続する位置 tick の座標差分から補完した速度。 */
     DERIVED_LOCATION_DELTA,
 

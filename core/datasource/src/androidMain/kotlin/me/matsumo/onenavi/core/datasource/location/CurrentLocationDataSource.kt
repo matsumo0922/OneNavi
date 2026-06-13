@@ -5,6 +5,7 @@ import android.content.Context
 import android.location.Location
 import android.os.Looper
 import android.os.SystemClock
+import androidx.compose.runtime.Immutable
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -25,10 +26,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.tasks.await
+import me.matsumo.onenavi.core.common.car.CarHardwareDiagnosticsSnapshot
+import me.matsumo.onenavi.core.common.car.CarHardwareDiagnosticsState
 import me.matsumo.onenavi.core.datasource.AppSettingDataSource
 import me.matsumo.onenavi.core.model.DeveloperFeature
 import kotlin.time.Duration.Companion.milliseconds
@@ -53,6 +58,7 @@ class CurrentLocationDataSource(
         LocationServices.getFusedLocationProviderClient(context)
     private val speedEstimatorLock = Any()
     private val speedEstimator = VehicleSpeedEstimator()
+    private val carHardwareLocationOverride = CarHardwareLocationOverride()
     private val _vehicleSpeedState = MutableStateFlow(VehicleSpeedState())
 
     /**
@@ -74,10 +80,23 @@ class CurrentLocationDataSource(
             return applySpeedEstimation(createDevelopmentUserLocation())
         }
 
-        return try {
-            val location = locationProviderClient.lastLocation.await()?.toUserLocation()
+        val phoneLocation = readPhoneLastKnownOrNull()
+        val overrideResult = carHardwareLocationOverride.apply(
+            phoneLocation = phoneLocation,
+            snapshot = CarHardwareDiagnosticsState.snapshot.value,
+        )
 
-            location?.let(::applySpeedEstimation)
+        return overrideResult?.let(::applySpeedEstimation)
+    }
+
+    /**
+     * 端末側の lastKnown 位置を読む。
+     *
+     * @return 取得できた端末位置。取得失敗時は null
+     */
+    private suspend fun readPhoneLastKnownOrNull(): UserLocation? {
+        return try {
+            locationProviderClient.lastLocation.await()?.toUserLocation()
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Throwable) {
@@ -124,7 +143,7 @@ class CurrentLocationDataSource(
                     rawLocationUpdates(
                         intervalMillis = intervalMillis,
                         minDistanceMeters = minDistanceMeters,
-                    )
+                    ).withCarHardwareOverrides()
                 }
             }
             .buffer(Channel.CONFLATED)
@@ -202,9 +221,7 @@ class CurrentLocationDataSource(
         return object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 result.locations
-                    .mapNotNull { location ->
-                        location.toUserLocation()?.let(::applySpeedEstimation)
-                    }
+                    .mapNotNull(Location::toUserLocation)
                     .forEach { userLocation ->
                         val sendResult = trySend(userLocation)
                         if (sendResult.isFailure) return@forEach
@@ -214,14 +231,66 @@ class CurrentLocationDataSource(
     }
 
     /**
+     * 端末位置 Flow へ車両ハードウェア値を重ねる。
+     *
+     * 端末位置と車両 snapshot の更新を merge し、常に最新値同士で override を評価する。
+     * 速度 state は入力のたびに更新するが、速度を除いた位置が直近 emit から変わらない更新
+     * （車速だけの更新など）では下流へ位置 tick を流さない。
+     *
+     * @return 車両ハードウェア値を反映した位置更新 Flow
+     */
+    private fun Flow<UserLocation>.withCarHardwareOverrides(): Flow<UserLocation> = flow {
+        val overrideState = LocationOverrideState(CarHardwareDiagnosticsState.snapshot.value)
+        val phoneLocationInputs = this@withCarHardwareOverrides.map { location ->
+            LocationOverrideInput.PhoneLocation(location)
+        }
+        val carHardwareInputs = CarHardwareDiagnosticsState.snapshot
+            .distinctUntilChangedBy { snapshot -> snapshot.speed to snapshot.location }
+            .map { snapshot -> LocationOverrideInput.CarHardwareSnapshot(snapshot) }
+
+        merge(phoneLocationInputs, carHardwareInputs).collect { input ->
+            overrideState.update(input)
+
+            val overrideResult = carHardwareLocationOverride.apply(
+                phoneLocation = overrideState.latestPhoneLocation,
+                snapshot = overrideState.latestCarHardwareSnapshot,
+            ) ?: return@collect
+            val estimatedLocation = applySpeedEstimation(overrideResult)
+            val isNewBaseLocation = overrideState.consumeIfNewBaseLocation(overrideResult.location)
+
+            if (!isNewBaseLocation) return@collect
+
+            emit(estimatedLocation)
+        }
+    }.buffer(Channel.CONFLATED)
+
+    /**
      * 速度推定を適用した位置 tick を返し、共有速度 state を更新する。
      *
      * @param location provider から受け取った位置 tick
      * @return 速度推定を反映した位置 tick
      */
     private fun applySpeedEstimation(location: UserLocation): UserLocation {
+        return applySpeedEstimation(
+            CarHardwareLocationOverrideResult(
+                location = location,
+                measuredSpeedSource = VehicleSpeedSource.LOCATION,
+            ),
+        )
+    }
+
+    /**
+     * 速度推定を適用した位置 tick を返し、共有速度 state を更新する。
+     *
+     * @param overrideResult 車両ハードウェア値を重ねた位置 tick
+     * @return 速度推定を反映した位置 tick
+     */
+    private fun applySpeedEstimation(overrideResult: CarHardwareLocationOverrideResult): UserLocation {
         val estimation = synchronized(speedEstimatorLock) {
-            speedEstimator.estimate(location)
+            speedEstimator.estimate(
+                location = overrideResult.location,
+                measuredSpeedSource = overrideResult.measuredSpeedSource,
+            )
         }
 
         _vehicleSpeedState.value = estimation.state
@@ -243,6 +312,77 @@ class CurrentLocationDataSource(
         /** すべての tick を tracker に渡すための既定最小移動距離。 */
         const val DEFAULT_MIN_DISTANCE_METERS = 0f
     }
+}
+
+/**
+ * 位置 override flow の最新入力と直近 emit 位置を保持する。
+ *
+ * @param initialSnapshot collect 開始時点の車両ハードウェア診断 snapshot
+ */
+private class LocationOverrideState(
+    initialSnapshot: CarHardwareDiagnosticsSnapshot,
+) {
+
+    /** 端末位置 provider から届いた最新位置。未受信の場合は null。 */
+    var latestPhoneLocation: UserLocation? = null
+        private set
+
+    /** 車両ハードウェア診断の最新 snapshot。 */
+    var latestCarHardwareSnapshot: CarHardwareDiagnosticsSnapshot = initialSnapshot
+        private set
+
+    private var lastEmittedBaseLocation: UserLocation? = null
+
+    /**
+     * 入力イベントを最新値へ反映する。
+     *
+     * @param input 端末位置または車両 snapshot の更新イベント
+     */
+    fun update(input: LocationOverrideInput) {
+        when (input) {
+            is LocationOverrideInput.PhoneLocation -> latestPhoneLocation = input.location
+            is LocationOverrideInput.CarHardwareSnapshot -> latestCarHardwareSnapshot = input.snapshot
+        }
+    }
+
+    /**
+     * 速度を除いた位置が直近 emit から変わったかを返し、変わった場合は emit 済みとして記録する。
+     *
+     * @param location override 適用後の位置 tick
+     * @return 下流へ emit すべき新しい位置なら true
+     */
+    fun consumeIfNewBaseLocation(location: UserLocation): Boolean {
+        val baseLocation = location.copy(speedMps = null)
+        if (baseLocation == lastEmittedBaseLocation) return false
+
+        lastEmittedBaseLocation = baseLocation
+
+        return true
+    }
+}
+
+/** 位置 override flow に投入する入力イベント。 */
+private sealed interface LocationOverrideInput {
+
+    /**
+     * 端末位置の更新イベント。
+     *
+     * @param location 端末位置 provider から届いた位置
+     */
+    @Immutable
+    data class PhoneLocation(
+        val location: UserLocation,
+    ) : LocationOverrideInput
+
+    /**
+     * 車両ハードウェア snapshot の更新イベント。
+     *
+     * @param snapshot 車両ハードウェア診断 snapshot
+     */
+    @Immutable
+    data class CarHardwareSnapshot(
+        val snapshot: CarHardwareDiagnosticsSnapshot,
+    ) : LocationOverrideInput
 }
 
 /**

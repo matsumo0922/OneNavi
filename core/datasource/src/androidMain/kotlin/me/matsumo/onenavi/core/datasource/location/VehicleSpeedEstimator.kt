@@ -23,14 +23,19 @@ internal class VehicleSpeedEstimator {
      * 位置 tick を速度付き tick と速度 state に変換する。
      *
      * @param location provider から受け取った位置 tick
+     * @param measuredSpeedSource provider 速度がある場合の入力元
      * @return 速度を補完した位置 tick と共有速度 state
      */
-    fun estimate(location: UserLocation): VehicleSpeedEstimation {
+    fun estimate(
+        location: UserLocation,
+        measuredSpeedSource: VehicleSpeedSource = VehicleSpeedSource.LOCATION,
+    ): VehicleSpeedEstimation {
         val measuredSpeedMps = location.speedMps.validSpeedOrNull()
         val derivedSpeedMps = measuredSpeedMps ?: deriveSpeedMps(location)
         val speedSource = speedSourceFor(
             measuredSpeedMps = measuredSpeedMps,
             derivedSpeedMps = derivedSpeedMps,
+            measuredSpeedSource = measuredSpeedSource,
         )
         val displaySpeedKmh = derivedSpeedMps?.let(::smoothDisplaySpeedKmh)
 
@@ -95,10 +100,15 @@ internal class VehicleSpeedEstimator {
      *
      * @param measuredSpeedMps provider 由来の速度
      * @param derivedSpeedMps 差分補完後の速度
+     * @param measuredSpeedSource provider 速度がある場合の入力元
      * @return 速度入力元
      */
-    private fun speedSourceFor(measuredSpeedMps: Float?, derivedSpeedMps: Float?): VehicleSpeedSource {
-        if (measuredSpeedMps != null) return VehicleSpeedSource.LOCATION
+    private fun speedSourceFor(
+        measuredSpeedMps: Float?,
+        derivedSpeedMps: Float?,
+        measuredSpeedSource: VehicleSpeedSource,
+    ): VehicleSpeedSource {
+        if (measuredSpeedMps != null) return measuredSpeedSource
         if (derivedSpeedMps != null) return VehicleSpeedSource.DERIVED_LOCATION_DELTA
 
         return VehicleSpeedSource.UNAVAILABLE
