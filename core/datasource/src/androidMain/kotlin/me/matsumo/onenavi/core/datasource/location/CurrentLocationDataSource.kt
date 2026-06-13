@@ -230,9 +230,17 @@ class CurrentLocationDataSource(
         }
     }
 
+    /**
+     * 端末位置 Flow へ車両ハードウェア値を重ねる。
+     *
+     * 端末位置と車両 snapshot の更新を merge し、常に最新値同士で override を評価する。
+     * 速度 state は入力のたびに更新するが、速度を除いた位置が直近 emit から変わらない更新
+     * （車速だけの更新など）では下流へ位置 tick を流さない。
+     *
+     * @return 車両ハードウェア値を反映した位置更新 Flow
+     */
     private fun Flow<UserLocation>.withCarHardwareOverrides(): Flow<UserLocation> = flow {
-        var latestPhoneLocation: UserLocation? = null
-        var latestCarHardwareSnapshot: CarHardwareDiagnosticsSnapshot = CarHardwareDiagnosticsState.snapshot.value
+        val overrideState = LocationOverrideState(CarHardwareDiagnosticsState.snapshot.value)
         val phoneLocationInputs = this@withCarHardwareOverrides.map { location ->
             LocationOverrideInput.PhoneLocation(location)
         }
@@ -241,17 +249,18 @@ class CurrentLocationDataSource(
             .map { snapshot -> LocationOverrideInput.CarHardwareSnapshot(snapshot) }
 
         merge(phoneLocationInputs, carHardwareInputs).collect { input ->
-            when (input) {
-                is LocationOverrideInput.PhoneLocation -> latestPhoneLocation = input.location
-                is LocationOverrideInput.CarHardwareSnapshot -> latestCarHardwareSnapshot = input.snapshot
-            }
+            overrideState.update(input)
 
             val overrideResult = carHardwareLocationOverride.apply(
-                phoneLocation = latestPhoneLocation,
-                snapshot = latestCarHardwareSnapshot,
+                phoneLocation = overrideState.latestPhoneLocation,
+                snapshot = overrideState.latestCarHardwareSnapshot,
             ) ?: return@collect
+            val estimatedLocation = applySpeedEstimation(overrideResult)
+            val isNewBaseLocation = overrideState.consumeIfNewBaseLocation(overrideResult.location)
 
-            emit(applySpeedEstimation(overrideResult))
+            if (!isNewBaseLocation) return@collect
+
+            emit(estimatedLocation)
         }
     }.buffer(Channel.CONFLATED)
 
@@ -302,6 +311,53 @@ class CurrentLocationDataSource(
 
         /** すべての tick を tracker に渡すための既定最小移動距離。 */
         const val DEFAULT_MIN_DISTANCE_METERS = 0f
+    }
+}
+
+/**
+ * 位置 override flow の最新入力と直近 emit 位置を保持する。
+ *
+ * @param initialSnapshot collect 開始時点の車両ハードウェア診断 snapshot
+ */
+private class LocationOverrideState(
+    initialSnapshot: CarHardwareDiagnosticsSnapshot,
+) {
+
+    /** 端末位置 provider から届いた最新位置。未受信の場合は null。 */
+    var latestPhoneLocation: UserLocation? = null
+        private set
+
+    /** 車両ハードウェア診断の最新 snapshot。 */
+    var latestCarHardwareSnapshot: CarHardwareDiagnosticsSnapshot = initialSnapshot
+        private set
+
+    private var lastEmittedBaseLocation: UserLocation? = null
+
+    /**
+     * 入力イベントを最新値へ反映する。
+     *
+     * @param input 端末位置または車両 snapshot の更新イベント
+     */
+    fun update(input: LocationOverrideInput) {
+        when (input) {
+            is LocationOverrideInput.PhoneLocation -> latestPhoneLocation = input.location
+            is LocationOverrideInput.CarHardwareSnapshot -> latestCarHardwareSnapshot = input.snapshot
+        }
+    }
+
+    /**
+     * 速度を除いた位置が直近 emit から変わったかを返し、変わった場合は emit 済みとして記録する。
+     *
+     * @param location override 適用後の位置 tick
+     * @return 下流へ emit すべき新しい位置なら true
+     */
+    fun consumeIfNewBaseLocation(location: UserLocation): Boolean {
+        val baseLocation = location.copy(speedMps = null)
+        if (baseLocation == lastEmittedBaseLocation) return false
+
+        lastEmittedBaseLocation = baseLocation
+
+        return true
     }
 }
 

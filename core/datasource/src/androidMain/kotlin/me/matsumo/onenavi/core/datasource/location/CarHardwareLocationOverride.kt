@@ -23,13 +23,10 @@ internal class CarHardwareLocationOverride(
         phoneLocation: UserLocation?,
         snapshot: CarHardwareDiagnosticsSnapshot,
     ): CarHardwareLocationOverrideResult? {
-        val carHardwareLocation = snapshot.location.location.successfulValueOrNull()
-            ?.toUserLocationOrNull()
+        val carHardwareLocation = snapshot.location.location.toFreshUserLocationOrNull()
         val carHardwareSpeedMps = snapshot.resolveCarHardwareSpeedMps(carHardwareLocation)
         val selectedLocation = carHardwareLocation ?: phoneLocation ?: return null
-        val selectedSpeedMps = carHardwareSpeedMps
-            ?: phoneLocation?.speedMps.validSpeedOrNull()
-            ?: selectedLocation.speedMps.validSpeedOrNull()
+        val selectedSpeedMps = carHardwareSpeedMps ?: phoneLocation?.speedMps.validSpeedOrNull()
         val measuredSpeedSource = if (carHardwareSpeedMps != null) {
             VehicleSpeedSource.CAR_HARDWARE
         } else {
@@ -52,9 +49,15 @@ internal class CarHardwareLocationOverride(
             ?: carHardwareLocation?.speedMps.validSpeedOrNull()
     }
 
-    private fun CarHardwareLocationPointSnapshot.toUserLocationOrNull(): UserLocation? {
+    private fun CarHardwareValueSnapshot<CarHardwareLocationPointSnapshot>.toFreshUserLocationOrNull(): UserLocation? {
+        val pointSnapshot = successfulValueOrNull() ?: return null
+
+        return pointSnapshot.toUserLocationOrNull(carValueTimestampMillis = timestampMillis)
+    }
+
+    private fun CarHardwareLocationPointSnapshot.toUserLocationOrNull(carValueTimestampMillis: Long): UserLocation? {
         if (!latitude.isFinite() || !longitude.isFinite()) return null
-        if (!isFreshLocation()) return null
+        if (!isFreshLocation(carValueTimestampMillis)) return null
 
         val timestampMillis = locationTimeMillis
             .takeIf { timeMillis -> timeMillis > 0L }
@@ -76,17 +79,25 @@ internal class CarHardwareLocationOverride(
         )
     }
 
-    private fun CarHardwareLocationPointSnapshot.isFreshLocation(): Boolean {
+    private fun CarHardwareLocationPointSnapshot.isFreshLocation(carValueTimestampMillis: Long): Boolean {
         val elapsedNanos = elapsedRealtimeNanos
 
         if (elapsedNanos > 0L) {
-            val ageMillis = currentElapsedRealtimeMillis() - elapsedNanos / NANOS_PER_MILLIS
-            return ageMillis in 0L..MAX_CAR_HARDWARE_LOCATION_AGE_MILLIS
+            return isFreshLocationAge(currentElapsedRealtimeMillis() - elapsedNanos / NANOS_PER_MILLIS)
         }
 
-        if (locationTimeMillis <= 0L) return true
+        if (locationTimeMillis > 0L) {
+            return isFreshLocationAge(currentTimeMillis() - locationTimeMillis)
+        }
 
-        val ageMillis = currentTimeMillis() - locationTimeMillis
+        if (carValueTimestampMillis > 0L) {
+            return isFreshLocationAge(currentElapsedRealtimeMillis() - carValueTimestampMillis)
+        }
+
+        return false
+    }
+
+    private fun isFreshLocationAge(ageMillis: Long): Boolean {
         return ageMillis in 0L..MAX_CAR_HARDWARE_LOCATION_AGE_MILLIS
     }
 
@@ -103,7 +114,7 @@ internal class CarHardwareLocationOverride(
     }
 
     private fun CarHardwareValueSnapshot<*>.isFreshValue(): Boolean {
-        if (timestampMillis <= 0L) return true
+        if (timestampMillis <= 0L) return false
 
         val ageMillis = currentElapsedRealtimeMillis() - timestampMillis
         return ageMillis in 0L..MAX_CAR_HARDWARE_SPEED_AGE_MILLIS

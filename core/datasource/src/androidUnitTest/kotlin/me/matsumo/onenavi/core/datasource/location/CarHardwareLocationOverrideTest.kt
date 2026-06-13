@@ -125,6 +125,69 @@ class CarHardwareLocationOverrideTest {
     }
 
     @Test
+    fun timestampが無い車両位置は採用しない() {
+        val override = createOverride()
+        val phoneLocation = phoneLocation(speedMps = PHONE_SPEED_MPS)
+        val snapshot = carHardwareSnapshot(
+            location = carHardwareLocation(
+                locationTimeMillis = 0L,
+                elapsedRealtimeNanos = 0L,
+            ),
+            locationTimestampMillis = 0L,
+        )
+
+        val actual = override.apply(
+            phoneLocation = phoneLocation,
+            snapshot = snapshot,
+        )
+
+        assertEquals(PHONE_LATITUDE, actual?.location?.latitude)
+        assertEquals(PHONE_LONGITUDE, actual?.location?.longitude)
+        assertEquals(PHONE_SPEED_MPS, actual?.location?.speedMps)
+        assertEquals(VehicleSpeedSource.LOCATION, actual?.measuredSpeedSource)
+    }
+
+    @Test
+    fun 位置にtimestampが無くてもCarValueのtimestampが新鮮なら車両位置を採用する() {
+        val override = createOverride()
+        val snapshot = carHardwareSnapshot(
+            location = carHardwareLocation(
+                locationTimeMillis = 0L,
+                elapsedRealtimeNanos = 0L,
+            ),
+        )
+
+        val actual = override.apply(
+            phoneLocation = null,
+            snapshot = snapshot,
+        )
+
+        assertEquals(CAR_LATITUDE, actual?.location?.latitude)
+        assertEquals(CAR_LONGITUDE, actual?.location?.longitude)
+        assertEquals(CURRENT_TIME_MILLIS, actual?.location?.timestampMillis)
+    }
+
+    @Test
+    fun timestampが無い車速は採用しない() {
+        val override = createOverride()
+        val phoneLocation = phoneLocation(speedMps = PHONE_SPEED_MPS)
+        val snapshot = carHardwareSnapshot(
+            rawSpeedMetersPerSecond = RAW_SPEED_MPS,
+            speedTimestampMillis = 0L,
+        )
+
+        val actual = override.apply(
+            phoneLocation = phoneLocation,
+            snapshot = snapshot,
+        )
+
+        assertEquals(PHONE_LATITUDE, actual?.location?.latitude)
+        assertEquals(PHONE_LONGITUDE, actual?.location?.longitude)
+        assertEquals(PHONE_SPEED_MPS, actual?.location?.speedMps)
+        assertEquals(VehicleSpeedSource.LOCATION, actual?.measuredSpeedSource)
+    }
+
+    @Test
     fun 端末位置も車両位置も無い場合はnullを返す() {
         val override = createOverride()
         val snapshot = CarHardwareDiagnosticsSnapshot()
@@ -165,6 +228,7 @@ class CarHardwareLocationOverrideTest {
         location: CarHardwareLocationPointSnapshot? = null,
         rawSpeedMetersPerSecond: Float? = null,
         speedTimestampMillis: Long = CURRENT_ELAPSED_REALTIME_MILLIS,
+        locationTimestampMillis: Long = CURRENT_ELAPSED_REALTIME_MILLIS,
         locationStatus: CarHardwareDataStatus = CarHardwareDataStatus.SUCCESS,
         speedStatus: CarHardwareDataStatus = CarHardwareDataStatus.SUCCESS,
     ): CarHardwareDiagnosticsSnapshot {
@@ -184,7 +248,7 @@ class CarHardwareLocationOverrideTest {
                 location = carHardwareValue(
                     value = location,
                     status = locationStatus,
-                    timestampMillis = CURRENT_ELAPSED_REALTIME_MILLIS,
+                    timestampMillis = locationTimestampMillis,
                 ),
             ),
         )
@@ -195,6 +259,7 @@ class CarHardwareLocationOverrideTest {
         longitude: Double = CAR_LONGITUDE,
         speedMetersPerSecond: Float? = null,
         accuracyMeters: Float? = CAR_ACCURACY_METERS,
+        locationTimeMillis: Long = CURRENT_TIME_MILLIS,
         elapsedRealtimeNanos: Long = CURRENT_ELAPSED_REALTIME_MILLIS * NANOS_PER_MILLIS,
     ): CarHardwareLocationPointSnapshot {
         return CarHardwareLocationPointSnapshot(
@@ -205,7 +270,7 @@ class CarHardwareLocationOverrideTest {
             bearingDegrees = CAR_BEARING_DEGREES,
             speedMetersPerSecond = speedMetersPerSecond,
             provider = "car",
-            locationTimeMillis = CURRENT_TIME_MILLIS,
+            locationTimeMillis = locationTimeMillis,
             elapsedRealtimeNanos = elapsedRealtimeNanos,
         )
     }
