@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -133,11 +134,7 @@ internal fun MapNavigationContent(
         val topPanelModifier = Modifier
             .fillMaxWidth()
             .heightIn(max = topPanelMaxHeight)
-            .padding(
-                start = contentInsets.start,
-                top = contentInsets.top,
-                end = contentInsets.end,
-            )
+            .statusBarsPadding()
             .onGloballyPositioned { coordinates ->
                 onUiEvent(MapUiEvent.OnTopAppBarHeightChanged(coordinates.size.height))
             }
@@ -326,8 +323,8 @@ private fun Modifier.navigationBottomCardPadding(
     horizontalPadding: Dp,
 ): Modifier {
     return padding(
-        start = contentInsets.start + horizontalPadding,
-        end = contentInsets.end + horizontalPadding,
+        start = horizontalPadding,
+        end = horizontalPadding,
         bottom = contentInsets.bottom.coerceAtLeast(MAP_NAVIGATION_BOTTOM_CARD_DEFAULT_PADDING),
     )
 }
