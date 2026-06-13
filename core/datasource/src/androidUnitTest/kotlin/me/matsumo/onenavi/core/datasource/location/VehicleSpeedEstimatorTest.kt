@@ -26,6 +26,22 @@ class VehicleSpeedEstimatorTest {
     }
 
     @Test
+    fun 車両ハードウェア速度をprovider速度として扱う() {
+        val estimator = VehicleSpeedEstimator()
+
+        val actual = estimator.estimate(
+            location = location(
+                speedMps = 12f,
+            ),
+            measuredSpeedSource = VehicleSpeedSource.CAR_HARDWARE,
+        )
+
+        assertEquals(12f, actual.location.speedMps)
+        assertEquals(43, actual.state.displaySpeedKmh)
+        assertEquals(VehicleSpeedSource.CAR_HARDWARE, actual.state.source)
+    }
+
+    @Test
     fun provider速度が無い場合は前回位置との差分から速度を補完する() {
         val estimator = VehicleSpeedEstimator()
         estimator.estimate(location(longitude = ORIGIN_LONGITUDE))
