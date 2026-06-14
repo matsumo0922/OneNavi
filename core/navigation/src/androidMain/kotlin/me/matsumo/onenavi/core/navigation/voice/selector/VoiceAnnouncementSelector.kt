@@ -396,22 +396,42 @@ internal class VoiceAnnouncementSelector(
      * 先行案内地点が「発話帯に入り始める」geometry 累積距離を返す。候補の発話帯がこの位置より手前で
      * 完結していれば、先行地点の案内に割り込む余地が無いため route 順ゲートをバイパスできる。
      *
-     * 案内点に最も近い段 (= 最も actionable な直前案内) の発話開始位置を使う。MIDDLE はその距離窓の開始、
-     * FINAL は速度リードを織り込んだ発火境界 ([finalFireBoundaryMeters])。これにより先行地点が窓なし
-     * FINAL のみ (合流・カーブ等の単一 block) でも発話開始位置を持ち、後続の遠距離予告が握り潰されない。
+     * windowed MIDDLE を持つ通常の地点は、案内点に最も近い MIDDLE 窓の開始を使う ([nearestWindowedMiddleStageOf]、
+     * #101 の従来挙動)。FINAL 発火境界は近接 MIDDLE 窓より案内点寄りなので、ここで FINAL を使うと先行地点の
+     * 近接 MIDDLE 窓 (より手前で開く) を無視して後続を早く解禁し、その MIDDLE 発火時に barge-in / 順序崩れを招く。
+     *
+     * windowed MIDDLE を 1 つも持たない (= FINAL のみの合流・カーブ等の単一 block) 地点に限り、その FINAL の
+     * 速度リード込み発火境界 ([finalFireBoundaryMeters]) を発話開始位置として使う。これにより窓なし先行地点でも
+     * 発話開始位置を持ち、後続の遠距離予告が握り潰されない。
      */
     private fun earlierTargetGateEnterMeters(
         target: AnnouncementTarget,
         tick: VoiceTick,
     ): Double {
+        nearestWindowedMiddleStageOf(target)?.middleWindow?.let { window -> return window.enterGeometryMeters }
+
         val nearestStage = target.stages.maxByOrNull { stage -> stage.triggerGeometryMeters }
             ?: return target.geometryMeters
 
-        if (nearestStage.kind == AnnouncementStageKind.FINAL) {
-            return finalFireBoundaryMeters(nearestStage, target, tick)
+        return finalFireBoundaryMeters(nearestStage, target, tick)
+    }
+
+    /** target 内で案内点に最も近い (窓終端が最大の) windowed MIDDLE 段を返す。無ければ null。 */
+    private fun nearestWindowedMiddleStageOf(target: AnnouncementTarget): AnnouncementStage? {
+        var nearestStage: AnnouncementStage? = null
+        var nearestExitGeometryMeters = Double.NEGATIVE_INFINITY
+
+        for (stage in target.stages) {
+            if (stage.kind != AnnouncementStageKind.MIDDLE) continue
+
+            val stageWindow = stage.middleWindow ?: continue
+            if (stageWindow.exitGeometryMeters > nearestExitGeometryMeters) {
+                nearestStage = stage
+                nearestExitGeometryMeters = stageWindow.exitGeometryMeters
+            }
         }
 
-        return nearestStage.middleWindow?.enterGeometryMeters ?: nearestStage.triggerGeometryMeters
+        return nearestStage
     }
 
     /**

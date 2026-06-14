@@ -612,6 +612,39 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
+    fun `先行 target が近接 MIDDLE 窓を持つ場合は FINAL 境界でなく MIDDLE 窓開始でゲートする`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // 先行 A は近接 MIDDLE [850,900] と FINAL (trigger geo 970) を併せ持つ通常地点。
+        // gate enter は最寄り MIDDLE 窓開始 850 (FINAL 境界 970 ではない)。後続 B の窓終端 860 は 850 に重なるため、
+        // A が区切られるまでゲートする。FINAL 境界 970 を使うと閾値 870 となり 860<=870 で誤って解禁される。
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 1_000.0,
+                stages = listOf(
+                    middleStage("aNear", enter = 850.0, exit = 900.0, groupKey = "aGrp"),
+                    finalStage("aFinal", triggerGeometryMeters = 970.0),
+                ),
+            ),
+            targetOf(
+                index = 1,
+                geometryMeters = 1_100.0,
+                stages = listOf(middleStage("bAdvance", enter = 800.0, exit = 860.0, groupKey = "bGrp")),
+            ),
+        )
+
+        val blocked = selector.select(plan, tickOf(current = 830.0), emptyState())
+        val afterAnnounced = selector.select(
+            plan = plan,
+            tick = tickOf(current = 830.0),
+            state = emptyState().withStageFired(VoiceAnnouncementId("aFinal")),
+        )
+
+        assertNull(blocked)
+        assertEquals(VoiceAnnouncementId("bAdvance"), afterAnnounced?.stage?.id)
+    }
+
+    @Test
     fun `route が発話不能なら何も選ばない`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         val plan = planOf(
