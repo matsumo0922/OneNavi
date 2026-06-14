@@ -539,6 +539,68 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
+    fun `先行が窓なし FINAL でも 遠距離予告窓が先行 FINAL 発火帯より手前で完結すれば発話される`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // 手前 A は単一 block の FINAL のみ (合流 / カーブ相当・窓なし)。GP 2000、発火帯 enter = 2000 - 30(min lead) = 1970。
+        // 後続 B の遠距離予告窓 [1000,1500] は A の発火帯より完全に手前で完結する (disjoint)。
+        val plan = planOf(
+            targetOf(index = 0, geometryMeters = 2_000.0, stages = listOf(finalStage("mergeFinal"))),
+            targetOf(
+                index = 1,
+                geometryMeters = 2_300.0,
+                stages = listOf(middleStage("farAdvance", enter = 1_000.0, exit = 1_500.0, groupKey = "farGroup")),
+            ),
+        )
+
+        // A 未発話・未通過でも、窓が disjoint なので B の遠距離予告が解禁される (issue #90 の核心)。
+        val selection = selector.select(plan, tickOf(current = 1_200.0), emptyState())
+
+        assertEquals(VoiceAnnouncementId("farAdvance"), selection?.stage?.id)
+    }
+
+    @Test
+    fun `遠距離予告窓が先行 FINAL の発火帯に食い込む場合は区切りまでゲートされる`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // B の予告窓 [1000,1990] は A の発火帯 enter=1970 に食い込む (overlap) → 順序保持のためゲート。
+        val plan = planOf(
+            targetOf(index = 0, geometryMeters = 2_000.0, stages = listOf(finalStage("mergeFinal"))),
+            targetOf(
+                index = 1,
+                geometryMeters = 2_300.0,
+                stages = listOf(middleStage("farAdvance", enter = 1_000.0, exit = 1_990.0, groupKey = "farGroup")),
+            ),
+        )
+
+        val blocked = selector.select(plan, tickOf(current = 1_200.0), emptyState())
+        val afterPassed = selector.select(plan, tickOf(current = 1_200.0), emptyState().withTargetPassed(0))
+
+        assertNull(blocked)
+        assertEquals(VoiceAnnouncementId("farAdvance"), afterPassed?.stage?.id)
+    }
+
+    @Test
+    fun `先行 FINAL の発火帯は速度リードで広がり 同じ予告窓でもゲート結果が変わる`() {
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        // B の予告窓終端 = 1900。A(GP2000) の FINAL 発火帯 enter は
+        //   速度なし   : 2000 - 30(min lead)        = 1970 → 1900 <= 1970 で発話可
+        //   速度 30m/s : 2000 - max(30×5, 30)=150  = 1850 → 1900 <= 1850 が偽でゲート
+        val plan = planOf(
+            targetOf(index = 0, geometryMeters = 2_000.0, stages = listOf(finalStage("mergeFinal"))),
+            targetOf(
+                index = 1,
+                geometryMeters = 2_300.0,
+                stages = listOf(middleStage("farAdvance", enter = 1_500.0, exit = 1_900.0, groupKey = "farGroup")),
+            ),
+        )
+
+        val lowSpeed = selector.select(plan, tickOf(current = 1_700.0), emptyState())
+        val highSpeed = selector.select(plan, tickOf(current = 1_700.0, speed = 30.0), emptyState())
+
+        assertEquals(VoiceAnnouncementId("farAdvance"), lowSpeed?.stage?.id)
+        assertNull(highSpeed)
+    }
+
+    @Test
     fun `route が発話不能なら何も選ばない`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         val plan = planOf(

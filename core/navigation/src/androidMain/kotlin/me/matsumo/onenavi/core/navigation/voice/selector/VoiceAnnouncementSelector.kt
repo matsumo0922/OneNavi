@@ -117,30 +117,36 @@ internal class VoiceAnnouncementSelector(
     }
 
     /**
-     * 自分より手前 (route 順で前) の案内地点がすべて「発話済み or 通過済み」かを返す。
+     * 自分より手前 (route 順で前) の案内地点のうち、候補段の発話帯と重なり得る地点がすべて
+     * 「発話済み or 通過済み」かを返す。
      *
-     * 外部データには、ある案内地点の発話を 1km 級の手前でトリガする bare な段があり、これを放置すると
+     * 外部データには、ある案内地点の発話を数 km 級の手前でトリガする段があり、これを放置すると
      * 手前の地点の案内中に後続地点の案内が割り込んでしまう (例: 1 つ目の交差点へ向かう途中で 2 つ目の
-     * 交差点の方向だけが鳴る)。route 順を保つため、手前の地点がすべて区切り済みになるまで後続地点は
-     * 原則候補にしない。
+     * 交差点の方向だけが鳴る)。route 順を保つため、手前の地点の発話帯と重なる候補は、その手前地点が
+     * 区切り済みになるまで候補にしない。
+     *
+     * 順序保証は外部ナビ API 参照実装と同じく「発話帯 (距離窓) の非重複」で行う。候補段の発話帯が
+     * 未発話の先行地点の最寄り段の発話開始位置より手前で完結していれば、割り込む余地が無いためゲート
+     * 対象外にする (= 遠距離予告は手前地点を待たず鳴る)。先行地点が窓なし FINAL のみ (合流・カーブ等の
+     * 単一 block) でも、その FINAL の発火境界を発話開始位置として扱うため、後続の遠距離予告が握り潰されない。
      *
      * 「○m先」のような予告は手前の地点が通過する前に鳴るのが正常なため、「通過済み」だけでなく
-     * 「その地点の FINAL (= 最寄り段) が発話済み」も区切り済みとみなす。これにより手前の地点の直前案内が
-     * 出た後は、後続地点の予告が即座に解禁される。
-     *
-     * ただし、後続 MIDDLE の距離窓が未発話の先行地点の最寄り MIDDLE 窓より前で完結している場合は、
-     * 先行地点の近接案内へ割り込む可能性がないため route 順ゲートの対象外にする。
+     * 「その地点の FINAL (= 最寄り段) が発話済み」も区切り済みとみなす。
      */
     private fun areEarlierTargetsAnnounced(
         plan: VoiceAnnouncementPlan,
         targetIndex: Int,
         candidateStage: AnnouncementStage,
+        candidateTarget: AnnouncementTarget,
+        tick: VoiceTick,
         state: VoiceAnnouncementSpeechState,
     ): Boolean {
+        val candidateBandExitMeters = candidateBandExitMeters(candidateStage, candidateTarget)
+
         for (earlierIndex in 0 until targetIndex) {
             val earlierTarget = plan.targets[earlierIndex]
             if (isTargetAnnounced(earlierTarget, earlierIndex, state)) continue
-            if (canBypassEarlierTargetGate(candidateStage, earlierTarget)) continue
+            if (candidateBandExitMeters <= earlierTargetGateEnterMeters(earlierTarget, tick)) continue
 
             return false
         }
@@ -215,6 +221,8 @@ internal class VoiceAnnouncementSelector(
                 plan = plan,
                 targetIndex = targetIndex,
                 candidateStage = stage,
+                candidateTarget = target,
+                tick = tick,
                 state = state,
             )
         }
@@ -254,6 +262,8 @@ internal class VoiceAnnouncementSelector(
                 plan = plan,
                 targetIndex = targetIndex,
                 candidateStage = selection.stage,
+                candidateTarget = target,
+                tick = tick,
                 state = state,
             )
 
@@ -360,37 +370,44 @@ internal class VoiceAnnouncementSelector(
         return result
     }
 
-    /** 後続 MIDDLE の距離窓が先行地点の最寄り MIDDLE 窓と重なり得ないかを返す。 */
-    private fun canBypassEarlierTargetGate(
-        candidateStage: AnnouncementStage,
-        earlierTarget: AnnouncementTarget,
-    ): Boolean {
-        if (candidateStage.kind != AnnouncementStageKind.MIDDLE) return false
-
-        val candidateWindow = candidateStage.middleWindow ?: return false
-        val earlierWindow = nearestWindowedMiddleStageOf(earlierTarget)?.middleWindow ?: return false
-
-        return candidateWindow.exitGeometryMeters <= earlierWindow.enterGeometryMeters
+    /**
+     * 候補段の発話帯の終端 (geometry 累積距離) を返す。route 順ゲートの非重複判定で「この候補が
+     * いつまで発話され得るか」の上限として使う。
+     *
+     * MIDDLE は距離窓の終端 (案内点に近い端)。FINAL は窓を持たず案内点まで発話され得るため案内点位置。
+     * FINAL の終端を案内点にすることで、案内点近傍の FINAL (= 通常の直前案内) は手前地点の発話帯と必ず
+     * 重なり、route 順を追い越さない。一方で MIDDLE の遠距離予告は窓終端が手前地点より前なら解禁される。
+     */
+    private fun candidateBandExitMeters(
+        stage: AnnouncementStage,
+        target: AnnouncementTarget,
+    ): Double = when (stage.kind) {
+        AnnouncementStageKind.MIDDLE ->
+            stage.middleWindow?.exitGeometryMeters ?: target.geometryMeters
+        AnnouncementStageKind.FINAL ->
+            target.geometryMeters
     }
 
-    /** target 内で案内地点に最も近い MIDDLE 窓を持つ段を返す。 */
-    private fun nearestWindowedMiddleStageOf(target: AnnouncementTarget): AnnouncementStage? {
-        var nearestStage: AnnouncementStage? = null
-        var nearestExitGeometryMeters = Double.NEGATIVE_INFINITY
+    /**
+     * 先行案内地点が「発話帯に入り始める」geometry 累積距離を返す。候補の発話帯がこの位置より手前で
+     * 完結していれば、先行地点の案内に割り込む余地が無いため route 順ゲートをバイパスできる。
+     *
+     * 案内点に最も近い段 (= 最も actionable な直前案内) の発話開始位置を使う。MIDDLE はその距離窓の開始、
+     * FINAL は速度リードを織り込んだ発火境界 ([finalFireBoundaryMeters])。これにより先行地点が窓なし
+     * FINAL のみ (合流・カーブ等の単一 block) でも発話開始位置を持ち、後続の遠距離予告が握り潰されない。
+     */
+    private fun earlierTargetGateEnterMeters(
+        target: AnnouncementTarget,
+        tick: VoiceTick,
+    ): Double {
+        val nearestStage = target.stages.maxByOrNull { stage -> stage.triggerGeometryMeters }
+            ?: return target.geometryMeters
 
-        for (stage in target.stages) {
-            if (stage.kind != AnnouncementStageKind.MIDDLE) continue
-
-            val stageWindow = stage.middleWindow ?: continue
-            val isNearerThanCurrent = stageWindow.exitGeometryMeters > nearestExitGeometryMeters
-
-            if (isNearerThanCurrent) {
-                nearestStage = stage
-                nearestExitGeometryMeters = stageWindow.exitGeometryMeters
-            }
+        if (nearestStage.kind == AnnouncementStageKind.FINAL) {
+            return finalFireBoundaryMeters(nearestStage, target, tick)
         }
 
-        return nearestStage
+        return nearestStage.middleWindow?.enterGeometryMeters ?: nearestStage.triggerGeometryMeters
     }
 
     /**
