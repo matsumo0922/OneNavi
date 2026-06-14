@@ -9,6 +9,7 @@ import com.google.android.gms.maps.GoogleMap
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.model.RouteDetail
+import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RoutePointEvent
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
@@ -493,6 +494,7 @@ private fun NavigationEffect(
     modifier: Modifier = Modifier,
 ) {
     val guidanceRoute = guidanceState.routeForMapOverlay() ?: return
+    val guidanceTargetPolylinePointIndex = guidanceState.guidanceTargetPolylinePointIndex(guidanceRoute.route)
 
     if (!shouldSuppressGuidanceRouteOverlay) {
         RoutePolylineEffect(
@@ -501,6 +503,7 @@ private fun NavigationEffect(
             isSelected = true,
             cameraZoom = cameraZoom,
             routeProgressMeters = routeProgressMeters,
+            guidanceTargetPolylinePointIndex = guidanceTargetPolylinePointIndex,
         )
     }
 
@@ -556,6 +559,7 @@ private fun NavigationEffect(
  * @param isSelected 選択中 route として描画するか
  * @param cameraZoom 現在の GoogleMap zoom
  * @param routeProgressMeters route 上の現在地累積距離。取得できない場合は null
+ * @param guidanceTargetPolylinePointIndex 現在の案内地点に最も近い route geometry index。取得できない場合は null
  */
 @Composable
 private fun RoutePolylineEffect(
@@ -564,6 +568,7 @@ private fun RoutePolylineEffect(
     isSelected: Boolean,
     cameraZoom: Float,
     routeProgressMeters: Double? = null,
+    guidanceTargetPolylinePointIndex: Int? = null,
 ) {
     MapPolyline(
         googleMap = googleMap,
@@ -579,6 +584,7 @@ private fun RoutePolylineEffect(
             googleMap = googleMap,
             route = route,
             routeProgressMeters = routeProgressMeters,
+            guidanceTargetPolylinePointIndex = guidanceTargetPolylinePointIndex,
             zIndex = ROUTE_POINT_EVENT_MARKER_Z_INDEX,
         )
     }
@@ -590,6 +596,7 @@ private fun RoutePolylineEffect(
  * @param googleMap marker 描画先の GoogleMap
  * @param route 描画対象 route
  * @param routeProgressMeters route 上の現在地累積距離。取得できない場合は null
+ * @param guidanceTargetPolylinePointIndex 現在の案内地点に最も近い route geometry index。取得できない場合は null
  * @param zIndex marker の zIndex
  */
 @Composable
@@ -597,16 +604,20 @@ private fun RoutePointEventMarkersEffect(
     googleMap: GoogleMap,
     route: RouteDetail,
     routeProgressMeters: Double?,
+    guidanceTargetPolylinePointIndex: Int?,
     zIndex: Float,
 ) {
     val visiblePointEvents = route.visiblePointEvents(routeProgressMeters)
 
     visiblePointEvents.forEachIndexed { eventIndex, pointEvent ->
+        val isGuidanceTarget = pointEvent.isGuidanceTarget(guidanceTargetPolylinePointIndex)
+
         MapRoutePointEventMarker(
             googleMap = googleMap,
             latitude = pointEvent.location.latitude,
             longitude = pointEvent.location.longitude,
             kind = pointEvent.kind,
+            isGuidanceTarget = isGuidanceTarget,
             zIndex = zIndex + eventIndex * ROUTE_POINT_EVENT_MARKER_Z_INDEX_STEP,
         )
     }
@@ -630,6 +641,46 @@ private fun RouteDetail.visiblePointEvents(routeProgressMeters: Double?): List<R
         .filter { pointEvent -> pointEvent.distanceFromStartMeters >= minimumDistanceFromStartMeters }
         .take(ROUTE_POINT_EVENT_MARKER_MAX_COUNT)
         .toList()
+}
+
+private fun GuidanceState.guidanceTargetPolylinePointIndex(route: RouteDetail): Int? {
+    val targetLocation = (this as? GuidanceState.Guiding)
+        ?.presentation
+        ?.nextManeuver
+        ?.location
+        ?: return null
+
+    return route.geometry.nearestPointIndex(targetLocation)
+}
+
+private fun List<RoutePoint>.nearestPointIndex(targetLocation: RoutePoint): Int? {
+    if (isEmpty()) return null
+
+    var nearestIndex = 0
+    var nearestDistanceSquared = this[nearestIndex].distanceSquaredTo(targetLocation)
+
+    for (pointIndex in 1 until size) {
+        val distanceSquared = this[pointIndex].distanceSquaredTo(targetLocation)
+        if (distanceSquared < nearestDistanceSquared) {
+            nearestIndex = pointIndex
+            nearestDistanceSquared = distanceSquared
+        }
+    }
+
+    return nearestIndex
+}
+
+private fun RoutePointEvent.isGuidanceTarget(guidanceTargetPolylinePointIndex: Int?): Boolean {
+    val targetPolylinePointIndex = guidanceTargetPolylinePointIndex ?: return false
+
+    return polylinePointIndex == targetPolylinePointIndex
+}
+
+private fun RoutePoint.distanceSquaredTo(targetLocation: RoutePoint): Double {
+    val latitudeDelta = latitude - targetLocation.latitude
+    val longitudeDelta = longitude - targetLocation.longitude
+
+    return latitudeDelta * latitudeDelta + longitudeDelta * longitudeDelta
 }
 
 /**

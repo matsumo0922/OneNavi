@@ -9,7 +9,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.unit.Dp
@@ -34,6 +33,7 @@ import org.jetbrains.compose.resources.painterResource
  * @param latitude marker の緯度
  * @param longitude marker の経度
  * @param kind 地点イベントの種別
+ * @param isGuidanceTarget 現在の案内地点に紐付く marker かどうか
  * @param zIndex marker の zIndex
  */
 @Composable
@@ -42,11 +42,12 @@ internal fun MapRoutePointEventMarker(
     latitude: Double,
     longitude: Double,
     kind: RoutePointEventKind,
+    isGuidanceTarget: Boolean,
     zIndex: Float,
 ) {
-    val icon = rememberRoutePointEventMarkerIcon(kind)
+    val icon = rememberRoutePointEventMarkerIcon(kind, isGuidanceTarget)
 
-    DisposableEffect(googleMap, latitude, longitude, kind, zIndex, icon) {
+    DisposableEffect(googleMap, latitude, longitude, kind, isGuidanceTarget, zIndex, icon) {
         val marker = googleMap.addMarker(
             MarkerOptions()
                 .position(LatLng(latitude, longitude))
@@ -59,10 +60,16 @@ internal fun MapRoutePointEventMarker(
 }
 
 @Composable
-private fun rememberRoutePointEventMarkerIcon(kind: RoutePointEventKind): BitmapDescriptor {
-    return rememberMapComposeBitmapDescriptor(kind) {
+private fun rememberRoutePointEventMarkerIcon(kind: RoutePointEventKind, isGuidanceTarget: Boolean): BitmapDescriptor {
+    return rememberMapComposeBitmapDescriptor(
+        kind,
+        isGuidanceTarget,
+        routePointEventMarkerSize(kind, isGuidanceTarget),
+        routePointEventIconRenderSize(kind, isGuidanceTarget),
+    ) {
         RoutePointEventMarkerIcon(
             kind = kind,
+            isGuidanceTarget = isGuidanceTarget,
         )
     }
 }
@@ -70,11 +77,11 @@ private fun rememberRoutePointEventMarkerIcon(kind: RoutePointEventKind): Bitmap
 @Composable
 private fun RoutePointEventMarkerIcon(
     kind: RoutePointEventKind,
+    isGuidanceTarget: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val markerSize = routePointEventMarkerSize(kind)
-    val iconSize = routePointEventIconSize(kind)
-    val iconScale = routePointEventIconScale(kind)
+    val markerSize = routePointEventMarkerSize(kind, isGuidanceTarget)
+    val iconSize = routePointEventIconRenderSize(kind, isGuidanceTarget)
     val painter = painterResource(routePointEventSignResource(kind))
 
     Box(
@@ -85,7 +92,6 @@ private fun RoutePointEventMarkerIcon(
             modifier = Modifier
                 .offset(y = RoutePointEventMarkerShadowOffsetY)
                 .size(iconSize)
-                .scale(iconScale)
                 .blur(RoutePointEventMarkerShadowBlur),
             painter = painter,
             contentDescription = null,
@@ -93,16 +99,20 @@ private fun RoutePointEventMarkerIcon(
         )
 
         Image(
-            modifier = Modifier
-                .size(iconSize)
-                .scale(iconScale),
+            modifier = Modifier.size(iconSize),
             painter = painter,
             contentDescription = null,
         )
     }
 }
 
-private fun routePointEventMarkerSize(kind: RoutePointEventKind): Dp = when (kind) {
+private fun routePointEventMarkerSize(kind: RoutePointEventKind, isGuidanceTarget: Boolean): Dp {
+    val baseSize = routePointEventBaseMarkerSize(kind)
+
+    return baseSize * routePointEventGuidanceTargetScale(isGuidanceTarget)
+}
+
+private fun routePointEventBaseMarkerSize(kind: RoutePointEventKind): Dp = when (kind) {
     RoutePointEventKind.TRAFFIC_LIGHT -> RoutePointEventTrafficLightMarkerSize
     RoutePointEventKind.STOP_LINE,
     RoutePointEventKind.RAILWAY_CROSSING,
@@ -116,12 +126,14 @@ private fun routePointEventIconSize(kind: RoutePointEventKind): Dp = when (kind)
     -> RoutePointEventIconSize
 }
 
-private fun routePointEventIconScale(kind: RoutePointEventKind): Float = when (kind) {
-    RoutePointEventKind.TRAFFIC_LIGHT -> RoutePointEventTrafficLightIconScale
-    RoutePointEventKind.STOP_LINE,
-    RoutePointEventKind.RAILWAY_CROSSING,
-    -> RoutePointEventIconScale
+private fun routePointEventIconRenderSize(kind: RoutePointEventKind, isGuidanceTarget: Boolean): Dp {
+    val baseSize = routePointEventIconSize(kind)
+
+    return baseSize * routePointEventGuidanceTargetScale(isGuidanceTarget)
 }
+
+private fun routePointEventGuidanceTargetScale(isGuidanceTarget: Boolean): Float =
+    if (isGuidanceTarget) RoutePointEventGuidanceTargetScale else RoutePointEventScale
 
 private fun routePointEventSignResource(kind: RoutePointEventKind): DrawableResource = when (kind) {
     RoutePointEventKind.TRAFFIC_LIGHT -> Res.drawable.ic_sign_traffic_light
@@ -141,11 +153,11 @@ private val RoutePointEventIconSize = 32.dp
 /** 通過予定の信号機 marker の標識アイコンサイズ。 */
 private val RoutePointEventTrafficLightIconSize = 30.dp
 
-/** 地点イベント marker の標準標識アイコン拡大率。 */
-private const val RoutePointEventIconScale = 1f
+/** 地点イベント marker の標準拡大率。 */
+private const val RoutePointEventScale = 1f
 
-/** 通過予定の信号機 marker の標識アイコン拡大率。 */
-private const val RoutePointEventTrafficLightIconScale = 1.25f
+/** 現在の案内地点に紐付く地点イベント marker の拡大率。 */
+private const val RoutePointEventGuidanceTargetScale = 1.8f
 
 /** 地点イベント marker の影の縦方向 offset。 */
 private val RoutePointEventMarkerShadowOffsetY = 1.5.dp
