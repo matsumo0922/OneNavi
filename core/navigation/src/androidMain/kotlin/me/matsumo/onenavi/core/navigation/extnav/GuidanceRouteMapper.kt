@@ -474,14 +474,18 @@ internal class GuidanceRouteMapper {
      * 近傍 intersection の方面看板から [StepSignpost] を作る。
      *
      * 画像は案内イベント自身の看板系 ID を優先し、無ければ近傍 intersection の ID にフォールバックする。
+     * テキスト ([directionSignA]) が空であっても画像が存在する場合は看板を返す。
+     * テキストも画像も両方存在しない場合のみ null を返す。
      */
     private fun buildSignpost(
         nearestIntersection: IntersectionAnchor?,
         preferredImageRefs: List<ExtNavGuideImageRef> = emptyList(),
     ): StepSignpost? {
         val intersection = nearestIntersection?.intersection ?: return null
-        val primary = intersection.directionSignA.trim().takeIf { text -> text.isNotEmpty() } ?: return null
+
+        val primary = intersection.directionSignA.trim().takeIf { text -> text.isNotEmpty() }
         val secondary = intersection.directionSignB.trim().takeIf { text -> text.isNotEmpty() }
+
         val firstImage = preferredImageRefs.firstSignpostImageOrNull()
             ?: intersection.imageRefs.firstSignpostImageOrNull()
         val imageRef = firstImage?.let { image ->
@@ -490,6 +494,10 @@ internal class GuidanceRouteMapper {
                 minor = image.minor,
             )
         }
+
+        val hasContent = primary != null || imageRef != null
+        if (!hasContent) return null
+
         return StepSignpost(
             primary = primary,
             secondary = secondary,

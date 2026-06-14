@@ -275,6 +275,49 @@ class GuidanceRouteMapperTest {
     }
 
     @Test
+    fun `directionSignA が空でも交差点案内画像があれば看板を返す`() {
+        val mapper = GuidanceRouteMapper()
+        val route = buildHighwayRoute()
+        val intersectionImage = GuideImageRef(major = 101, minor = 333_333)
+        val routeGuidance = buildHighwayRouteGuidanceWithEmptyDirectionSignA()
+        val routeGuidanceWithImages = routeGuidance.withFirstGuidancePointAndIntersectionImages(
+            guidancePointImages = emptyList(),
+            intersectionImages = listOf(intersectionImage),
+        )
+        val payload = ExtNavRoutePayload(id = route.id, routeGuidance = routeGuidanceWithImages)
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        val tollEvent = guidanceRoute.events.first { event ->
+            event.details.facility?.kind == FacilityKind.TOLL_GATE
+        }
+        // テキストが空でも画像があるため看板自体は null にならない
+        assertNull(tollEvent.details.signpost?.primary)
+        assertEquals(intersectionImage.major, tollEvent.details.signpost?.imageRef?.major)
+        assertEquals(intersectionImage.minor, tollEvent.details.signpost?.imageRef?.minor)
+    }
+
+    @Test
+    fun `directionSignA が空で画像もなければ看板は null になる`() {
+        val mapper = GuidanceRouteMapper()
+        val route = buildHighwayRoute()
+        val routeGuidance = buildHighwayRouteGuidanceWithEmptyDirectionSignA()
+        val routeGuidanceWithNoImages = routeGuidance.withFirstGuidancePointAndIntersectionImages(
+            guidancePointImages = emptyList(),
+            intersectionImages = emptyList(),
+        )
+        val payload = ExtNavRoutePayload(id = route.id, routeGuidance = routeGuidanceWithNoImages)
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        val tollEvent = guidanceRoute.events.first { event ->
+            event.details.facility?.kind == FacilityKind.TOLL_GATE
+        }
+        // テキストも画像もないため看板自体が null になる
+        assertNull(tollEvent.details.signpost)
+    }
+
+    @Test
     fun `料金所画像は方面看板画像として採用しない`() {
         val mapper = GuidanceRouteMapper()
         val route = buildHighwayRoute()
@@ -551,6 +594,34 @@ class GuidanceRouteMapperTest {
         imageIds = persistentListOf(),
         polyline = persistentListOf(),
     )
+
+    /**
+     * [buildHighwayRouteGuidance] と同じ構成だが、intersection の [directionSignA] を空文字にしたバリアント。
+     * `directionSignA` 空 + 画像あり / なし のシナリオをテストするために使う。
+     */
+    private fun buildHighwayRouteGuidanceWithEmptyDirectionSignA(): RouteGuidance =
+        buildHighwayRouteGuidance().copy(
+            intersections = persistentListOf(
+                Intersection(
+                    id = 0,
+                    name = "テスト料金所",
+                    nameRuby = "",
+                    roadName = "",
+                    roadNameOfficial = "",
+                    roadNumberSign = "",
+                    directionSignA = "",
+                    directionSignAKana = "",
+                    directionSignB = "",
+                    directionSignBKana = "",
+                    position = Coord.fromDegrees(latDeg = ORIGIN_LATITUDE, lonDeg = ORIGIN_LONGITUDE + LONGITUDE_STEP),
+                    angleIn = 0,
+                    angleOut = 0,
+                    direction = ManeuverDirection.Straight,
+                    imageRefs = persistentListOf(),
+                    facilityHint = GuidanceFacilityHint(kind = GuidanceFacilityKind.TOLL_GATE),
+                ),
+            ),
+        )
 
     private fun RouteGuidance.withFirstGuidancePointAndIntersectionImages(
         guidancePointImages: List<GuideImageRef>,
