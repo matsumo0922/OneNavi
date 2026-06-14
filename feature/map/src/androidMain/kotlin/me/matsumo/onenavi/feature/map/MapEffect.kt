@@ -25,6 +25,7 @@ import me.matsumo.onenavi.feature.map.components.MapRoutePointEventMarker
 import me.matsumo.onenavi.feature.map.components.MapVehiclePoseEffect
 import me.matsumo.onenavi.feature.map.components.MapWaypointNumberedMarker
 import me.matsumo.onenavi.feature.map.components.callout.MapGuidanceManeuverCallOutMarkerEffect
+import me.matsumo.onenavi.feature.map.components.callout.MapRouteIncidentCallOutMarkerEffect
 import me.matsumo.onenavi.feature.map.components.callout.MapRoutePreviewCallOutMarkerEffect
 import me.matsumo.onenavi.feature.map.state.MapCameraState
 import me.matsumo.onenavi.feature.map.state.MapHostInsets
@@ -511,6 +512,7 @@ private fun NavigationEffect(
             route = route,
             isSelected = true,
             cameraZoom = cameraZoom,
+            modifier = modifier,
             routeProgressMeters = routeProgressMeters,
             guidanceTargetPolylinePointIndex = guidanceTargetPolylinePointIndex,
             guidanceTargetDistanceFromStartMeters = guidanceTargetDistanceFromStartMeters,
@@ -571,6 +573,7 @@ private fun NavigationEffect(
  * @param routeProgressMeters route 上の現在地累積距離。取得できない場合は null
  * @param guidanceTargetPolylinePointIndex 現在の案内地点に最も近い route geometry index。取得できない場合は null
  * @param guidanceTargetDistanceFromStartMeters 現在の案内地点の route geometry 上の累積距離。取得できない場合は null
+ * @param modifier callout overlay 用 modifier
  */
 @Composable
 private fun RoutePolylineEffect(
@@ -578,6 +581,7 @@ private fun RoutePolylineEffect(
     route: RouteDetail,
     isSelected: Boolean,
     cameraZoom: Float,
+    modifier: Modifier = Modifier,
     routeProgressMeters: Double? = null,
     guidanceTargetPolylinePointIndex: Int? = null,
     guidanceTargetDistanceFromStartMeters: Double? = null,
@@ -599,6 +603,16 @@ private fun RoutePolylineEffect(
             guidanceTargetPolylinePointIndex = guidanceTargetPolylinePointIndex,
             guidanceTargetDistanceFromStartMeters = guidanceTargetDistanceFromStartMeters,
             zIndex = ROUTE_POINT_EVENT_MARKER_Z_INDEX,
+        )
+    }
+
+    if (isSelected) {
+        MapRouteIncidentCallOutMarkerEffect(
+            modifier = modifier,
+            googleMap = googleMap,
+            routeIncidents = route.routeIncidents,
+            routeProgressMeters = routeProgressMeters,
+            cameraZoom = cameraZoom,
         )
     }
 }
