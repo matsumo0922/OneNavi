@@ -38,13 +38,18 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * Compose slot を GoogleMap marker icon に変換し、CallOut 配置を一定間隔で更新する effect。
+ *
+ * @param onCallOutClick CallOut がタップされた時のコールバック。null の場合は click listener を
+ *   設定せず、dispose 時にも [GoogleMap.setOnMarkerClickListener] を null 化しない。
+ *   複数の [MapCallOutMarkerEffect] が同一 [googleMap] に共存するとき、click 不要な effect に
+ *   null を渡すことで他 effect の listener が破壊されるのを防ぐ。
  */
 @Composable
 internal fun MapCallOutMarkerEffect(
     googleMap: GoogleMap,
     requests: ImmutableList<MapCallOutRequest>,
     viewportPadding: PaddingValues,
-    onCallOutClick: (Int, MapCallOutRequest) -> Unit,
+    onCallOutClick: ((Int, MapCallOutRequest) -> Unit)?,
     modifier: Modifier = Modifier,
     relayoutInterval: Duration = 1.seconds,
     content: @Composable (
@@ -63,12 +68,14 @@ internal fun MapCallOutMarkerEffect(
     var placements by remember { mutableStateOf<List<MapCallOutPlacement>>(emptyList()) }
 
     DisposableEffect(googleMap) {
-        googleMap.setOnMarkerClickListener { marker ->
-            val tag = marker.tag as? String ?: return@setOnMarkerClickListener false
-            val handler = markerClickHandlers[tag] ?: return@setOnMarkerClickListener false
+        if (onCallOutClick != null) {
+            googleMap.setOnMarkerClickListener { marker ->
+                val tag = marker.tag as? String ?: return@setOnMarkerClickListener false
+                val handler = markerClickHandlers[tag] ?: return@setOnMarkerClickListener false
 
-            handler.invoke()
-            true
+                handler.invoke()
+                true
+            }
         }
 
         onDispose {
@@ -78,7 +85,10 @@ internal fun MapCallOutMarkerEffect(
             markerSpecs.clear()
             markerClickHandlers.clear()
             previousPlacements.clear()
-            googleMap.setOnMarkerClickListener(null)
+
+            if (onCallOutClick != null) {
+                googleMap.setOnMarkerClickListener(null)
+            }
         }
     }
 
@@ -171,7 +181,7 @@ internal fun MapCallOutMarkerEffect(
             previousPlacements = previousPlacements,
             specs = specs,
             shadowPaddingPx = shadowPaddingPx,
-            onCallOutClick = onCallOutClick,
+            onCallOutClick = onCallOutClick ?: { _, _ -> },
         )
     }
 

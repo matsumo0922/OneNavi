@@ -20,13 +20,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.GoogleMap
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.onenavi.core.model.RouteIncidentMarker
 import me.matsumo.onenavi.core.model.RouteIncidentMarkerCategory
+import me.matsumo.onenavi.feature.map.state.MapHostInsets
 
 /**
  * ルートインシデント（事故 / 規制）marker effect。
@@ -35,10 +38,16 @@ import me.matsumo.onenavi.core.model.RouteIncidentMarkerCategory
  * [cameraZoom] が [INCIDENT_CALLOUT_MIN_ZOOM] 未満の場合は非表示。
  * 現在地以降のインシデントのみを対象に、最大 [INCIDENT_CALLOUT_MAX_COUNT] 件表示する。
  *
+ * click listener は所有しない（[MapCallOutMarkerEffect] に null を渡す）ため、
+ * このEffect が dispose されても他の CallOut effect の listener を破壊しない。
+ *
  * @param googleMap CallOut marker 描画先の GoogleMap
  * @param routeIncidents 描画対象のインシデント一覧
  * @param routeProgressMeters ルート上の現在地累積距離。null の場合はルート先頭から表示する
  * @param cameraZoom 現在の GoogleMap zoom
+ * @param topAppBarHeightPx CallOut が避ける上部バー高さ（px）
+ * @param bottomCardHeight CallOut が避ける下部カード高さ
+ * @param viewportPadding CallOut が避ける host / 画面外・UI 帯 padding
  * @param modifier callout overlay 用 modifier
  */
 @Composable
@@ -47,6 +56,9 @@ internal fun MapRouteIncidentCallOutMarkerEffect(
     routeIncidents: ImmutableList<RouteIncidentMarker>,
     routeProgressMeters: Double?,
     cameraZoom: Float,
+    topAppBarHeightPx: Int,
+    bottomCardHeight: Dp,
+    viewportPadding: MapHostInsets,
     modifier: Modifier = Modifier,
 ) {
     if (googleMap == null) return
@@ -58,6 +70,9 @@ internal fun MapRouteIncidentCallOutMarkerEffect(
     )
     if (visibleIncidents.isEmpty()) return
 
+    val density = LocalDensity.current
+    val topPadding = with(density) { topAppBarHeightPx.toDp() } + viewportPadding.top + INCIDENT_CALLOUT_VIEWPORT_MARGIN
+
     val requests = remember(visibleIncidents) {
         visibleIncidents.mapIndexed { index, incident ->
             incident.toCallOutRequest(index = index)
@@ -68,8 +83,13 @@ internal fun MapRouteIncidentCallOutMarkerEffect(
         modifier = modifier,
         googleMap = googleMap,
         requests = requests,
-        viewportPadding = INCIDENT_CALLOUT_VIEWPORT_PADDING,
-        onCallOutClick = { _, _ -> },
+        viewportPadding = PaddingValues(
+            start = viewportPadding.start + INCIDENT_CALLOUT_VIEWPORT_MARGIN,
+            top = topPadding,
+            end = viewportPadding.end + INCIDENT_CALLOUT_VIEWPORT_MARGIN,
+            bottom = bottomCardHeight + viewportPadding.bottom + INCIDENT_CALLOUT_VIEWPORT_MARGIN,
+        ),
+        onCallOutClick = null,
     ) { index, _, tailSide ->
         val incident = visibleIncidents.getOrNull(index)
 
@@ -190,10 +210,8 @@ private val INCIDENT_BADGE_SIZE = 24.dp
 private val INCIDENT_BADGE_ICON_SIZE = 16.dp
 private val INCIDENT_CALLOUT_ICON_SPACING = 6.dp
 
-private val INCIDENT_CALLOUT_VIEWPORT_PADDING = PaddingValues(
-    horizontal = 12.dp,
-    vertical = 12.dp,
-)
+/** インシデント CallOut の viewport 内余白。UI 帯への padding に加算する。 */
+private val INCIDENT_CALLOUT_VIEWPORT_MARGIN = 12.dp
 
 /** インシデント CallOut を表示する最小 zoom。 */
 private const val INCIDENT_CALLOUT_MIN_ZOOM = 12f

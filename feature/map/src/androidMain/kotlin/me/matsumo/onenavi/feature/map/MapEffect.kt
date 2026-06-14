@@ -162,6 +162,9 @@ internal fun MapEffect(
             googleMap = googleMap,
             guidanceWaypointCount = guidanceWaypointCount,
             cameraZoom = cameraZoom,
+            topAppBarHeightPx = topAppBarHeightPx,
+            bottomCardHeight = navigationCardHeight,
+            viewportPadding = viewportPadding,
         )
     }
 
@@ -210,6 +213,9 @@ private fun AddWaypointSelectedEffect(
     googleMap: GoogleMap,
     guidanceWaypointCount: Int,
     cameraZoom: Float,
+    topAppBarHeightPx: Int,
+    bottomCardHeight: Dp,
+    viewportPadding: MapHostInsets,
 ) {
     val routePreviewState = overlayState.routePreviewState as? RoutePreviewState.Ready
 
@@ -237,6 +243,9 @@ private fun AddWaypointSelectedEffect(
             route = route,
             isSelected = routeIndex == routePreviewState.selectedIndex,
             cameraZoom = cameraZoom,
+            topAppBarHeightPx = topAppBarHeightPx,
+            bottomCardHeight = bottomCardHeight,
+            viewportPadding = viewportPadding,
         )
     }
 }
@@ -290,6 +299,9 @@ private fun NavigationAlternativesEffect(
             route = route,
             isSelected = routeIndex == routePreviewState.selectedIndex,
             cameraZoom = cameraZoom,
+            topAppBarHeightPx = topAppBarHeightPx,
+            bottomCardHeight = bottomCardHeight,
+            viewportPadding = viewportPadding,
         )
     }
 
@@ -453,6 +465,9 @@ private fun RoutePreviewEffect(
                 route = route,
                 isSelected = routeIndex == routePreviewState.selectedIndex,
                 cameraZoom = cameraZoom,
+                topAppBarHeightPx = topAppBarHeightPx,
+                bottomCardHeight = bottomSheetPeekHeight,
+                viewportPadding = viewportPadding,
             )
         }
     }
@@ -512,6 +527,9 @@ private fun NavigationEffect(
             route = route,
             isSelected = true,
             cameraZoom = cameraZoom,
+            topAppBarHeightPx = topAppBarHeightPx,
+            bottomCardHeight = bottomSheetPeekHeight,
+            viewportPadding = viewportPadding,
             modifier = modifier,
             routeProgressMeters = routeProgressMeters,
             guidanceTargetPolylinePointIndex = guidanceTargetPolylinePointIndex,
@@ -570,6 +588,9 @@ private fun NavigationEffect(
  * @param route 描画対象 route
  * @param isSelected 選択中 route として描画するか
  * @param cameraZoom 現在の GoogleMap zoom
+ * @param topAppBarHeightPx インシデント callout が避ける上部バー高さ（px）
+ * @param bottomCardHeight インシデント callout が避ける下部カード高さ
+ * @param viewportPadding インシデント callout が避ける host / 画面外・UI 帯 padding
  * @param routeProgressMeters route 上の現在地累積距離。取得できない場合は null
  * @param guidanceTargetPolylinePointIndex 現在の案内地点に最も近い route geometry index。取得できない場合は null
  * @param guidanceTargetDistanceFromStartMeters 現在の案内地点の route geometry 上の累積距離。取得できない場合は null
@@ -581,6 +602,9 @@ private fun RoutePolylineEffect(
     route: RouteDetail,
     isSelected: Boolean,
     cameraZoom: Float,
+    topAppBarHeightPx: Int,
+    bottomCardHeight: Dp,
+    viewportPadding: MapHostInsets,
     modifier: Modifier = Modifier,
     routeProgressMeters: Double? = null,
     guidanceTargetPolylinePointIndex: Int? = null,
@@ -613,6 +637,9 @@ private fun RoutePolylineEffect(
             routeIncidents = route.routeIncidents,
             routeProgressMeters = routeProgressMeters,
             cameraZoom = cameraZoom,
+            topAppBarHeightPx = topAppBarHeightPx,
+            bottomCardHeight = bottomCardHeight,
+            viewportPadding = viewportPadding,
         )
     }
 }
