@@ -274,6 +274,10 @@ class GuidanceRouteMapperTest {
         assertEquals(intersectionImage.minor, tollEvent.details.signpost?.imageRef?.minor)
     }
 
+    /**
+     * `buildSignpost()` はルート種別を問わず directionSignA と画像で看板を組むため、
+     * 空 directionSignA の交差点を作りやすい料金所 fixture を流用して検証する。
+     */
     @Test
     fun `directionSignA が空でも交差点案内画像があれば看板を返す`() {
         val mapper = GuidanceRouteMapper()
@@ -297,6 +301,10 @@ class GuidanceRouteMapperTest {
         assertEquals(intersectionImage.minor, tollEvent.details.signpost?.imageRef?.minor)
     }
 
+    /**
+     * `buildSignpost()` はルート種別を問わないため、空 directionSignA の交差点を作りやすい
+     * 料金所 fixture を流用して、テキストも画像も無いとき看板が null になることを検証する。
+     */
     @Test
     fun `directionSignA が空で画像もなければ看板は null になる`() {
         val mapper = GuidanceRouteMapper()
