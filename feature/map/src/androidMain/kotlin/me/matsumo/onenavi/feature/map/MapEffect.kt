@@ -18,6 +18,7 @@ import me.matsumo.onenavi.feature.map.components.MapNumberedMarker
 import me.matsumo.onenavi.feature.map.components.MapOriginMarker
 import me.matsumo.onenavi.feature.map.components.MapPolyline
 import me.matsumo.onenavi.feature.map.components.MapPolylineStyle
+import me.matsumo.onenavi.feature.map.components.MapRoutePointEventMarker
 import me.matsumo.onenavi.feature.map.components.MapVehiclePoseEffect
 import me.matsumo.onenavi.feature.map.components.MapWaypointNumberedMarker
 import me.matsumo.onenavi.feature.map.components.callout.MapGuidanceManeuverCallOutMarkerEffect
@@ -548,6 +549,38 @@ private fun RoutePolylineEffect(
         roadClassSegments = if (isSelected) route.roadClassSegments else persistentListOf(),
         congestionSegments = if (isSelected) route.congestionSegments else persistentListOf(),
     )
+
+    if (isSelected) {
+        RoutePointEventMarkersEffect(
+            googleMap = googleMap,
+            route = route,
+            zIndex = ROUTE_POINT_EVENT_MARKER_Z_INDEX,
+        )
+    }
+}
+
+/**
+ * route 上の地点イベント marker を描画する。
+ *
+ * @param googleMap marker 描画先の GoogleMap
+ * @param route 描画対象 route
+ * @param zIndex marker の zIndex
+ */
+@Composable
+private fun RoutePointEventMarkersEffect(
+    googleMap: GoogleMap,
+    route: RouteDetail,
+    zIndex: Float,
+) {
+    route.pointEvents.forEachIndexed { eventIndex, pointEvent ->
+        MapRoutePointEventMarker(
+            googleMap = googleMap,
+            latitude = pointEvent.location.latitude,
+            longitude = pointEvent.location.longitude,
+            kind = pointEvent.kind,
+            zIndex = zIndex + eventIndex * ROUTE_POINT_EVENT_MARKER_Z_INDEX_STEP,
+        )
+    }
 }
 
 /**
@@ -607,3 +640,9 @@ private const val WAYPOINT_CANDIDATE_MARKER_Z_INDEX = 11_500f
 
 /** 自車 marker の zIndex。 */
 private const val VEHICLE_PUCK_Z_INDEX = 12_000f
+
+/** ルート地点イベント marker の zIndex。 */
+private const val ROUTE_POINT_EVENT_MARKER_Z_INDEX = 10_700f
+
+/** ルート地点イベント marker の重なり順を安定させるための zIndex 加算値。 */
+private const val ROUTE_POINT_EVENT_MARKER_Z_INDEX_STEP = 0.01f

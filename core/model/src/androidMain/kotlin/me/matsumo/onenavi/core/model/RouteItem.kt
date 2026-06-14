@@ -80,6 +80,7 @@ data class RoadSegmentDistance(
  * @param steps 案内ステップ
  * @param roadClassSegments geometry を道路種別（高速 / 一般道）ごとに区切ったセグメント列。経路サマリ由来で境界は近似。空の場合は色分けしない。
  * @param congestionSegments geometry に沿った渋滞区間。ルート計算時点のスナップショット。渋滞が無ければ空。
+ * @param pointEvents geometry 上へ表示する信号機 / 一時停止 / 踏切などの地点イベント。
  * @param priority ルート種別（推奨 / 渋滞回避 / 等）。取得元が複数候補を返さないソースでは null。
  * @param tollFee 有料道路の合計料金（円）。料金不明 / 有料区間なしの場合は null。
  * @param tollDetails 有料道路の道路別料金内訳。空の場合は内訳不明 / 有料区間なし。
@@ -98,6 +99,7 @@ data class RouteDetail(
     val steps: ImmutableList<RouteStepInfo>,
     val roadClassSegments: ImmutableList<RoadClassSegment> = persistentListOf(),
     val congestionSegments: ImmutableList<CongestionSegment> = persistentListOf(),
+    val pointEvents: ImmutableList<RoutePointEvent> = persistentListOf(),
     val priority: RoutePriority? = null,
     val tollFee: Int? = null,
     val tollDetails: ImmutableList<TollSegmentFee> = persistentListOf(),
