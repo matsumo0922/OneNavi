@@ -18,6 +18,7 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import me.matsumo.drive.supporter.api.guidance.domain.SpeedLimitSegment as ExtNavSpeedLimitSegment
 
 /**
  * GPS tick をルート geometry 上の進捗 snapshot に変換する tracker。
@@ -147,7 +148,7 @@ class ExtNavGuidanceTracker {
         val primaryEventMetres = guidanceRoute.events
             .filter { event -> event.primary != null }
             .map { event -> event.anchor.geometryDistanceFromStartMeters }
-        val speedLimitsByGuidancePointIndex = buildSpeedLimitsByGuidancePointIndex(payload)
+        val speedLimitSegments = buildSpeedLimitSegments(payload, distanceContext)
 
         return AttachedRoute(
             route = route,
@@ -157,28 +158,49 @@ class ExtNavGuidanceTracker {
             distanceContext = distanceContext,
             projectionContext = projectionContext,
             primaryEventMetres = primaryEventMetres,
-            speedLimitsByGuidancePointIndex = speedLimitsByGuidancePointIndex,
+            speedLimitSegments = speedLimitSegments,
         )
     }
 
     /**
-     * GuidancePoint 単位の制限速度を list index で引ける map にする。
+     * source 距離基準の制限速度区間を geometry 距離基準へ変換する。
      *
      * @param payload attach 対象の route payload
-     * @return GuidancePoint の list index から制限速度 (km/h) への map
+     * @param distanceContext source→geometry 距離変換 context
+     * @return geometry 距離基準へ変換済みの制限速度区間
      */
-    private fun buildSpeedLimitsByGuidancePointIndex(payload: ExtNavRoutePayload): Map<Int, Int> {
-        return payload.routeGuidance.guidancePoints
-            .mapIndexedNotNull { guidancePointIndex, guidancePoint ->
-                val speedLimitKmh = guidancePoint.maneuver
-                    ?.speedLimit
-                    ?.limit
-                    ?.takeIf { limit -> limit > 0 }
-                    ?: return@mapIndexedNotNull null
+    private fun buildSpeedLimitSegments(payload: ExtNavRoutePayload, distanceContext: ExtNavRouteDistanceContext): List<SpeedLimitGeometrySegment> {
+        return payload.routeGuidance.speedLimitSegments
+            .mapNotNull { segment -> segment.toGeometrySegment(distanceContext) }
+            .sortedWith(
+                compareBy<SpeedLimitGeometrySegment> { segment -> segment.startGeometryMetres }
+                    .thenBy { segment -> segment.endGeometryMetres },
+            )
+    }
 
-                guidancePointIndex to speedLimitKmh
-            }
-            .toMap()
+    /**
+     * 外部ナビ API ライブラリ由来の制限速度区間を geometry 距離基準へ変換する。
+     *
+     * @param distanceContext source→geometry 距離変換 context
+     * @return 表示可能な速度区間。異常値や長さのない区間は null
+     */
+    private fun ExtNavSpeedLimitSegment.toGeometrySegment(distanceContext: ExtNavRouteDistanceContext): SpeedLimitGeometrySegment? {
+        val validLimitKmh = limitKmh.takeIf { limit -> limit in MIN_SPEED_LIMIT_KMH..MAX_SPEED_LIMIT_KMH }
+            ?: return null
+
+        val startSourceMetres = startDistanceFromRouteStartMetres.toDouble()
+        val endSourceMetres = endDistanceFromRouteStartMetres.toDouble()
+        if (endSourceMetres <= startSourceMetres) return null
+
+        val startGeometryMetres = distanceContext.geometryMetresFor(startSourceMetres)
+        val endGeometryMetres = distanceContext.geometryMetresFor(endSourceMetres)
+        if (endGeometryMetres <= startGeometryMetres) return null
+
+        return SpeedLimitGeometrySegment(
+            startGeometryMetres = startGeometryMetres,
+            endGeometryMetres = endGeometryMetres,
+            limitKmh = validLimitKmh,
+        )
     }
 
     /**
@@ -237,10 +259,7 @@ class ExtNavGuidanceTracker {
             route = attached.route,
             matchedSegmentIndex = projection.matchedSegmentIndex,
         )
-        val currentSpeedLimitKmh = currentSpeedLimitKmhFor(
-            attached = attached,
-            nextGuidancePointIndex = selection.nextPrimaryEvent?.anchor?.sourceGuidancePointIndex,
-        )
+        val currentSpeedLimitKmh = currentSpeedLimitKmhFor(attached, projection.currentCumulativeMeters)
         val progress = buildProgress(
             attached = attached,
             projection = projection,
@@ -302,7 +321,7 @@ class ExtNavGuidanceTracker {
      * @param distanceRemainingMetres 事前算出済みの残距離
      * @param routeMatchState 現在位置と案内 route の一致状態
      * @param currentRoadClass 現在走行中の道路種別
-     * @param currentSpeedLimitKmh 現在区間として扱う次案内地点の制限速度
+     * @param currentSpeedLimitKmh 現在区間の制限速度
      * @return UI 表示用の案内進捗
      */
     private fun buildProgress(
@@ -347,19 +366,31 @@ class ExtNavGuidanceTracker {
     }
 
     /**
-     * 現在区間の制限速度として、次の主案内地点に紐づく制限速度を返す。
+     * 現在地が含まれる制限速度区間の速度を返す。
      *
      * @param attached attach 済み route 情報
-     * @param nextGuidancePointIndex 次の主案内地点 index
-     * @return 取得済みの制限速度。無ければ null
+     * @param currentCumulativeMeters 現在地の geometry 累積距離
+     * @return 現在地が区間内なら制限速度。gap や異常値なら null
      */
-    private fun currentSpeedLimitKmhFor(
-        attached: AttachedRoute,
-        nextGuidancePointIndex: Int?,
-    ): Int? {
-        val guidancePointIndex = nextGuidancePointIndex ?: return null
+    private fun currentSpeedLimitKmhFor(attached: AttachedRoute, currentCumulativeMeters: Double): Int? {
+        val speedLimitSegments = attached.speedLimitSegments
+        var lowIndex = 0
+        var highIndex = speedLimitSegments.lastIndex
 
-        return attached.speedLimitsByGuidancePointIndex[guidancePointIndex]
+        while (lowIndex <= highIndex) {
+            val middleIndex = (lowIndex + highIndex) ushr 1
+            val segment = speedLimitSegments[middleIndex]
+            val isBeforeSegment = currentCumulativeMeters < segment.startGeometryMetres
+            val isAfterSegment = currentCumulativeMeters >= segment.endGeometryMetres
+
+            when {
+                isBeforeSegment -> highIndex = middleIndex - 1
+                isAfterSegment -> lowIndex = middleIndex + 1
+                else -> return segment.limitKmh
+            }
+        }
+
+        return null
     }
 
     /**
@@ -1008,7 +1039,7 @@ class ExtNavGuidanceTracker {
      * @param distanceContext source→geometry 距離変換 context
      * @param projectionContext 道路種別 / ETA を解決する geometry コンテキスト
      * @param primaryEventMetres 主案内イベントの geometry 距離一覧 (off-route 判定用)
-     * @param speedLimitsByGuidancePointIndex GuidancePoint list index ごとの制限速度 (km/h)
+     * @param speedLimitSegments geometry 距離基準へ変換済みの制限速度区間
      */
     private class AttachedRoute(
         val route: RouteDetail,
@@ -1018,7 +1049,20 @@ class ExtNavGuidanceTracker {
         val distanceContext: ExtNavRouteDistanceContext,
         val projectionContext: RouteProjectionContext,
         val primaryEventMetres: List<Double>,
-        val speedLimitsByGuidancePointIndex: Map<Int, Int>,
+        val speedLimitSegments: List<SpeedLimitGeometrySegment>,
+    )
+
+    /**
+     * geometry 距離基準に変換済みの制限速度区間。
+     *
+     * @param startGeometryMetres 区間開始の geometry 累積距離
+     * @param endGeometryMetres 区間終了の geometry 累積距離
+     * @param limitKmh 区間の制限速度 (km/h)
+     */
+    private data class SpeedLimitGeometrySegment(
+        val startGeometryMetres: Double,
+        val endGeometryMetres: Double,
+        val limitKmh: Int,
     )
 
     /**
@@ -1153,5 +1197,11 @@ class ExtNavGuidanceTracker {
 
         /** GPS 方位が無いときに移動方位を確定できる最小移動距離。 */
         private const val MIN_HEADING_MOVE_METRES: Double = 3.0
+
+        /** 表示対象にする最小制限速度。 */
+        private const val MIN_SPEED_LIMIT_KMH: Int = 20
+
+        /** 表示対象にする最大制限速度。 */
+        private const val MAX_SPEED_LIMIT_KMH: Int = 120
     }
 }
