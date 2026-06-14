@@ -54,7 +54,7 @@ class ExtNavRouteIncidentMapperTest {
         assertEquals(RouteIncidentMarkerCategory.Regulation, incidents[1].category)
         assertEquals(RoutePoint(latitude = 35.1, longitude = 139.1), incidents[0].coord)
         assertEquals("事故", incidents[0].displayText)
-        assertEquals(120, incidents[0].distanceFromStartMeters)
+        assertEquals(120.0, incidents[0].distanceFromStartMeters)
         assertEquals(0, incidents[0].polylinePointIndex)
         assertEquals("○○IC", incidents[0].placeName)
         assertEquals("E1", incidents[0].roadNumbering)
@@ -121,9 +121,38 @@ class ExtNavRouteIncidentMapperTest {
 
         val cumulativeMetres = RouteGeometryMath.cumulativeMetres(geometry)
         val sourceStartMetres = cumulativeMetres[1]
-        val expectedDistanceMeters = (sourceStartMetres + 500.0).toInt()
+        val expectedDistanceMeters = sourceStartMetres + 500.0
 
         assertEquals(expectedDistanceMeters, incidents.single().distanceFromStartMeters)
+    }
+
+    @Test
+    fun `ルート全長を超える距離はルート終端にクランプされる`() {
+        val routeGuidance = routeGuidanceWithIncidents(
+            incidents = listOf(
+                extNavIncident(
+                    category = ExtNavRouteIncidentCategory.Accident,
+                    coord = Coord.fromDegrees(35.3, 139.3),
+                    displayText = "事故",
+                    distanceFromStartMetres = 99_999,
+                    polylinePointIndex = 2,
+                    placeName = null,
+                    roadNumbering = null,
+                ),
+            ),
+        )
+
+        val geometry = routeGuidance.polyline.toRouteGeometry()
+
+        val incidents = ExtNavRouteIncidentMapper.map(
+            routeGuidance = routeGuidance,
+            geometry = geometry,
+        )
+
+        val cumulativeMetres = RouteGeometryMath.cumulativeMetres(geometry)
+        val totalGeometryMetres = cumulativeMetres.last()
+
+        assertEquals(totalGeometryMetres, incidents.single().distanceFromStartMeters)
     }
 
     @Test

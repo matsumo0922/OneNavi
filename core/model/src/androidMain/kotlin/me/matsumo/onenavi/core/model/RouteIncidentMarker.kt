@@ -29,7 +29,7 @@ data class RouteIncidentMarker(
     val category: RouteIncidentMarkerCategory,
     val coord: RoutePoint,
     val displayText: String,
-    val distanceFromStartMeters: Int,
+    val distanceFromStartMeters: Double,
     val polylinePointIndex: Int,
     val placeName: String?,
     val roadNumbering: String?,

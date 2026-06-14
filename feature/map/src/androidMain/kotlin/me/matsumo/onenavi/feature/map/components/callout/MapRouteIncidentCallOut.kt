@@ -167,9 +167,7 @@ private fun visibleRouteIncidents(
     incidents: ImmutableList<RouteIncidentMarker>,
     routeProgressMeters: Double?,
 ): List<RouteIncidentMarker> {
-    val minimumDistanceFromStartMeters = routeProgressMeters
-        ?.coerceAtLeast(0.0)
-        ?.toInt()
+    val minimumDistanceFromStartMeters = routeProgressMeters?.coerceAtLeast(0.0)
 
     if (minimumDistanceFromStartMeters == null) {
         return incidents.take(INCIDENT_CALLOUT_MAX_COUNT)

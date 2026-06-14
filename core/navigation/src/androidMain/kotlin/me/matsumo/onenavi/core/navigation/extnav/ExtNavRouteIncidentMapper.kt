@@ -28,6 +28,7 @@ internal object ExtNavRouteIncidentMapper {
 
         val indexOffset = if (isOriginPrepended(routeGuidance.polyline, geometry)) 1 else 0
         val cumulativeMetres = RouteGeometryMath.cumulativeMetres(geometry)
+        val totalGeometryMetres = cumulativeMetres.lastOrNull() ?: 0.0
         val distanceOffsetMeters = routeGuidance.polyline.geometryStartMetres(geometry, cumulativeMetres)
 
         return routeGuidance.routeIncidents
@@ -36,6 +37,7 @@ internal object ExtNavRouteIncidentMapper {
                     indexOffset = indexOffset,
                     lastGeometryIndex = geometry.lastIndex,
                     distanceOffsetMeters = distanceOffsetMeters,
+                    totalGeometryMetres = totalGeometryMetres,
                 )
             }
             .toImmutableList()
@@ -56,10 +58,10 @@ internal object ExtNavRouteIncidentMapper {
         indexOffset: Int,
         lastGeometryIndex: Int,
         distanceOffsetMeters: Double,
+        totalGeometryMetres: Double,
     ): RouteIncidentMarker {
-        val geometryDistanceFromStartMeters = (distanceFromStartMetres + distanceOffsetMeters)
-            .coerceAtLeast(0.0)
-            .toInt()
+        val geometryDistanceFromStartMeters = (distanceFromStartMetres.toDouble() + distanceOffsetMeters)
+            .coerceIn(0.0, totalGeometryMetres)
 
         return RouteIncidentMarker(
             category = category.toModel(),
