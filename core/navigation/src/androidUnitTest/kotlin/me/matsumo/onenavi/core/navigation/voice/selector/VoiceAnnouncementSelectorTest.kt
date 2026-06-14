@@ -539,12 +539,17 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
-    fun `先行が窓なし FINAL でも 遠距離予告窓が先行 FINAL 発火帯より手前で完結すれば発話される`() {
+    fun `名目 trigger を持つ窓なし FINAL でも 遠距離予告窓が余白ぶん手前で完結すれば発話される`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
-        // 手前 A は単一 block の FINAL のみ (合流 / カーブ相当・窓なし)。GP 2000、発火帯 enter = 2000 - 30(min lead) = 1970。
-        // 後続 B の遠距離予告窓 [1000,1500] は A の発火帯より完全に手前で完結する (disjoint)。
+        // 手前 A は名目 trigger を持つ単一 block FINAL (合流 350m / カーブ 500m 相当・窓なし)。
+        // GP 2000・trigger geo 1650 → 発火帯 enter = min(1650, 2000-30) = 1650。バイパス閾値 = 1650 - 100(margin) = 1550。
+        // 後続 B の遠距離予告窓 [1000,1500] は閾値より手前で完結する (disjoint + 余白)。
         val plan = planOf(
-            targetOf(index = 0, geometryMeters = 2_000.0, stages = listOf(finalStage("mergeFinal"))),
+            targetOf(
+                index = 0,
+                geometryMeters = 2_000.0,
+                stages = listOf(finalStage("mergeFinal", triggerGeometryMeters = 1_650.0)),
+            ),
             targetOf(
                 index = 1,
                 geometryMeters = 2_300.0,
@@ -552,27 +557,33 @@ class VoiceAnnouncementSelectorTest {
             ),
         )
 
-        // A 未発話・未通過でも、窓が disjoint なので B の遠距離予告が解禁される (issue #90 の核心)。
+        // A 未発話・未通過でも、窓が余白込みで disjoint なので B の遠距離予告が解禁される (issue #90 の核心)。
         val selection = selector.select(plan, tickOf(current = 1_200.0), emptyState())
 
         assertEquals(VoiceAnnouncementId("farAdvance"), selection?.stage?.id)
     }
 
     @Test
-    fun `遠距離予告窓が先行 FINAL の発火帯に食い込む場合は区切りまでゲートされる`() {
+    fun `遠距離予告窓が先行 FINAL 発火帯の手前余白に食い込む場合はゲートされる`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
-        // B の予告窓 [1000,1990] は A の発火帯 enter=1970 に食い込む (overlap) → 順序保持のためゲート。
+        // A: GP 2000・名目 trigger geo 1650 → 発火帯 enter = 1650。バイパス閾値 = 1650 - 100(margin) = 1550。
+        // B の予告窓終端 1600 は発火帯 (1650) より手前だが余白 (1550) には食い込む → barge-in 回避のためゲート。
+        // finalFireBoundaryMeters が名目 trigger(1650) でなくリード境界(1970)を返すと誤って解禁されるため、結合も固定する。
         val plan = planOf(
-            targetOf(index = 0, geometryMeters = 2_000.0, stages = listOf(finalStage("mergeFinal"))),
+            targetOf(
+                index = 0,
+                geometryMeters = 2_000.0,
+                stages = listOf(finalStage("mergeFinal", triggerGeometryMeters = 1_650.0)),
+            ),
             targetOf(
                 index = 1,
                 geometryMeters = 2_300.0,
-                stages = listOf(middleStage("farAdvance", enter = 1_000.0, exit = 1_990.0, groupKey = "farGroup")),
+                stages = listOf(middleStage("farAdvance", enter = 1_000.0, exit = 1_600.0, groupKey = "farGroup")),
             ),
         )
 
-        val blocked = selector.select(plan, tickOf(current = 1_200.0), emptyState())
-        val afterPassed = selector.select(plan, tickOf(current = 1_200.0), emptyState().withTargetPassed(0))
+        val blocked = selector.select(plan, tickOf(current = 1_300.0), emptyState())
+        val afterPassed = selector.select(plan, tickOf(current = 1_300.0), emptyState().withTargetPassed(0))
 
         assertNull(blocked)
         assertEquals(VoiceAnnouncementId("farAdvance"), afterPassed?.stage?.id)
@@ -581,15 +592,15 @@ class VoiceAnnouncementSelectorTest {
     @Test
     fun `先行 FINAL の発火帯は速度リードで広がり 同じ予告窓でもゲート結果が変わる`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
-        // B の予告窓終端 = 1900。A(GP2000) の FINAL 発火帯 enter は
-        //   速度なし   : 2000 - 30(min lead)        = 1970 → 1900 <= 1970 で発話可
-        //   速度 30m/s : 2000 - max(30×5, 30)=150  = 1850 → 1900 <= 1850 が偽でゲート
+        // A(GP2000) は名目 trigger 無し → 発火帯 enter は速度リードで決まる。バイパス閾値 = enter - 100(margin)。
+        //   速度なし   : enter = 2000 - 30(min lead)       = 1970 → 閾値 1870 → 予告窓終端 1860 <= 1870 で発話可
+        //   速度 30m/s : enter = 2000 - max(30×5, 30)=150 = 1850 → 閾値 1750 → 1860 <= 1750 が偽でゲート
         val plan = planOf(
             targetOf(index = 0, geometryMeters = 2_000.0, stages = listOf(finalStage("mergeFinal"))),
             targetOf(
                 index = 1,
                 geometryMeters = 2_300.0,
-                stages = listOf(middleStage("farAdvance", enter = 1_500.0, exit = 1_900.0, groupKey = "farGroup")),
+                stages = listOf(middleStage("farAdvance", enter = 1_500.0, exit = 1_860.0, groupKey = "farGroup")),
             ),
         )
 

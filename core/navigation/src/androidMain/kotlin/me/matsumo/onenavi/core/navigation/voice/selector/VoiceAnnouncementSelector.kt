@@ -126,9 +126,11 @@ internal class VoiceAnnouncementSelector(
      * 区切り済みになるまで候補にしない。
      *
      * 順序保証は外部ナビ API 参照実装と同じく「発話帯 (距離窓) の非重複」で行う。候補段の発話帯が
-     * 未発話の先行地点の最寄り段の発話開始位置より手前で完結していれば、割り込む余地が無いためゲート
-     * 対象外にする (= 遠距離予告は手前地点を待たず鳴る)。先行地点が窓なし FINAL のみ (合流・カーブ等の
-     * 単一 block) でも、その FINAL の発火境界を発話開始位置として扱うため、後続の遠距離予告が握り潰されない。
+     * 未発話の先行地点の最寄り段の発話開始位置より [VoiceAnnouncementConfig.routeOrderBypassMarginMeters]
+     * 以上手前で完結していれば、割り込む余地が無いためゲート対象外にする (= 遠距離予告は手前地点を待たず鳴る)。
+     * 余白は、解禁直後に発話を始めた候補が再生中に先行 FINAL の発火と重なって barge-in されないための保険。
+     * 先行地点が窓なし FINAL のみ (合流・カーブ等の単一 block) でも、その FINAL の発火境界を発話開始位置として
+     * 扱うため、後続の遠距離予告が握り潰されない。
      *
      * 「○m先」のような予告は手前の地点が通過する前に鳴るのが正常なため、「通過済み」だけでなく
      * 「その地点の FINAL (= 最寄り段) が発話済み」も区切り済みとみなす。
@@ -146,7 +148,9 @@ internal class VoiceAnnouncementSelector(
         for (earlierIndex in 0 until targetIndex) {
             val earlierTarget = plan.targets[earlierIndex]
             if (isTargetAnnounced(earlierTarget, earlierIndex, state)) continue
-            if (candidateBandExitMeters <= earlierTargetGateEnterMeters(earlierTarget, tick)) continue
+
+            val gateEnterMeters = earlierTargetGateEnterMeters(earlierTarget, tick) - config.routeOrderBypassMarginMeters
+            if (candidateBandExitMeters <= gateEnterMeters) continue
 
             return false
         }

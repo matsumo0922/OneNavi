@@ -16,6 +16,9 @@ import androidx.compose.runtime.Immutable
  * @property lateFinalSkipRatio attach 時点で名目 FINAL トリガを過ぎていた場合に、距離句の破綻を避けるため skip する残距離割合
  * @property lateFinalSkipMinimumTriggerMeters 途中参加 skip の対象にする FINAL 名目手前距離の下限 (m)
  * @property queuedStaleGraceMeters ENQUEUE 済み MIDDLE をキュー消化時に窓終端からどれだけ猶予するか (m)
+ * @property routeOrderBypassMarginMeters route 順ゲートの disjoint バイパスで、候補の発話帯終端を先行地点の
+ *   発話開始からどれだけ手前で完結させるか要求する余白 (m)。実再生時間ぶん先行 FINAL の barge-in と重ならない
+ *   ように、境界ちょうどではなくこの距離だけ手前で終わる候補のみ解禁する
  * @property ordering 緊急度同値時の tie-break 並び順
  */
 @Immutable
@@ -27,6 +30,7 @@ internal data class VoiceAnnouncementConfig(
     val lateFinalSkipRatio: Double = DEFAULT_LATE_FINAL_SKIP_RATIO,
     val lateFinalSkipMinimumTriggerMeters: Double = DEFAULT_LATE_FINAL_SKIP_MINIMUM_TRIGGER_METERS,
     val queuedStaleGraceMeters: Double = DEFAULT_QUEUED_STALE_GRACE_METERS,
+    val routeOrderBypassMarginMeters: Double = DEFAULT_ROUTE_ORDER_BYPASS_MARGIN_METERS,
     val ordering: VoiceAnnouncementOrdering = VoiceAnnouncementOrdering.RouteOrder,
 ) {
 
@@ -46,5 +50,11 @@ internal data class VoiceAnnouncementConfig(
 
         /** MIDDLE の ENQUEUE 後 stale 判定に足す既定猶予距離 (m)。 */
         const val DEFAULT_QUEUED_STALE_GRACE_METERS: Double = 100.0
+
+        /**
+         * route 順ゲートの disjoint バイパスに要求する既定の余白距離 (m)。候補の発話帯が先行地点の発話開始の
+         * これだけ手前で完結していなければ解禁しない。実再生時間ぶん先行 FINAL の barge-in と重ならないための保険。
+         */
+        const val DEFAULT_ROUTE_ORDER_BYPASS_MARGIN_METERS: Double = 100.0
     }
 }
