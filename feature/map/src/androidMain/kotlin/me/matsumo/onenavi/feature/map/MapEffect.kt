@@ -9,6 +9,7 @@ import com.google.android.gms.maps.GoogleMap
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.model.RouteDetail
+import me.matsumo.onenavi.core.model.RoutePointEvent
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
@@ -110,6 +111,7 @@ internal fun MapEffect(
                 guidanceState = guidanceState,
                 googleMap = googleMap,
                 cameraZoom = cameraZoom,
+                routeProgressMeters = vehicleLocationState?.routeProgressMeters,
                 topAppBarHeightPx = topAppBarHeightPx,
                 bottomSheetPeekHeight = bottomSheetPeekHeight,
                 viewportPadding = viewportPadding,
@@ -467,6 +469,7 @@ private fun RoutePreviewEffect(
  * @param guidanceState Guidance 期の案内状態
  * @param googleMap overlay 描画先の GoogleMap
  * @param cameraZoom 現在の GoogleMap zoom
+ * @param routeProgressMeters 案内 route 上の現在地累積距離。取得できない場合は null
  * @param topAppBarHeightPx callout が避ける上部バー高さ
  * @param bottomSheetPeekHeight callout が避ける bottom sheet 高さ
  * @param viewportPadding callout が避ける host / 画面外・UI 帯 padding
@@ -480,6 +483,7 @@ private fun NavigationEffect(
     guidanceState: GuidanceState,
     googleMap: GoogleMap,
     cameraZoom: Float,
+    routeProgressMeters: Double?,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
     viewportPadding: MapHostInsets,
@@ -496,6 +500,7 @@ private fun NavigationEffect(
             route = guidanceRoute.route,
             isSelected = true,
             cameraZoom = cameraZoom,
+            routeProgressMeters = routeProgressMeters,
         )
     }
 
@@ -550,6 +555,7 @@ private fun NavigationEffect(
  * @param route 描画対象 route
  * @param isSelected 選択中 route として描画するか
  * @param cameraZoom 現在の GoogleMap zoom
+ * @param routeProgressMeters route 上の現在地累積距離。取得できない場合は null
  */
 @Composable
 private fun RoutePolylineEffect(
@@ -557,6 +563,7 @@ private fun RoutePolylineEffect(
     route: RouteDetail,
     isSelected: Boolean,
     cameraZoom: Float,
+    routeProgressMeters: Double? = null,
 ) {
     MapPolyline(
         googleMap = googleMap,
@@ -571,6 +578,7 @@ private fun RoutePolylineEffect(
         RoutePointEventMarkersEffect(
             googleMap = googleMap,
             route = route,
+            routeProgressMeters = routeProgressMeters,
             zIndex = ROUTE_POINT_EVENT_MARKER_Z_INDEX,
         )
     }
@@ -581,15 +589,17 @@ private fun RoutePolylineEffect(
  *
  * @param googleMap marker 描画先の GoogleMap
  * @param route 描画対象 route
+ * @param routeProgressMeters route 上の現在地累積距離。取得できない場合は null
  * @param zIndex marker の zIndex
  */
 @Composable
 private fun RoutePointEventMarkersEffect(
     googleMap: GoogleMap,
     route: RouteDetail,
+    routeProgressMeters: Double?,
     zIndex: Float,
 ) {
-    val visiblePointEvents = route.pointEvents.take(ROUTE_POINT_EVENT_MARKER_MAX_COUNT)
+    val visiblePointEvents = route.visiblePointEvents(routeProgressMeters)
 
     visiblePointEvents.forEachIndexed { eventIndex, pointEvent ->
         MapRoutePointEventMarker(
@@ -600,6 +610,26 @@ private fun RoutePointEventMarkersEffect(
             zIndex = zIndex + eventIndex * ROUTE_POINT_EVENT_MARKER_Z_INDEX_STEP,
         )
     }
+}
+
+/**
+ * 地点イベント marker の描画対象を route 進行距離に基づいて切り出す。
+ *
+ * @param routeProgressMeters route 上の現在地累積距離。取得できない場合は null
+ * @return 現在地以降、または route 先頭からの地点イベント
+ */
+private fun RouteDetail.visiblePointEvents(routeProgressMeters: Double?): List<RoutePointEvent> {
+    val minimumDistanceFromStartMeters = routeProgressMeters?.coerceAtLeast(0.0)
+
+    if (minimumDistanceFromStartMeters == null) {
+        return pointEvents.take(ROUTE_POINT_EVENT_MARKER_MAX_COUNT)
+    }
+
+    return pointEvents
+        .asSequence()
+        .filter { pointEvent -> pointEvent.distanceFromStartMeters >= minimumDistanceFromStartMeters }
+        .take(ROUTE_POINT_EVENT_MARKER_MAX_COUNT)
+        .toList()
 }
 
 /**

@@ -19,17 +19,27 @@ internal object ExtNavRoutePointEventMapper {
     /**
      * [RouteGuidance.pointEvents] を [RoutePointEvent] に変換する。
      *
-     * 外部ナビ API ライブラリの index は [RouteGuidance.polyline] 基準で、OneNavi の [geometry] は
-     * 出発地を先頭に追加している場合があるため、marker 描画や周辺 UI で使えるよう geometry
-     * 基準の index に補正する。
+     * 外部ナビ API ライブラリの index / 距離は [RouteGuidance.polyline] 基準で、OneNavi の
+     * [geometry] は出発地を先頭に追加している場合があるため、marker 描画や周辺 UI で
+     * 使えるよう geometry 基準へ補正する。
      */
     fun map(routeGuidance: RouteGuidance, geometry: ImmutableList<RoutePoint>): ImmutableList<RoutePointEvent> {
         if (routeGuidance.pointEvents.isEmpty() || geometry.isEmpty()) return persistentListOf()
 
         val indexOffset = if (isOriginPrepended(routeGuidance.polyline, geometry)) 1 else 0
+        val cumulativeMetres = RouteGeometryMath.cumulativeMetres(geometry)
+        val totalGeometryMetres = cumulativeMetres.lastOrNull() ?: 0.0
+        val distanceOffsetMeters = routeGuidance.polyline.geometryStartMetres(geometry, cumulativeMetres)
 
         return routeGuidance.pointEvents
-            .map { event -> event.toModel(indexOffset, geometry.lastIndex) }
+            .map { event ->
+                event.toModel(
+                    indexOffset = indexOffset,
+                    lastGeometryIndex = geometry.lastIndex,
+                    distanceOffsetMeters = distanceOffsetMeters,
+                    totalGeometryMetres = totalGeometryMetres,
+                )
+            }
             .toImmutableList()
     }
 
@@ -44,16 +54,38 @@ internal object ExtNavRoutePointEventMapper {
         return latitudeDiffers || longitudeDiffers
     }
 
-    private fun ExtNavRoutePointEvent.toModel(indexOffset: Int, lastGeometryIndex: Int): RoutePointEvent {
+    private fun ExtNavRoutePointEvent.toModel(
+        indexOffset: Int,
+        lastGeometryIndex: Int,
+        distanceOffsetMeters: Double,
+        totalGeometryMetres: Double,
+    ): RoutePointEvent {
+        val geometryDistanceFromStartMeters = (distanceFromStartMetres + distanceOffsetMeters)
+            .coerceIn(0.0, totalGeometryMetres)
+
         return RoutePointEvent(
             kind = kind.toModel(),
             location = RoutePoint(
                 latitude = coord.latDegrees,
                 longitude = coord.lonDegrees,
             ),
-            distanceFromStartMeters = distanceFromStartMetres,
+            distanceFromStartMeters = geometryDistanceFromStartMeters,
             polylinePointIndex = (polylinePointIndex + indexOffset).coerceIn(0, lastGeometryIndex),
         )
+    }
+
+    private fun ImmutableList<Coord>.geometryStartMetres(
+        geometry: ImmutableList<RoutePoint>,
+        cumulativeMetres: DoubleArray,
+    ): Double {
+        if (isEmpty() || cumulativeMetres.isEmpty()) return 0.0
+
+        val firstPolylinePoint = first()
+        val geometryIndex = geometry.indexOfFirst { point ->
+            point.latitude == firstPolylinePoint.latDegrees && point.longitude == firstPolylinePoint.lonDegrees
+        }
+
+        return cumulativeMetres.getOrNull(geometryIndex) ?: 0.0
     }
 
     private fun ExtNavRoutePointEventKind.toModel(): RoutePointEventKind = when (this) {

@@ -42,11 +42,11 @@ class ExtNavRoutePointEventMapperTest {
             ),
         )
 
+        val geometry = routeGuidance.polyline.toRouteGeometry()
+
         val events = ExtNavRoutePointEventMapper.map(
             routeGuidance = routeGuidance,
-            geometry = routeGuidance.polyline
-                .map { coord -> RoutePoint(coord.latDegrees, coord.lonDegrees) }
-                .toImmutableList(),
+            geometry = geometry,
         )
 
         assertEquals(
@@ -86,6 +86,36 @@ class ExtNavRoutePointEventMapperTest {
         )
 
         assertEquals(2, events.single().polylinePointIndex)
+    }
+
+    @Test
+    fun `origin が追加された geometry では地点イベント距離を補正する`() {
+        val routeGuidance = routeGuidanceWithPointEvents(
+            pointEvents = listOf(
+                extNavPointEvent(
+                    kind = ExtNavRoutePointEventKind.TrafficLight,
+                    coord = Coord.fromDegrees(35.2, 139.2),
+                    distanceFromStartMetres = 500.0,
+                    polylinePointIndex = 1,
+                ),
+            ),
+        )
+        val prependedOrigin = RoutePoint(latitude = 35.0, longitude = 139.0)
+        val geometry = (
+            listOf(prependedOrigin) +
+                routeGuidance.polyline.map { coord -> RoutePoint(coord.latDegrees, coord.lonDegrees) }
+            ).toImmutableList()
+
+        val events = ExtNavRoutePointEventMapper.map(
+            routeGuidance = routeGuidance,
+            geometry = geometry,
+        )
+
+        val cumulativeMetres = RouteGeometryMath.cumulativeMetres(geometry)
+        val sourceStartMetres = cumulativeMetres[1]
+        val expectedEventDistanceMeters = sourceStartMetres + 500.0
+
+        assertEquals(expectedEventDistanceMeters, events.single().distanceFromStartMeters, 0.0001)
     }
 
     @Test
@@ -140,4 +170,6 @@ class ExtNavRoutePointEventMapperTest {
             polylinePointIndex = polylinePointIndex,
         )
     }
+
+    private fun List<Coord>.toRouteGeometry() = map { coord -> RoutePoint(coord.latDegrees, coord.lonDegrees) }.toImmutableList()
 }

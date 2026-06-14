@@ -13,7 +13,7 @@
         <path
                 android:pathData="M387.6749 199.621A187.5998 187.5999 0 0 1 12.4753 199.621A187.5998 187.5999 0 0 1 387.6749 199.621Z"
                 android:strokeColor="#FFFFFF"
-                android:strokeWidth="5.6" />
+                android:strokeWidth="10" />
     </group>
     <path
             android:pathData="M40.6665 161.0034H359.4834V238.2412H40.6665V161.0034Z"
