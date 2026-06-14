@@ -118,6 +118,7 @@ class ExtNavRouteDataSource(
                 ?.let { priority -> interchangeNameHints[priority] }
             val roadClassSegments = buildRoadClassSegments(routeGuidance, geometry, interchangeNameHint)
             val congestionSegments = buildCongestionSegments(routeGuidance, geometry)
+            val pointEvents = ExtNavRoutePointEventMapper.map(routeGuidance, geometry)
             val tollYen = routeGuidance.summary.tollYen.takeIf { it > 0 }
             val distanceMetres = routeGuidance.summary.distanceMetres.toDouble()
             val timeSeconds = routeGuidance.summary.timeSeconds.toDouble()
@@ -139,6 +140,7 @@ class ExtNavRouteDataSource(
                 steps = persistentListOf(),
                 roadClassSegments = roadClassSegments,
                 congestionSegments = congestionSegments,
+                pointEvents = pointEvents,
                 priority = routePriority,
                 tollFee = tollYen,
                 tollDetails = tollDetails,
