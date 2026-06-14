@@ -60,7 +60,7 @@ internal object ExtNavRouteIncidentMapper {
         distanceOffsetMeters: Double,
         totalGeometryMetres: Double,
     ): RouteIncidentMarker {
-        val geometryDistanceFromStartMeters = (distanceFromStartMetres.toDouble() + distanceOffsetMeters)
+        val geometryDistanceFromStartMeters = (distanceFromStartMetres + distanceOffsetMeters)
             .coerceIn(0.0, totalGeometryMetres)
 
         return RouteIncidentMarker(
