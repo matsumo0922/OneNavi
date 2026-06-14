@@ -61,13 +61,16 @@ enum class HighwayBoundary { ENTRANCE, EXIT }
 /**
  * 方面看板。単一文字列に潰さず、副方面・看板画像も保持する。
  *
- * @property primary 主方面 (`direction_a`)。
- * @property secondary 副方面 (`direction_b`)。無ければ null。
+ * テキストなしで画像のみの看板 (交差点案内画像など) も表現できるよう、[primary] は nullable とする。
+ * [primary] と [imageRef] の両方が null になることはない。
+ *
+ * @property primary 主方面テキスト (`direction_a`)。テキストが空の場合は null。
+ * @property secondary 副方面テキスト (`direction_b`)。無ければ null。
  * @property imageRef 看板画像キー (`categories.major/minor` 由来)。無ければ null。
  */
 @Immutable
 data class StepSignpost(
-    val primary: String,
+    val primary: String?,
     val secondary: String?,
     val imageRef: GuideImageKey?,
 )

@@ -38,8 +38,8 @@ internal class GuidanceListDetailPolicy {
         val boundary = event.details.boundary
         if (boundary != null) return GuidanceListDetail.Boundary(kind = boundary)
 
-        val signpost = event.details.signpost
-        if (signpost != null) return GuidanceListDetail.Signpost(text = signpost.primary)
+        val signpostText = event.details.signpost?.primary
+        if (signpostText != null) return GuidanceListDetail.Signpost(text = signpostText)
 
         return null
     }
