@@ -109,7 +109,7 @@ private fun RoutePointEventMarkerIcon(
 private fun routePointEventMarkerSize(kind: RoutePointEventKind, isGuidanceTarget: Boolean): Dp {
     val baseSize = routePointEventBaseMarkerSize(kind)
 
-    return baseSize * routePointEventGuidanceTargetScale(isGuidanceTarget)
+    return baseSize * routePointEventGuidanceTargetScale(kind, isGuidanceTarget)
 }
 
 private fun routePointEventBaseMarkerSize(kind: RoutePointEventKind): Dp = when (kind) {
@@ -129,11 +129,11 @@ private fun routePointEventIconSize(kind: RoutePointEventKind): Dp = when (kind)
 private fun routePointEventIconRenderSize(kind: RoutePointEventKind, isGuidanceTarget: Boolean): Dp {
     val baseSize = routePointEventIconSize(kind)
 
-    return baseSize * routePointEventGuidanceTargetScale(isGuidanceTarget)
+    return baseSize * routePointEventGuidanceTargetScale(kind, isGuidanceTarget)
 }
 
-private fun routePointEventGuidanceTargetScale(isGuidanceTarget: Boolean): Float =
-    if (isGuidanceTarget) RoutePointEventGuidanceTargetScale else RoutePointEventScale
+private fun routePointEventGuidanceTargetScale(kind: RoutePointEventKind, isGuidanceTarget: Boolean): Float =
+    if (isGuidanceTarget && kind == RoutePointEventKind.TRAFFIC_LIGHT) RoutePointEventGuidanceTargetScale else RoutePointEventScale
 
 private fun routePointEventSignResource(kind: RoutePointEventKind): DrawableResource = when (kind) {
     RoutePointEventKind.TRAFFIC_LIGHT -> Res.drawable.ic_sign_traffic_light
