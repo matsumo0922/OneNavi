@@ -38,13 +38,11 @@ internal fun MapRoutePointEventMarker(
     zIndex: Float,
 ) {
     val icon = rememberRoutePointEventMarkerIcon(kind)
-    val title = remember(kind) { routePointEventMarkerTitle(kind) }
 
-    DisposableEffect(googleMap, latitude, longitude, kind, zIndex, icon, title) {
+    DisposableEffect(googleMap, latitude, longitude, kind, zIndex, icon) {
         val marker = googleMap.addMarker(
             MarkerOptions()
                 .position(LatLng(latitude, longitude))
-                .title(title)
                 .anchor(0.5f, 0.5f)
                 .icon(icon)
                 .zIndex(zIndex),
@@ -147,39 +145,30 @@ private fun Canvas.drawTrafficLightGlyph(center: Float, density: Density) {
 }
 
 private fun Canvas.drawStopLineGlyph(center: Float, density: Density) {
-    val radius = with(density) { StopLineOctagonRadius.toPx() }
-    val sideInset = radius * StopLineOctagonInsetRatio
-    val octagon = Path().apply {
-        moveTo(center - sideInset, center - radius)
-        lineTo(center + sideInset, center - radius)
-        lineTo(center + radius, center - sideInset)
-        lineTo(center + radius, center + sideInset)
-        lineTo(center + sideInset, center + radius)
-        lineTo(center - sideInset, center + radius)
-        lineTo(center - radius, center + sideInset)
-        lineTo(center - radius, center - sideInset)
+    val triangleWidth = with(density) { StopLineTriangleWidth.toPx() }
+    val triangleHeight = with(density) { StopLineTriangleHeight.toPx() }
+    val borderWidth = with(density) { StopLineTriangleBorderWidth.toPx() }
+    val top = center - triangleHeight / 2f
+    val bottom = center + triangleHeight / 2f
+    val triangle = Path().apply {
+        moveTo(center - triangleWidth / 2f, top)
+        lineTo(center + triangleWidth / 2f, top)
+        lineTo(center, bottom)
         close()
     }
     val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = StopLineFillColor
         style = Paint.Style.FILL
     }
-    val barHalfLength = radius * StopLineBarLengthRatio
-    val barWidth = with(density) { StopLineBarWidth.toPx() }
-    val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        strokeCap = Paint.Cap.ROUND
-        strokeWidth = barWidth
+        strokeJoin = Paint.Join.ROUND
+        strokeWidth = borderWidth
+        style = Paint.Style.STROKE
     }
 
-    drawPath(octagon, fillPaint)
-    drawLine(
-        center - barHalfLength,
-        center,
-        center + barHalfLength,
-        center,
-        barPaint,
-    )
+    drawPath(triangle, fillPaint)
+    drawPath(triangle, borderPaint)
 }
 
 private fun Canvas.drawRailwayCrossingGlyph(center: Float, density: Density) {
@@ -211,12 +200,6 @@ private fun Canvas.drawRailwayCrossingGlyph(center: Float, density: Density) {
         center + crossHalfLength,
         strokePaint,
     )
-}
-
-private fun routePointEventMarkerTitle(kind: RoutePointEventKind): String = when (kind) {
-    RoutePointEventKind.TRAFFIC_LIGHT -> "信号機"
-    RoutePointEventKind.STOP_LINE -> "一時停止"
-    RoutePointEventKind.RAILWAY_CROSSING -> "踏切"
 }
 
 /** 地点イベント marker の bitmap 全体サイズ。 */
@@ -267,17 +250,14 @@ private val TrafficLightYellowColor = Color.rgb(250, 204, 21)
 /** 信号機 glyph の緑色。 */
 private val TrafficLightGreenColor = Color.rgb(34, 197, 94)
 
-/** 一時停止 glyph の八角形半径。 */
-private val StopLineOctagonRadius = 10.dp
+/** 一時停止 glyph の逆三角幅。 */
+private val StopLineTriangleWidth = 18.dp
 
-/** 一時停止 glyph の八角形の角切り比率。 */
-private const val StopLineOctagonInsetRatio = 0.42f
+/** 一時停止 glyph の逆三角高さ。 */
+private val StopLineTriangleHeight = 16.dp
 
-/** 一時停止 glyph の白線幅。 */
-private val StopLineBarWidth = 2.4.dp
-
-/** 一時停止 glyph の白線長比率。 */
-private const val StopLineBarLengthRatio = 0.52f
+/** 一時停止 glyph の白枠幅。 */
+private val StopLineTriangleBorderWidth = 2.dp
 
 /** 一時停止 glyph の塗り色。 */
 private val StopLineFillColor = Color.rgb(220, 38, 38)

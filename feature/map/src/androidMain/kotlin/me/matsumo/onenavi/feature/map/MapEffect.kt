@@ -64,6 +64,7 @@ internal fun MapEffect(
 ) {
     val density = LocalDensity.current
     val navigationCardHeight = with(density) { navigationCardHeightPx.toDp() }
+    val cameraZoom = cameraState.cameraState.zoom
 
     when (screenState) {
         is MapScreenState.Browsing -> Unit
@@ -88,6 +89,7 @@ internal fun MapEffect(
                 screenState = screenState,
                 routePreviewState = routePreviewState,
                 googleMap = googleMap,
+                cameraZoom = cameraZoom,
                 topAppBarHeightPx = topAppBarHeightPx,
                 bottomSheetPeekHeight = bottomSheetPeekHeight,
                 viewportPadding = viewportPadding,
@@ -107,7 +109,7 @@ internal fun MapEffect(
                 modifier = modifier,
                 guidanceState = guidanceState,
                 googleMap = googleMap,
-                cameraZoom = cameraState.cameraState.zoom,
+                cameraZoom = cameraZoom,
                 topAppBarHeightPx = topAppBarHeightPx,
                 bottomSheetPeekHeight = bottomSheetPeekHeight,
                 viewportPadding = viewportPadding,
@@ -152,6 +154,7 @@ internal fun MapEffect(
             overlayState = overlayState,
             googleMap = googleMap,
             guidanceWaypointCount = guidanceWaypointCount,
+            cameraZoom = cameraZoom,
         )
     }
 
@@ -161,6 +164,7 @@ internal fun MapEffect(
             modifier = modifier,
             routePreviewState = navigationAlternativesReady,
             googleMap = googleMap,
+            cameraZoom = cameraZoom,
             topAppBarHeightPx = topAppBarHeightPx,
             bottomCardHeight = navigationCardHeight,
             viewportPadding = viewportPadding,
@@ -191,12 +195,14 @@ internal fun MapEffect(
  * @param overlayState 選択地点と仮ルート探索状態
  * @param googleMap overlay 描画先の GoogleMap
  * @param guidanceWaypointCount 現在案内中ルートが持つ経由地数
+ * @param cameraZoom 現在の GoogleMap zoom
  */
 @Composable
 private fun AddWaypointSelectedEffect(
     overlayState: MapOverlayState.AddWaypointSelected,
     googleMap: GoogleMap,
     guidanceWaypointCount: Int,
+    cameraZoom: Float,
 ) {
     val routePreviewState = overlayState.routePreviewState as? RoutePreviewState.Ready
 
@@ -223,6 +229,7 @@ private fun AddWaypointSelectedEffect(
             googleMap = googleMap,
             route = route,
             isSelected = routeIndex == routePreviewState.selectedIndex,
+            cameraZoom = cameraZoom,
         )
     }
 }
@@ -232,6 +239,7 @@ private fun AddWaypointSelectedEffect(
  *
  * @param routePreviewState 代替ルート候補
  * @param googleMap overlay 描画先の GoogleMap
+ * @param cameraZoom 現在の GoogleMap zoom
  * @param topAppBarHeightPx callout が避ける上部バー高さ
  * @param bottomCardHeight callout が避ける下部カード高さ
  * @param viewportPadding callout が避ける host / 画面外・UI 帯 padding
@@ -241,6 +249,7 @@ private fun AddWaypointSelectedEffect(
 private fun NavigationAlternativesEffect(
     routePreviewState: RoutePreviewState.Ready,
     googleMap: GoogleMap,
+    cameraZoom: Float,
     topAppBarHeightPx: Int,
     bottomCardHeight: Dp,
     viewportPadding: MapHostInsets,
@@ -273,6 +282,7 @@ private fun NavigationAlternativesEffect(
             googleMap = googleMap,
             route = route,
             isSelected = routeIndex == routePreviewState.selectedIndex,
+            cameraZoom = cameraZoom,
         )
     }
 
@@ -376,6 +386,7 @@ private fun RouteIntermediateWaypointMarkersEffect(
  * @param screenState ルート Preview 画面 state
  * @param routePreviewState Preview 期のルート候補状態
  * @param googleMap overlay 描画先の GoogleMap
+ * @param cameraZoom 現在の GoogleMap zoom
  * @param topAppBarHeightPx callout が避ける上部バー高さ
  * @param bottomSheetPeekHeight callout が避ける bottom sheet 高さ
  * @param viewportPadding callout が避ける host / 画面外・UI 帯 padding
@@ -387,6 +398,7 @@ private fun RoutePreviewEffect(
     screenState: MapScreenState.RoutePreview,
     routePreviewState: RoutePreviewState,
     googleMap: GoogleMap,
+    cameraZoom: Float,
     topAppBarHeightPx: Int,
     bottomSheetPeekHeight: Dp,
     viewportPadding: MapHostInsets,
@@ -433,6 +445,7 @@ private fun RoutePreviewEffect(
                 googleMap = googleMap,
                 route = route,
                 isSelected = routeIndex == routePreviewState.selectedIndex,
+                cameraZoom = cameraZoom,
             )
         }
     }
@@ -482,6 +495,7 @@ private fun NavigationEffect(
             googleMap = googleMap,
             route = guidanceRoute.route,
             isSelected = true,
+            cameraZoom = cameraZoom,
         )
     }
 
@@ -535,12 +549,14 @@ private fun NavigationEffect(
  * @param googleMap polyline 描画先の GoogleMap
  * @param route 描画対象 route
  * @param isSelected 選択中 route として描画するか
+ * @param cameraZoom 現在の GoogleMap zoom
  */
 @Composable
 private fun RoutePolylineEffect(
     googleMap: GoogleMap,
     route: RouteDetail,
     isSelected: Boolean,
+    cameraZoom: Float,
 ) {
     MapPolyline(
         googleMap = googleMap,
@@ -550,7 +566,8 @@ private fun RoutePolylineEffect(
         congestionSegments = if (isSelected) route.congestionSegments else persistentListOf(),
     )
 
-    if (isSelected) {
+    val shouldShowRoutePointEvents = isSelected && cameraZoom >= ROUTE_POINT_EVENT_MARKER_MIN_ZOOM
+    if (shouldShowRoutePointEvents) {
         RoutePointEventMarkersEffect(
             googleMap = googleMap,
             route = route,
@@ -572,7 +589,9 @@ private fun RoutePointEventMarkersEffect(
     route: RouteDetail,
     zIndex: Float,
 ) {
-    route.pointEvents.forEachIndexed { eventIndex, pointEvent ->
+    val visiblePointEvents = route.pointEvents.take(ROUTE_POINT_EVENT_MARKER_MAX_COUNT)
+
+    visiblePointEvents.forEachIndexed { eventIndex, pointEvent ->
         MapRoutePointEventMarker(
             googleMap = googleMap,
             latitude = pointEvent.location.latitude,
@@ -646,3 +665,9 @@ private const val ROUTE_POINT_EVENT_MARKER_Z_INDEX = 10_700f
 
 /** ルート地点イベント marker の重なり順を安定させるための zIndex 加算値。 */
 private const val ROUTE_POINT_EVENT_MARKER_Z_INDEX_STEP = 0.01f
+
+/** ルート地点イベント marker を表示する最小 zoom。 */
+private const val ROUTE_POINT_EVENT_MARKER_MIN_ZOOM = 15f
+
+/** 1 route で同時に描画する地点イベント marker の最大件数。 */
+private const val ROUTE_POINT_EVENT_MARKER_MAX_COUNT = 120
