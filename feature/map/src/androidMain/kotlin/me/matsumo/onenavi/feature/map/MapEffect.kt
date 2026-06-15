@@ -648,7 +648,10 @@ private fun RoutePointEventMarkersEffect(
     guidanceTargetPointIndex: Int?,
     zIndex: Float,
 ) {
-    val visiblePointEvents = route.visiblePointEvents(routeProgressMeters)
+    val visiblePointEvents = route.visiblePointEvents(
+        routeProgressMeters = routeProgressMeters,
+        guidanceTargetPointIndex = guidanceTargetPointIndex,
+    )
     val guidanceTargetPointEventIndex = visiblePointEvents.guidanceTargetPointEventIndex(guidanceTargetPointIndex)
 
     visiblePointEvents.forEachIndexed { eventIndex, pointEvent ->
@@ -669,20 +672,61 @@ private fun RoutePointEventMarkersEffect(
  * 地点イベント marker の描画対象を route 進行距離に基づいて切り出す。
  *
  * @param routeProgressMeters route 上の現在地累積距離。取得できない場合は null
+ * @param guidanceTargetPointIndex 現在の案内地点の GuidancePoint index。取得できない場合は null
  * @return 現在地以降、または route 先頭からの地点イベント
  */
-private fun RouteDetail.visiblePointEvents(routeProgressMeters: Double?): List<RoutePointEvent> {
+private fun RouteDetail.visiblePointEvents(
+    routeProgressMeters: Double?,
+    guidanceTargetPointIndex: Int?,
+): List<RoutePointEvent> {
     val minimumDistanceFromStartMeters = routeProgressMeters?.coerceAtLeast(0.0)
+    val maximumDistanceFromStartMeters = pointEventTargetDistanceLimit(
+        guidanceTargetPointIndex = guidanceTargetPointIndex,
+        minimumDistanceFromStartMeters = minimumDistanceFromStartMeters,
+    )
 
     if (minimumDistanceFromStartMeters == null) {
-        return pointEvents.take(ROUTE_POINT_EVENT_MARKER_MAX_COUNT)
+        return pointEvents
+            .asSequence()
+            .filterWithinTargetDistance(maximumDistanceFromStartMeters)
+            .take(ROUTE_POINT_EVENT_MARKER_MAX_COUNT)
+            .toList()
     }
 
     return pointEvents
         .asSequence()
         .filter { pointEvent -> pointEvent.distanceFromStartMeters >= minimumDistanceFromStartMeters }
+        .filterWithinTargetDistance(maximumDistanceFromStartMeters)
         .take(ROUTE_POINT_EVENT_MARKER_MAX_COUNT)
         .toList()
+}
+
+private fun RouteDetail.pointEventTargetDistanceLimit(
+    guidanceTargetPointIndex: Int?,
+    minimumDistanceFromStartMeters: Double?,
+): Double? {
+    val targetDistanceFromStartMeters = guidanceTargetPointIndex
+        ?.let { targetPointIndex ->
+            pointEvents.firstOrNull { pointEvent ->
+                pointEvent.sourceGuidancePointIndex == targetPointIndex
+            }
+        }
+        ?.distanceFromStartMeters
+        ?: return null
+    val targetDistanceLimit = targetDistanceFromStartMeters + ROUTE_POINT_EVENT_TARGET_DISTANCE_TOLERANCE_METERS
+    val canApplyLimit = minimumDistanceFromStartMeters == null || targetDistanceLimit >= minimumDistanceFromStartMeters
+
+    return targetDistanceLimit.takeIf { canApplyLimit }
+}
+
+private fun Sequence<RoutePointEvent>.filterWithinTargetDistance(
+    maximumDistanceFromStartMeters: Double?,
+): Sequence<RoutePointEvent> {
+    return if (maximumDistanceFromStartMeters == null) {
+        this
+    } else {
+        filter { pointEvent -> pointEvent.distanceFromStartMeters <= maximumDistanceFromStartMeters }
+    }
 }
 
 private fun GuidanceState.guidanceTargetPointIndex(): Int? {
@@ -771,3 +815,6 @@ private const val ROUTE_POINT_EVENT_MARKER_MIN_ZOOM = 15f
 
 /** 1 route で同時に描画する地点イベント marker の最大件数。 */
 private const val ROUTE_POINT_EVENT_MARKER_MAX_COUNT = 120
+
+/** 案内地点に紐付く地点イベントまでを表示対象に含めるための距離許容値 (m)。 */
+private const val ROUTE_POINT_EVENT_TARGET_DISTANCE_TOLERANCE_METERS = 1.0
