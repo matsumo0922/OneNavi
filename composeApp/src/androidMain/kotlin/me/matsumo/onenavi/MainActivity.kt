@@ -51,7 +51,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         carGuidanceSessionReleaser.ensureStarted()
         guidanceForegroundController.ensureStarted()
-        dispatchAssistantIntent(intent)
+        if (savedInstanceState == null) {
+            dispatchAssistantIntent(intent)
+        }
         enableEdgeToEdge()
         setContent {
             val userData by viewModel.setting.collectAsStateWithLifecycle(null)
