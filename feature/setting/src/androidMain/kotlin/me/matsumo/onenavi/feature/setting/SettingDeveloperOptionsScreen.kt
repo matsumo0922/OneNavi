@@ -29,6 +29,7 @@ import me.matsumo.onenavi.core.common.car.CarHardwareValueSnapshot
 import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.setting_developer_options_car_hardware_diagnostics
+import me.matsumo.onenavi.core.resource.setting_developer_options_car_hardware_diagnostics_cluster
 import me.matsumo.onenavi.core.resource.setting_developer_options_car_hardware_diagnostics_connection
 import me.matsumo.onenavi.core.resource.setting_developer_options_car_hardware_diagnostics_description
 import me.matsumo.onenavi.core.resource.setting_developer_options_car_hardware_diagnostics_energy
@@ -139,7 +140,7 @@ internal fun SettingDeveloperOptionsScreen(
             }
 
             if (setting.isDeveloperFeatureEnabled(DeveloperFeature.CAR_HARDWARE_DIAGNOSTICS)) {
-                carHardwareDiagnosticsItems(carHardwareDiagnostics)
+                carHardwareDiagnosticsItems(carHardwareDiagnostics, setting.hasDetectedClusterSession)
             }
         }
     }
@@ -189,7 +190,7 @@ private val DeveloperFeature.description: StringResource
         DeveloperFeature.CAR_HARDWARE_DIAGNOSTICS -> Res.string.setting_developer_options_car_hardware_diagnostics_description
     }
 
-private fun LazyListScope.carHardwareDiagnosticsItems(snapshot: CarHardwareDiagnosticsSnapshot) {
+private fun LazyListScope.carHardwareDiagnosticsItems(snapshot: CarHardwareDiagnosticsSnapshot, hasDetectedClusterSession: Boolean) {
     item {
         SettingTitleItem(
             modifier = Modifier.fillMaxWidth(),
@@ -236,6 +237,14 @@ private fun LazyListScope.carHardwareDiagnosticsItems(snapshot: CarHardwareDiagn
             description = snapshot.location.description(),
         )
     }
+
+    item {
+        SettingDeveloperOptionsDiagnosticItem(
+            modifier = Modifier.fillMaxWidth(),
+            title = Res.string.setting_developer_options_car_hardware_diagnostics_cluster,
+            description = clusterSessionDescription(hasDetectedClusterSession),
+        )
+    }
 }
 
 @Composable
@@ -249,6 +258,10 @@ private fun SettingDeveloperOptionsDiagnosticItem(
         title = stringResource(title),
         description = description,
     )
+}
+
+private fun clusterSessionDescription(hasDetectedClusterSession: Boolean): String {
+    return if (hasDetectedClusterSession) "検出済み" else "未検出"
 }
 
 private fun CarHardwareDiagnosticsSnapshot.connectionDescription(): String {

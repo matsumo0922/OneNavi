@@ -248,6 +248,7 @@
     <string name="setting_developer_options_car_hardware_diagnostics_toll_card">ETC カード</string>
     <string name="setting_developer_options_car_hardware_diagnostics_energy">燃料 / 電池</string>
     <string name="setting_developer_options_car_hardware_diagnostics_location">車両位置</string>
+    <string name="setting_developer_options_car_hardware_diagnostics_cluster">クラスター対応</string>
 
     <!-- Setting Paywall -->
     <string name="setting_paywall_title">Pro</string>
