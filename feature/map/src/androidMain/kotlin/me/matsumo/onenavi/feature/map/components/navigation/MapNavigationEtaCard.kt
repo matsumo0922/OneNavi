@@ -35,7 +35,9 @@ import kotlinx.datetime.toLocalDateTime
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.common.formatDuration
 import me.matsumo.onenavi.core.model.CongestionSegment
+import me.matsumo.onenavi.core.navigation.newguidance.model.GpsSignalState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_unit_day
 import me.matsumo.onenavi.core.resource.common_unit_hour
@@ -61,6 +63,7 @@ import kotlin.time.Instant
 internal fun MapNavigationEtaCard(
     progress: GuidanceProgress,
     congestionSegments: ImmutableList<CongestionSegment>,
+    gpsSignalState: GpsSignalState,
     displaySpeedKmh: Int?,
     speedLimitKmh: Int?,
     onCloseClicked: () -> Unit,
@@ -146,8 +149,14 @@ internal fun MapNavigationEtaCard(
                 MapNavigationSpeedRow(
                     displaySpeedKmh = displaySpeedKmh,
                     speedLimitKmh = speedLimitKmh,
+                    isEstimated = progress.positionSource == VehiclePositionSource.DEAD_RECKONING,
                 )
             }
+
+            MapNavigationGpsSignalRow(
+                gpsSignalState = gpsSignalState,
+                positionSource = progress.positionSource,
+            )
 
             MapNavigationEtaActionRow(
                 modifier = Modifier
@@ -159,6 +168,38 @@ internal fun MapNavigationEtaCard(
                 onRoutePreviewClicked = onRoutePreviewClicked,
             )
         }
+    }
+}
+
+@Composable
+private fun MapNavigationGpsSignalRow(
+    gpsSignalState: GpsSignalState,
+    positionSource: VehiclePositionSource,
+    modifier: Modifier = Modifier,
+) {
+    val lost = gpsSignalState as? GpsSignalState.Lost
+    val isDeadReckoning = positionSource == VehiclePositionSource.DEAD_RECKONING
+    if (lost == null && !isDeadReckoning) return
+
+    val elapsedSeconds = lost?.elapsedSeconds?.toInt()?.coerceAtLeast(0) ?: 0
+    val text = if (isDeadReckoning) {
+        "測位低下 · 推定走行中 ${elapsedSeconds}s"
+    } else {
+        "測位低下 ${elapsedSeconds}s"
+    }
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    ) {
+        Text(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 

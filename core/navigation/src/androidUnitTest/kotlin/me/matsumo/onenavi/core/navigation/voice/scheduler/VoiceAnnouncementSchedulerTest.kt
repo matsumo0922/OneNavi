@@ -542,6 +542,21 @@ class VoiceAnnouncementSchedulerTest {
     }
 
     @Test
+    fun `route が発話不能な tick で通過扱いせず復帰後に再評価する`() {
+        val scheduler = schedulerOf()
+        scheduler.attach(planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0))))
+
+        val deadReckoningTick = scheduler.onTick(tickOf(current = 850.0, isRouteUsable = false))
+        val observedTick = scheduler.onTick(tickOf(current = 850.0, isRouteUsable = true))
+
+        assertNull(deadReckoningTick)
+        assertEquals(
+            VoiceAnnouncementId("m800"),
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(observedTick).request.stageId,
+        )
+    }
+
+    @Test
     fun `debug snapshot は直近5件の発話予定と fetch 状態を返す`() {
         val scheduler = schedulerOf()
         scheduler.attach(

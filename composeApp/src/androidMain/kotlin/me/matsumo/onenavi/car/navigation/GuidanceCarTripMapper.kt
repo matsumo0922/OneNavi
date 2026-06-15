@@ -52,6 +52,18 @@ internal class GuidanceCarTripMapper(
         val currentRoadName = state.previousProgress.currentRoadName
             ?.takeIf { roadName -> roadName.isNotBlank() }
 
+        return loadingTrip(currentRoadName)
+    }
+
+    /** 準備中の Trip を loading state として生成する。 */
+    fun toLoadingTrip(state: GuidanceState.Preparing): Trip {
+        val currentRoadName = state.initialProgress.currentRoadName
+            ?.takeIf { roadName -> roadName.isNotBlank() }
+
+        return loadingTrip(currentRoadName)
+    }
+
+    private fun loadingTrip(currentRoadName: String?): Trip {
         return Trip.Builder()
             .setLoading(true)
             .also { tripBuilder ->

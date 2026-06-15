@@ -17,12 +17,16 @@ import me.matsumo.drive.supporter.api.guidance.domain.SsmlPhrase
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListDetail
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListIcon
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * [ExtNavGuidanceTracker] の案内地点分類テスト。
@@ -137,6 +141,132 @@ class ExtNavGuidanceTrackerTest {
         assertEquals(null, tracker.snapshot.value?.progress?.currentSpeedLimitKmh)
     }
 
+    @Test
+    fun `停止中のトンネル途絶では DR を進めない`() {
+        val tracker = attachTrackerWithTunnel(
+            tunnelSegment = ExtNavTunnelSegment(
+                startGeometryMeters = 0.0,
+                endGeometryMeters = 500.0,
+            ),
+        )
+        val route = buildRoute()
+        tracker.onLocation(locationAt(point = route.origin, speedMps = 0f))
+
+        val didAdvance = tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = ONE_SECOND_NANOS,
+            nowWallClockMillis = ONE_SECOND_MILLIS,
+        )
+
+        assertFalse(didAdvance)
+        assertEquals(VehiclePositionSource.OBSERVED, tracker.snapshot.value?.positionSource)
+    }
+
+    @Test
+    fun `低速トンネルでは保持速度で DR を進める`() {
+        val tracker = attachTrackerWithTunnel(
+            tunnelSegment = ExtNavTunnelSegment(
+                startGeometryMeters = 0.0,
+                endGeometryMeters = 500.0,
+            ),
+        )
+        val route = buildRoute()
+        tracker.onLocation(locationAt(point = route.origin, speedMps = 3f))
+
+        val didAdvance = tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = ONE_SECOND_NANOS,
+            nowWallClockMillis = ONE_SECOND_MILLIS,
+        )
+
+        val snapshot = tracker.snapshot.value
+        assertTrue(didAdvance)
+        assertEquals(VehiclePositionSource.DEAD_RECKONING, snapshot?.positionSource)
+        assertEquals(3.0, snapshot?.currentCumulativeMeters ?: 0.0, 0.2)
+    }
+
+    @Test
+    fun `長いトンネルでは最大 DR 距離でクランプする`() {
+        val tracker = attachTrackerWithTunnel(
+            tunnelSegment = ExtNavTunnelSegment(
+                startGeometryMeters = 0.0,
+                endGeometryMeters = 10_000.0,
+            ),
+            route = buildLongRoute(),
+        )
+        tracker.onLocation(locationAt(point = buildLongRoute().origin, speedMps = 30f))
+
+        val didAdvance = tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = 200L * ONE_SECOND_NANOS,
+            nowWallClockMillis = 200L * ONE_SECOND_MILLIS,
+        )
+
+        val snapshot = tracker.snapshot.value
+        assertTrue(didAdvance)
+        assertEquals(VehiclePositionSource.DEAD_RECKONING, snapshot?.positionSource)
+        assertTrue((snapshot?.currentCumulativeMeters ?: 0.0) <= 3_000.1)
+    }
+
+    @Test
+    fun `出口近くで停止した DR はトンネル出口を越えない`() {
+        val tracker = attachTrackerWithTunnel(
+            tunnelSegment = ExtNavTunnelSegment(
+                startGeometryMeters = 0.0,
+                endGeometryMeters = 100.0,
+            ),
+        )
+        val route = buildRoute()
+        tracker.onLocation(locationAt(point = route.origin, speedMps = 30f))
+
+        val didAdvance = tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = 10L * ONE_SECOND_NANOS,
+            nowWallClockMillis = 10L * ONE_SECOND_MILLIS,
+        )
+
+        val snapshot = tracker.snapshot.value
+        assertTrue(didAdvance)
+        assertEquals(100.0, snapshot?.currentCumulativeMeters ?: 0.0, 0.2)
+    }
+
+    @Test
+    fun `トンネル分岐風 geometry でも DR snapshot は観測値を持たない`() {
+        val route = buildBranchLikeRoute()
+        val tracker = attachTrackerWithTunnel(
+            tunnelSegment = ExtNavTunnelSegment(
+                startGeometryMeters = 0.0,
+                endGeometryMeters = 1_000.0,
+            ),
+            route = route,
+        )
+        tracker.onLocation(locationAt(point = route.origin, speedMps = 15f))
+
+        val didAdvance = tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = 4L * ONE_SECOND_NANOS,
+            nowWallClockMillis = 4L * ONE_SECOND_MILLIS,
+        )
+
+        val snapshot = tracker.snapshot.value
+        assertTrue(didAdvance)
+        assertEquals(VehiclePositionSource.DEAD_RECKONING, snapshot?.positionSource)
+        assertNull(snapshot?.rawLocation)
+        assertNull(snapshot?.projectionErrorMeters)
+        assertNull(snapshot?.progress?.observedLocation)
+    }
+
+    private fun attachTrackerWithTunnel(
+        tunnelSegment: ExtNavTunnelSegment,
+        route: RouteDetail = buildRoute(),
+    ): ExtNavGuidanceTracker {
+        val tracker = ExtNavGuidanceTracker()
+        tracker.attach(
+            payload = ExtNavRoutePayload(
+                id = route.id,
+                routeGuidance = buildRouteGuidance(),
+            ),
+            route = route,
+            tunnelMapStatus = TunnelMapStatus.Ready(listOf(tunnelSegment).toImmutableList()),
+        )
+        return tracker
+    }
+
     private fun buildRoute(): RouteDetail {
         val origin = RoutePoint(latitude = ORIGIN_LATITUDE, longitude = ORIGIN_LONGITUDE)
         val tollGate = RoutePoint(latitude = ORIGIN_LATITUDE, longitude = ORIGIN_LONGITUDE + 0.002)
@@ -153,6 +283,40 @@ class ExtNavGuidanceTrackerTest {
             durationSeconds = 300.0,
             steps = persistentListOf(),
             tollFee = 320,
+        )
+    }
+
+    private fun buildLongRoute(): RouteDetail {
+        val origin = RoutePoint(latitude = ORIGIN_LATITUDE, longitude = ORIGIN_LONGITUDE)
+        val destination = RoutePoint(latitude = ORIGIN_LATITUDE, longitude = ORIGIN_LONGITUDE + 0.1)
+        return RouteDetail(
+            id = "route-long-test",
+            origin = origin,
+            destination = destination,
+            intermediateWaypoints = persistentListOf(),
+            geometry = listOf(origin, destination).toImmutableList(),
+            distanceMeters = 10_000.0,
+            durationSeconds = 600.0,
+            steps = persistentListOf(),
+            tollFee = 0,
+        )
+    }
+
+    private fun buildBranchLikeRoute(): RouteDetail {
+        val origin = RoutePoint(latitude = ORIGIN_LATITUDE, longitude = ORIGIN_LONGITUDE)
+        val bend = RoutePoint(latitude = ORIGIN_LATITUDE, longitude = ORIGIN_LONGITUDE + 0.003)
+        val branch = RoutePoint(latitude = ORIGIN_LATITUDE + 0.002, longitude = ORIGIN_LONGITUDE + 0.006)
+        val destination = RoutePoint(latitude = ORIGIN_LATITUDE + 0.002, longitude = ORIGIN_LONGITUDE + 0.01)
+        return RouteDetail(
+            id = "route-branch-test",
+            origin = origin,
+            destination = destination,
+            intermediateWaypoints = persistentListOf(),
+            geometry = listOf(origin, bend, branch, destination).toImmutableList(),
+            distanceMeters = 1_000.0,
+            durationSeconds = 180.0,
+            steps = persistentListOf(),
+            tollFee = 0,
         )
     }
 
@@ -290,19 +454,24 @@ class ExtNavGuidanceTrackerTest {
         facilityHint = facilityKind?.let { kind -> GuidanceFacilityHint(kind = kind) },
     )
 
-    private fun locationAt(point: RoutePoint): UserLocation = UserLocation(
+    private fun locationAt(
+        point: RoutePoint,
+        speedMps: Float = 10f,
+    ): UserLocation = UserLocation(
         latitude = point.latitude,
         longitude = point.longitude,
         bearingDegrees = null,
-        speedMps = 10f,
+        speedMps = speedMps,
         accuracyMeters = 3f,
         timestampMillis = 1_000L,
-        elapsedRealtimeNanos = 1_000_000L,
+        elapsedRealtimeNanos = 0L,
     )
 
     /** テスト用の基準座標。 */
     private companion object {
         private const val ORIGIN_LATITUDE: Double = 35.0
         private const val ORIGIN_LONGITUDE: Double = 139.0
+        private const val ONE_SECOND_MILLIS: Long = 1_000L
+        private const val ONE_SECOND_NANOS: Long = 1_000_000_000L
     }
 }

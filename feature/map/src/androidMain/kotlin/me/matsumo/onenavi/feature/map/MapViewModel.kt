@@ -40,6 +40,7 @@ import me.matsumo.onenavi.core.model.SearchSuggestionItem
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuideImageGateway
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
+import me.matsumo.onenavi.core.navigation.newguidance.model.GpsSignalState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
@@ -99,6 +100,9 @@ class MapViewModel(
     /** Guidance 期の state machine を提供する ([GuidanceState])。 */
     val newGuidanceState: StateFlow<GuidanceState> = newGuidanceManager.state
 
+    /** Guidance 期の GPS signal state を提供する ([GpsSignalState])。 */
+    val gpsSignalState: StateFlow<GpsSignalState> = newGuidanceManager.gpsSignalState
+
     /** core 層で推定した表示用の自車速度。 */
     val vehicleSpeedState: StateFlow<VehicleSpeedState> = currentLocationDataSource.vehicleSpeedState
 
@@ -116,6 +120,7 @@ class MapViewModel(
         .flatMapLatest { guidanceState ->
             when (guidanceState) {
                 is GuidanceState.Guiding -> flowOf(GuidanceVehicleLocationSelector.select(guidanceState.progress))
+                is GuidanceState.Preparing -> flowOf(GuidanceVehicleLocationSelector.select(guidanceState.initialProgress))
                 GuidanceState.Arrived,
                 is GuidanceState.Failed,
                 GuidanceState.Idle,
@@ -787,6 +792,7 @@ private class UiEventDelegate(
     private fun currentNavigationRoute(): RouteDetail? {
         return when (val guidanceState = newGuidanceManager.state.value) {
             is GuidanceState.Guiding -> guidanceState.route
+            is GuidanceState.Preparing -> guidanceState.route
             is GuidanceState.Rerouting -> guidanceState.previousRoute
 
             GuidanceState.Arrived,
@@ -1076,6 +1082,11 @@ private class UiEventDelegate(
             is GuidanceState.Guiding -> guidanceState.route.toNavigationRouteSearchContext(
                 origin = guidanceState.progress.snappedLocation,
                 originDirectionDegrees = guidanceState.progress.bearingDegrees.toInt(),
+            )
+
+            is GuidanceState.Preparing -> guidanceState.route.toNavigationRouteSearchContext(
+                origin = guidanceState.initialProgress.snappedLocation,
+                originDirectionDegrees = guidanceState.initialProgress.bearingDegrees.toInt(),
             )
 
             is GuidanceState.Rerouting -> guidanceState.previousRoute.toNavigationRouteSearchContext(

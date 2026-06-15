@@ -20,6 +20,7 @@ import com.google.android.gms.maps.model.MarkerOptions
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.isActive
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.ic_vehicle_puck
 import me.matsumo.onenavi.feature.map.components.callout.rememberMapComposeBitmapDescriptor
@@ -57,6 +58,7 @@ internal fun MapVehiclePoseEffect(
         vehicleLocationState.location.latitude,
         vehicleLocationState.location.longitude,
     )
+    val markerAlpha = vehicleLocationState.vehiclePuckAlpha()
 
     DisposableEffect(googleMap, icon) {
         markerState.value = googleMap.addMarker(
@@ -78,6 +80,7 @@ internal fun MapVehiclePoseEffect(
     SideEffect {
         val marker = markerState.value ?: return@SideEffect
         marker.zIndex = zIndex
+        marker.alpha = markerAlpha
     }
 
     LaunchedEffect(vehicleLocationState, routeKey, routeGeometry) {
@@ -92,11 +95,12 @@ internal fun MapVehiclePoseEffect(
             estimator = estimator,
             marker = markerState.value,
             cameraState = cameraState,
+            markerAlpha = markerAlpha,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
         )
     }
 
-    LaunchedEffect(markerState.value, estimator, cameraState) {
+    LaunchedEffect(markerState.value, estimator, cameraState, markerAlpha) {
         while (isActive) {
             withFrameNanos { }
             val marker = markerState.value ?: continue
@@ -105,6 +109,7 @@ internal fun MapVehiclePoseEffect(
                 estimator = estimator,
                 marker = marker,
                 cameraState = cameraState,
+                markerAlpha = markerAlpha,
                 nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
             )
         }
@@ -148,19 +153,45 @@ private fun Marker.updatePose(pose: VehiclePose) {
  * @param estimator frame 時点の pose を推定する estimator
  * @param marker 自車 marker。未生成の場合は camera のみ更新する
  * @param cameraState 追従カメラ state
+ * @param markerAlpha 自車 marker に適用する透明度
  * @param nowElapsedRealtimeNanos 推定対象の monotonic clock 時刻
  */
 private fun updateEstimatedVehiclePose(
     estimator: VehiclePoseEstimator,
     marker: Marker?,
     cameraState: MapCameraState,
+    markerAlpha: Float,
     nowElapsedRealtimeNanos: Long,
 ) {
     val pose = estimator.estimate(nowElapsedRealtimeNanos) ?: return
 
+    marker?.alpha = markerAlpha
     marker?.updatePose(pose)
     cameraState.updateVehiclePose(pose)
 }
 
+/**
+ * 自車 marker に適用する透明度を返す。
+ *
+ * @return 推定位置または初期位置の場合は半透明、それ以外は通常表示
+ */
+private fun VehicleLocationState.vehiclePuckAlpha(): Float {
+    return when (positionSource) {
+        VehiclePositionSource.DEAD_RECKONING,
+        VehiclePositionSource.INITIAL,
+        -> ESTIMATED_VEHICLE_PUCK_ALPHA
+
+        VehiclePositionSource.OBSERVED,
+        null,
+        -> OBSERVED_VEHICLE_PUCK_ALPHA
+    }
+}
+
 /** 自車アイコンの表示サイズ。 */
 private val VEHICLE_PUCK_SIZE = 64.dp
+
+/** 実測中の自車 marker 透明度。 */
+private const val OBSERVED_VEHICLE_PUCK_ALPHA = 1f
+
+/** 推定中の自車 marker 透明度。 */
+private const val ESTIMATED_VEHICLE_PUCK_ALPHA = 0.58f

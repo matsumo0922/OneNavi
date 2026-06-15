@@ -34,6 +34,7 @@ internal fun MapNavigationSpeedRow(
     displaySpeedKmh: Int?,
     speedLimitKmh: Int?,
     modifier: Modifier = Modifier,
+    isEstimated: Boolean = false,
 ) {
     Row(
         modifier = modifier,
@@ -48,6 +49,7 @@ internal fun MapNavigationSpeedRow(
 
         MapNavigationCurrentSpeedColumn(
             displaySpeedKmh = displaySpeedKmh,
+            isEstimated = isEstimated,
         )
     }
 }
@@ -56,6 +58,7 @@ internal fun MapNavigationSpeedRow(
 private fun MapNavigationCurrentSpeedColumn(
     displaySpeedKmh: Int?,
     modifier: Modifier = Modifier,
+    isEstimated: Boolean = false,
 ) {
     val contentDescription = if (displaySpeedKmh != null) {
         stringResource(Res.string.home_map_navigation_current_speed_content_description, displaySpeedKmh)
@@ -80,7 +83,7 @@ private fun MapNavigationCurrentSpeedColumn(
         )
 
         Text(
-            text = SPEED_LABEL,
+            text = if (isEstimated) ESTIMATED_SPEED_LABEL else SPEED_LABEL,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.End,
@@ -130,6 +133,9 @@ private const val SPEED_UNIT_KM = "km/h"
 
 /** 速度表示の補助ラベル。 */
 private const val SPEED_LABEL = "speed"
+
+/** 推定速度表示の補助ラベル。 */
+private const val ESTIMATED_SPEED_LABEL = "推定"
 
 /** 制限速度標識のサイズ。 */
 private val SpeedLimitSignSize = 48.dp

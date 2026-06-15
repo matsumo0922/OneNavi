@@ -8,6 +8,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePrese
  * Guidance 期 (案内中) の状態。
  *
  * - [Idle]: 案内停止中 / Preview の前後
+ * - [Preparing]: 案内開始準備中
  * - [Guiding]: 通常案内中
  * - [Rerouting]: 逸脱検知 → 外部ナビ API ライブラリで再探索中
  * - [Arrived]: 目的地到達
@@ -18,6 +19,18 @@ sealed interface GuidanceState {
 
     /** 案内停止中 / Preview の前後。 */
     data object Idle : GuidanceState
+
+    /**
+     * 案内開始準備中。
+     *
+     * @param route 準備中のルート
+     * @param initialProgress 準備中に UI が読む初期進捗
+     */
+    @Immutable
+    data class Preparing(
+        val route: RouteDetail,
+        val initialProgress: GuidanceProgress,
+    ) : GuidanceState
 
     /**
      * 通常案内中。

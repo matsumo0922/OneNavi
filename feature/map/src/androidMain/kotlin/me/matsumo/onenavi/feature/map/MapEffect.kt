@@ -718,6 +718,7 @@ private data class GuidanceOverlayRoute(
  */
 private fun GuidanceState.routeForMapOverlay(): GuidanceOverlayRoute? = when (this) {
     is GuidanceState.Guiding -> GuidanceOverlayRoute(route = route)
+    is GuidanceState.Preparing -> GuidanceOverlayRoute(route = route)
     is GuidanceState.Rerouting -> GuidanceOverlayRoute(route = previousRoute)
     GuidanceState.Arrived,
     is GuidanceState.Failed,

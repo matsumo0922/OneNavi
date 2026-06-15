@@ -26,7 +26,10 @@ import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationEventHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import me.matsumo.onenavi.core.datasource.location.VehicleSpeedState
+import me.matsumo.onenavi.core.navigation.newguidance.model.GpsSignalState
+import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_cancel
@@ -57,6 +60,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun MapNavigationContent(
     guidanceState: GuidanceState,
+    gpsSignalState: GpsSignalState,
     vehicleSpeedState: VehicleSpeedState,
     navigationGuideImage: NavigationGuideImage?,
     overlayState: MapOverlayState,
@@ -70,11 +74,12 @@ internal fun MapNavigationContent(
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     var showCancelDialog by remember { mutableStateOf(false) }
     val guiding = guidanceState as? GuidanceState.Guiding
+    val preparing = guidanceState as? GuidanceState.Preparing
     val rerouting = guidanceState as? GuidanceState.Rerouting
     val banner = guiding?.presentation?.banner
     val shouldShowTopPanel = (guiding != null && banner != null) || rerouting != null
-    val etaRoute = guiding?.route ?: rerouting?.previousRoute
-    val etaProgress = guiding?.progress ?: rerouting?.previousProgress
+    val etaRoute = guiding?.route ?: preparing?.route ?: rerouting?.previousRoute
+    val etaProgress = guiding?.progress ?: preparing?.initialProgress ?: rerouting?.previousProgress
     val addWaypointSearchResults = overlayState as? MapOverlayState.AddWaypointSearchResults
     val addWaypointSelected = overlayState as? MapOverlayState.AddWaypointSelected
     val addWaypointAlternatives = overlayState as? MapOverlayState.AddWaypointAlternatives
@@ -281,7 +286,8 @@ internal fun MapNavigationContent(
                         modifier = Modifier.fillMaxWidth(),
                         progress = etaProgress,
                         congestionSegments = etaRoute.congestionSegments,
-                        displaySpeedKmh = vehicleSpeedState.displaySpeedKmh,
+                        gpsSignalState = gpsSignalState,
+                        displaySpeedKmh = etaProgress.displaySpeedKmh(vehicleSpeedState),
                         speedLimitKmh = etaProgress.currentSpeedLimitKmh,
                         onCloseClicked = ::cancelNavigation,
                         onAlternativesClicked = {
@@ -311,6 +317,21 @@ internal fun MapNavigationContent(
         )
     }
 }
+
+private fun GuidanceProgress.displaySpeedKmh(
+    vehicleSpeedState: VehicleSpeedState,
+): Int? {
+    if (positionSource == VehiclePositionSource.DEAD_RECKONING) {
+        return vehicleSpeedMps
+            ?.takeIf { speedMps -> speedMps.isFinite() }
+            ?.let { speedMps -> (speedMps * METRES_PER_SECOND_TO_KILOMETRES_PER_HOUR).toInt() }
+    }
+
+    return vehicleSpeedState.displaySpeedKmh
+}
+
+/** m/s を km/h へ変換する係数。 */
+private const val METRES_PER_SECOND_TO_KILOMETRES_PER_HOUR = 3.6f
 
 /** 分割レイアウトで下部 overlay カードへ最低限確保する高さ。 */
 private val MAP_NAVIGATION_SPLIT_BOTTOM_CARD_MIN_HEIGHT = 240.dp

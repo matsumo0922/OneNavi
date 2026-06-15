@@ -152,6 +152,7 @@ class VehicleLocationStabilizerTest {
         routeProgressMeters = null,
         source = source,
         routeMatchState = null,
+        positionSource = null,
         projectionErrorMeters = null,
     )
 

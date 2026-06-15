@@ -1,0 +1,4 @@
+{
+  "title": "GPS outage / DR navigation",
+  "description": "トンネル内の測位低下時に、GPS 低下バッジ・推定速度・推定中の自車表現を確認する案。"
+}

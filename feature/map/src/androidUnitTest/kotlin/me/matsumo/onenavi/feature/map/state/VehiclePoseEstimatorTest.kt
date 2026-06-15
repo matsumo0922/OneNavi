@@ -155,6 +155,7 @@ class VehiclePoseEstimatorTest {
             VehicleLocationSource.ROUTE_SNAPPED
         },
         routeMatchState = null,
+        positionSource = null,
         projectionErrorMeters = null,
     )
 

@@ -1,16 +1,26 @@
 package me.matsumo.onenavi.core.navigation.newguidance
 
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import me.matsumo.drive.supporter.api.guidance.domain.DsrRouteSummary
+import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
+import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavRoutePayload
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavTunnelSegment
+import me.matsumo.onenavi.core.navigation.extnav.TunnelMapStatus
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -20,17 +30,20 @@ import kotlin.test.assertIs
  */
 class NewGuidanceManagerTest {
 
-    private val manager = NewGuidanceManager()
-
     @Test
     fun `初期状態は Idle`() {
+        val manager = NewGuidanceManager()
+
         assertEquals(GuidanceState.Idle, manager.state.value)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun `startGuidance で Guiding になる`() {
+    fun `startGuidance で Guiding になる`() = runTest {
+        val manager = NewGuidanceManager(scope = this)
         val route = buildRoute()
         manager.startGuidance(route = route)
+        runCurrent()
 
         val state = assertIs<GuidanceState.Guiding>(manager.state.value)
         assertEquals(route, state.route)
@@ -39,9 +52,12 @@ class NewGuidanceManagerTest {
         assertEquals(route.origin, state.progress.snappedLocation)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun `stopGuidance で Idle に戻る`() {
+    fun `stopGuidance で Idle に戻る`() = runTest {
+        val manager = NewGuidanceManager(scope = this)
         manager.startGuidance(route = buildRoute())
+        runCurrent()
         manager.stopGuidance()
 
         assertEquals(GuidanceState.Idle, manager.state.value)
@@ -50,6 +66,7 @@ class NewGuidanceManagerTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `stopGuidance で停止イベントを通知する`() = runTest {
+        val manager = NewGuidanceManager(scope = this)
         val events = mutableListOf<GuidanceEvent>()
         val collectJob = launch {
             manager.events
@@ -67,10 +84,66 @@ class NewGuidanceManagerTest {
 
     @Test
     fun `release は二重呼び出しでも例外にならない`() {
+        val manager = NewGuidanceManager()
+
         manager.release()
         manager.release()
 
         assertEquals(GuidanceState.Idle, manager.state.value)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `DR snapshot だけでは目的地到着と経由地通過を確定しない`() = runTest {
+        val route = buildShortRouteWithWaypoint()
+        val routeRegistry = ExtNavRouteRegistry()
+        val tracker = ExtNavGuidanceTracker()
+        routeRegistry.put(
+            ExtNavRoutePayload(
+                id = route.id,
+                routeGuidance = buildRouteGuidance(),
+            ),
+        )
+        val manager = NewGuidanceManager(
+            routeRegistry = routeRegistry,
+            guidanceTracker = tracker,
+            tunnelSegmentProvider = {
+                TunnelMapStatus.Ready(
+                    segments = listOf(
+                        ExtNavTunnelSegment(
+                            startGeometryMeters = 0.0,
+                            endGeometryMeters = 500.0,
+                        ),
+                    ).toImmutableList(),
+                )
+            },
+            scope = this,
+        )
+        val events = mutableListOf<GuidanceEvent>()
+        val eventJob = launch {
+            manager.events
+                .take(1)
+                .toList(events)
+        }
+
+        manager.startGuidance(route = route)
+        runCurrent()
+        tracker.onLocation(locationAt(route.origin, speedMps = 30f))
+        runCurrent()
+        tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = 10L * NANOS_PER_SECOND,
+            nowWallClockMillis = 10L * MILLIS_PER_SECOND,
+        )
+        runCurrent()
+
+        val state = assertIs<GuidanceState.Guiding>(manager.state.value)
+        assertEquals(route.intermediateWaypoints, state.route.intermediateWaypoints)
+        assertEquals(VehiclePositionSource.DEAD_RECKONING, state.progress.positionSource)
+        assertEquals(emptyList(), events)
+
+        eventJob.cancel()
+        manager.stopGuidance()
+        runCurrent()
     }
 
     private fun buildRoute(): RouteDetail {
@@ -86,5 +159,61 @@ class NewGuidanceManagerTest {
             durationSeconds = 600.0,
             steps = persistentListOf(),
         )
+    }
+
+    private fun buildShortRouteWithWaypoint(): RouteDetail {
+        val origin = RoutePoint(latitude = 35.0, longitude = 139.0)
+        val waypoint = RoutePoint(latitude = 35.0, longitude = 139.0005)
+        val destination = RoutePoint(latitude = 35.0, longitude = 139.001)
+        return RouteDetail(
+            id = "route-short",
+            origin = origin,
+            destination = destination,
+            intermediateWaypoints = persistentListOf(waypoint),
+            geometry = listOf(origin, waypoint, destination).toImmutableList(),
+            distanceMeters = 100.0,
+            durationSeconds = 30.0,
+            steps = persistentListOf(),
+        )
+    }
+
+    private fun buildRouteGuidance(): RouteGuidance = RouteGuidance(
+        index = 1,
+        priority = null,
+        summary = DsrRouteSummary(
+            depth = 0,
+            distanceMetres = 100,
+            timeSeconds = 30,
+            fuelLitres = 0f,
+            tollYen = 0,
+            tollDetails = persistentListOf(),
+            streets = persistentListOf(),
+            priority = 0,
+            trafficCongestionAvoidanceRate = 0f,
+        ),
+        guidancePoints = persistentListOf(),
+        intersections = persistentListOf(),
+        imageIds = persistentListOf(),
+        polyline = persistentListOf(),
+        speedLimitSegments = persistentListOf(),
+    )
+
+    private fun locationAt(point: RoutePoint, speedMps: Float): UserLocation = UserLocation(
+        latitude = point.latitude,
+        longitude = point.longitude,
+        bearingDegrees = null,
+        speedMps = speedMps,
+        accuracyMeters = 3f,
+        timestampMillis = 0L,
+        elapsedRealtimeNanos = 0L,
+    )
+
+    private companion object {
+
+        /** 1 秒をミリ秒へ変換する係数。 */
+        private const val MILLIS_PER_SECOND = 1_000L
+
+        /** 1 秒をナノ秒へ変換する係数。 */
+        private const val NANOS_PER_SECOND = 1_000_000_000L
     }
 }
