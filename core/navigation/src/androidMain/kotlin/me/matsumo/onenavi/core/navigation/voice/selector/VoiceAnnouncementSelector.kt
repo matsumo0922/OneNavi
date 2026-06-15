@@ -210,6 +210,9 @@ internal class VoiceAnnouncementSelector(
      * グループに具体テンプレートの候補と汎用テンプレートの候補が同時に発話可能なときは汎用候補を避ける
      * ([applyGenericAvoidance]、外部ナビ API 参照実装の汎用回避)。FINAL が同 tick で発話可能になった場合は
      * 緊急度比較で最緊急 (= FINAL) を採用する。
+     *
+     * 同一案内地点で FINAL が発話済みになった後は、残っている MIDDLE 段を候補化しない ([isFinalAnnounced])。
+     * 高速走行で FINAL 発火境界が MIDDLE 窓内に食い込んだ tick 以降に MIDDLE が後追いで鳴るのを抑止する。
      */
     private fun selectStageForTarget(
         plan: VoiceAnnouncementPlan,
@@ -218,6 +221,8 @@ internal class VoiceAnnouncementSelector(
         tick: VoiceTick,
         state: VoiceAnnouncementSpeechState,
     ): VoiceAnnouncementSelection? {
+        if (isFinalAnnounced(target, state)) return null
+
         val consumedGroupKeys = consumedGroupKeysOf(target, state)
         val speakableStages = speakableStagesOf(target, tick, state, consumedGroupKeys)
         val routeOrderedStages = speakableStages.filter { stage ->
@@ -283,6 +288,9 @@ internal class VoiceAnnouncementSelector(
 
     /**
      * debug preview 用に route 順ゲートを表示状態へ残したまま、target 内の候補 stage を選ぶ。
+     *
+     * 実発話と挙動を揃えるため、FINAL 発話済みの target は preview からも除外する ([isFinalAnnounced])。
+     * preview が逆転した MIDDLE を表示し続けると画面上の情報が実発話と乖離するため。
      */
     private fun selectPreviewStageForTarget(
         targetIndex: Int,
@@ -290,6 +298,8 @@ internal class VoiceAnnouncementSelector(
         tick: VoiceTick,
         state: VoiceAnnouncementSpeechState,
     ): VoiceAnnouncementSelection? {
+        if (isFinalAnnounced(target, state)) return null
+
         val consumedGroupKeys = consumedGroupKeysOf(target, state)
         val speakableStages = speakableStagesOf(target, tick, state, consumedGroupKeys)
         val preferredStages = applyGenericAvoidance(speakableStages)
@@ -509,6 +519,31 @@ internal class VoiceAnnouncementSelector(
         .filter { stage -> state.isStageFired(stage.id) }
         .map { stage -> stage.groupKey }
         .toSet()
+
+    /**
+     * 同一案内地点で FINAL 種別の段が発話済みか、その groupKey が消費済みかを返す。
+     *
+     * 高速走行時に FINAL 発火境界が MIDDLE 距離窓内に食い込んだ後、次 tick 以降に同地点の MIDDLE が
+     * 後追いで選抜されるのを防ぐための地点内ゲート。FINAL が発話確定済み ([VoiceAnnouncementSpeechState.isStageFired])
+     * の場合に加え、FINAL と同一 groupKey の別段が先に消費された場合も FINAL 発話済みと同等に扱う
+     * (グループ消費で FINAL 自身が fired にならないケースも地点区切りとして扱う)。
+     *
+     * FINAL 発話**前**の通常の MIDDLE 予告には影響しない。このヘルパは FINAL が確定済みの場合のみ true を返す。
+     */
+    private fun isFinalAnnounced(
+        target: AnnouncementTarget,
+        state: VoiceAnnouncementSpeechState,
+    ): Boolean {
+        val consumedGroupKeys = consumedGroupKeysOf(target, state)
+
+        return target.stages.any { stage ->
+            val isFinalKind = stage.kind == AnnouncementStageKind.FINAL
+            val isFired = state.isStageFired(stage.id)
+            val isGroupConsumed = stage.groupKey in consumedGroupKeys
+
+            isFinalKind && (isFired || isGroupConsumed)
+        }
+    }
 
     /**
      * 2 候補のうち緊急度が高い方を返す。null は「候補なし」を表す。
