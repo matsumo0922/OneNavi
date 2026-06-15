@@ -2,6 +2,7 @@ package me.matsumo.onenavi.core.navigation.newguidance
 
 import io.github.aakira.napier.Napier
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,7 +25,10 @@ import me.matsumo.onenavi.core.repository.RouteRepository
 class NewRouteManager(
     private val routeRepository: RouteRepository,
 ) {
+    private val searchGenerationLock = Any()
     private val _state = MutableStateFlow<RoutePreviewState>(RoutePreviewState.Idle)
+    private var latestSearchGeneration = INITIAL_SEARCH_GENERATION
+
     val state: StateFlow<RoutePreviewState> = _state.asStateFlow()
 
     /**
@@ -32,38 +36,49 @@ class NewRouteManager(
      *
      * [waypoints] の先頭が origin、末尾が destination、間の要素は intermediate 経由地として扱う。
      * 探索中は [RoutePreviewState.Searching]、完了で [RoutePreviewState.Ready]、失敗で
-     * [RoutePreviewState.Failed] に遷移する。
+     * [RoutePreviewState.Failed] に遷移する。より新しい探索に追い越された場合は state を更新せず
+     * null を返す。
+     *
+     * @return この呼び出しの探索結果。より新しい探索に追い越された場合は null
      */
-    suspend fun searchRoutes(waypoints: List<RouteWaypoint>) {
+    suspend fun searchRoutes(waypoints: List<RouteWaypoint>): RoutePreviewState? {
         require(waypoints.size >= 2) {
             "waypoints must contain at least origin and destination (size=${waypoints.size})"
         }
 
+        val searchGeneration = nextSearchGeneration()
         _state.value = RoutePreviewState.Searching
 
         val origin = waypoints.first().toRoutePoint()
         val destination = waypoints.last().toRoutePoint()
         val intermediates = waypoints.subList(1, waypoints.lastIndex).map { it.toRoutePoint() }
 
-        runCatching {
-            searchRouteDetails(
+        return try {
+            val routes = searchRouteDetails(
                 origin = origin,
                 destination = destination,
                 intermediatePoints = intermediates,
                 originDirectionDegrees = null,
             ).withRouteWaypoints(waypoints)
+            if (!isLatestSearchGeneration(searchGeneration)) return null
+
+            Napier.i(tag = TAG) { "searchRoutes ready: routes=${routes.size}" }
+            RoutePreviewState.Ready(
+                routes = routes.toImmutableList(),
+                selectedIndex = 0,
+            ).also { readyState ->
+                _state.value = readyState
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            if (!isLatestSearchGeneration(searchGeneration)) return null
+
+            Napier.w(tag = TAG, throwable = error) { "searchRoutes failed" }
+            RoutePreviewState.Failed(error).also { failedState ->
+                _state.value = failedState
+            }
         }
-            .onSuccess { routes ->
-                Napier.i(tag = TAG) { "searchRoutes ready: routes=${routes.size}" }
-                _state.value = RoutePreviewState.Ready(
-                    routes = routes.toImmutableList(),
-                    selectedIndex = 0,
-                )
-            }
-            .onFailure { error ->
-                Napier.w(tag = TAG, throwable = error) { "searchRoutes failed" }
-                _state.value = RoutePreviewState.Failed(error)
-            }
     }
 
     /**
@@ -79,24 +94,22 @@ class NewRouteManager(
         routeWaypoints: List<RouteWaypoint> = emptyList(),
         originDirectionDegrees: Int? = null,
     ): RoutePreviewState {
-        return runCatching {
-            searchRouteDetails(
+        return try {
+            val routes = searchRouteDetails(
                 origin = origin,
                 destination = destination,
                 intermediatePoints = intermediatePoints,
                 originDirectionDegrees = originDirectionDegrees,
             ).withRouteWaypoints(routeWaypoints)
-        }.fold(
-            onSuccess = { routes ->
-                RoutePreviewState.Ready(
-                    routes = routes.toImmutableList(),
-                    selectedIndex = 0,
-                )
-            },
-            onFailure = { error ->
-                RoutePreviewState.Failed(error)
-            },
-        )
+            RoutePreviewState.Ready(
+                routes = routes.toImmutableList(),
+                selectedIndex = 0,
+            )
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            RoutePreviewState.Failed(error)
+        }
     }
 
     /**
@@ -152,7 +165,27 @@ class NewRouteManager(
         longitude = longitude,
     )
 
+    private fun nextSearchGeneration(): Long {
+        return synchronized(searchGenerationLock) {
+            latestSearchGeneration += SEARCH_GENERATION_INCREMENT
+            latestSearchGeneration
+        }
+    }
+
+    private fun isLatestSearchGeneration(searchGeneration: Long): Boolean {
+        return synchronized(searchGenerationLock) {
+            latestSearchGeneration == searchGeneration
+        }
+    }
+
     private companion object {
+        /** 最初の探索世代。 */
+        const val INITIAL_SEARCH_GENERATION = 0L
+
+        /** 探索世代の加算値。 */
+        const val SEARCH_GENERATION_INCREMENT = 1L
+
+        /** ログ出力用タグ。 */
         const val TAG = "NewRouteManager"
     }
 }

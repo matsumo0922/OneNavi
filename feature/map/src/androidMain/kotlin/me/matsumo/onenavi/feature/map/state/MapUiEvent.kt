@@ -3,6 +3,7 @@ package me.matsumo.onenavi.feature.map.state
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.unit.Dp
 import kotlinx.collections.immutable.ImmutableList
+import me.matsumo.onenavi.core.common.car.AssistantNavCoordinate
 import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
@@ -44,6 +45,24 @@ sealed interface MapUiEvent {
         val item: SearchResultItem,
         val latitude: Double?,
         val longitude: Double?,
+    ) : MapUiEvent
+
+    /** アシスタント要求から目的地を設定し、案内を自動開始する。 */
+    data class OnAssistantNavigateTo(
+        val query: String?,
+        val coordinate: AssistantNavCoordinate?,
+    ) : MapUiEvent
+
+    /** アシスタント要求から目的地のルートプレビューを表示する。 */
+    data class OnAssistantPreviewRoute(
+        val query: String?,
+        val coordinate: AssistantNavCoordinate?,
+    ) : MapUiEvent
+
+    /** アシスタント要求から経由地を追加する。 */
+    data class OnAssistantAddStop(
+        val query: String?,
+        val coordinate: AssistantNavCoordinate?,
     ) : MapUiEvent
 
     /** 地点詳細の選択地点を現在のルート文脈へ経由地として追加する。 */

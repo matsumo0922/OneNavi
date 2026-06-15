@@ -2,6 +2,11 @@ package me.matsumo.onenavi.core.navigation.newguidance
 
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.model.RouteDetail
@@ -15,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -50,8 +56,9 @@ class NewRouteManagerTest {
     fun `searchRoutes 成功で Ready になる`() = runTest {
         fakeDataSource.nextResult = Result.success(listOf(buildRouteResult()))
 
-        manager.searchRoutes(waypoints = defaultWaypoints)
+        val result = manager.searchRoutes(waypoints = defaultWaypoints)
 
+        assertIs<RoutePreviewState.Ready>(result)
         val state = assertIs<RoutePreviewState.Ready>(manager.state.value)
         assertEquals(1, state.routes.size)
         assertEquals(0, state.selectedIndex)
@@ -119,10 +126,72 @@ class NewRouteManagerTest {
         val cause = IllegalStateException("offline")
         fakeDataSource.nextResult = Result.failure(cause)
 
-        manager.searchRoutes(waypoints = defaultWaypoints)
+        val result = manager.searchRoutes(waypoints = defaultWaypoints)
 
+        assertIs<RoutePreviewState.Failed>(result)
         val state = assertIs<RoutePreviewState.Failed>(manager.state.value)
         assertSame(cause, state.error)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `古い searchRoutes は新しい探索に追い越されたら state を更新せず null を返す`() = runTest {
+        val firstResult = CompletableDeferred<Result<List<RouteResult>>>()
+        val secondResult = CompletableDeferred<Result<List<RouteResult>>>()
+        val latestDestination = RouteWaypoint.Place(
+            name = "latest",
+            latitude = 36.0,
+            longitude = 140.0,
+        )
+        val latestWaypoints = listOf(originWaypoint, latestDestination)
+        fakeDataSource.enqueueResult(firstResult)
+        fakeDataSource.enqueueResult(secondResult)
+
+        val firstSearch = async {
+            manager.searchRoutes(waypoints = defaultWaypoints)
+        }
+        runCurrent()
+        val secondSearch = async {
+            manager.searchRoutes(waypoints = latestWaypoints)
+        }
+        runCurrent()
+
+        secondResult.complete(Result.success(listOf(buildRouteResult())))
+        val secondState = assertIs<RoutePreviewState.Ready>(secondSearch.await())
+        firstResult.complete(Result.success(listOf(buildRouteResult())))
+
+        assertNull(firstSearch.await())
+        assertEquals(latestWaypoints.toImmutableList(), secondState.selectedRoute.routeWaypoints)
+        val managerState = assertIs<RoutePreviewState.Ready>(manager.state.value)
+        assertEquals(latestWaypoints.toImmutableList(), managerState.selectedRoute.routeWaypoints)
+    }
+
+    @Test
+    fun `searchRoutes は CancellationException を Failed にせず再送出する`() = runTest {
+        val cancellation = CancellationException("cancelled")
+        fakeDataSource.nextResult = Result.failure(cancellation)
+
+        val thrown = assertFailsWith<CancellationException> {
+            manager.searchRoutes(waypoints = defaultWaypoints)
+        }
+
+        assertSame(cancellation, thrown)
+        assertIs<RoutePreviewState.Searching>(manager.state.value)
+    }
+
+    @Test
+    fun `searchRoutePreview は CancellationException を再送出する`() = runTest {
+        val cancellation = CancellationException("cancelled")
+        fakeDataSource.nextResult = Result.failure(cancellation)
+
+        val thrown = assertFailsWith<CancellationException> {
+            manager.searchRoutePreview(
+                origin = origin,
+                destination = destination,
+            )
+        }
+
+        assertSame(cancellation, thrown)
     }
 
     @Test
@@ -201,6 +270,11 @@ private class FakeRouteDataSource : RouteDataSource {
         private set
     var lastOriginDirectionDegrees: Int? = null
         private set
+    private val queuedResults = ArrayDeque<CompletableDeferred<Result<List<RouteResult>>>>()
+
+    fun enqueueResult(result: CompletableDeferred<Result<List<RouteResult>>>) {
+        queuedResults += result
+    }
 
     override suspend fun searchRoutes(
         originLatitude: Double,
@@ -212,6 +286,15 @@ private class FakeRouteDataSource : RouteDataSource {
     ): Result<List<RouteResult>> {
         lastIntermediateWaypoints = intermediateWaypoints
         lastOriginDirectionDegrees = originDirectionDegrees
+        val queuedResult = if (queuedResults.isEmpty()) {
+            null
+        } else {
+            queuedResults.removeFirst()
+        }
+        if (queuedResult != null) {
+            return queuedResult.await()
+        }
+
         return nextResult
     }
 }

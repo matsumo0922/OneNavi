@@ -103,7 +103,7 @@ fun MapScreen(
     val vehicleLocationState by viewModel.vehicleLocationState.collectAsStateWithLifecycle()
     val vehicleSpeedState by viewModel.vehicleSpeedState.collectAsStateWithLifecycle()
     val ttsScheduleDebugSnapshot by viewModel.ttsDebugSnapshot.collectAsStateWithLifecycle()
-    val phoneCommand by carPhoneSessionCoordinator.phoneCommand.collectAsStateWithLifecycle()
+    val phoneCommands by carPhoneSessionCoordinator.phoneCommands.collectAsStateWithLifecycle()
 
     val mapHostViewport = LocalMapHostViewport.current
     val hostStableInsets = mapHostViewport.stableInsets
@@ -143,17 +143,10 @@ fun MapScreen(
     val visibleTtsDebugSnapshot = ttsScheduleDebugSnapshot.takeIf { shouldShowTtsDebugCard }
     val isNavigating = screenState is MapScreenState.Navigating
     val isAndroidAutoVirtualDisplay = displaySurface == OneNaviDisplaySurface.AndroidAutoVirtualDisplay
-    val isPhoneDisplaySurface = displaySurface == OneNaviDisplaySurface.Phone
-    val destinationSearchRequestId = if (isPhoneDisplaySurface) {
-        phoneCommand?.destinationSearchRequestId()
-    } else {
-        null
-    }
-    val addWaypointSearchRequestId = if (isPhoneDisplaySurface) {
-        phoneCommand?.addWaypointSearchRequestId()
-    } else {
-        null
-    }
+    val currentCommandEnvelope = phoneCommands[displaySurface]
+    val assistantCommandEnvelope = currentCommandEnvelope?.assistantCommandEnvelope()
+    val destinationSearchRequestId = currentCommandEnvelope?.destinationSearchRequestId()
+    val addWaypointSearchRequestId = currentCommandEnvelope?.addWaypointSearchRequestId()
     val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
     val topAppBarHeightDp = with(density) { uiState.topAppBarHeight.toDp() }
     val waypointSearchOverlay = uiState.overlayState as? MapOverlayState.WaypointSearch
@@ -215,8 +208,16 @@ fun MapScreen(
     LaunchedEffect(addWaypointSearchRequestId, shouldConsumeAddWaypointSearchRequest) {
         val requestId = addWaypointSearchRequestId ?: return@LaunchedEffect
         if (shouldConsumeAddWaypointSearchRequest) {
-            carPhoneSessionCoordinator.consumePhoneCommand(requestId)
+            carPhoneSessionCoordinator.consumePhoneCommand(displaySurface, requestId)
         }
+    }
+
+    LaunchedEffect(assistantCommandEnvelope?.id) {
+        val envelope = assistantCommandEnvelope ?: return@LaunchedEffect
+        val event = envelope.command.toMapUiEvent(vehicleLocationState) ?: return@LaunchedEffect
+
+        viewModel.onUiEvent(event)
+        carPhoneSessionCoordinator.consumePhoneCommand(displaySurface, envelope.id)
     }
 
     LaunchedEffect(guidanceState, isAndroidAutoVirtualDisplay, screenState) {
@@ -308,7 +309,9 @@ fun MapScreen(
                 scaffoldState = scaffoldState,
                 destinationSearchRequestId = destinationSearchRequestId,
                 usePhoneAddWaypointSearch = isAndroidAutoVirtualDisplay,
-                onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
+                onDestinationSearchRequestConsumed = { requestId ->
+                    carPhoneSessionCoordinator.consumePhoneCommand(displaySurface, requestId)
+                },
                 onMapUpdate = { googleMap = it },
                 onPointOfInterestClicked = { pointOfInterest ->
                     viewModel.onUiEvent(pointOfInterest.toMapPointOfInterestSelectedEvent())
@@ -348,7 +351,9 @@ fun MapScreen(
                 scaffoldState = scaffoldState,
                 destinationSearchRequestId = destinationSearchRequestId,
                 usePhoneAddWaypointSearch = isAndroidAutoVirtualDisplay,
-                onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
+                onDestinationSearchRequestConsumed = { requestId ->
+                    carPhoneSessionCoordinator.consumePhoneCommand(displaySurface, requestId)
+                },
                 onMapUpdate = { googleMap = it },
                 onPointOfInterestClicked = { pointOfInterest ->
                     viewModel.onUiEvent(pointOfInterest.toMapPointOfInterestSelectedEvent())
@@ -1036,6 +1041,10 @@ private fun CarPhoneSessionCommandEnvelope.destinationSearchRequestId(): Long? {
     return when (command) {
         CarPhoneSessionCommand.OpenDestinationSearch -> id
         CarPhoneSessionCommand.OpenAddWaypointSearch -> null
+        is CarPhoneSessionCommand.AddStop -> null
+        is CarPhoneSessionCommand.NavigateTo -> null
+        is CarPhoneSessionCommand.PreviewRoute -> null
+        is CarPhoneSessionCommand.SearchPlaces -> null
     }
 }
 
@@ -1043,6 +1052,42 @@ private fun CarPhoneSessionCommandEnvelope.addWaypointSearchRequestId(): Long? {
     return when (command) {
         CarPhoneSessionCommand.OpenAddWaypointSearch -> id
         CarPhoneSessionCommand.OpenDestinationSearch -> null
+        is CarPhoneSessionCommand.AddStop -> null
+        is CarPhoneSessionCommand.NavigateTo -> null
+        is CarPhoneSessionCommand.PreviewRoute -> null
+        is CarPhoneSessionCommand.SearchPlaces -> null
+    }
+}
+
+private fun CarPhoneSessionCommandEnvelope.assistantCommandEnvelope(): CarPhoneSessionCommandEnvelope? {
+    return when (command) {
+        is CarPhoneSessionCommand.AddStop,
+        is CarPhoneSessionCommand.NavigateTo,
+        is CarPhoneSessionCommand.PreviewRoute,
+        is CarPhoneSessionCommand.SearchPlaces,
+        -> this
+
+        CarPhoneSessionCommand.OpenAddWaypointSearch,
+        CarPhoneSessionCommand.OpenDestinationSearch,
+        -> null
+    }
+}
+
+private fun CarPhoneSessionCommand.toMapUiEvent(vehicleLocationState: VehicleLocationState?): MapUiEvent? {
+    val location = vehicleLocationState?.location
+    return when (this) {
+        is CarPhoneSessionCommand.AddStop -> MapUiEvent.OnAssistantAddStop(query, coordinate)
+        is CarPhoneSessionCommand.NavigateTo -> MapUiEvent.OnAssistantNavigateTo(query, coordinate)
+        is CarPhoneSessionCommand.PreviewRoute -> MapUiEvent.OnAssistantPreviewRoute(query, coordinate)
+        is CarPhoneSessionCommand.SearchPlaces -> MapUiEvent.OnSearch(
+            query = query,
+            latitude = location?.latitude,
+            longitude = location?.longitude,
+        )
+
+        CarPhoneSessionCommand.OpenAddWaypointSearch,
+        CarPhoneSessionCommand.OpenDestinationSearch,
+        -> null
     }
 }
 
