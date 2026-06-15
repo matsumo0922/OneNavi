@@ -316,6 +316,8 @@ private class UiEventDelegate(
             is MapUiEvent.OnAddWaypointAlternativesClicked -> handleAddWaypointAlternativesClicked()
             MapUiEvent.OnPhoneDestinationSearchClicked -> handlePhoneDestinationSearchClicked()
             MapUiEvent.OnPhoneDestinationSearchRequested -> handlePhoneDestinationSearchRequested()
+            MapUiEvent.OnPhoneAddWaypointSearchClicked -> handlePhoneAddWaypointSearchClicked()
+            MapUiEvent.OnPhoneAddWaypointSearchRequested -> handlePhoneAddWaypointSearchRequested()
             MapUiEvent.OnSharedGuidanceStarted -> handleSharedGuidanceStarted()
             is MapUiEvent.OnWaypointSearchDismissed -> handleWaypointSearchDismissed()
             is MapUiEvent.OnWaypointEditResultConsumed -> handleWaypointEditResultConsumed()
@@ -996,6 +998,13 @@ private class UiEventDelegate(
             }
     }
 
+    private fun handlePhoneAddWaypointSearchClicked() {
+        phoneDestinationSearchLauncher.launchAddWaypointSearch()
+            .onFailure { error ->
+                Napier.w(tag = TAG, throwable = error) { "Failed to launch phone add waypoint search." }
+            }
+    }
+
     private fun handlePhoneDestinationSearchRequested() {
         if (screenStates.value.lastOrNull() is MapScreenState.Navigating) {
             return
@@ -1013,7 +1022,20 @@ private class UiEventDelegate(
         showBrowsing()
     }
 
+    private fun handlePhoneAddWaypointSearchRequested() {
+        if (createNavigationRouteSearchContext() == null) {
+            return
+        }
+
+        showSharedGuidanceScreen()
+        openWaypointSearchOverlay(MapOverlayState.AddWaypointSearch)
+    }
+
     private fun handleSharedGuidanceStarted() {
+        showSharedGuidanceScreen()
+    }
+
+    private fun showSharedGuidanceScreen() {
         if (screenStates.value.lastOrNull() is MapScreenState.Navigating) {
             return
         }

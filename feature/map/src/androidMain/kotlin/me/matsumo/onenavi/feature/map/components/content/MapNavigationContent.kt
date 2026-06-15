@@ -68,6 +68,7 @@ internal fun MapNavigationContent(
     panelLayout: MapPanelLayout,
     navigationCardHeight: Dp,
     contentInsets: MapHostInsets,
+    usePhoneAddWaypointSearch: Boolean,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -294,7 +295,7 @@ internal fun MapNavigationContent(
                             onUiEvent(MapUiEvent.OnNavigationAlternativesClicked)
                         },
                         onAddWaypointClicked = {
-                            onUiEvent(MapUiEvent.OnAddWaypointRequested)
+                            onUiEvent(addWaypointClickedEvent(usePhoneAddWaypointSearch))
                         },
                         onRoutePreviewClicked = {
                             onUiEvent(MapUiEvent.OnNavigationRoutePreviewClicked)
@@ -328,6 +329,14 @@ private fun GuidanceProgress.displaySpeedKmh(
     }
 
     return vehicleSpeedState.displaySpeedKmh
+}
+
+private fun addWaypointClickedEvent(usePhoneAddWaypointSearch: Boolean): MapUiEvent {
+    return if (usePhoneAddWaypointSearch) {
+        MapUiEvent.OnPhoneAddWaypointSearchClicked
+    } else {
+        MapUiEvent.OnAddWaypointRequested
+    }
 }
 
 /** m/s を km/h へ変換する係数。 */

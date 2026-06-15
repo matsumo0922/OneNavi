@@ -27,8 +27,6 @@ import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.dialogs.init
 import me.matsumo.onenavi.car.CarGuidanceSessionReleaser
 import me.matsumo.onenavi.components.PermissionScreen
-import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommand
-import me.matsumo.onenavi.core.common.car.CarPhoneSessionCommandEnvelope
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
 import me.matsumo.onenavi.core.model.Theme
@@ -56,7 +54,7 @@ class MainActivity : ComponentActivity() {
             val userData by viewModel.setting.collectAsStateWithLifecycle(null)
             val phoneCommand by carPhoneSessionCoordinator.phoneCommand.collectAsStateWithLifecycle()
             val isSystemInDarkTheme = shouldUseDarkTheme(userData?.theme ?: Theme.System)
-            val destinationSearchRequestId = phoneCommand?.destinationSearchRequestId()
+            val phoneSearchRequestId = phoneCommand?.id
 
             var isPermissionGranted by remember { mutableStateOf(hasRequiredPermissions()) }
 
@@ -87,7 +85,7 @@ class MainActivity : ComponentActivity() {
                             OneNaviApp(
                                 modifier = Modifier.fillMaxSize(),
                                 setting = setting,
-                                destinationSearchRequestId = destinationSearchRequestId,
+                                phoneSearchRequestId = phoneSearchRequestId,
                             )
                         } else {
                             OneNaviTheme(setting) {
@@ -129,11 +127,5 @@ class MainActivity : ComponentActivity() {
 
     private fun hasRequiredPermissions(): Boolean {
         return ContextCompat.checkSelfPermission(this, permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun CarPhoneSessionCommandEnvelope.destinationSearchRequestId(): Long? {
-        return when (command) {
-            CarPhoneSessionCommand.OpenDestinationSearch -> id
-        }
     }
 }
