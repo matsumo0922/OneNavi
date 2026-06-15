@@ -529,6 +529,9 @@ internal class VoiceAnnouncementSelector(
      * (グループ消費で FINAL 自身が fired にならないケースも地点区切りとして扱う)。
      *
      * FINAL 発話**前**の通常の MIDDLE 予告には影響しない。このヘルパは FINAL が確定済みの場合のみ true を返す。
+     *
+     * 前提: 外部データ上、1 案内地点に FINAL は 1 グループだけ存在する。FINAL が複数グループある場合は
+     * 最初のグループが確定した時点で地点全体が区切り済みとみなされる (FINAL×2 のデータは想定外)。
      */
     private fun isFinalAnnounced(
         target: AnnouncementTarget,
