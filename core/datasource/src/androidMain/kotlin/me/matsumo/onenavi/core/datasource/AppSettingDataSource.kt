@@ -252,6 +252,14 @@ class AppSettingDataSource(
         return formatter.encodeToString(SetSerializer(DeveloperFeature.serializer()), features)
     }
 
+    suspend fun setHasDetectedClusterSession(hasDetected: Boolean) = withContext(ioDispatcher) {
+        if (currentSetting().hasDetectedClusterSession == hasDetected) return@withContext
+
+        preference.edit {
+            it[booleanPreferencesKey(AppSetting::hasDetectedClusterSession.name)] = hasDetected
+        }
+    }
+
     suspend fun getOrCreateExtNavDeviceUuid(): String = withContext(ioDispatcher) {
         val current = currentSetting().extNavDeviceUuid
         if (current.matches(EXT_NAV_DEVICE_UUID_REGEX)) return@withContext current
