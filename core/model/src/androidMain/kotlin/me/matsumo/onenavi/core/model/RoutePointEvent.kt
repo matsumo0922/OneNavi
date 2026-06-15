@@ -23,6 +23,7 @@ enum class RoutePointEventKind {
  * @param location 地図上に marker を置く座標
  * @param distanceFromStartMeters ルート始点からの累積距離（m）
  * @param polylinePointIndex [location] に最も近い [RouteDetail.geometry] の index
+ * @param sourceGuidancePointIndex 案内地点に直接紐付く場合の GuidancePoint index。通常の通過地点 marker では null。
  */
 @Immutable
 data class RoutePointEvent(
@@ -30,4 +31,5 @@ data class RoutePointEvent(
     val location: RoutePoint,
     val distanceFromStartMeters: Double,
     val polylinePointIndex: Int,
+    val sourceGuidancePointIndex: Int? = null,
 )

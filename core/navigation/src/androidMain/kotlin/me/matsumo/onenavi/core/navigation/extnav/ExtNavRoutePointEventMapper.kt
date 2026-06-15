@@ -71,6 +71,7 @@ internal object ExtNavRoutePointEventMapper {
             ),
             distanceFromStartMeters = geometryDistanceFromStartMeters,
             polylinePointIndex = (polylinePointIndex + indexOffset).coerceIn(0, lastGeometryIndex),
+            sourceGuidancePointIndex = guidanceAnchor?.sourceGuidancePointIndex,
         )
     }
 

@@ -4,6 +4,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.guidance.domain.DsrRouteSummary
+import me.matsumo.drive.supporter.api.guidance.domain.ExternalGuideAnchor
 import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RoutePointEventKind
@@ -60,6 +61,7 @@ class ExtNavRoutePointEventMapperTest {
         assertEquals(RoutePoint(latitude = 35.1, longitude = 139.1), events[0].location)
         assertEquals(240.0, events[1].distanceFromStartMeters)
         assertEquals(2, events[2].polylinePointIndex)
+        assertEquals(null, events[0].sourceGuidancePointIndex)
     }
 
     @Test
@@ -119,6 +121,28 @@ class ExtNavRoutePointEventMapperTest {
     }
 
     @Test
+    fun `案内 anchor を持つ地点イベントでは GuidancePoint index を中立モデルへ変換する`() {
+        val routeGuidance = routeGuidanceWithPointEvents(
+            pointEvents = listOf(
+                extNavPointEvent(
+                    kind = ExtNavRoutePointEventKind.TrafficLight,
+                    coord = Coord.fromDegrees(35.2, 139.2),
+                    distanceFromStartMetres = 500.0,
+                    polylinePointIndex = 1,
+                    sourceGuidancePointIndex = 12,
+                ),
+            ),
+        )
+
+        val events = ExtNavRoutePointEventMapper.map(
+            routeGuidance = routeGuidance,
+            geometry = routeGuidance.polyline.toRouteGeometry(),
+        )
+
+        assertEquals(12, events.single().sourceGuidancePointIndex)
+    }
+
+    @Test
     fun `地点イベントが無い場合は空リストを返す`() {
         val routeGuidance = routeGuidanceWithPointEvents(pointEvents = emptyList())
 
@@ -162,12 +186,22 @@ class ExtNavRoutePointEventMapperTest {
         coord: Coord,
         distanceFromStartMetres: Double,
         polylinePointIndex: Int,
+        sourceGuidancePointIndex: Int? = null,
     ): ExtNavRoutePointEvent {
         return ExtNavRoutePointEvent(
             kind = kind,
             coord = coord,
             distanceFromStartMetres = distanceFromStartMetres,
             polylinePointIndex = polylinePointIndex,
+            guidanceAnchor = sourceGuidancePointIndex?.toExtNavAnchor(),
+        )
+    }
+
+    private fun Int.toExtNavAnchor(): ExternalGuideAnchor {
+        return ExternalGuideAnchor(
+            sourceDistanceFromStartMetres = null,
+            sourceGuidancePointIndex = this,
+            sourceBlockIndex = null,
         )
     }
 
