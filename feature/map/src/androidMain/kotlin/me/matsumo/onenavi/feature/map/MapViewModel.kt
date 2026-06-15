@@ -13,12 +13,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
@@ -27,7 +29,9 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import me.matsumo.onenavi.core.common.OpenLocationCode
+import me.matsumo.onenavi.core.common.car.AssistantNavCoordinate
 import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
 import me.matsumo.onenavi.core.datasource.location.CurrentLocationDataSource
 import me.matsumo.onenavi.core.datasource.location.VehicleSpeedState
@@ -139,6 +143,7 @@ class MapViewModel(
         newRouteManager = newRouteManager,
         newGuidanceManager = newGuidanceManager,
         phoneDestinationSearchLauncher = phoneDestinationSearchLauncher,
+        currentLocationDataSource = currentLocationDataSource,
         scope = viewModelScope,
         uiState = _uiState,
         screenStates = _screenStates,
@@ -246,6 +251,7 @@ private class UiEventDelegate(
     private val newRouteManager: NewRouteManager,
     private val newGuidanceManager: NewGuidanceManager,
     private val phoneDestinationSearchLauncher: PhoneDestinationSearchLauncher,
+    private val currentLocationDataSource: CurrentLocationDataSource,
     private val scope: CoroutineScope,
     private val uiState: MutableStateFlow<MapUiState>,
     private val screenStates: StateFlow<List<MapScreenState>>,
@@ -292,6 +298,9 @@ private class UiEventDelegate(
             is MapUiEvent.OnMapPointOfInterestSelected -> handleMapPointOfInterestSelected(event.placeId, event.name, event.latitude, event.longitude)
             is MapUiEvent.OnMapLongPressed -> handleMapLongPressed(event.latitude, event.longitude)
             is MapUiEvent.OnRouteSearch -> handleRouteSearch(event.item, event.latitude, event.longitude)
+            is MapUiEvent.OnAssistantNavigateTo -> handleAssistantNavigateTo(event.query, event.coordinate)
+            is MapUiEvent.OnAssistantPreviewRoute -> handleAssistantPreviewRoute(event.query, event.coordinate)
+            is MapUiEvent.OnAssistantAddStop -> handleAssistantAddStop(event.query, event.coordinate)
             is MapUiEvent.OnPlaceAddWaypointClicked -> handlePlaceAddWaypointClicked(event.item)
             is MapUiEvent.OnRouteIndexChanged -> handleRouteIndexChanged(event.index)
             is MapUiEvent.OnNavigationStart -> handleNavigationStart()
@@ -522,6 +531,69 @@ private class UiEventDelegate(
         routeSearchJob?.cancel()
         routeSearchJob = scope.launch {
             newRouteManager.searchRoutes(waypoints = waypoints)
+        }
+    }
+
+    private fun handleAssistantNavigateTo(query: String?, coordinate: AssistantNavCoordinate?) {
+        routeSearchJob?.cancel()
+        routeSearchJob = scope.launch {
+            val originWaypoint = resolveOrigin() ?: run {
+                Napier.w(tag = TAG) { "Assistant navigate ignored because current location is unavailable." }
+                return@launch
+            }
+            val destination = resolveDestination(query, coordinate, originWaypoint) ?: return@launch
+            val waypoints = persistentListOf(originWaypoint, destination.toRouteWaypoint())
+            val routePreviewState = newRouteManager.searchRoutes(waypoints = waypoints)
+            val readyState = routePreviewState.toAssistantReadyState("Assistant navigate") ?: return@launch
+
+            ensureActive()
+            newGuidanceManager.startGuidance(route = readyState.selectedRoute)
+            replaceWithNavigatingScreen()
+        }
+    }
+
+    private fun handleAssistantPreviewRoute(query: String?, coordinate: AssistantNavCoordinate?) {
+        if (newGuidanceManager.state.value.isActiveGuidance()) {
+            Napier.i(tag = TAG) { "Assistant preview ignored during active guidance." }
+            return
+        }
+
+        routeSearchJob?.cancel()
+        routeSearchJob = scope.launch {
+            val originWaypoint = resolveOrigin() ?: run {
+                Napier.w(tag = TAG) { "Assistant preview ignored because current location is unavailable." }
+                return@launch
+            }
+            val destination = resolveDestination(query, coordinate, originWaypoint) ?: return@launch
+            val waypoints = persistentListOf(originWaypoint, destination.toRouteWaypoint())
+
+            pushScreenState(
+                MapScreenState.RoutePreview(
+                    waypoints = waypoints,
+                    topBarMode = RoutePreviewTopBarMode.Viewing,
+                ),
+            )
+            newRouteManager.searchRoutes(waypoints = waypoints).toAssistantReadyState("Assistant preview")
+        }
+    }
+
+    private fun handleAssistantAddStop(query: String?, coordinate: AssistantNavCoordinate?) {
+        if (!newGuidanceManager.state.value.isActiveGuidance()) {
+            handleAssistantNavigateTo(query, coordinate)
+            return
+        }
+
+        addWaypointRouteSearchJob?.cancel()
+        addWaypointRouteSearchJob = scope.launch {
+            val searchContext = createNavigationRouteSearchContext() ?: run {
+                handleAssistantNavigateTo(query, coordinate)
+                return@launch
+            }
+            val destination = resolveDestination(query, coordinate, searchContext.originWaypoint) ?: return@launch
+
+            searchRepository.addHistory(destination)
+            // Assistant の「次の目的地」より、既存 UI と同じ最小迂回挿入を優先する。
+            searchAddWaypointRoute(destination)
         }
     }
 
@@ -1045,6 +1117,12 @@ private class UiEventDelegate(
         pushScreenState(MapScreenState.Navigating)
     }
 
+    private fun replaceWithNavigatingScreen() {
+        clearNavigationOverlayState()
+        showBrowsing()
+        pushScreenState(MapScreenState.Navigating)
+    }
+
     private suspend fun searchAddWaypointRoute(result: SearchResultItem) {
         val searchContext = createNavigationRouteSearchContext() ?: run {
             uiState.value = uiState.value.copy(
@@ -1120,6 +1198,82 @@ private class UiEventDelegate(
             is GuidanceState.Failed,
             GuidanceState.Idle,
             -> null
+        }
+    }
+
+    private suspend fun resolveOrigin(): RouteWaypoint.CurrentLocation? {
+        val searchContext = createNavigationRouteSearchContext()
+        if (searchContext != null) {
+            return searchContext.originWaypoint
+        }
+
+        val location = currentLocationDataSource.lastKnown()
+            ?: withTimeoutOrNull(FIRST_FIX_TIMEOUT_MILLIS) {
+                currentLocationDataSource.locationUpdates().first()
+            }
+
+        return location?.let { userLocation ->
+            RouteWaypoint.CurrentLocation(
+                latitude = userLocation.latitude,
+                longitude = userLocation.longitude,
+            )
+        }
+    }
+
+    private suspend fun resolveDestination(
+        query: String?,
+        coordinate: AssistantNavCoordinate?,
+        originWaypoint: RouteWaypoint.CurrentLocation,
+    ): SearchResultItem? {
+        if (coordinate != null) {
+            return createMapPointResult(
+                placeId = null,
+                name = query.orEmpty(),
+                latitude = coordinate.latitude,
+                longitude = coordinate.longitude,
+            )
+        }
+
+        val destinationQuery = query?.trim().orEmpty()
+        if (destinationQuery.isBlank()) {
+            Napier.w(tag = TAG) { "Assistant destination ignored because query and coordinate are empty." }
+            return null
+        }
+
+        return searchRepository.searchMultiple(
+            query = destinationQuery,
+            latitude = originWaypoint.latitude,
+            longitude = originWaypoint.longitude,
+        ).fold(
+            onSuccess = { results ->
+                results.firstOrNull().also { result ->
+                    if (result == null) {
+                        Napier.w(tag = TAG) { "Assistant destination not found. query=$destinationQuery" }
+                    }
+                }
+            },
+            onFailure = { error ->
+                Napier.w(tag = TAG, throwable = error) { "Assistant destination search failed. query=$destinationQuery" }
+                null
+            },
+        )
+    }
+
+    private fun RoutePreviewState?.toAssistantReadyState(actionName: String): RoutePreviewState.Ready? {
+        return when (this) {
+            null -> null
+            is RoutePreviewState.Ready -> this
+            is RoutePreviewState.Failed -> {
+                Napier.w(tag = TAG, throwable = error) { "$actionName route search failed." }
+                null
+            }
+
+            RoutePreviewState.Idle,
+            RoutePreviewState.Searching,
+            -> {
+                Napier.w(tag = TAG) { "$actionName route search finished without ready state." }
+                null
+            }
         }
     }
 
@@ -1326,7 +1480,10 @@ private class UiEventDelegate(
     }
 
     companion object {
+        /** ログ出力用タグ。 */
         private const val TAG = "MapViewModel - UiEventDelegate"
+
+        /** 検索候補入力の debounce 時間。 */
         private const val DEBOUNCE = 300L
     }
 }
@@ -1335,6 +1492,9 @@ private const val MAP_POINT_ID_PREFIX = "map-point:"
 
 /** 自車位置 stream の一時的な unsubscribe を許容する猶予時間（ms）。 */
 private const val VEHICLE_LOCATION_SUBSCRIPTION_STOP_TIMEOUT_MILLIS = 5_000L
+
+/** アシスタント cold start 時に初回位置を待つ上限時間（ms）。 */
+private const val FIRST_FIX_TIMEOUT_MILLIS = 5_000L
 
 private fun MapScreenState?.supportsRouteContextOverlay(): Boolean {
     return when (this) {
@@ -1354,6 +1514,20 @@ private fun MapScreenState?.supportsRouteContextOverlay(): Boolean {
 private fun RoutePreviewState.Ready.routeMatchingPriority(currentRoute: RouteDetail?): RouteDetail {
     val currentPriority = currentRoute?.priority
     return routes.firstOrNull { route -> route.priority == currentPriority } ?: selectedRoute
+}
+
+private fun GuidanceState.isActiveGuidance(): Boolean {
+    return when (this) {
+        is GuidanceState.Guiding,
+        is GuidanceState.Preparing,
+        is GuidanceState.Rerouting,
+        -> true
+
+        GuidanceState.Arrived,
+        is GuidanceState.Failed,
+        GuidanceState.Idle,
+        -> false
+    }
 }
 
 /**

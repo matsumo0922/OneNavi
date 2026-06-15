@@ -6,6 +6,7 @@ import android.content.Intent
 import android.view.Display
 import me.matsumo.onenavi.MainActivity
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
+import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
 import me.matsumo.onenavi.core.common.car.PhoneDestinationSearchLauncher
 
 /**
@@ -37,7 +38,7 @@ class MainActivityPhoneDestinationSearchLauncher(
             runCatching {
                 context.startActivity(intent, options.toBundle())
             }.onFailure {
-                carPhoneSessionCoordinator.consumePhoneCommand(commandId)
+                carPhoneSessionCoordinator.consumePhoneCommand(OneNaviDisplaySurface.Phone, commandId)
             }.getOrThrow()
         }
     }

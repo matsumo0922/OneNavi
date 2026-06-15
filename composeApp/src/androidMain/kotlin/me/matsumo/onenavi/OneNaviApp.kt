@@ -17,7 +17,6 @@ import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
 internal fun OneNaviApp(
     setting: AppSetting,
     modifier: Modifier = Modifier,
-    phoneSearchRequestId: Long? = null,
 ) {
     SetupCoil()
     BasicAds.Initialize()
@@ -25,7 +24,6 @@ internal fun OneNaviApp(
     OneNaviTheme(setting) {
         AppNavHost(
             modifier = modifier,
-            phoneSearchRequestId = phoneSearchRequestId,
         )
     }
 }

@@ -16,14 +16,16 @@ class CarPhoneSessionCoordinator {
     private val lock = Any()
     private val surfaceCounts = mutableMapOf<OneNaviDisplaySurface, Int>()
     private val _state = MutableStateFlow(CarPhoneSessionState())
-    private val _phoneCommand = MutableStateFlow<CarPhoneSessionCommandEnvelope?>(null)
+    private val _phoneCommands = MutableStateFlow<Map<OneNaviDisplaySurface, CarPhoneSessionCommandEnvelope>>(
+        emptyMap(),
+    )
     private var nextCommandId = INITIAL_COMMAND_ID
 
     /** 現在プロセス内で有効な表示面の状態。 */
     val state: StateFlow<CarPhoneSessionState> = _state.asStateFlow()
 
-    /** スマホ表示が一度だけ処理する操作要求。 */
-    val phoneCommand: StateFlow<CarPhoneSessionCommandEnvelope?> = _phoneCommand.asStateFlow()
+    /** 表示面ごとに一度だけ処理する操作要求。 */
+    val phoneCommands: StateFlow<Map<OneNaviDisplaySurface, CarPhoneSessionCommandEnvelope>> = _phoneCommands.asStateFlow()
 
     /** 表示面が開始したことを記録する。 */
     fun registerSurface(surface: OneNaviDisplaySurface) {
@@ -52,21 +54,41 @@ class CarPhoneSessionCoordinator {
 
     /** スマホ側で目的地検索 UI を開く command を発行する。 */
     fun requestPhoneDestinationSearch(): Long {
-        return publishPhoneCommand(CarPhoneSessionCommand.OpenDestinationSearch)
+        return publishCommand(
+            command = CarPhoneSessionCommand.OpenDestinationSearch,
+            targetSurface = OneNaviDisplaySurface.Phone,
+        )
     }
 
     /** スマホ側で案内中の経由地追加 UI を開く command を発行する。 */
     fun requestPhoneAddWaypointSearch(): Long {
-        return publishPhoneCommand(CarPhoneSessionCommand.OpenAddWaypointSearch)
+        return publishCommand(
+            command = CarPhoneSessionCommand.OpenAddWaypointSearch,
+            targetSurface = OneNaviDisplaySurface.Phone,
+        )
+    }
+
+    /**
+     * アシスタントから受け取った案内要求を指定表示面へ発行する。
+     *
+     * @param request アシスタントから抽出した要求
+     * @param targetSurface 実行する表示面
+     * @return 発行した command id
+     */
+    fun requestAssistantNavigation(request: AssistantNavRequest, targetSurface: OneNaviDisplaySurface): Long {
+        return publishCommand(
+            command = request.toCommand(),
+            targetSurface = targetSurface,
+        )
     }
 
     /** 指定 command を処理済みにする。 */
-    fun consumePhoneCommand(commandId: Long) {
-        _phoneCommand.update { currentCommand ->
-            if (currentCommand?.id == commandId) {
-                null
+    fun consumePhoneCommand(surface: OneNaviDisplaySurface, commandId: Long) {
+        _phoneCommands.update { currentCommands ->
+            if (currentCommands[surface]?.id == commandId) {
+                currentCommands - surface
             } else {
-                currentCommand
+                currentCommands
             }
         }
     }
@@ -80,16 +102,42 @@ class CarPhoneSessionCoordinator {
         )
     }
 
-    private fun publishPhoneCommand(command: CarPhoneSessionCommand): Long {
+    private fun publishCommand(command: CarPhoneSessionCommand, targetSurface: OneNaviDisplaySurface): Long {
         return synchronized(lock) {
             val commandId = nextCommandId
             nextCommandId += COMMAND_ID_INCREMENT
-            _phoneCommand.value = CarPhoneSessionCommandEnvelope(
+            val envelope = CarPhoneSessionCommandEnvelope(
                 id = commandId,
                 command = command,
             )
+            _phoneCommands.update { currentCommands ->
+                currentCommands + (targetSurface to envelope)
+            }
 
             commandId
+        }
+    }
+
+    private fun AssistantNavRequest.toCommand(): CarPhoneSessionCommand {
+        return when (this) {
+            is AssistantNavRequest.AddStop -> CarPhoneSessionCommand.AddStop(
+                query = query,
+                coordinate = coordinate,
+            )
+
+            is AssistantNavRequest.Navigate -> CarPhoneSessionCommand.NavigateTo(
+                query = query,
+                coordinate = coordinate,
+            )
+
+            is AssistantNavRequest.Preview -> CarPhoneSessionCommand.PreviewRoute(
+                query = query,
+                coordinate = coordinate,
+            )
+
+            is AssistantNavRequest.Search -> CarPhoneSessionCommand.SearchPlaces(
+                query = query,
+            )
         }
     }
 

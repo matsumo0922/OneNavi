@@ -1,6 +1,7 @@
 package me.matsumo.onenavi
 
 import android.Manifest.permission
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
@@ -29,6 +30,7 @@ import me.matsumo.onenavi.car.CarGuidanceSessionReleaser
 import me.matsumo.onenavi.components.PermissionScreen
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
+import me.matsumo.onenavi.core.common.car.parseAssistantNavUri
 import me.matsumo.onenavi.core.model.Theme
 import me.matsumo.onenavi.core.ui.theme.LocalOneNaviDisplaySurface
 import me.matsumo.onenavi.core.ui.theme.OneNaviTheme
@@ -49,12 +51,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         carGuidanceSessionReleaser.ensureStarted()
         guidanceForegroundController.ensureStarted()
+        if (savedInstanceState == null) {
+            dispatchAssistantIntent(intent)
+        }
         enableEdgeToEdge()
         setContent {
             val userData by viewModel.setting.collectAsStateWithLifecycle(null)
-            val phoneCommand by carPhoneSessionCoordinator.phoneCommand.collectAsStateWithLifecycle()
             val isSystemInDarkTheme = shouldUseDarkTheme(userData?.theme ?: Theme.System)
-            val phoneSearchRequestId = phoneCommand?.id
 
             var isPermissionGranted by remember { mutableStateOf(hasRequiredPermissions()) }
 
@@ -85,7 +88,6 @@ class MainActivity : ComponentActivity() {
                             OneNaviApp(
                                 modifier = Modifier.fillMaxSize(),
                                 setting = setting,
-                                phoneSearchRequestId = phoneSearchRequestId,
                             )
                         } else {
                             OneNaviTheme(setting) {
@@ -103,6 +105,12 @@ class MainActivity : ComponentActivity() {
 
         FileKit.init(this)
         initAdsSdk()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        dispatchAssistantIntent(intent)
     }
 
     override fun onStart() {
@@ -127,5 +135,12 @@ class MainActivity : ComponentActivity() {
 
     private fun hasRequiredPermissions(): Boolean {
         return ContextCompat.checkSelfPermission(this, permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun dispatchAssistantIntent(intent: Intent?) {
+        val uri = intent?.dataString ?: return
+        val request = parseAssistantNavUri(uri, intent.action) ?: return
+
+        carPhoneSessionCoordinator.requestAssistantNavigation(request, OneNaviDisplaySurface.Phone)
     }
 }
