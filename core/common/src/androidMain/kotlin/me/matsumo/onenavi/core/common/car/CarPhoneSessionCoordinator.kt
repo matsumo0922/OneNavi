@@ -110,7 +110,9 @@ class CarPhoneSessionCoordinator {
                 id = commandId,
                 command = command,
             )
-            _phoneCommands.value = _phoneCommands.value + (targetSurface to envelope)
+            _phoneCommands.update { currentCommands ->
+                currentCommands + (targetSurface to envelope)
+            }
 
             commandId
         }
