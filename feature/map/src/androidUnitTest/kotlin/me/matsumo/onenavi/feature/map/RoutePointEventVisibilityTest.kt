@@ -35,6 +35,40 @@ class RoutePointEventVisibilityTest {
     }
 
     @Test
+    fun visiblePointEventsKeepsNonTrafficLightEventsBeyondGuidanceTargetDistance() {
+        val route = routeDetail(
+            pointEvents = listOf(
+                pointEvent(
+                    kind = RoutePointEventKind.TRAFFIC_LIGHT,
+                    distanceFromStartMeters = 110.0,
+                ),
+                pointEvent(
+                    kind = RoutePointEventKind.STOP_LINE,
+                    distanceFromStartMeters = 230.0,
+                ),
+                pointEvent(
+                    kind = RoutePointEventKind.TRAFFIC_LIGHT,
+                    distanceFromStartMeters = 240.0,
+                ),
+            ),
+        )
+
+        val visiblePointEvents = RoutePointEventVisibility.visiblePointEvents(
+            route = route,
+            routeProgressMeters = 100.0,
+            guidanceTargetDistanceFromStartMeters = 180.0,
+        )
+
+        assertEquals(
+            expected = listOf(
+                RoutePointEventKind.TRAFFIC_LIGHT,
+                RoutePointEventKind.STOP_LINE,
+            ),
+            actual = visiblePointEvents.map { pointEvent -> pointEvent.kind },
+        )
+    }
+
+    @Test
     fun visiblePointEventsIncludesTargetDistanceTolerance() {
         val route = routeDetail(
             pointEvents = listOf(
@@ -91,9 +125,12 @@ class RoutePointEventVisibilityTest {
         )
     }
 
-    private fun pointEvent(distanceFromStartMeters: Double): RoutePointEvent {
+    private fun pointEvent(
+        kind: RoutePointEventKind = RoutePointEventKind.TRAFFIC_LIGHT,
+        distanceFromStartMeters: Double,
+    ): RoutePointEvent {
         return RoutePointEvent(
-            kind = RoutePointEventKind.TRAFFIC_LIGHT,
+            kind = kind,
             location = routePoint(),
             distanceFromStartMeters = distanceFromStartMeters,
             polylinePointIndex = 0,
