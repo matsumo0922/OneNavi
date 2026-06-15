@@ -15,11 +15,13 @@ import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.R
 
 /** VD 上へ ComposeView を出す検証用 Presentation。 */
-class CarVirtualDisplayProbePresentation(
+internal class CarVirtualDisplayProbePresentation(
     outerContext: Context,
     display: Display,
     initialViewport: CarVirtualDisplayProbeViewport,
     initialInputState: CarVirtualDisplayProbeInputState,
+    private val isDebugStateEnabled: () -> Boolean,
+    private val inputLatencyLogger: CarVirtualDisplayProbeInputLatencyLogger,
 ) : Presentation(outerContext, display, R.style.Theme_Matsumo) {
 
     private val runtime = CarVirtualDisplayRuntime()
@@ -35,6 +37,8 @@ class CarVirtualDisplayProbePresentation(
     }
 
     fun updateInputState(inputState: CarVirtualDisplayProbeInputState) {
+        if (!isDebugStateEnabled()) return
+
         this.inputState = inputState
 
         if (inputState.kind != CarVirtualDisplayProbeInputKind.Click) {
@@ -142,7 +146,8 @@ class CarVirtualDisplayProbePresentation(
 
     private fun dispatchClickMotionEvents(inputState: CarVirtualDisplayProbeInputState): Boolean {
         val targetComposeView = composeView
-        clickCoordinateResult = null
+        val dispatchStartedAtMillis = inputLatencyLogger.now()
+        clearClickCoordinateResultIfNeeded()
 
         val dispatchCoordinate = inputState.resolveCarVirtualDisplayProbeClickDispatchCoordinate(viewport) ?: return false
 
@@ -150,25 +155,59 @@ class CarVirtualDisplayProbePresentation(
             return false
         }
 
-        val semanticsCoordinateResult = targetComposeView?.let { composeView ->
-            semanticsClickDispatcher.dispatchClick(composeView, dispatchCoordinate)
-        }
-
-        if (semanticsCoordinateResult != null) {
-            clickCoordinateResult = semanticsCoordinateResult
-            return true
-        }
-
-        val didHandleClick = gestureDispatcher.dispatchClick(
+        gestureDispatcher.dispatchClickDown(
             surfaceX = dispatchCoordinate.point.x,
             surfaceY = dispatchCoordinate.point.y,
         )
-        clickCoordinateResult = CarVirtualDisplayProbeClickCoordinateResult(
+
+        val semanticsCoordinateResult = targetComposeView?.let { composeView ->
+            semanticsClickDispatcher.dispatchClick(
+                composeView = composeView,
+                touchPoint = dispatchCoordinate,
+                inputState = inputState,
+                inputLatencyLogger = inputLatencyLogger,
+            )
+        }
+
+        if (semanticsCoordinateResult != null) {
+            gestureDispatcher.cancelClick()
+            updateClickCoordinateResultIfNeeded(semanticsCoordinateResult)
+            inputLatencyLogger.logClickDispatchFinished(
+                inputState = inputState,
+                path = "semantics",
+                startedAtMillis = dispatchStartedAtMillis,
+                didDispatch = true,
+            )
+            return true
+        }
+
+        inputLatencyLogger.logGestureFallback(inputState, CLICK_UP_DELAY_MS)
+        val didHandleClick = gestureDispatcher.finishClickAfterDelay()
+        val clickCoordinateResult = CarVirtualDisplayProbeClickCoordinateResult(
             label = "$CLICK_COORDINATE_MOTION_EVENT_PREFIX:${dispatchCoordinate.label}",
             point = dispatchCoordinate.point,
         )
+        updateClickCoordinateResultIfNeeded(clickCoordinateResult)
+        inputLatencyLogger.logClickDispatchFinished(
+            inputState = inputState,
+            path = "gesture",
+            startedAtMillis = dispatchStartedAtMillis,
+            didDispatch = didHandleClick,
+        )
 
         return didHandleClick
+    }
+
+    private fun clearClickCoordinateResultIfNeeded() {
+        if (isDebugStateEnabled()) {
+            clickCoordinateResult = null
+        }
+    }
+
+    private fun updateClickCoordinateResultIfNeeded(result: CarVirtualDisplayProbeClickCoordinateResult) {
+        if (isDebugStateEnabled()) {
+            clickCoordinateResult = result
+        }
     }
 
     /** Presentation のログタグ。 */

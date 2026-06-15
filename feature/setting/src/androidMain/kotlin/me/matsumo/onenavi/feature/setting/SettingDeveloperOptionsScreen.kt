@@ -37,6 +37,8 @@ import me.matsumo.onenavi.core.resource.setting_developer_options_car_hardware_d
 import me.matsumo.onenavi.core.resource.setting_developer_options_car_hardware_diagnostics_toll_card
 import me.matsumo.onenavi.core.resource.setting_developer_options_car_vd_debug_overlay
 import me.matsumo.onenavi.core.resource.setting_developer_options_car_vd_debug_overlay_description
+import me.matsumo.onenavi.core.resource.setting_developer_options_car_vd_input_latency_logs
+import me.matsumo.onenavi.core.resource.setting_developer_options_car_vd_input_latency_logs_description
 import me.matsumo.onenavi.core.resource.setting_developer_options_fake_gps
 import me.matsumo.onenavi.core.resource.setting_developer_options_fake_gps_description
 import me.matsumo.onenavi.core.resource.setting_developer_options_force_plus_privilege
@@ -161,6 +163,7 @@ private val DeveloperFeature.sectionTitle: StringResource
         DeveloperFeature.FAKE_GPS -> Res.string.setting_developer_options_section_location
         DeveloperFeature.MAP_DIAGNOSTICS -> Res.string.setting_developer_options_section_map
         DeveloperFeature.CAR_VD_DEBUG_OVERLAY -> Res.string.setting_developer_options_section_android_auto
+        DeveloperFeature.CAR_VD_INPUT_LATENCY_LOGS -> Res.string.setting_developer_options_section_android_auto
         DeveloperFeature.TTS_SCHEDULE_DEBUG_CARD -> Res.string.setting_developer_options_section_android_auto
         DeveloperFeature.CAR_HARDWARE_DIAGNOSTICS -> Res.string.setting_developer_options_section_android_auto
     }
@@ -173,6 +176,7 @@ private val DeveloperFeature.title: StringResource
         DeveloperFeature.FAKE_GPS -> Res.string.setting_developer_options_fake_gps
         DeveloperFeature.MAP_DIAGNOSTICS -> Res.string.setting_developer_options_map_diagnostics
         DeveloperFeature.CAR_VD_DEBUG_OVERLAY -> Res.string.setting_developer_options_car_vd_debug_overlay
+        DeveloperFeature.CAR_VD_INPUT_LATENCY_LOGS -> Res.string.setting_developer_options_car_vd_input_latency_logs
         DeveloperFeature.TTS_SCHEDULE_DEBUG_CARD -> Res.string.setting_developer_options_tts_schedule_debug_card
         DeveloperFeature.CAR_HARDWARE_DIAGNOSTICS -> Res.string.setting_developer_options_car_hardware_diagnostics
     }
@@ -185,6 +189,7 @@ private val DeveloperFeature.description: StringResource
         DeveloperFeature.FAKE_GPS -> Res.string.setting_developer_options_fake_gps_description
         DeveloperFeature.MAP_DIAGNOSTICS -> Res.string.setting_developer_options_map_diagnostics_description
         DeveloperFeature.CAR_VD_DEBUG_OVERLAY -> Res.string.setting_developer_options_car_vd_debug_overlay_description
+        DeveloperFeature.CAR_VD_INPUT_LATENCY_LOGS -> Res.string.setting_developer_options_car_vd_input_latency_logs_description
         DeveloperFeature.TTS_SCHEDULE_DEBUG_CARD -> Res.string.setting_developer_options_tts_schedule_debug_card_description
         DeveloperFeature.CAR_HARDWARE_DIAGNOSTICS -> Res.string.setting_developer_options_car_hardware_diagnostics_description
     }

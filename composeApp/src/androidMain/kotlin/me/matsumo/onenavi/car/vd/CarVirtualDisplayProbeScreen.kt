@@ -10,13 +10,26 @@ import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import io.github.aakira.napier.Napier
+import me.matsumo.onenavi.core.model.DeveloperFeature
+import me.matsumo.onenavi.core.repository.AppSettingRepository
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
 /** Android Auto template 画面として Surface callback を登録する検証 Screen。 */
 class CarVirtualDisplayProbeScreen(
     private val carContext: CarContext,
-) : Screen(carContext) {
+) : Screen(carContext), KoinComponent {
 
-    private val controller = CarVirtualDisplayProbeController(carContext.applicationContext)
+    private val appSettingRepository by inject<AppSettingRepository>()
+    private val controller = CarVirtualDisplayProbeController(
+        context = carContext.applicationContext,
+        isDebugOverlayEnabled = {
+            appSettingRepository.setting.value.isDeveloperFeatureEnabled(DeveloperFeature.CAR_VD_DEBUG_OVERLAY)
+        },
+        isInputLatencyLoggingEnabled = {
+            appSettingRepository.setting.value.isDeveloperFeatureEnabled(DeveloperFeature.CAR_VD_INPUT_LATENCY_LOGS)
+        },
+    )
     private val surfaceCallback = CarVirtualDisplayProbeSurfaceCallback(controller)
     private var isSurfaceCallbackRegistered = false
 

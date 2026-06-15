@@ -15,6 +15,7 @@ internal data class CarVirtualDisplayDragGestureState(
 internal data class CarVirtualDisplayClickGestureState(
     val downTime: Long,
     val downPoint: CarVirtualDisplaySurfacePoint,
+    val didHandleDown: Boolean,
 )
 
 /** 合成 fling の move/up を予約実行するための状態。 */
@@ -193,7 +194,7 @@ private fun Float.coerceInSafe(minimumValue: Float, maximumValue: Float): Float 
 }
 
 /** click 注入時の down/up 間隔。 */
-internal const val CLICK_UP_DELAY_MS = 32L
+internal const val CLICK_UP_DELAY_MS = 16L
 
 /** drag 入力が途切れてから ACTION_UP を送るまでの猶予。 */
 internal const val DRAG_FINISH_DELAY_MS = 96L
