@@ -135,6 +135,7 @@ class NewGuidanceManager internal constructor(
 
         prepareJob?.cancel()
         stopGuidanceSession(detachTracker = isSessionActive)
+        resetSignalState()
         if (resetReroute) rerouteDetector?.detach()
         Napier.i(tag = TAG) { "Guidance started: routeId=${route.id}" }
         currentRoute = route
