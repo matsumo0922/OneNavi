@@ -92,7 +92,9 @@ internal class GuidanceForegroundNotificationFactory(
     private fun GuidanceState.toNotificationContent(): GuidanceNotificationContent {
         return when (this) {
             is GuidanceState.Guiding -> toNotificationContent()
-            is GuidanceState.Rerouting -> GuidanceNotificationContent(
+            is GuidanceState.Preparing,
+            is GuidanceState.Rerouting,
+            -> GuidanceNotificationContent(
                 title = context.getString(R.string.guidance_notification_title),
                 text = context.getString(R.string.guidance_notification_rerouting),
             )

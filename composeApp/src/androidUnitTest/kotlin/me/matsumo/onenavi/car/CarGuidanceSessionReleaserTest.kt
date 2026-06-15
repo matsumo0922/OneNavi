@@ -15,6 +15,7 @@ import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -168,6 +169,7 @@ class CarGuidanceSessionReleaserTest {
             currentRoadClass = RoadClass.ORDINARY,
             currentSpeedLimitKmh = null,
             routeMatchState = RouteMatchState.ON_ROUTE,
+            positionSource = VehiclePositionSource.OBSERVED,
             projectionErrorMeters = null,
         )
     }

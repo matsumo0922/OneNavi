@@ -7,6 +7,7 @@ import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -71,6 +72,7 @@ class ExtNavRerouteDetectorTest {
             locationTimestampMillis = timestampMillis,
             vehicleSpeedMps = rawLocation.speedMps,
             routeMatchState = RouteMatchState.OFF_ROUTE_CONFIRMED,
+            positionSource = VehiclePositionSource.OBSERVED,
             isOffRouteCandidate = true,
             nextGuidancePointIndex = null,
             headingDegrees = rawLocation.bearingDegrees,
@@ -102,6 +104,7 @@ class ExtNavRerouteDetectorTest {
         currentRoadClass = RoadClass.ORDINARY,
         currentSpeedLimitKmh = null,
         routeMatchState = RouteMatchState.OFF_ROUTE_CONFIRMED,
+        positionSource = VehiclePositionSource.OBSERVED,
         projectionErrorMeters = PROJECTION_ERROR_METERS,
     )
 

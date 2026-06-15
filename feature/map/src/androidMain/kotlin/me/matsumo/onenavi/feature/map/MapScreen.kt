@@ -49,6 +49,7 @@ import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
 import me.matsumo.onenavi.core.datasource.location.VehicleSpeedState
 import me.matsumo.onenavi.core.model.DeveloperFeature
+import me.matsumo.onenavi.core.navigation.newguidance.model.GpsSignalState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
@@ -98,6 +99,7 @@ fun MapScreen(
     val hasScreenStateStack by viewModel.hasScreenStateStack.collectAsStateWithLifecycle()
     val routePreviewState by viewModel.newRoutePreviewState.collectAsStateWithLifecycle()
     val guidanceState by viewModel.newGuidanceState.collectAsStateWithLifecycle()
+    val gpsSignalState by viewModel.gpsSignalState.collectAsStateWithLifecycle()
     val vehicleLocationState by viewModel.vehicleLocationState.collectAsStateWithLifecycle()
     val vehicleSpeedState by viewModel.vehicleSpeedState.collectAsStateWithLifecycle()
     val ttsScheduleDebugSnapshot by viewModel.ttsDebugSnapshot.collectAsStateWithLifecycle()
@@ -194,7 +196,9 @@ fun MapScreen(
     }
 
     LaunchedEffect(guidanceState, isAndroidAutoVirtualDisplay, screenState) {
-        val isGuidanceStarted = guidanceState is GuidanceState.Guiding
+        val isGuiding = guidanceState is GuidanceState.Guiding
+        val isPreparing = guidanceState is GuidanceState.Preparing
+        val isGuidanceStarted = isGuiding || isPreparing
         val isAlreadyNavigating = screenState is MapScreenState.Navigating
         val shouldSyncGuidance = isAndroidAutoVirtualDisplay && isGuidanceStarted && !isAlreadyNavigating
 
@@ -263,6 +267,7 @@ fun MapScreen(
                 screenState = screenState,
                 routePreviewState = routePreviewState,
                 guidanceState = guidanceState,
+                gpsSignalState = gpsSignalState,
                 ttsDebugSnapshot = visibleTtsDebugSnapshot,
                 vehicleLocationState = vehicleLocationState,
                 vehicleSpeedState = vehicleSpeedState,
@@ -301,6 +306,7 @@ fun MapScreen(
                 screenState = screenState,
                 routePreviewState = routePreviewState,
                 guidanceState = guidanceState,
+                gpsSignalState = gpsSignalState,
                 ttsDebugSnapshot = visibleTtsDebugSnapshot,
                 vehicleLocationState = vehicleLocationState,
                 vehicleSpeedState = vehicleSpeedState,
@@ -392,6 +398,7 @@ private fun MapScreenCompactLayout(
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
     guidanceState: GuidanceState,
+    gpsSignalState: GpsSignalState,
     ttsDebugSnapshot: VoiceAnnouncementDebugSnapshot?,
     vehicleLocationState: VehicleLocationState?,
     vehicleSpeedState: VehicleSpeedState,
@@ -459,6 +466,7 @@ private fun MapScreenCompactLayout(
                 uiState = uiState,
                 screenState = screenState,
                 guidanceState = guidanceState,
+                gpsSignalState = gpsSignalState,
                 vehicleSpeedState = vehicleSpeedState,
                 ttsDebugSnapshot = ttsDebugSnapshot,
                 cameraState = cameraState,
@@ -490,6 +498,7 @@ private fun MapScreenSplitLayout(
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
     guidanceState: GuidanceState,
+    gpsSignalState: GpsSignalState,
     ttsDebugSnapshot: VoiceAnnouncementDebugSnapshot?,
     vehicleLocationState: VehicleLocationState?,
     vehicleSpeedState: VehicleSpeedState,
@@ -577,6 +586,7 @@ private fun MapScreenSplitLayout(
                     uiState = uiState,
                     screenState = screenState,
                     guidanceState = guidanceState,
+                    gpsSignalState = gpsSignalState,
                     vehicleSpeedState = vehicleSpeedState,
                     ttsDebugSnapshot = ttsDebugSnapshot,
                     cameraState = cameraState,
@@ -705,6 +715,7 @@ private fun MapScreenContent(
     uiState: MapUiState,
     screenState: MapScreenState,
     guidanceState: GuidanceState,
+    gpsSignalState: GpsSignalState,
     vehicleSpeedState: VehicleSpeedState,
     ttsDebugSnapshot: VoiceAnnouncementDebugSnapshot?,
     cameraState: MapCameraState,
@@ -756,6 +767,7 @@ private fun MapScreenContent(
             MapNavigationContent(
                 modifier = modifier,
                 guidanceState = guidanceState,
+                gpsSignalState = gpsSignalState,
                 vehicleSpeedState = vehicleSpeedState,
                 navigationGuideImage = uiState.navigationGuideImage,
                 overlayState = uiState.overlayState,

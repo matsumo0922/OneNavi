@@ -3,6 +3,7 @@ package me.matsumo.onenavi.core.navigation.extnav
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import kotlin.math.roundToInt
 
 /**
@@ -63,6 +64,7 @@ internal class ExtNavRerouteDetector {
         if (snapshot.routeMatchState != RouteMatchState.OFF_ROUTE_CONFIRMED) {
             return ExtNavRerouteDecision.None
         }
+        if (snapshot.positionSource != VehiclePositionSource.OBSERVED) return ExtNavRerouteDecision.None
         if (isWithinWarmup(timestampMillis)) return ExtNavRerouteDecision.None
         if (snapshot.distanceRemainingMeters <= MIN_REMAINING_METRES) return ExtNavRerouteDecision.None
 

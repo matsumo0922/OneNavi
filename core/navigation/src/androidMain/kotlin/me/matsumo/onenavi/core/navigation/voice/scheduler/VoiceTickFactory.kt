@@ -2,6 +2,7 @@ package me.matsumo.onenavi.core.navigation.voice.scheduler
 
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavProgressSnapshot
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import me.matsumo.onenavi.core.navigation.voice.selector.VoiceTick
 
 /**
@@ -20,7 +21,8 @@ internal class VoiceTickFactory {
     fun from(snapshot: ExtNavProgressSnapshot): VoiceTick = VoiceTick(
         currentCumulativeMeters = snapshot.currentCumulativeMeters,
         speedMetersPerSecond = snapshot.vehicleSpeedMps?.toDouble(),
-        isRouteUsable = snapshot.routeMatchState.isUsableForVoiceAnnouncement(),
+        isRouteUsable = snapshot.routeMatchState.isUsableForVoiceAnnouncement() &&
+            snapshot.positionSource == VehiclePositionSource.OBSERVED,
     )
 }
 

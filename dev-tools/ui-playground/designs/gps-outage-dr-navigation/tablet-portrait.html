@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body { font-family: system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif; background: #e8edf1; color: #1c1b1f; }
+      .map { position: relative; height: 100%; overflow: hidden; background: linear-gradient(135deg, #dfe7eb, #eef3f6); }
+      .road { position: absolute; left: -10%; top: 44%; width: 128%; height: 94px; background: #717a80; transform: rotate(-16deg); }
+      .route { position: absolute; left: 8%; top: 50%; width: 95%; height: 10px; background: #1a73e8; transform: rotate(-16deg); border-radius: 10px; }
+      .tunnel { position: absolute; left: 35%; top: 39%; width: 42%; height: 148px; border: 4px dashed #263238; transform: rotate(-16deg); border-radius: 14px; opacity: .75; }
+      .vehicle { position: absolute; left: 48%; top: 49%; width: 30px; height: 30px; border-radius: 50%; background: rgba(26,115,232,.58); border: 4px solid white; box-shadow: 0 0 0 10px rgba(26,115,232,.14); }
+      .badge { position: absolute; left: 32px; top: 42px; padding: 10px 14px; border-radius: 8px; background: #ffd8a8; color: #3d2600; font-weight: 800; font-size: 15px; }
+      .panel { position: absolute; left: 32px; right: 32px; bottom: 32px; background: white; border-radius: 18px; padding: 22px; box-shadow: 0 10px 28px rgba(0,0,0,.22); display: flex; justify-content: space-between; align-items: center; }
+      .time { font-size: 44px; color: #16833a; font-weight: 900; }
+      .summary { color: #667078; margin-top: 2px; font-size: 18px; }
+      .speed { text-align: right; }
+      .speed b { display: block; font-size: 44px; }
+      .speed span { color: #667078; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <main class="map">
+      <div class="road"></div><div class="route"></div><div class="tunnel"></div><div class="vehicle"></div>
+      <div class="badge">測位低下 · 推定走行中 8s</div>
+      <section class="panel"><div><div class="time">18分</div><div class="summary">12 km · 18:42 着</div></div><div class="speed"><b>72</b><span>推定</span></div></section>
+    </main>
+  </body>
+</html>

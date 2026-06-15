@@ -12,6 +12,7 @@ import me.matsumo.onenavi.core.model.RouteWaypoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.ManeuverCallout
 import kotlin.test.Test
@@ -209,6 +210,7 @@ class GuidanceCarTripMapperTest {
             currentRoadClass = RoadClass.ORDINARY,
             currentSpeedLimitKmh = null,
             routeMatchState = RouteMatchState.ON_ROUTE,
+            positionSource = VehiclePositionSource.OBSERVED,
             projectionErrorMeters = null,
         )
     }

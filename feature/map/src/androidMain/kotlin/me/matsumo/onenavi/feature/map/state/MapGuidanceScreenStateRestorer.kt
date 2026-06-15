@@ -28,6 +28,7 @@ internal object MapGuidanceScreenStateRestorer {
     private fun GuidanceState.requiresNavigatingScreen(): Boolean {
         return when (this) {
             is GuidanceState.Guiding,
+            is GuidanceState.Preparing,
             is GuidanceState.Rerouting,
             -> true
 

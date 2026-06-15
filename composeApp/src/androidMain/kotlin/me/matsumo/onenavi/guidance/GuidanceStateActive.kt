@@ -6,6 +6,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 internal val GuidanceState.isActiveGuidance: Boolean
     get() = when (this) {
         is GuidanceState.Guiding,
+        is GuidanceState.Preparing,
         is GuidanceState.Rerouting,
         -> true
         GuidanceState.Arrived,

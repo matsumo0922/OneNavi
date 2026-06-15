@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation
 
 /**
@@ -15,10 +16,11 @@ import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePrese
  * @param currentCumulativeMeters ルート geometry 上の現在累積距離
  * @param distanceRemainingMeters 内部計算用の残距離
  * @param matchedSegmentIndex snap 先 polyline segment index
- * @param projectionErrorMeters 生位置と snap 点の距離
+ * @param projectionErrorMeters 生位置と snap 点の距離。実測でない場合は null
  * @param locationTimestampMillis 位置 tick の時刻
  * @param vehicleSpeedMps 車速
  * @param routeMatchState 現在位置と案内 route の一致状態
+ * @param positionSource 位置が実測・推定・初期値のいずれかを表す種別
  * @param isOffRouteCandidate debounce 前のオフルート候補
  * @param nextGuidancePointIndex 次の案内ポイント index
  * @param headingDegrees 車両進行方位 (GPS 方位、無ければ直前位置からの移動方位)。求められなければ null
@@ -31,10 +33,11 @@ data class ExtNavProgressSnapshot(
     val currentCumulativeMeters: Double,
     val distanceRemainingMeters: Double,
     val matchedSegmentIndex: Int,
-    val projectionErrorMeters: Double,
+    val projectionErrorMeters: Double?,
     val locationTimestampMillis: Long,
     val vehicleSpeedMps: Float?,
     val routeMatchState: RouteMatchState,
+    val positionSource: VehiclePositionSource,
     val isOffRouteCandidate: Boolean,
     val nextGuidancePointIndex: Int?,
     val headingDegrees: Float? = null,

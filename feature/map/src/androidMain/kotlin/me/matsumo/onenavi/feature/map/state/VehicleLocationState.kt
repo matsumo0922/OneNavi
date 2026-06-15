@@ -3,6 +3,7 @@ package me.matsumo.onenavi.feature.map.state
 import androidx.compose.runtime.Immutable
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 
 /**
  * 地図上に表示する自車位置の取得元。
@@ -27,6 +28,7 @@ enum class VehicleLocationSource {
  * @param routeProgressMeters route geometry 上の累積距離。route-snapped 位置でない場合は null
  * @param source 位置情報の取得元
  * @param routeMatchState 現在位置と案内 route の一致状態。案内中でない場合は null
+ * @param positionSource 位置が実測・推定・初期値のいずれかを表す種別。案内中でない場合は null
  * @param projectionErrorMeters 生位置と route-snapped 位置の距離。計算できない場合は null
  */
 @Immutable
@@ -40,5 +42,6 @@ data class VehicleLocationState(
     val routeProgressMeters: Double?,
     val source: VehicleLocationSource,
     val routeMatchState: RouteMatchState?,
+    val positionSource: VehiclePositionSource?,
     val projectionErrorMeters: Double?,
 )

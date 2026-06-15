@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import me.matsumo.onenavi.core.datasource.location.CurrentLocationDataSource
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.RoadClass
@@ -29,12 +31,16 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavProgressSnapshot
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDecision
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavTunnelSegmentProvider
 import me.matsumo.onenavi.core.navigation.extnav.RouteGeometryMath
 import me.matsumo.onenavi.core.navigation.extnav.RouteStopProgress
+import me.matsumo.onenavi.core.navigation.extnav.TunnelMapStatus
+import me.matsumo.onenavi.core.navigation.newguidance.model.GpsSignalState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
+import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidancePresentation
 import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
 import me.matsumo.onenavi.core.navigation.voice.scheduler.VoiceAnnouncementController
@@ -56,10 +62,12 @@ class NewGuidanceManager internal constructor(
     private val voiceController: VoiceAnnouncementController? = null,
     private val rerouteDetector: ExtNavRerouteDetector? = null,
     private val routeRepository: RouteRepository? = null,
+    private val tunnelSegmentProvider: ExtNavTunnelSegmentProvider? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
 
     private val _state = MutableStateFlow<GuidanceState>(GuidanceState.Idle)
+    private val _gpsSignalState = MutableStateFlow<GpsSignalState>(GpsSignalState.Available)
     private val _events = MutableSharedFlow<GuidanceEvent>(extraBufferCapacity = EVENT_BUFFER_CAPACITY)
     private val fallbackVoiceDebugSnapshot = MutableStateFlow<VoiceAnnouncementDebugSnapshot?>(null)
 
@@ -73,9 +81,20 @@ class NewGuidanceManager internal constructor(
 
     private var currentRoute: RouteDetail? = null
     private var rerouteJob: Job? = null
+    private var prepareJob: Job? = null
+    private var guidanceRequestGeneration: Long = INITIAL_GUIDANCE_REQUEST_GENERATION
+    private var collectingSessionId: Long? = null
+    private var isTrackerAttached: Boolean = false
+    private var latestUsableObservedLocation: UserLocation? = null
+    private var didFlushUsableObservedLocation: Boolean = false
+    private var lastObservedReceivedAtElapsedNanos: Long? = null
+    private var lastUsableObservedAtElapsedNanos: Long? = null
 
     /** Guidance 期の現在状態。 */
     val state: StateFlow<GuidanceState> = _state.asStateFlow()
+
+    /** 案内中に使う測位信号の状態。 */
+    val gpsSignalState: StateFlow<GpsSignalState> = _gpsSignalState.asStateFlow()
 
     /** Guidance 期の一度きりのイベント。 */
     val events: SharedFlow<GuidanceEvent> = _events.asSharedFlow()
@@ -93,7 +112,10 @@ class NewGuidanceManager internal constructor(
      * @param route 案内対象ルート
      */
     fun startGuidance(route: RouteDetail) {
-        beginGuidance(route = route, resetReroute = true)
+        beginGuidance(
+            route = route,
+            resetReroute = true,
+        )
     }
 
     /**
@@ -109,19 +131,43 @@ class NewGuidanceManager internal constructor(
         route: RouteDetail,
         resetReroute: Boolean,
     ) {
+        val requestGeneration = nextGuidanceRequestGeneration()
+
+        prepareJob?.cancel()
         stopGuidanceSession(detachTracker = isSessionActive)
         if (resetReroute) rerouteDetector?.detach()
         Napier.i(tag = TAG) { "Guidance started: routeId=${route.id}" }
         currentRoute = route
         val sessionId = consumeNextSessionId()
-        val trackerSnapshot = startTrackerForRoute(route, announceOpening = resetReroute)
-        activeSessionId = sessionId
-        isSessionActive = true
-        _state.value = guidingStateFrom(route = route, snapshot = trackerSnapshot)
-        startGuidanceSession(
+        _state.value = GuidanceState.Preparing(
+            route = route,
+            initialProgress = route.toInitialProgress(),
+        )
+        startPreparingSession(
             route = route,
             sessionId = sessionId,
         )
+
+        prepareJob = scope.launch {
+            val tunnelMapStatus = prepareTunnelMap(route)
+            if (!isCurrentGuidanceRequest(requestGeneration, route)) {
+                return@launch
+            }
+
+            val trackerSnapshot = startTrackerForRoute(
+                route = route,
+                tunnelMapStatus = tunnelMapStatus,
+                announceOpening = resetReroute,
+            )
+            activeSessionId = sessionId
+            isSessionActive = true
+            isTrackerAttached = trackerSnapshot != null
+            _state.value = guidingStateFrom(
+                route = route,
+                snapshot = trackerSnapshot,
+            )
+            flushLatestUsableObservedLocation()
+        }
     }
 
     /**
@@ -158,9 +204,13 @@ class NewGuidanceManager internal constructor(
         val shouldEmitStopped = _state.value != GuidanceState.Idle
 
         Napier.i(tag = TAG) { "Guidance stopped" }
+        nextGuidanceRequestGeneration()
+        prepareJob?.cancel()
+        prepareJob = null
         rerouteJob?.cancel()
         rerouteJob = null
         stopGuidanceSession(detachTracker = isSessionActive)
+        resetSignalState()
         rerouteDetector?.detach()
         currentRoute = null
         _state.value = GuidanceState.Idle
@@ -190,6 +240,7 @@ class NewGuidanceManager internal constructor(
      */
     private fun startTrackerForRoute(
         route: RouteDetail,
+        tunnelMapStatus: TunnelMapStatus,
         announceOpening: Boolean,
     ): ExtNavProgressSnapshot? {
         val registry = routeRegistry
@@ -205,11 +256,16 @@ class NewGuidanceManager internal constructor(
             return null
         }
 
-        val attachment = tracker.attach(payload = payload, route = route)
+        val attachment = tracker.attach(
+            payload = payload,
+            route = route,
+            tunnelMapStatus = tunnelMapStatus,
+        )
         rerouteDetector?.attach(route)
-        tracker.onLocation(route.toOriginUserLocation())
-
-        val snapshot = tracker.snapshot.value
+        val snapshot = tracker.initializeAtRouteOrigin(
+            timestampMillis = System.currentTimeMillis(),
+            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+        )
         if (snapshot == null) {
             Napier.w(tag = TAG) { "Tracker snapshot was not produced. routeId=${route.id}" }
             return null
@@ -226,17 +282,19 @@ class NewGuidanceManager internal constructor(
     }
 
     /**
-     * 案内 session 用の coroutine 群を開始する。
+     * Preparing から Guiding へ昇格する案内 session 用 coroutine 群を開始する。
      *
-     * tracker snapshot の state 反映と、端末位置の tracker 投入を別 job として開始する。
+     * tracker snapshot の state 反映、端末位置の先行収集、測位信号 clock を別 job として開始する。
      *
      * @param route 案内対象ルート
      * @param sessionId この案内開始に対応する session id
      */
-    private fun startGuidanceSession(
+    private fun startPreparingSession(
         route: RouteDetail,
         sessionId: Long,
     ) {
+        collectingSessionId = sessionId
+
         val tracker = guidanceTracker
         if (tracker == null) {
             Napier.w(tag = TAG) { "Tracker is not injected. Guidance session collection is skipped." }
@@ -251,6 +309,10 @@ class NewGuidanceManager internal constructor(
             ),
             startLocationCollection(
                 route = route,
+                tracker = tracker,
+                sessionId = sessionId,
+            ),
+            startSignalClock(
                 tracker = tracker,
                 sessionId = sessionId,
             ),
@@ -306,14 +368,19 @@ class NewGuidanceManager internal constructor(
         snapshot: ExtNavProgressSnapshot,
     ): Boolean {
         val activeRoute = currentRoute ?: route
-        if (isDestinationReached(snapshot)) {
+        val canCommitObservedProgress = snapshot.positionSource == VehiclePositionSource.OBSERVED
+        if (canCommitObservedProgress && isDestinationReached(snapshot)) {
             completeDestinationGuidance(route = activeRoute)
             return false
         }
 
-        val updatedRoute = activeRoute.withPassedIntermediateWaypointsRemoved(
-            currentCumulativeMeters = snapshot.currentCumulativeMeters,
-        )
+        val updatedRoute = if (canCommitObservedProgress) {
+            activeRoute.withPassedIntermediateWaypointsRemoved(
+                currentCumulativeMeters = snapshot.currentCumulativeMeters,
+            )
+        } else {
+            activeRoute
+        }
         if (updatedRoute != activeRoute) {
             val didPassWaypoint = updatedRoute.intermediateWaypoints.size < activeRoute.intermediateWaypoints.size
             currentRoute = updatedRoute
@@ -350,9 +417,13 @@ class NewGuidanceManager internal constructor(
     private fun completeDestinationGuidance(route: RouteDetail) {
         Napier.i(tag = TAG) { "Destination reached: routeId=${route.id}" }
         voiceController?.announceDestinationReached()
+        nextGuidanceRequestGeneration()
+        prepareJob?.cancel()
+        prepareJob = null
         rerouteJob?.cancel()
         rerouteJob = null
         stopGuidanceSession(detachTracker = isSessionActive)
+        resetSignalState()
         rerouteDetector?.detach()
         currentRoute = null
         _state.value = GuidanceState.Idle
@@ -455,7 +526,9 @@ class NewGuidanceManager internal constructor(
         val previousProgress = previousGuidingState?.progress ?: previousRoute.toInitialProgress()
 
         Napier.i(tag = TAG) { "Reroute requested: reason=${request.reason}" }
+        nextGuidanceRequestGeneration()
         stopGuidanceSession(detachTracker = true)
+        resetSignalState()
         _state.value = GuidanceState.Rerouting(
             previousRoute = previousRoute,
             previousProgress = previousProgress,
@@ -596,16 +669,16 @@ class NewGuidanceManager internal constructor(
                         tracker = tracker,
                         location = lastKnownLocation,
                         sessionId = sessionId,
+                        canUpdateFreshness = false,
                     )
                 }
-
-                if (!isActiveSession(sessionId)) return@launch
 
                 dataSource.locationUpdates().collect { location ->
                     forwardLocationTick(
                         tracker = tracker,
                         location = location,
                         sessionId = sessionId,
+                        canUpdateFreshness = true,
                     )
                 }
             } catch (cancellation: CancellationException) {
@@ -631,10 +704,51 @@ class NewGuidanceManager internal constructor(
         tracker: ExtNavGuidanceTracker,
         location: UserLocation,
         sessionId: Long,
+        canUpdateFreshness: Boolean,
     ) {
-        if (!isActiveSession(sessionId)) return
+        if (!isSessionCollecting(sessionId)) return
+
+        if (canUpdateFreshness) {
+            recordObservedLocation(location)
+        }
+        if (!isActiveSession(sessionId) || !isTrackerAttached) return
+        if (!shouldForwardObservedLocation(location)) return
 
         tracker.onLocation(location)
+    }
+
+    /**
+     * 測位信号 clock を開始する。
+     *
+     * @param tracker DR tick を投入する tracker
+     * @param sessionId この案内開始に対応する session id
+     * @return clock job
+     */
+    private fun startSignalClock(
+        tracker: ExtNavGuidanceTracker,
+        sessionId: Long,
+    ): Job = scope.launch {
+        try {
+            while (isSessionCollecting(sessionId)) {
+                val nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                updateGpsSignalState(nowElapsedRealtimeNanos)
+                if (isActiveSession(sessionId)) {
+                    maybeAdvanceDeadReckoning(
+                        tracker = tracker,
+                        nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+                    )
+                }
+                delay(DR_TICK_INTERVAL_MILLIS)
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            handleGuidanceFailure(
+                routeId = currentRoute?.id.orEmpty(),
+                source = "signal",
+                error = error,
+            )
+        }
     }
 
     /**
@@ -644,9 +758,12 @@ class NewGuidanceManager internal constructor(
      */
     private fun stopGuidanceSession(detachTracker: Boolean) {
         activeSessionId = null
+        collectingSessionId = null
         sessionJobs.forEach { job -> job.cancel() }
         sessionJobs = emptyList()
         isSessionActive = false
+        isTrackerAttached = false
+        didFlushUsableObservedLocation = false
 
         if (detachTracker) {
             guidanceTracker?.detach()
@@ -674,6 +791,162 @@ class NewGuidanceManager internal constructor(
     private fun isActiveSession(sessionId: Long): Boolean = activeSessionId == sessionId
 
     /**
+     * 指定 session の collector / clock が継続対象かを判定する。
+     *
+     * @param sessionId 確認対象の案内 session id
+     * @return Preparing または Guiding 中の session なら true
+     */
+    private fun isSessionCollecting(sessionId: Long): Boolean =
+        collectingSessionId == sessionId && (activeSessionId == null || activeSessionId == sessionId)
+
+    /**
+     * 位置 tick の freshness 情報を記録する。
+     *
+     * @param location 観測位置 tick
+     */
+    private fun recordObservedLocation(location: UserLocation) {
+        val receivedAtElapsedNanos = SystemClock.elapsedRealtimeNanos()
+        lastObservedReceivedAtElapsedNanos = receivedAtElapsedNanos
+
+        if (!location.isUsableObservedLocation()) return
+
+        lastUsableObservedAtElapsedNanos = receivedAtElapsedNanos
+        latestUsableObservedLocation = location
+        _gpsSignalState.value = GpsSignalState.Available
+    }
+
+    /**
+     * 測位信号状態を更新する。
+     *
+     * @param nowElapsedRealtimeNanos 現在の monotonic clock
+     */
+    private fun updateGpsSignalState(nowElapsedRealtimeNanos: Long) {
+        val lastUsableObservedAt = lastUsableObservedAtElapsedNanos ?: return
+        val elapsedSeconds = (nowElapsedRealtimeNanos - lastUsableObservedAt).coerceAtLeast(0L) /
+            NANOS_PER_SECOND.toFloat()
+        if (elapsedSeconds <= LOST_SIGNAL_THRESHOLD_SECONDS) {
+            _gpsSignalState.value = GpsSignalState.Available
+        } else {
+            _gpsSignalState.value = GpsSignalState.Lost(elapsedSeconds = elapsedSeconds)
+        }
+    }
+
+    /**
+     * 測位途絶中なら tracker の DR を 1 tick 進める。
+     *
+     * @param tracker DR tick の投入先
+     * @param nowElapsedRealtimeNanos 現在の monotonic clock
+     */
+    private fun maybeAdvanceDeadReckoning(
+        tracker: ExtNavGuidanceTracker,
+        nowElapsedRealtimeNanos: Long,
+    ) {
+        if (_gpsSignalState.value !is GpsSignalState.Lost) return
+
+        tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+            nowWallClockMillis = System.currentTimeMillis(),
+        )
+    }
+
+    /**
+     * 観測 tick を tracker へ投入してよいかを返す。
+     *
+     * usable tick が途絶した後は、精度の粗い tick で DR を解除しない。通常案内中は従来どおり粗い tick も
+     * tracker へ流す。
+     *
+     * @param location tracker 投入候補の観測位置
+     * @return tracker へ投入してよい場合 true
+     */
+    private fun shouldForwardObservedLocation(location: UserLocation): Boolean {
+        val isSignalLost = _gpsSignalState.value is GpsSignalState.Lost
+        if (!isSignalLost) return true
+
+        return location.isUsableObservedLocation()
+    }
+
+    /**
+     * attach 直後に直近 usable tick を tracker へ 1 回だけ流す。
+     */
+    private fun flushLatestUsableObservedLocation() {
+        val tracker = guidanceTracker ?: return
+        val sessionId = activeSessionId ?: return
+        if (didFlushUsableObservedLocation) return
+        val location = latestUsableObservedLocation ?: return
+
+        didFlushUsableObservedLocation = true
+        forwardLocationTick(
+            tracker = tracker,
+            location = location,
+            sessionId = sessionId,
+            canUpdateFreshness = false,
+        )
+    }
+
+    /**
+     * guidance request 世代を進める。
+     *
+     * @return 更新後の世代
+     */
+    private fun nextGuidanceRequestGeneration(): Long {
+        guidanceRequestGeneration += GUIDANCE_REQUEST_GENERATION_INCREMENT
+        return guidanceRequestGeneration
+    }
+
+    /**
+     * prepare 完了結果が現在の開始要求に対応しているかを返す。
+     *
+     * @param generation prepare 開始時に capture した世代
+     * @param route prepare 対象 route
+     * @return 現在の route / 世代と一致する場合 true
+     */
+    private fun isCurrentGuidanceRequest(
+        generation: Long,
+        route: RouteDetail,
+    ): Boolean {
+        val currentRoute = currentRoute ?: return false
+        return generation == guidanceRequestGeneration && currentRoute.id == route.id
+    }
+
+    /**
+     * 選択 route のトンネル区間を準備する。
+     *
+     * @param route 準備対象 route
+     * @return トンネル区間状態。失敗時は Unavailable
+     */
+    private suspend fun prepareTunnelMap(route: RouteDetail): TunnelMapStatus {
+        val provider = tunnelSegmentProvider ?: return TunnelMapStatus.Ready(persistentListOf())
+
+        return runCatching {
+            withTimeout(TUNNEL_PREPARE_TIMEOUT_MILLIS) {
+                provider.prepare(route)
+            }
+        }.getOrElse { error ->
+            Napier.w(tag = TAG, throwable = error) { "Tunnel map preparation failed: routeId=${route.id}" }
+            TunnelMapStatus.Unavailable
+        }
+    }
+
+    /**
+     * 測位信号状態と freshness を初期化する。
+     */
+    private fun resetSignalState() {
+        latestUsableObservedLocation = null
+        didFlushUsableObservedLocation = false
+        lastObservedReceivedAtElapsedNanos = null
+        lastUsableObservedAtElapsedNanos = null
+        _gpsSignalState.value = GpsSignalState.Available
+    }
+
+    /**
+     * DR 解除や freshness 判定に使える観測位置かを返す。
+     *
+     * @return 水平精度が有限で閾値以下なら true
+     */
+    private fun UserLocation.isUsableObservedLocation(): Boolean =
+        accuracyMeters.isFinite() && accuracyMeters <= USABLE_LOCATION_ACCURACY_METRES
+
+    /**
      * 案内中の非キャンセル例外を [GuidanceState.Failed] に変換する。
      *
      * @param routeId 案内中 route id
@@ -686,6 +959,11 @@ class NewGuidanceManager internal constructor(
         error: Throwable,
     ) {
         Napier.w(tag = TAG, throwable = error) { "Guidance $source failed: routeId=$routeId" }
+        nextGuidanceRequestGeneration()
+        prepareJob?.cancel()
+        prepareJob = null
+        stopGuidanceSession(detachTracker = isSessionActive)
+        resetSignalState()
         _state.value = GuidanceState.Failed("guidance $source failed")
     }
 
@@ -714,23 +992,29 @@ class NewGuidanceManager internal constructor(
 
         /** Guidance event のバッファ容量。 */
         const val EVENT_BUFFER_CAPACITY = 1
+
+        /** guidance request generation の初期値。 */
+        const val INITIAL_GUIDANCE_REQUEST_GENERATION = 0L
+
+        /** guidance request generation を進める加算値。 */
+        const val GUIDANCE_REQUEST_GENERATION_INCREMENT = 1L
+
+        /** トンネル prepare の待ち時間上限。 */
+        const val TUNNEL_PREPARE_TIMEOUT_MILLIS = 3_000L
+
+        /** DR / GPS signal clock の tick 間隔。 */
+        const val DR_TICK_INTERVAL_MILLIS = 200L
+
+        /** 秒からナノ秒へ変換する係数。 */
+        const val NANOS_PER_SECOND = 1_000_000_000L
+
+        /** usable observed tick とみなす水平精度上限。 */
+        const val USABLE_LOCATION_ACCURACY_METRES = 20f
+
+        /** usable tick 途絶とみなす秒数。 */
+        const val LOST_SIGNAL_THRESHOLD_SECONDS = 3f
     }
 }
-
-/**
- * route origin を初期 tick 用の [UserLocation] に変換する。
- *
- * @return route 始点を表す仮の現在地
- */
-private fun RouteDetail.toOriginUserLocation(): UserLocation = UserLocation(
-    latitude = origin.latitude,
-    longitude = origin.longitude,
-    bearingDegrees = null,
-    speedMps = null,
-    accuracyMeters = 0f,
-    timestampMillis = System.currentTimeMillis(),
-    elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
-)
 
 /**
  * tracker snapshot が作れない場合の初期 [GuidanceProgress] を作る。
@@ -756,5 +1040,6 @@ private fun RouteDetail.toInitialProgress(): GuidanceProgress = GuidanceProgress
     currentRoadClass = roadClassSegments.firstOrNull()?.roadClass ?: RoadClass.ORDINARY,
     currentSpeedLimitKmh = null,
     routeMatchState = RouteMatchState.ON_ROUTE,
-    projectionErrorMeters = 0.0,
+    positionSource = VehiclePositionSource.INITIAL,
+    projectionErrorMeters = null,
 )

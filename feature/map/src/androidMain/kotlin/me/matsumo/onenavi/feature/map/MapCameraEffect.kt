@@ -278,6 +278,11 @@ internal fun MapCameraEffect(
                     progress = guidanceState.progress,
                 )
 
+                is GuidanceState.Preparing -> remainingRouteOverviewPoints(
+                    route = guidanceState.route,
+                    progress = guidanceState.initialProgress,
+                )
+
                 is GuidanceState.Rerouting -> remainingRouteOverviewPoints(
                     route = guidanceState.previousRoute,
                     progress = guidanceState.previousProgress,
@@ -514,6 +519,7 @@ private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"
 
 private fun GuidanceState.routeOverviewKey(): String? = when (this) {
     is GuidanceState.Guiding -> route.id
+    is GuidanceState.Preparing -> route.id
     is GuidanceState.Rerouting -> previousRoute.id
     is GuidanceState.Arrived,
     is GuidanceState.Failed,

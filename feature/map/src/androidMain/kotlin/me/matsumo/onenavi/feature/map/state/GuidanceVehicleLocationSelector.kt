@@ -45,6 +45,7 @@ internal object GuidanceVehicleLocationSelector {
         routeProgressMeters = currentCumulativeMeters,
         source = VehicleLocationSource.ROUTE_SNAPPED,
         routeMatchState = routeMatchState,
+        positionSource = positionSource,
         projectionErrorMeters = projectionErrorMeters,
     )
 
@@ -69,6 +70,7 @@ internal object GuidanceVehicleLocationSelector {
             routeProgressMeters = null,
             source = VehicleLocationSource.RAW_GPS,
             routeMatchState = routeMatchState,
+            positionSource = positionSource,
             projectionErrorMeters = projectionErrorMeters,
         )
     }

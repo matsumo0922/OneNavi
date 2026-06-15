@@ -102,5 +102,6 @@ private fun UserLocation.toVehicleLocationState(): VehicleLocationState = Vehicl
     routeProgressMeters = null,
     source = VehicleLocationSource.RAW_GPS,
     routeMatchState = null,
+    positionSource = null,
     projectionErrorMeters = null,
 )

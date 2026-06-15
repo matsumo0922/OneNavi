@@ -96,6 +96,7 @@ internal class CarNavigationSessionPublisher(
 
         when (state) {
             is GuidanceState.Guiding -> publishGuidingState(manager, state)
+            is GuidanceState.Preparing -> publishPreparingState(manager, state)
             is GuidanceState.Rerouting -> publishReroutingState(manager, state)
             GuidanceState.Arrived,
             is GuidanceState.Failed,
@@ -110,6 +111,15 @@ internal class CarNavigationSessionPublisher(
             manager.updateTrip(tripMapper.toTrip(state))
         }.onFailure { error ->
             Napier.w(tag = TAG, throwable = error) { "Failed to publish Android Auto trip." }
+        }
+    }
+
+    private fun publishPreparingState(manager: NavigationManager, state: GuidanceState.Preparing) {
+        runCatching {
+            ensureNavigationStarted(manager)
+            manager.updateTrip(tripMapper.toLoadingTrip(state))
+        }.onFailure { error ->
+            Napier.w(tag = TAG, throwable = error) { "Failed to publish Android Auto preparing trip." }
         }
     }
 
