@@ -2,7 +2,6 @@ package me.matsumo.onenavi.feature.map
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -10,7 +9,6 @@ import com.google.android.gms.maps.GoogleMap
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.model.RouteDetail
-import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RoutePointEvent
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
@@ -32,8 +30,6 @@ import me.matsumo.onenavi.feature.map.state.MapHostInsets
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapScreenState
 import me.matsumo.onenavi.feature.map.state.VehicleLocationState
-import kotlin.math.abs
-import kotlin.math.cos
 
 /**
  * GoogleMap 上に画面状態に応じた overlay を描画する。
@@ -514,12 +510,7 @@ private fun NavigationEffect(
 ) {
     val guidanceRoute = guidanceState.routeForMapOverlay() ?: return
     val route = guidanceRoute.route
-    val routeGeometry = route.geometry
-    val guidanceTargetLocation = guidanceState.guidanceTargetLocation()
-    val guidanceTargetDistanceFromStartMeters = guidanceState.guidanceTargetDistanceFromStartMeters()
-    val guidanceTargetPolylinePointIndex = remember(route.id, guidanceTargetLocation) {
-        routeGeometry.nearestPointIndexOrNull(guidanceTargetLocation)
-    }
+    val guidanceTargetPointIndex = guidanceState.guidanceTargetPointIndex()
 
     if (!shouldSuppressGuidanceRouteOverlay) {
         RoutePolylineEffect(
@@ -532,8 +523,7 @@ private fun NavigationEffect(
             viewportPadding = viewportPadding,
             modifier = modifier,
             routeProgressMeters = routeProgressMeters,
-            guidanceTargetPolylinePointIndex = guidanceTargetPolylinePointIndex,
-            guidanceTargetDistanceFromStartMeters = guidanceTargetDistanceFromStartMeters,
+            guidanceTargetPointIndex = guidanceTargetPointIndex,
         )
     }
 
@@ -592,8 +582,7 @@ private fun NavigationEffect(
  * @param bottomCardHeight インシデント callout が避ける下部カード高さ
  * @param viewportPadding インシデント callout が避ける host / 画面外・UI 帯 padding
  * @param routeProgressMeters route 上の現在地累積距離。取得できない場合は null
- * @param guidanceTargetPolylinePointIndex 現在の案内地点に最も近い route geometry index。取得できない場合は null
- * @param guidanceTargetDistanceFromStartMeters 現在の案内地点の route geometry 上の累積距離。取得できない場合は null
+ * @param guidanceTargetPointIndex 現在の案内地点の GuidancePoint index。取得できない場合は null
  * @param modifier callout overlay 用 modifier
  */
 @Composable
@@ -607,8 +596,7 @@ private fun RoutePolylineEffect(
     viewportPadding: MapHostInsets,
     modifier: Modifier = Modifier,
     routeProgressMeters: Double? = null,
-    guidanceTargetPolylinePointIndex: Int? = null,
-    guidanceTargetDistanceFromStartMeters: Double? = null,
+    guidanceTargetPointIndex: Int? = null,
 ) {
     MapPolyline(
         googleMap = googleMap,
@@ -624,8 +612,7 @@ private fun RoutePolylineEffect(
             googleMap = googleMap,
             route = route,
             routeProgressMeters = routeProgressMeters,
-            guidanceTargetPolylinePointIndex = guidanceTargetPolylinePointIndex,
-            guidanceTargetDistanceFromStartMeters = guidanceTargetDistanceFromStartMeters,
+            guidanceTargetPointIndex = guidanceTargetPointIndex,
             zIndex = ROUTE_POINT_EVENT_MARKER_Z_INDEX,
         )
     }
@@ -650,8 +637,7 @@ private fun RoutePolylineEffect(
  * @param googleMap marker 描画先の GoogleMap
  * @param route 描画対象 route
  * @param routeProgressMeters route 上の現在地累積距離。取得できない場合は null
- * @param guidanceTargetPolylinePointIndex 現在の案内地点に最も近い route geometry index。取得できない場合は null
- * @param guidanceTargetDistanceFromStartMeters 現在の案内地点の route geometry 上の累積距離。取得できない場合は null
+ * @param guidanceTargetPointIndex 現在の案内地点の GuidancePoint index。取得できない場合は null
  * @param zIndex marker の zIndex
  */
 @Composable
@@ -659,15 +645,11 @@ private fun RoutePointEventMarkersEffect(
     googleMap: GoogleMap,
     route: RouteDetail,
     routeProgressMeters: Double?,
-    guidanceTargetPolylinePointIndex: Int?,
-    guidanceTargetDistanceFromStartMeters: Double?,
+    guidanceTargetPointIndex: Int?,
     zIndex: Float,
 ) {
     val visiblePointEvents = route.visiblePointEvents(routeProgressMeters)
-    val guidanceTargetPointEventIndex = visiblePointEvents.guidanceTargetPointEventIndex(
-        guidanceTargetPolylinePointIndex,
-        guidanceTargetDistanceFromStartMeters,
-    )
+    val guidanceTargetPointEventIndex = visiblePointEvents.guidanceTargetPointEventIndex(guidanceTargetPointIndex)
 
     visiblePointEvents.forEachIndexed { eventIndex, pointEvent ->
         val isGuidanceTarget = eventIndex == guidanceTargetPointEventIndex
@@ -703,78 +685,20 @@ private fun RouteDetail.visiblePointEvents(routeProgressMeters: Double?): List<R
         .toList()
 }
 
-private fun GuidanceState.guidanceTargetLocation(): RoutePoint? {
-    return (this as? GuidanceState.Guiding)
+private fun GuidanceState.guidanceTargetPointIndex(): Int? {
+    val guidancePointIndex = (this as? GuidanceState.Guiding)
         ?.presentation
         ?.nextManeuver
-        ?.location
+        ?.guidancePointIndex
+
+    return guidancePointIndex?.takeIf { index -> index >= 0 }
 }
 
-private fun GuidanceState.guidanceTargetDistanceFromStartMeters(): Double? {
-    return (this as? GuidanceState.Guiding)
-        ?.presentation
-        ?.nextManeuver
-        ?.geometryDistanceFromStartMeters
-}
+private fun List<RoutePointEvent>.guidanceTargetPointEventIndex(guidanceTargetPointIndex: Int?): Int? {
+    val targetPointIndex = guidanceTargetPointIndex ?: return null
 
-private fun List<RoutePointEvent>.guidanceTargetPointEventIndex(
-    guidanceTargetPolylinePointIndex: Int?,
-    guidanceTargetDistanceFromStartMeters: Double?,
-): Int? {
-    val targetPolylinePointIndex = guidanceTargetPolylinePointIndex ?: return null
-    val targetDistanceFromStartMeters = guidanceTargetDistanceFromStartMeters ?: return null
-    val candidateStartIndex = targetPolylinePointIndex - ROUTE_POINT_EVENT_GUIDANCE_TARGET_INDEX_TOLERANCE
-    val candidateEndIndex = targetPolylinePointIndex + ROUTE_POINT_EVENT_GUIDANCE_TARGET_INDEX_TOLERANCE
-    var nearestPointEventIndex: Int? = null
-    var nearestDistanceDeltaMeters = Double.MAX_VALUE
-
-    for (pointEventIndex in indices) {
-        val pointEvent = this[pointEventIndex]
-        val hasCandidateIndex = pointEvent.polylinePointIndex in candidateStartIndex..candidateEndIndex
-        if (!hasCandidateIndex) continue
-
-        val distanceDeltaMeters = abs(pointEvent.distanceFromStartMeters - targetDistanceFromStartMeters)
-        val isInsideDistanceWindow = distanceDeltaMeters <= ROUTE_POINT_EVENT_GUIDANCE_TARGET_DISTANCE_TOLERANCE_METERS
-        if (!isInsideDistanceWindow) continue
-
-        if (distanceDeltaMeters < nearestDistanceDeltaMeters) {
-            nearestPointEventIndex = pointEventIndex
-            nearestDistanceDeltaMeters = distanceDeltaMeters
-        }
-    }
-
-    return nearestPointEventIndex
-}
-
-private fun List<RoutePoint>.nearestPointIndexOrNull(targetLocation: RoutePoint?): Int? {
-    val targetRoutePoint = targetLocation ?: return null
-
-    return nearestPointIndex(targetRoutePoint)
-}
-
-private fun List<RoutePoint>.nearestPointIndex(targetLocation: RoutePoint): Int? {
-    if (isEmpty()) return null
-
-    var nearestIndex = 0
-    var nearestDistanceSquared = this[nearestIndex].distanceSquaredTo(targetLocation)
-
-    for (pointIndex in 1 until size) {
-        val distanceSquared = this[pointIndex].distanceSquaredTo(targetLocation)
-        if (distanceSquared < nearestDistanceSquared) {
-            nearestIndex = pointIndex
-            nearestDistanceSquared = distanceSquared
-        }
-    }
-
-    return nearestIndex
-}
-
-private fun RoutePoint.distanceSquaredTo(targetLocation: RoutePoint): Double {
-    val latitudeDelta = latitude - targetLocation.latitude
-    val averageLatitudeRadians = Math.toRadians((latitude + targetLocation.latitude) / 2.0)
-    val longitudeDelta = (longitude - targetLocation.longitude) * cos(averageLatitudeRadians)
-
-    return latitudeDelta * latitudeDelta + longitudeDelta * longitudeDelta
+    return indexOfFirst { pointEvent -> pointEvent.sourceGuidancePointIndex == targetPointIndex }
+        .takeIf { pointEventIndex -> pointEventIndex >= 0 }
 }
 
 /**
@@ -846,9 +770,3 @@ private const val ROUTE_POINT_EVENT_MARKER_MIN_ZOOM = 15f
 
 /** 1 route で同時に描画する地点イベント marker の最大件数。 */
 private const val ROUTE_POINT_EVENT_MARKER_MAX_COUNT = 120
-
-/** 案内地点に紐付く地点イベント marker とみなす route geometry index の許容差。 */
-private const val ROUTE_POINT_EVENT_GUIDANCE_TARGET_INDEX_TOLERANCE = 1
-
-/** 案内地点に紐付く地点イベント marker とみなす route geometry 距離差の許容値。 */
-private const val ROUTE_POINT_EVENT_GUIDANCE_TARGET_DISTANCE_TOLERANCE_METERS = 50.0
