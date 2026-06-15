@@ -729,6 +729,87 @@ class VoiceAnnouncementSelectorTest {
         assertTrue(passed.isEmpty())
     }
 
+    @Test
+    fun `高速走行で FINAL が先に発火した後 同一地点の MIDDLE 窓がまだ有効でも MIDDLE は選ばれない`() {
+        // GP=5000m、33.3m/s × leadTime5s = 166.5m → FINAL 発火境界 4833.5m。
+        // MIDDLE「200m先」窓 = [4750, 4850)。current=4838 は FINAL 発火後もまだ窓内。
+        // 修正前: FINAL fired 後の tick で MIDDLE が選ばれてしまう (順序逆転)。
+        // 修正後: FINAL fired があれば MIDDLE は候補化しない。
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 5_000.0,
+                stages = listOf(
+                    middleStage("g200", enter = 4_750.0, exit = 4_850.0, groupKey = "predictGrp"),
+                    finalStage("final", groupKey = "finalGrp"),
+                ),
+            ),
+        )
+
+        // FINAL が fired された後、窓内 (4838) でも MIDDLE は選ばれない。
+        val stateAfterFinal = emptyState().withStageFired(VoiceAnnouncementId("final"))
+        val afterFinalInWindow = selector.select(
+            plan = plan,
+            tick = tickOf(current = 4_838.0, speed = 33.3),
+            state = stateAfterFinal,
+        )
+
+        assertNull(afterFinalInWindow)
+    }
+
+    @Test
+    fun `FINAL 発火前の通常の MIDDLE 予告は FINAL fired 抑止の影響を受けず選ばれる`() {
+        // FINAL が未発話の間、MIDDLE 窓に現在地が入っていれば通常どおり選ばれること (回帰防止)。
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 5_000.0,
+                stages = listOf(
+                    middleStage("g200", enter = 4_750.0, exit = 4_850.0, groupKey = "predictGrp"),
+                    finalStage("final", groupKey = "finalGrp"),
+                ),
+            ),
+        )
+
+        // FINAL 未発話・current=4800 は MIDDLE 窓内 → MIDDLE が選ばれる。
+        val beforeFinal = selector.select(
+            plan = plan,
+            tick = tickOf(current = 4_800.0, speed = 10.0),
+            state = emptyState(),
+        )
+
+        assertEquals(VoiceAnnouncementId("g200"), beforeFinal?.stage?.id)
+    }
+
+    @Test
+    fun `debug preview も FINAL 発話済みの target の MIDDLE を表示しない`() {
+        // 実発話と preview の挙動を揃えるため、FINAL fired 後は preview からも MIDDLE を除外する。
+        val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
+        val plan = planOf(
+            targetOf(
+                index = 0,
+                geometryMeters = 5_000.0,
+                stages = listOf(
+                    middleStage("g200", enter = 4_750.0, exit = 4_850.0, groupKey = "predictGrp"),
+                    finalStage("final", groupKey = "finalGrp"),
+                ),
+            ),
+        )
+
+        // FINAL fired 後に preview を取得しても target 自体が候補から外れるため空になる。
+        val stateAfterFinal = emptyState().withStageFired(VoiceAnnouncementId("final"))
+        val previews = selector.previewUpcoming(
+            plan = plan,
+            tick = tickOf(current = 4_838.0, speed = 33.3),
+            state = stateAfterFinal,
+            limit = 5,
+        )
+
+        assertTrue(previews.isEmpty())
+    }
+
     private fun simulateSelections(
         selector: VoiceAnnouncementSelector,
         plan: VoiceAnnouncementPlan,
