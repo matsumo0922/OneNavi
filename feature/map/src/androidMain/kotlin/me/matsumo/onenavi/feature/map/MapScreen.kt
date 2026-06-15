@@ -149,11 +149,22 @@ fun MapScreen(
     } else {
         null
     }
+    val addWaypointSearchRequestId = if (isPhoneDisplaySurface) {
+        phoneCommand?.addWaypointSearchRequestId()
+    } else {
+        null
+    }
     val navigationCardHeightDp = with(density) { uiState.navigationCardHeight.toDp() }
     val topAppBarHeightDp = with(density) { uiState.topAppBarHeight.toDp() }
     val waypointSearchOverlay = uiState.overlayState as? MapOverlayState.WaypointSearch
     val isAddWaypointSearchOverlay = uiState.overlayState is MapOverlayState.AddWaypointSearch
     val shouldShowWaypointSearchOverlay = isAddWaypointSearchOverlay || waypointSearchOverlay != null
+    val isAddWaypointSearchUnavailable = !guidanceState.supportsPhoneAddWaypointSearch()
+    val shouldConsumeAddWaypointSearchRequest = when {
+        addWaypointSearchRequestId == null -> false
+        isAddWaypointSearchOverlay -> true
+        else -> isAddWaypointSearchUnavailable
+    }
 
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
     val cameraState = rememberMapCameraState()
@@ -192,6 +203,19 @@ fun MapScreen(
     LaunchedEffect(destinationSearchRequestId) {
         if (destinationSearchRequestId != null) {
             viewModel.onUiEvent(MapUiEvent.OnPhoneDestinationSearchRequested)
+        }
+    }
+
+    LaunchedEffect(addWaypointSearchRequestId) {
+        if (addWaypointSearchRequestId != null) {
+            viewModel.onUiEvent(MapUiEvent.OnPhoneAddWaypointSearchRequested)
+        }
+    }
+
+    LaunchedEffect(addWaypointSearchRequestId, shouldConsumeAddWaypointSearchRequest) {
+        val requestId = addWaypointSearchRequestId ?: return@LaunchedEffect
+        if (shouldConsumeAddWaypointSearchRequest) {
+            carPhoneSessionCoordinator.consumePhoneCommand(requestId)
         }
     }
 
@@ -283,6 +307,7 @@ fun MapScreen(
                 viewportPadding = mapViewportPadding,
                 scaffoldState = scaffoldState,
                 destinationSearchRequestId = destinationSearchRequestId,
+                usePhoneAddWaypointSearch = isAndroidAutoVirtualDisplay,
                 onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
                 onMapUpdate = { googleMap = it },
                 onPointOfInterestClicked = { pointOfInterest ->
@@ -322,6 +347,7 @@ fun MapScreen(
                 viewportPadding = mapViewportPadding,
                 scaffoldState = scaffoldState,
                 destinationSearchRequestId = destinationSearchRequestId,
+                usePhoneAddWaypointSearch = isAndroidAutoVirtualDisplay,
                 onDestinationSearchRequestConsumed = carPhoneSessionCoordinator::consumePhoneCommand,
                 onMapUpdate = { googleMap = it },
                 onPointOfInterestClicked = { pointOfInterest ->
@@ -414,6 +440,7 @@ private fun MapScreenCompactLayout(
     viewportPadding: MapHostInsets,
     scaffoldState: BottomSheetScaffoldState,
     destinationSearchRequestId: Long?,
+    usePhoneAddWaypointSearch: Boolean,
     onDestinationSearchRequestConsumed: (Long) -> Unit,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
@@ -473,6 +500,7 @@ private fun MapScreenCompactLayout(
                 panelLayout = panelLayout,
                 contentInsets = contentInsets,
                 destinationSearchRequestId = destinationSearchRequestId,
+                usePhoneAddWaypointSearch = usePhoneAddWaypointSearch,
                 onDestinationSearchRequestConsumed = onDestinationSearchRequestConsumed,
                 onUiEvent = onUiEvent,
                 onSettingClicked = onSettingClicked,
@@ -514,6 +542,7 @@ private fun MapScreenSplitLayout(
     viewportPadding: MapHostInsets,
     scaffoldState: BottomSheetScaffoldState,
     destinationSearchRequestId: Long?,
+    usePhoneAddWaypointSearch: Boolean,
     onDestinationSearchRequestConsumed: (Long) -> Unit,
     onMapUpdate: (GoogleMap?) -> Unit,
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
@@ -593,6 +622,7 @@ private fun MapScreenSplitLayout(
                     panelLayout = panelLayout,
                     contentInsets = contentInsets,
                     destinationSearchRequestId = destinationSearchRequestId,
+                    usePhoneAddWaypointSearch = usePhoneAddWaypointSearch,
                     onDestinationSearchRequestConsumed = onDestinationSearchRequestConsumed,
                     onUiEvent = onUiEvent,
                     onSettingClicked = onSettingClicked,
@@ -722,6 +752,7 @@ private fun MapScreenContent(
     panelLayout: MapPanelLayout,
     contentInsets: MapHostInsets,
     destinationSearchRequestId: Long?,
+    usePhoneAddWaypointSearch: Boolean,
     onDestinationSearchRequestConsumed: (Long) -> Unit,
     onUiEvent: (MapUiEvent) -> Unit,
     onSettingClicked: () -> Unit,
@@ -775,6 +806,7 @@ private fun MapScreenContent(
                 panelLayout = panelLayout,
                 navigationCardHeight = navigationCardHeightDp,
                 contentInsets = contentInsets,
+                usePhoneAddWaypointSearch = usePhoneAddWaypointSearch,
                 onUiEvent = onUiEvent,
             )
         }
@@ -1003,6 +1035,28 @@ private fun LatLng.toMapLongPressedEvent(): MapUiEvent {
 private fun CarPhoneSessionCommandEnvelope.destinationSearchRequestId(): Long? {
     return when (command) {
         CarPhoneSessionCommand.OpenDestinationSearch -> id
+        CarPhoneSessionCommand.OpenAddWaypointSearch -> null
+    }
+}
+
+private fun CarPhoneSessionCommandEnvelope.addWaypointSearchRequestId(): Long? {
+    return when (command) {
+        CarPhoneSessionCommand.OpenAddWaypointSearch -> id
+        CarPhoneSessionCommand.OpenDestinationSearch -> null
+    }
+}
+
+private fun GuidanceState.supportsPhoneAddWaypointSearch(): Boolean {
+    return when (this) {
+        is GuidanceState.Guiding,
+        is GuidanceState.Preparing,
+        is GuidanceState.Rerouting,
+        -> true
+
+        GuidanceState.Arrived,
+        is GuidanceState.Failed,
+        GuidanceState.Idle,
+        -> false
     }
 }
 

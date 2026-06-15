@@ -51,15 +51,13 @@ class CarPhoneSessionCoordinator {
     }
 
     /** スマホ側で目的地検索 UI を開く command を発行する。 */
-    fun requestPhoneDestinationSearch() {
-        synchronized(lock) {
-            val commandId = nextCommandId
-            nextCommandId += COMMAND_ID_INCREMENT
-            _phoneCommand.value = CarPhoneSessionCommandEnvelope(
-                id = commandId,
-                command = CarPhoneSessionCommand.OpenDestinationSearch,
-            )
-        }
+    fun requestPhoneDestinationSearch(): Long {
+        return publishPhoneCommand(CarPhoneSessionCommand.OpenDestinationSearch)
+    }
+
+    /** スマホ側で案内中の経由地追加 UI を開く command を発行する。 */
+    fun requestPhoneAddWaypointSearch(): Long {
+        return publishPhoneCommand(CarPhoneSessionCommand.OpenAddWaypointSearch)
     }
 
     /** 指定 command を処理済みにする。 */
@@ -80,6 +78,19 @@ class CarPhoneSessionCoordinator {
                 .keys
                 .toSet(),
         )
+    }
+
+    private fun publishPhoneCommand(command: CarPhoneSessionCommand): Long {
+        return synchronized(lock) {
+            val commandId = nextCommandId
+            nextCommandId += COMMAND_ID_INCREMENT
+            _phoneCommand.value = CarPhoneSessionCommandEnvelope(
+                id = commandId,
+                command = command,
+            )
+
+            commandId
+        }
     }
 
     private companion object {

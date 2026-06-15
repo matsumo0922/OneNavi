@@ -20,12 +20,12 @@ import me.matsumo.onenavi.feature.setting.settingVoiceCategoryEntry
 @Composable
 internal fun AppNavHost(
     modifier: Modifier = Modifier,
-    destinationSearchRequestId: Long? = null,
+    phoneSearchRequestId: Long? = null,
 ) {
     val navBackStack = rememberNavBackStack(Destination.config, Destination.Home)
 
-    LaunchedEffect(destinationSearchRequestId) {
-        if (destinationSearchRequestId == null) {
+    LaunchedEffect(phoneSearchRequestId) {
+        if (phoneSearchRequestId == null) {
             return@LaunchedEffect
         }
 

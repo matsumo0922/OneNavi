@@ -7,6 +7,9 @@ sealed interface CarPhoneSessionCommand {
 
     /** スマホ側で目的地検索 UI を開く。 */
     data object OpenDestinationSearch : CarPhoneSessionCommand
+
+    /** スマホ側で案内中の経由地追加 UI を開く。 */
+    data object OpenAddWaypointSearch : CarPhoneSessionCommand
 }
 
 /**

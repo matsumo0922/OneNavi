@@ -127,6 +127,12 @@ sealed interface MapUiEvent {
     /** スマホ側で目的地検索を始めるため、地図画面を検索可能な状態へ戻す。 */
     data object OnPhoneDestinationSearchRequested : MapUiEvent
 
+    /** スマホ側の経由地追加 UI 起動を要求する。 */
+    data object OnPhoneAddWaypointSearchClicked : MapUiEvent
+
+    /** スマホ側で経由地追加を始めるため、案内中の検索オーバーレイを開く。 */
+    data object OnPhoneAddWaypointSearchRequested : MapUiEvent
+
     /** 共有案内状態が開始済みになったため、現在の表示面も案内画面へ同期する。 */
     data object OnSharedGuidanceStarted : MapUiEvent
 

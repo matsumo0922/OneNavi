@@ -40,16 +40,30 @@ class CarPhoneSessionCoordinatorTest {
     fun requestPhoneDestinationSearchPublishesConsumableCommand() {
         val coordinator = CarPhoneSessionCoordinator()
 
-        coordinator.requestPhoneDestinationSearch()
+        val commandId = coordinator.requestPhoneDestinationSearch()
 
         val command = coordinator.phoneCommand.value
 
+        assertEquals(1L, commandId)
         assertEquals(1L, command?.id)
         assertIs<CarPhoneSessionCommand.OpenDestinationSearch>(command?.command)
 
         coordinator.consumePhoneCommand(1L)
 
         assertNull(coordinator.phoneCommand.value)
+    }
+
+    @Test
+    fun requestPhoneAddWaypointSearchPublishesConsumableCommand() {
+        val coordinator = CarPhoneSessionCoordinator()
+
+        val commandId = coordinator.requestPhoneAddWaypointSearch()
+
+        val command = coordinator.phoneCommand.value
+
+        assertEquals(1L, commandId)
+        assertEquals(1L, command?.id)
+        assertIs<CarPhoneSessionCommand.OpenAddWaypointSearch>(command?.command)
     }
 
     @Test
