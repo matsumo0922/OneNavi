@@ -27,7 +27,11 @@ class CarVirtualDisplayProbeController(
     private var currentViewport: CarVirtualDisplayProbeViewport? = null
     private var inputSequence = 0L
     private var isInPanMode = false
+
+    // Presentation 側の Compose layout が更新し、host callback 側の SurfaceCallback が読む可能性がある。
+    @Volatile
     private var currentScrollTargetRect: CarDisplayInputTargetRect? = null
+
     private var currentInputState = createInitialCarVirtualDisplayProbeInputState()
     private val inputTargetReporter = object : CarDisplayInputTargetReporter {
         override fun updateScrollTargetRect(rect: CarDisplayInputTargetRect?) {
@@ -56,7 +60,7 @@ class CarVirtualDisplayProbeController(
         releaseVirtualDisplay()
         releaseCurrentHostSurface(exceptSurface = hostSurface)
         currentHostSurface = hostSurface
-        currentScrollTargetRect = null
+        clearScrollTargetRect()
 
         val initialViewport = createCarVirtualDisplayProbeViewport(
             surfaceWidth = normalizePositiveDimension(surfaceContainer.width, DEFAULT_SURFACE_WIDTH),
@@ -72,7 +76,7 @@ class CarVirtualDisplayProbeController(
         val updatedViewport = currentViewport?.withVisibleArea(visibleArea) ?: return
 
         currentViewport = updatedViewport
-        currentScrollTargetRect = null
+        clearScrollTargetRect()
         presentation?.updateViewport(updatedViewport)
         Napier.i(tag = TAG) { "Viewport visible applied. visible=${updatedViewport.visibleAreaLabel}" }
     }
@@ -81,7 +85,7 @@ class CarVirtualDisplayProbeController(
         val updatedViewport = currentViewport?.withStableArea(stableArea) ?: return
 
         currentViewport = updatedViewport
-        currentScrollTargetRect = null
+        clearScrollTargetRect()
         presentation?.updateViewport(updatedViewport)
         Napier.i(tag = TAG) { "Viewport stable applied. stable=${updatedViewport.stableAreaLabel}" }
     }
@@ -167,9 +171,14 @@ class CarVirtualDisplayProbeController(
 
     fun release() {
         currentViewport = null
-        currentScrollTargetRect = null
+        clearScrollTargetRect()
         releaseVirtualDisplay()
         releaseCurrentHostSurface()
+    }
+
+    private fun clearScrollTargetRect() {
+        // viewport 変更後は surface 座標の panel bounds が古くなるため、次の layout 報告までは中心 anchor に戻す。
+        currentScrollTargetRect = null
     }
 
     private fun updateScrollTargetRect(rect: CarDisplayInputTargetRect?) {
