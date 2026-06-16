@@ -94,7 +94,7 @@ data class AppSetting(
         const val SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_STEPS = 9
 
         /** 地図の初期表示と通常追従に使うズーム値の既定値。 */
-        const val MAP_DEFAULT_ZOOM_DEFAULT = 17f
+        const val MAP_DEFAULT_ZOOM_DEFAULT = 16f
 
         /** 設定 UI で選べる通常ズームの最小値。 */
         const val MAP_DEFAULT_ZOOM_MIN = 14f
@@ -102,11 +102,8 @@ data class AppSetting(
         /** 設定 UI で選べる通常ズームの最大値。 */
         const val MAP_DEFAULT_ZOOM_MAX = 18f
 
-        /** 通常ズーム slider のステップ数。両端を除く 1 zoom 刻みの目盛り数。 */
-        const val MAP_DEFAULT_ZOOM_STEPS = 3
-
         /** 案内地点フォーカス時に使うズーム値の既定値。 */
-        const val MAP_GUIDANCE_MANEUVER_ZOOM_DEFAULT = 18f
+        const val MAP_GUIDANCE_MANEUVER_ZOOM_DEFAULT = 17f
 
         /** 案内地点フォーカス zoom の標準的な最小値。 */
         const val MAP_GUIDANCE_MANEUVER_ZOOM_MIN = 16f
@@ -115,7 +112,7 @@ data class AppSetting(
         const val MAP_GUIDANCE_MANEUVER_ZOOM_MAX = 19f
 
         /** 3D 追従表示で使うチルト角度の既定値。 */
-        const val MAP_TILTED_CAMERA_DEGREES_DEFAULT = 45f
+        const val MAP_TILTED_CAMERA_DEGREES_DEFAULT = 55f
 
         /** 設定 UI で選べる 3D 追従表示チルト角度の最小値。 */
         const val MAP_TILTED_CAMERA_DEGREES_MIN = 20f
@@ -125,9 +122,6 @@ data class AppSetting(
 
         /** 3D 追従表示チルト角度の UI 丸め幅。 */
         const val MAP_TILTED_CAMERA_DEGREES_STEP = 5f
-
-        /** 3D 追従表示チルト角度 slider のステップ数。両端を除く 5 度刻みの目盛り数。 */
-        const val MAP_TILTED_CAMERA_DEGREES_STEPS = 7
 
         /** アプリ設定の既定値。 */
         val DEFAULT = AppSetting(
@@ -166,6 +160,28 @@ data class AppSetting(
             )
 
             return minOf(MAP_GUIDANCE_MANEUVER_ZOOM_MIN, resolvedDefaultZoom)
+        }
+
+        /** 通常ズーム slider のステップ数を返す。 */
+        fun mapDefaultZoomSteps(): Int =
+            sliderSteps(
+                minimumValue = MAP_DEFAULT_ZOOM_MIN,
+                maximumValue = MAP_DEFAULT_ZOOM_MAX,
+                step = 1f,
+            )
+
+        /** 3D 追従表示チルト角度 slider のステップ数を返す。 */
+        fun mapTiltedCameraDegreesSteps(): Int =
+            sliderSteps(
+                minimumValue = MAP_TILTED_CAMERA_DEGREES_MIN,
+                maximumValue = MAP_TILTED_CAMERA_DEGREES_MAX,
+                step = MAP_TILTED_CAMERA_DEGREES_STEP,
+            )
+
+        private fun sliderSteps(minimumValue: Float, maximumValue: Float, step: Float): Int {
+            val intervalCount = (maximumValue - minimumValue) / step
+
+            return (intervalCount.toInt() - 1).coerceAtLeast(0)
         }
     }
 }

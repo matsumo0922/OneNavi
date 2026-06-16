@@ -24,6 +24,7 @@ import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.feature.map.LocalMapRenderScale
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.Saver
+import kotlin.math.abs
 
 /**
  * GoogleMap 用のカメラ状態 holder を Compose 上で保持する。
@@ -280,9 +281,7 @@ internal class MapCameraState internal constructor(
     private fun moveDefaultCameraZoomIfNeeded(previousDefaultZoom: Float, resolvedDefaultZoom: Float) {
         val map = googleMap ?: return
         val current = map.cameraPosition
-        val isDefaultLatitude = current.target.latitude == MapCameraDefaults.DEFAULT_LATITUDE
-        val isDefaultLongitude = current.target.longitude == MapCameraDefaults.DEFAULT_LONGITUDE
-        val isDefaultTarget = isDefaultLatitude && isDefaultLongitude
+        val isDefaultTarget = isDefaultCameraTarget(current.target)
         val isPreviousDefaultZoom = current.zoom == previousDefaultZoom
         val shouldMoveDefaultCamera = isDefaultTarget && isPreviousDefaultZoom && !cameraState.isFollowingMyLocation
         if (!shouldMoveDefaultCamera) return
@@ -296,6 +295,14 @@ internal class MapCameraState internal constructor(
 
         map.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
         updateCameraPosition(cameraPosition)
+    }
+
+    private fun isDefaultCameraTarget(target: LatLng): Boolean {
+        val latitudeDistance = abs(target.latitude - MapCameraDefaults.DEFAULT_LATITUDE)
+        val longitudeDistance = abs(target.longitude - MapCameraDefaults.DEFAULT_LONGITUDE)
+
+        return latitudeDistance <= DEFAULT_TARGET_EPSILON_DEGREES &&
+            longitudeDistance <= DEFAULT_TARGET_EPSILON_DEGREES
     }
 
     /**
@@ -1316,6 +1323,9 @@ internal class MapCameraState internal constructor(
 
         /** density が未通知の間に使う既定値。 */
         private const val DEFAULT_DENSITY = 1f
+
+        /** 初期 target 判定で許容する緯度経度の丸め誤差。 */
+        private const val DEFAULT_TARGET_EPSILON_DEGREES = 0.000001
 
         /** Map camera 周辺の検証ログ用タグ。 */
         private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"

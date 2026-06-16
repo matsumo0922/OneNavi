@@ -69,6 +69,24 @@ class AppSettingDataSourceTest {
     }
 
     @Test
+    fun `map camera settings use configured defaults`() = runTest {
+        val dataSource = AppSettingDataSource(
+            preferenceHelper = InMemoryPreferenceHelper(),
+            formatter = Json,
+            ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+            applicationScope = backgroundScope,
+        )
+
+        val setting = dataSource.currentSetting()
+
+        assertEquals(16f, setting.mapDefaultZoom)
+        assertEquals(17f, setting.mapGuidanceManeuverZoom)
+        assertEquals(55f, setting.mapTiltedCameraDegrees)
+        assertEquals(3, AppSetting.mapDefaultZoomSteps())
+        assertEquals(7, AppSetting.mapTiltedCameraDegreesSteps())
+    }
+
+    @Test
     fun `map camera settings are persisted with dynamic guidance zoom clamp`() = runTest {
         val dataSource = AppSettingDataSource(
             preferenceHelper = InMemoryPreferenceHelper(),

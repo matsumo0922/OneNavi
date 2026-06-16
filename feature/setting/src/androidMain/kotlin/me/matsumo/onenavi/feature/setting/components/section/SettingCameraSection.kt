@@ -72,7 +72,7 @@ internal fun SettingCameraSection(
                 onMapDefaultZoomChanged(resolvedDefaultZoomDraft)
             },
             valueRange = MapDefaultZoomRange,
-            steps = AppSetting.MAP_DEFAULT_ZOOM_STEPS,
+            steps = AppSetting.mapDefaultZoomSteps(),
         )
 
         SettingSliderItem(
@@ -104,11 +104,12 @@ internal fun SettingCameraSection(
                 onMapTiltedCameraDegreesChanged(resolvedTiltedCameraDegreesDraft)
             },
             valueRange = TiltedCameraDegreesRange,
-            steps = AppSetting.MAP_TILTED_CAMERA_DEGREES_STEPS,
+            steps = AppSetting.mapTiltedCameraDegreesSteps(),
         )
     }
 }
 
+/** ズーム値を slider 表示用の整数文字列に丸める。 */
 private fun formatZoom(zoom: Float): String {
     return String.format(
         Locale.US,
@@ -117,6 +118,7 @@ private fun formatZoom(zoom: Float): String {
     )
 }
 
+/** チルト角度を slider 表示用の度数文字列に丸める。 */
 private fun formatDegrees(degrees: Float): String {
     return String.format(
         Locale.US,
@@ -125,13 +127,16 @@ private fun formatDegrees(degrees: Float): String {
     )
 }
 
+/** GoogleMap の zoom slider 入力を 1 zoom 単位に丸める。 */
 private fun roundZoom(zoom: Float): Float = zoom.roundToInt().toFloat()
 
+/** チルト角度 slider 入力を設定刻みに丸める。 */
 private fun roundTiltedCameraDegrees(degrees: Float): Float {
     val step = AppSetting.MAP_TILTED_CAMERA_DEGREES_STEP
     return (degrees / step).roundToInt() * step
 }
 
+/** 案内地点フォーカス zoom を通常ズーム連動の許容範囲へ収める。 */
 private fun resolveGuidanceManeuverZoom(guidanceManeuverZoom: Float, defaultZoom: Float): Float {
     return guidanceManeuverZoom.coerceIn(
         minimumValue = AppSetting.mapGuidanceManeuverZoomMin(defaultZoom),
@@ -139,11 +144,13 @@ private fun resolveGuidanceManeuverZoom(guidanceManeuverZoom: Float, defaultZoom
     )
 }
 
+/** 案内地点フォーカス zoom slider の範囲を返す。 */
 private fun guidanceManeuverZoomRange(defaultZoom: Float): ClosedFloatingPointRange<Float> {
     return AppSetting.mapGuidanceManeuverZoomMin(defaultZoom)
         .rangeTo(AppSetting.MAP_GUIDANCE_MANEUVER_ZOOM_MAX)
 }
 
+/** 案内地点フォーカス zoom slider のステップ数を返す。 */
 private fun guidanceManeuverZoomSteps(defaultZoom: Float): Int {
     val zoomIntervalCount = AppSetting.MAP_GUIDANCE_MANEUVER_ZOOM_MAX -
         AppSetting.mapGuidanceManeuverZoomMin(defaultZoom)
