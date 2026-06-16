@@ -385,7 +385,7 @@ private fun rememberMapViewWithLifecycle(
     val context = LocalContext.current
     val mapColorScheme = isDarkMode.toMapColorScheme()
 
-    return remember(context, mapRenderScale, initialCameraZoom) {
+    return remember(context, mapRenderScale) {
         val mapOptions = GoogleMapOptions()
             .mapType(GoogleMap.MAP_TYPE_NORMAL)
             .mapColorScheme(mapColorScheme)
