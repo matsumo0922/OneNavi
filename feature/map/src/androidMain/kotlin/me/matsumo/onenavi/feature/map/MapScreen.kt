@@ -20,6 +20,7 @@ import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -32,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -170,6 +172,8 @@ fun MapScreen(
             },
         ),
     )
+
+    MapScreenKeepScreenOnEffect(isNavigating = isNavigating)
 
     NavigationEventHandler(
         state = navigationState,
@@ -964,6 +968,24 @@ private fun MapPanelLayout.toPanelAlignment(): Alignment {
     return when (panelSide) {
         MapPanelSide.LEFT -> AbsoluteAlignment.CenterLeft
         MapPanelSide.RIGHT -> AbsoluteAlignment.CenterRight
+    }
+}
+
+@Composable
+private fun MapScreenKeepScreenOnEffect(isNavigating: Boolean) {
+    val view = LocalView.current
+
+    DisposableEffect(isNavigating, view) {
+        if (!isNavigating) {
+            onDispose {}
+        } else {
+            val previousKeepScreenOn = view.keepScreenOn
+            view.keepScreenOn = true
+
+            onDispose {
+                view.keepScreenOn = previousKeepScreenOn
+            }
+        }
     }
 }
 
