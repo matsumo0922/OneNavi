@@ -19,23 +19,37 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import io.github.aakira.napier.Napier
+import me.matsumo.onenavi.core.model.AppSetting
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.feature.map.LocalMapRenderScale
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.CAMERA_ROUTE_OVERVIEW_ZOOM_DECELERATE_FACTOR
 import me.matsumo.onenavi.feature.map.state.MapCameraState.Companion.Saver
+import kotlin.math.abs
 
 /**
  * GoogleMap 用のカメラ状態 holder を Compose 上で保持する。
  *
+ * @param defaultZoom 地図の初期表示と通常追従に使うズーム値
+ * @param guidanceManeuverZoom 案内地点フォーカス時に使うズーム値
+ * @param tiltedCameraDegrees 3D 追従表示で使うチルト角度
  * @return remember 済みの [MapCameraState]
  */
 @Composable
-internal fun rememberMapCameraState(): MapCameraState {
+internal fun rememberMapCameraState(
+    defaultZoom: Float = AppSetting.MAP_DEFAULT_ZOOM_DEFAULT,
+    guidanceManeuverZoom: Float = AppSetting.MAP_GUIDANCE_MANEUVER_ZOOM_DEFAULT,
+    tiltedCameraDegrees: Float = AppSetting.MAP_TILTED_CAMERA_DEGREES_DEFAULT,
+): MapCameraState {
     val density = LocalDensity.current.density * LocalMapRenderScale.current
     val state = rememberSaveable(saver = MapCameraState.Saver) { MapCameraState() }
 
     SideEffect {
         state.updateDensity(density)
+        state.updateCameraSettings(
+            defaultZoom = defaultZoom,
+            guidanceManeuverZoom = guidanceManeuverZoom,
+            tiltedCameraDegrees = tiltedCameraDegrees,
+        )
     }
 
     return state
@@ -73,6 +87,9 @@ internal class MapCameraState internal constructor(
     private var pendingManualBrowsingRestore: Boolean = initialRestoreState?.isFollowingMyLocation == false
     private var lastProjectionDiagnosticSignature: String? = null
     private var shouldLogDiagnostics: Boolean = false
+    private var defaultZoom: Float = MapCameraDefaults.DEFAULT_ZOOM
+    private var guidanceManeuverZoom: Float = MapCameraDefaults.GUIDANCE_MANEUVER_FOCUS_ZOOM
+    private var tiltedCameraDegrees: Float = MapCameraDefaults.VEHICLE_TILTED_CAMERA_DEGREES
 
     var cameraState by mutableStateOf(
         if (initialRestoreState == null) {
@@ -212,6 +229,80 @@ internal class MapCameraState internal constructor(
     fun updateDensity(density: Float) {
         this.density = density
         vehicleCameraPositionFactory.updateDensity(density)
+    }
+
+    /**
+     * 地図カメラ設定を更新する。
+     *
+     * @param defaultZoom 地図の初期表示と通常追従に使うズーム値
+     * @param guidanceManeuverZoom 案内地点フォーカス時に使うズーム値
+     * @param tiltedCameraDegrees 3D 追従表示で使うチルト角度
+     */
+    fun updateCameraSettings(
+        defaultZoom: Float,
+        guidanceManeuverZoom: Float,
+        tiltedCameraDegrees: Float,
+    ) {
+        val previousDefaultZoom = this.defaultZoom
+        val resolvedDefaultZoom = defaultZoom.coerceIn(
+            minimumValue = AppSetting.MAP_DEFAULT_ZOOM_MIN,
+            maximumValue = AppSetting.MAP_DEFAULT_ZOOM_MAX,
+        )
+        val resolvedGuidanceManeuverZoom = guidanceManeuverZoom.coerceIn(
+            minimumValue = AppSetting.mapGuidanceManeuverZoomMin(resolvedDefaultZoom),
+            maximumValue = AppSetting.MAP_GUIDANCE_MANEUVER_ZOOM_MAX,
+        )
+        val resolvedTiltedCameraDegrees = tiltedCameraDegrees.coerceIn(
+            minimumValue = AppSetting.MAP_TILTED_CAMERA_DEGREES_MIN,
+            maximumValue = AppSetting.MAP_TILTED_CAMERA_DEGREES_MAX,
+        )
+        val isDefaultZoomUnchanged = this.defaultZoom == resolvedDefaultZoom
+        val isGuidanceManeuverZoomUnchanged = this.guidanceManeuverZoom == resolvedGuidanceManeuverZoom
+        val isTiltedCameraDegreesUnchanged = this.tiltedCameraDegrees == resolvedTiltedCameraDegrees
+        val isZoomSettingUnchanged = isDefaultZoomUnchanged && isGuidanceManeuverZoomUnchanged
+        val isCameraSettingUnchanged = isZoomSettingUnchanged && isTiltedCameraDegreesUnchanged
+        if (isCameraSettingUnchanged) return
+
+        this.defaultZoom = resolvedDefaultZoom
+        this.guidanceManeuverZoom = resolvedGuidanceManeuverZoom
+        this.tiltedCameraDegrees = resolvedTiltedCameraDegrees
+        vehicleCameraPositionFactory.updateTiltedCameraDegrees(resolvedTiltedCameraDegrees)
+        updateDefaultZoomSnapshotIfNeeded(previousDefaultZoom, resolvedDefaultZoom)
+        moveDefaultCameraZoomIfNeeded(previousDefaultZoom, resolvedDefaultZoom)
+        moveFollowCameraIfNeeded()
+    }
+
+    private fun updateDefaultZoomSnapshotIfNeeded(previousDefaultZoom: Float, resolvedDefaultZoom: Float) {
+        if (cameraState.zoom != previousDefaultZoom) return
+
+        cameraState = cameraState.copy(zoom = resolvedDefaultZoom)
+    }
+
+    private fun moveDefaultCameraZoomIfNeeded(previousDefaultZoom: Float, resolvedDefaultZoom: Float) {
+        val map = googleMap ?: return
+        val current = map.cameraPosition
+        val isDefaultTarget = isDefaultCameraTarget(current.target)
+        val isPreviousDefaultZoom = current.zoom == previousDefaultZoom
+        val shouldMoveDefaultCamera = isDefaultTarget && isPreviousDefaultZoom && !cameraState.isFollowingMyLocation
+        if (!shouldMoveDefaultCamera) return
+
+        val cameraPosition = CameraPosition.Builder()
+            .target(current.target)
+            .zoom(resolvedDefaultZoom)
+            .bearing(current.bearing)
+            .tilt(current.tilt)
+            .build()
+
+        map.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
+        updateCameraPosition(cameraPosition)
+    }
+
+    private fun isDefaultCameraTarget(target: LatLng): Boolean {
+        val latitudeDistance = abs(target.latitude - MapCameraDefaults.DEFAULT_LATITUDE)
+        val longitudeDistance = abs(target.longitude - MapCameraDefaults.DEFAULT_LONGITUDE)
+
+        return latitudeDistance <= DEFAULT_TARGET_EPSILON_DEGREES &&
+            longitudeDistance <= DEFAULT_TARGET_EPSILON_DEGREES
     }
 
     /**
@@ -525,7 +616,7 @@ internal class MapCameraState internal constructor(
         map.stopAnimation()
         gestureController.clear()
         cameraState = cameraState.copy(
-            zoom = GUIDANCE_MANEUVER_FOCUS_ZOOM,
+            zoom = guidanceManeuverZoom,
             perspective = MapCameraPerspective.TOP_DOWN_NORTH_UP,
             isFollowingMyLocation = true,
         )
@@ -1022,14 +1113,14 @@ internal class MapCameraState internal constructor(
             return centeredVehicleCameraPosition(
                 vehiclePose = vehiclePose,
                 current = current,
-                zoom = MapCameraDefaults.DEFAULT_ZOOM,
+                zoom = defaultZoom,
                 perspective = MapCameraPerspective.TILTED,
             )
         }
 
         return CameraPosition.Builder()
             .target(current.target)
-            .zoom(MapCameraDefaults.DEFAULT_ZOOM)
+            .zoom(defaultZoom)
             .bearing(current.bearing)
             .tilt(vehicleCameraPositionFactory.vehicleTiltDegrees(MapCameraPerspective.TILTED))
             .build()
@@ -1046,7 +1137,7 @@ internal class MapCameraState internal constructor(
         if (vehiclePose != null) {
             return CameraPosition.Builder()
                 .target(LatLng(vehiclePose.location.latitude, vehiclePose.location.longitude))
-                .zoom(GUIDANCE_MANEUVER_FOCUS_ZOOM)
+                .zoom(guidanceManeuverZoom)
                 .bearing(vehiclePose.bearingDegrees ?: current.bearing)
                 .tilt(0f)
                 .build()
@@ -1054,7 +1145,7 @@ internal class MapCameraState internal constructor(
 
         return CameraPosition.Builder()
             .target(current.target)
-            .zoom(GUIDANCE_MANEUVER_FOCUS_ZOOM)
+            .zoom(guidanceManeuverZoom)
             .bearing(0f)
             .tilt(0f)
             .build()
@@ -1233,14 +1324,14 @@ internal class MapCameraState internal constructor(
         /** density が未通知の間に使う既定値。 */
         private const val DEFAULT_DENSITY = 1f
 
+        /** 初期 target 判定で許容する緯度経度の丸め誤差。 */
+        private const val DEFAULT_TARGET_EPSILON_DEGREES = 0.000001
+
         /** Map camera 周辺の検証ログ用タグ。 */
         private const val MAP_CAMERA_LOG_TAG = "OneNaviMapCamera"
 
         /** コンパス button による 3D heading-up / 2D north-up 切り替え animation 時間（ms）。 */
         private const val COMPASS_PERSPECTIVE_ANIMATION_DURATION_MS = 500L
-
-        /** 案内地点フォーカス中の zoom。 */
-        private const val GUIDANCE_MANEUVER_FOCUS_ZOOM = 18f
 
         /** 旧 [Saver] 復元データの要素数。 */
         private const val LEGACY_RESTORE_FIELD_COUNT = 5
@@ -1368,5 +1459,11 @@ internal object MapCameraDefaults {
     const val DEFAULT_LONGITUDE = 139.767125
 
     /** 初期カメラ zoom。 */
-    const val DEFAULT_ZOOM = 17f
+    const val DEFAULT_ZOOM = AppSetting.MAP_DEFAULT_ZOOM_DEFAULT
+
+    /** 案内地点フォーカス中の zoom。 */
+    const val GUIDANCE_MANEUVER_FOCUS_ZOOM = AppSetting.MAP_GUIDANCE_MANEUVER_ZOOM_DEFAULT
+
+    /** 3D 表示時のカメラ tilt。 */
+    const val VEHICLE_TILTED_CAMERA_DEGREES = AppSetting.MAP_TILTED_CAMERA_DEGREES_DEFAULT
 }

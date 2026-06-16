@@ -67,6 +67,51 @@ class AppSettingDataSourceTest {
         assertTrue(setting.isSpeedAdaptiveTtsGainEnabled)
         assertEquals(AppSetting.SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_MAX, setting.speedAdaptiveTtsGainMaxDb)
     }
+
+    @Test
+    fun `map camera settings use configured defaults`() = runTest {
+        val dataSource = AppSettingDataSource(
+            preferenceHelper = InMemoryPreferenceHelper(),
+            formatter = Json,
+            ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+            applicationScope = backgroundScope,
+        )
+
+        val setting = dataSource.currentSetting()
+
+        assertEquals(16f, setting.mapDefaultZoom)
+        assertEquals(17f, setting.mapGuidanceManeuverZoom)
+        assertEquals(55f, setting.mapTiltedCameraDegrees)
+        assertEquals(3, AppSetting.mapDefaultZoomSteps())
+        assertEquals(7, AppSetting.mapTiltedCameraDegreesSteps())
+    }
+
+    @Test
+    fun `map camera settings are persisted with dynamic guidance zoom clamp`() = runTest {
+        val dataSource = AppSettingDataSource(
+            preferenceHelper = InMemoryPreferenceHelper(),
+            formatter = Json,
+            ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+            applicationScope = backgroundScope,
+        )
+
+        dataSource.setMapDefaultZoom(14f)
+        dataSource.setMapGuidanceManeuverZoom(13f)
+        dataSource.setMapTiltedCameraDegrees(99f)
+
+        val lowDefaultZoomSetting = dataSource.currentSetting()
+
+        assertEquals(14f, lowDefaultZoomSetting.mapDefaultZoom)
+        assertEquals(14f, lowDefaultZoomSetting.mapGuidanceManeuverZoom)
+        assertEquals(AppSetting.MAP_TILTED_CAMERA_DEGREES_MAX, lowDefaultZoomSetting.mapTiltedCameraDegrees)
+
+        dataSource.setMapDefaultZoom(18f)
+
+        val highDefaultZoomSetting = dataSource.currentSetting()
+
+        assertEquals(18f, highDefaultZoomSetting.mapDefaultZoom)
+        assertEquals(AppSetting.MAP_GUIDANCE_MANEUVER_ZOOM_MIN, highDefaultZoomSetting.mapGuidanceManeuverZoom)
+    }
 }
 
 /** テスト用に単一の DataStore を返す PreferenceHelper。 */

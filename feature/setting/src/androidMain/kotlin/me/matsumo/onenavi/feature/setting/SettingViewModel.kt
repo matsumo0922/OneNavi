@@ -69,6 +69,24 @@ class SettingViewModel(
         }
     }
 
+    fun setMapDefaultZoom(defaultZoom: Float) {
+        viewModelScope.launch {
+            repository.setMapDefaultZoom(defaultZoom)
+        }
+    }
+
+    fun setMapGuidanceManeuverZoom(guidanceManeuverZoom: Float) {
+        viewModelScope.launch {
+            repository.setMapGuidanceManeuverZoom(guidanceManeuverZoom)
+        }
+    }
+
+    fun setMapTiltedCameraDegrees(tiltedCameraDegrees: Float) {
+        viewModelScope.launch {
+            repository.setMapTiltedCameraDegrees(tiltedCameraDegrees)
+        }
+    }
+
     fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) {
         viewModelScope.launch {
             repository.setGuidanceCategoryEnabled(categoryKey, isEnabled)
