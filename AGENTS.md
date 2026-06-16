@@ -111,9 +111,5 @@ cd ../OneNavi-<task-slug>
 
 UI 確認・デバッグ用の独立した Vite ベース mini app 群（本番モジュールには非統合）。
 
-- **UI を作成・確認するときは、まず `dev-tools/ui-playground` にデザイン案を HTML
-  モックとして追加し、ブラウザで人間が確認できるようにする**。手順の正本は
-  `docs/spec/29_ui_playground_dev_tool.md`（ツール内要約: `dev-tools/ui-playground/README.md`）。
-  起動は `make ui-playground`。
-- 他に `dev-tools/fake-gps`（`docs/spec/15_fake_gps_dev_tool.md`）、
-  `dev-tools/route-compare`（`docs/spec/23_route_compare_dev_tool.md`）。
+- `dev-tools/fake-gps`（`docs/spec/15_fake_gps_dev_tool.md`）
+- `dev-tools/route-compare`（`docs/spec/23_route_compare_dev_tool.md`）
