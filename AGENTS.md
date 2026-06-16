@@ -44,19 +44,6 @@
 
 上記以外で既存ファイルに禁止語が含まれていたら、必ず修正対象として報告すること。
 
-### コミット前の事前チェック
-
-差分に禁止語が混入していないかは、ローカルの **git-ignored** な pattern file を
-用意して grep することで確認できる（pattern file 自体も repo にコミットしてはならない）。
-例:
-
-```bash
-# .claude/forbidden.txt は .gitignore で除外済みであることを事前に確認
-git diff --cached | grep -iEf .claude/forbidden.txt
-```
-
-ヒットした場合は修正してから再 stage する。
-
 ### 背景
 
 非公開 API を第三者実装で扱う以上、権利侵害・BAN・法的リスクを公開側で極小化するため。
