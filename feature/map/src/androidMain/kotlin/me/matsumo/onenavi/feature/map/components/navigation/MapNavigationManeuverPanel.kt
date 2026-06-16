@@ -438,6 +438,11 @@ private fun MapNavigationManeuverBottomContent(
     }
 }
 
+/**
+ * 下段コンテナの最大高さを返す。
+ *
+ * split の Panel は Android Auto の固定 scroll anchor を拾うため、案内画像用の高さ上限から分離する。
+ */
 private fun ManeuverBottomContent.bottomContainerMaxHeight(
     isSplit: Boolean,
     sectionMaxHeight: Dp,
@@ -450,10 +455,20 @@ private fun ManeuverBottomContent.bottomContainerMaxHeight(
     return sectionMaxHeight
 }
 
+/**
+ * 下段コンテナを縦方向に充填するかどうかを返す。
+ *
+ * split の Panel では固定 scroll anchor が LazyColumn に当たるよう、Surface の hit target を広げる。
+ */
 private fun ManeuverBottomContent.shouldFillBottomContainerHeight(isSplit: Boolean): Boolean {
     return this is ManeuverBottomContent.Panel && isSplit
 }
 
+/**
+ * Panel 本体のサイズを整える。
+ *
+ * split では項目数が少ない場合でも LazyColumn が固定 scroll anchor を覆うように縦方向を充填する。
+ */
 private fun Modifier.maneuverPanelContentLayout(isSplit: Boolean): Modifier {
     val widthModifier = fillMaxWidth()
     if (!isSplit) return widthModifier
