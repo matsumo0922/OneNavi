@@ -38,7 +38,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.matsumo.onenavi.MainViewModel
 import me.matsumo.onenavi.OneNaviApp
 import me.matsumo.onenavi.car.CarGuidanceSessionReleaser
+import me.matsumo.onenavi.core.common.car.CarDisplayInputTargetReporter
 import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
+import me.matsumo.onenavi.core.common.car.LocalCarDisplayInputTargetReporter
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
 import me.matsumo.onenavi.core.model.AppSetting
 import me.matsumo.onenavi.core.model.DeveloperFeature
@@ -60,6 +62,7 @@ internal fun CarVirtualDisplayProbeContent(
     viewport: CarVirtualDisplayViewport,
     inputState: CarVirtualDisplayProbeInputState,
     clickCoordinateResult: CarVirtualDisplayProbeClickCoordinateResult?,
+    inputTargetReporter: CarDisplayInputTargetReporter,
     modifier: Modifier = Modifier,
 ) {
     val viewModel = koinViewModel<MainViewModel>()
@@ -106,6 +109,7 @@ internal fun CarVirtualDisplayProbeContent(
                     modifier = Modifier.fillMaxSize(),
                     settings = settings,
                     viewport = viewport,
+                    inputTargetReporter = inputTargetReporter,
                 )
             }
             if (shouldShowDebugOverlay) {
@@ -149,6 +153,7 @@ internal fun CarVirtualDisplayProbeContent(
 private fun CarVirtualDisplayProbeAppHost(
     settings: AppSetting?,
     viewport: CarVirtualDisplayViewport,
+    inputTargetReporter: CarDisplayInputTargetReporter,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -187,6 +192,7 @@ private fun CarVirtualDisplayProbeAppHost(
         hasLocationPermission -> {
             val mapRenderScale = rememberCarVirtualDisplayMapRenderScale(viewport.densityDpi)
             CompositionLocalProvider(
+                LocalCarDisplayInputTargetReporter provides inputTargetReporter,
                 LocalOneNaviDisplaySurface provides OneNaviDisplaySurface.AndroidAutoVirtualDisplay,
                 LocalSupportsPlatformDialogWindow provides false,
                 LocalMapRenderScale provides mapRenderScale,

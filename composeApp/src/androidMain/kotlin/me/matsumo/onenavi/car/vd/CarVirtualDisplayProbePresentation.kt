@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import io.github.aakira.napier.Napier
 import me.matsumo.onenavi.R
+import me.matsumo.onenavi.core.common.car.CarDisplayInputTargetReporter
 
 /** VD 上へ ComposeView を出す検証用 Presentation。 */
 class CarVirtualDisplayProbePresentation(
@@ -20,6 +21,7 @@ class CarVirtualDisplayProbePresentation(
     display: Display,
     initialViewport: CarVirtualDisplayProbeViewport,
     initialInputState: CarVirtualDisplayProbeInputState,
+    private val inputTargetReporter: CarDisplayInputTargetReporter,
 ) : Presentation(outerContext, display, R.style.Theme_Matsumo) {
 
     private val runtime = CarVirtualDisplayRuntime()
@@ -136,6 +138,7 @@ class CarVirtualDisplayProbePresentation(
                 viewport = viewport,
                 inputState = inputState,
                 clickCoordinateResult = clickCoordinateResult,
+                inputTargetReporter = inputTargetReporter,
             )
         }
     }

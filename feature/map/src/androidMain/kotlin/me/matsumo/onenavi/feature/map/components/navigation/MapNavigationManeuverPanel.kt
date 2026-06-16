@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -40,12 +41,18 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.collections.immutable.ImmutableList
+import me.matsumo.onenavi.core.common.car.CarDisplayInputTargetRect
+import me.matsumo.onenavi.core.common.car.CarDisplayInputTargetReporter
+import me.matsumo.onenavi.core.common.car.LocalCarDisplayInputTargetReporter
 import me.matsumo.onenavi.core.common.formatDistance
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RouteDetail
@@ -355,6 +362,7 @@ private fun MapNavigationManeuverBottomContainer(
                 panelColors = panelColors,
                 maxHeight = maxHeight,
                 isSplit = isSplit,
+                shouldReportPanelScrollTarget = content is ManeuverBottomContent.Panel && isSplit,
             )
         }
     }
@@ -395,8 +403,11 @@ private fun MapNavigationManeuverBottomContent(
     panelColors: RouteColors.ManeuverColors,
     maxHeight: Dp,
     isSplit: Boolean,
+    shouldReportPanelScrollTarget: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val inputTargetReporter = LocalCarDisplayInputTargetReporter.current
+
     when (content) {
         is ManeuverBottomContent.GuideImage -> MapNavigationManeuverGuideImage(
             modifier = modifier
@@ -405,18 +416,37 @@ private fun MapNavigationManeuverBottomContent(
             guideImage = content.guideImage,
         )
 
-        ManeuverBottomContent.Panel -> MapNavigationManeuverPanelSection(
-            modifier = modifier.maneuverPanelContentLayout(isSplit),
-            route = route,
-            listItems = listItems,
-            meterLabel = meterLabel,
-            kilometerLabel = kilometerLabel,
-            dayLabel = dayLabel,
-            hourLabel = hourLabel,
-            minuteLabel = minuteLabel,
-            timestampMillis = timestampMillis,
-            currentCumulativeMeters = currentCumulativeMeters,
-        )
+        ManeuverBottomContent.Panel -> {
+            DisposableEffect(inputTargetReporter, shouldReportPanelScrollTarget) {
+                if (!shouldReportPanelScrollTarget) {
+                    inputTargetReporter.updateScrollTargetRect(null)
+                }
+
+                onDispose {
+                    if (shouldReportPanelScrollTarget) {
+                        inputTargetReporter.updateScrollTargetRect(null)
+                    }
+                }
+            }
+
+            MapNavigationManeuverPanelSection(
+                modifier = modifier
+                    .maneuverPanelContentLayout(isSplit)
+                    .maneuverPanelScrollTargetLayout(
+                        isEnabled = shouldReportPanelScrollTarget,
+                        inputTargetReporter = inputTargetReporter,
+                    ),
+                route = route,
+                listItems = listItems,
+                meterLabel = meterLabel,
+                kilometerLabel = kilometerLabel,
+                dayLabel = dayLabel,
+                hourLabel = hourLabel,
+                minuteLabel = minuteLabel,
+                timestampMillis = timestampMillis,
+                currentCumulativeMeters = currentCumulativeMeters,
+            )
+        }
 
         is ManeuverBottomContent.Lanes -> MapNavigationManeuverLaneRow(
             modifier = modifier
@@ -474,6 +504,30 @@ private fun Modifier.maneuverPanelContentLayout(isSplit: Boolean): Modifier {
     if (!isSplit) return widthModifier
 
     return widthModifier.fillMaxHeight()
+}
+
+private fun Modifier.maneuverPanelScrollTargetLayout(
+    isEnabled: Boolean,
+    inputTargetReporter: CarDisplayInputTargetReporter,
+): Modifier {
+    if (!isEnabled) return this
+
+    return onGloballyPositioned { coordinates ->
+        inputTargetReporter.updateScrollTargetRect(
+            coordinates.toCarDisplayInputTargetRect(),
+        )
+    }
+}
+
+private fun LayoutCoordinates.toCarDisplayInputTargetRect(): CarDisplayInputTargetRect {
+    val bounds = boundsInRoot()
+
+    return CarDisplayInputTargetRect(
+        left = bounds.left,
+        top = bounds.top,
+        right = bounds.right,
+        bottom = bounds.bottom,
+    )
 }
 
 /**
