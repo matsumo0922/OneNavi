@@ -30,6 +30,7 @@ import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
@@ -233,7 +234,9 @@ fun MapScreen(
     }
 
     BoxWithConstraints(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .then(if (isNavigating) Modifier.keepScreenOn() else Modifier),
     ) {
         val panelLayout = remember(maxWidth) {
             resolveMapPanelLayout(maxWidth = maxWidth)
