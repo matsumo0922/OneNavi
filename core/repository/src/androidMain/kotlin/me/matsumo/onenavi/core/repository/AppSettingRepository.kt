@@ -46,4 +46,7 @@ class AppSettingRepository(
 
     suspend fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) =
         dataSource.setGuidanceCategoryEnabled(categoryKey, isEnabled)
+
+    suspend fun setHasDetectedClusterSession(hasDetected: Boolean) =
+        dataSource.setHasDetectedClusterSession(hasDetected)
 }

@@ -21,6 +21,7 @@ import me.matsumo.onenavi.core.common.serializer.ColorSerializer
  * @property speedAdaptiveTtsGainMaxDb 速度連動ゲインが上限速度で掛ける最大追加ゲイン
  * @property disabledGuidanceCategories 発話を OFF にした案内カテゴリの識別子集合
  * @property extNavDeviceUuid 外部ナビ API ライブラリ向けの端末識別子
+ * @property hasDetectedClusterSession これまでに Android Auto のインストルメントクラスター用 Session を受け取ったことがあるか
  */
 @Immutable
 @Serializable
@@ -43,6 +44,8 @@ data class AppSetting(
     /** 発話を OFF にした案内カテゴリの識別子集合 (外部ナビ API の category 名)。未登録カテゴリは ON 扱い。 */
     val disabledGuidanceCategories: Set<String>,
     val extNavDeviceUuid: String,
+    /** これまでに Android Auto のインストルメントクラスター用 Session を受け取ったことがあるか。 */
+    val hasDetectedClusterSession: Boolean,
 ) {
     val hasPrivilege get() = plusMode || isDeveloperFeatureEnabled(DeveloperFeature.FORCE_PLUS_PRIVILEGE)
 
@@ -97,6 +100,7 @@ data class AppSetting(
             // 走行に必須でない既定 OFF カテゴリ。VoiceAnnouncementCategoryGate.OneNaviDefault と揃えること。
             disabledGuidanceCategories = setOf("Curve", "Scenic", "AccidentBlackSpot", "Merge"),
             extNavDeviceUuid = "",
+            hasDetectedClusterSession = false,
         )
     }
 }
