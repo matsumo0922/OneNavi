@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -142,7 +143,9 @@ internal fun MapNavigationManeuverPanel(
             currentCumulativeMeters = progress.currentCumulativeMeters,
             followupLabel = followupLabel,
             roadClass = banner.roadClass,
+            isSplit = isSplit,
             maxHeight = bottomSectionMaxHeight,
+            availableHeight = availableHeight,
         )
     }
 }
@@ -307,17 +310,25 @@ private fun MapNavigationManeuverBottomContainer(
     currentCumulativeMeters: Double,
     followupLabel: String,
     roadClass: RoadClass,
+    isSplit: Boolean,
     maxHeight: Dp,
+    availableHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
     val panelColors = RouteColors.maneuver(roadClass)
     val bottomShape = content.bottomShape()
+    val containerMaxHeight = content.bottomContainerMaxHeight(
+        isSplit = isSplit,
+        sectionMaxHeight = maxHeight,
+        availableHeight = availableHeight,
+    )
 
     Surface(
         modifier = modifier
             .maneuverBottomContainerLayout(
                 content = content,
-                maxHeight = maxHeight,
+                maxHeight = containerMaxHeight,
+                fillHeight = content.shouldFillBottomContainerHeight(isSplit),
             )
             .animateContentSize(),
         shape = bottomShape,
@@ -343,6 +354,7 @@ private fun MapNavigationManeuverBottomContainer(
                 followupLabel = followupLabel,
                 panelColors = panelColors,
                 maxHeight = maxHeight,
+                isSplit = isSplit,
             )
         }
     }
@@ -351,8 +363,14 @@ private fun MapNavigationManeuverBottomContainer(
 private fun Modifier.maneuverBottomContainerLayout(
     content: ManeuverBottomContent,
     maxHeight: Dp,
+    fillHeight: Boolean,
 ): Modifier {
-    val constrainedModifier = heightIn(max = maxHeight)
+    val constrainedModifier = if (fillHeight) {
+        heightIn(max = maxHeight)
+            .fillMaxHeight()
+    } else {
+        heightIn(max = maxHeight)
+    }
 
     if (content is ManeuverBottomContent.Followup) {
         return constrainedModifier.wrapContentWidth(Alignment.Start)
@@ -376,6 +394,7 @@ private fun MapNavigationManeuverBottomContent(
     followupLabel: String,
     panelColors: RouteColors.ManeuverColors,
     maxHeight: Dp,
+    isSplit: Boolean,
     modifier: Modifier = Modifier,
 ) {
     when (content) {
@@ -387,7 +406,7 @@ private fun MapNavigationManeuverBottomContent(
         )
 
         ManeuverBottomContent.Panel -> MapNavigationManeuverPanelSection(
-            modifier = modifier.fillMaxWidth(),
+            modifier = modifier.maneuverPanelContentLayout(isSplit),
             route = route,
             listItems = listItems,
             meterLabel = meterLabel,
@@ -417,6 +436,29 @@ private fun MapNavigationManeuverBottomContent(
 
         ManeuverBottomContent.None -> Box(modifier = modifier.fillMaxWidth())
     }
+}
+
+private fun ManeuverBottomContent.bottomContainerMaxHeight(
+    isSplit: Boolean,
+    sectionMaxHeight: Dp,
+    availableHeight: Dp,
+): Dp {
+    if (this is ManeuverBottomContent.Panel && isSplit) {
+        return (availableHeight / 2f).coerceAtLeast(0.dp)
+    }
+
+    return sectionMaxHeight
+}
+
+private fun ManeuverBottomContent.shouldFillBottomContainerHeight(isSplit: Boolean): Boolean {
+    return this is ManeuverBottomContent.Panel && isSplit
+}
+
+private fun Modifier.maneuverPanelContentLayout(isSplit: Boolean): Modifier {
+    val widthModifier = fillMaxWidth()
+    if (!isSplit) return widthModifier
+
+    return widthModifier.fillMaxHeight()
 }
 
 /**
