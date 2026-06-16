@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.CompletableDeferred
@@ -220,6 +221,51 @@ class AppSettingDataSource(
         }
     }
 
+    suspend fun setMapDefaultZoom(defaultZoom: Float) = withContext(ioDispatcher) {
+        val current = currentSetting()
+        val resolvedDefaultZoom = defaultZoom.coerceIn(
+            minimumValue = AppSetting.MAP_DEFAULT_ZOOM_MIN,
+            maximumValue = AppSetting.MAP_DEFAULT_ZOOM_MAX,
+        )
+        val resolvedGuidanceManeuverZoom = resolveGuidanceManeuverZoom(
+            guidanceManeuverZoom = current.mapGuidanceManeuverZoom,
+            defaultZoom = resolvedDefaultZoom,
+        )
+        val isDefaultZoomUnchanged = current.mapDefaultZoom == resolvedDefaultZoom
+        val isGuidanceManeuverZoomUnchanged = current.mapGuidanceManeuverZoom == resolvedGuidanceManeuverZoom
+        if (isDefaultZoomUnchanged && isGuidanceManeuverZoomUnchanged) return@withContext
+
+        preference.edit { preferences ->
+            preferences[floatPreferencesKey(AppSetting::mapDefaultZoom.name)] = resolvedDefaultZoom
+            preferences[floatPreferencesKey(AppSetting::mapGuidanceManeuverZoom.name)] = resolvedGuidanceManeuverZoom
+        }
+    }
+
+    suspend fun setMapGuidanceManeuverZoom(guidanceManeuverZoom: Float) = withContext(ioDispatcher) {
+        val current = currentSetting()
+        val resolvedGuidanceManeuverZoom = resolveGuidanceManeuverZoom(
+            guidanceManeuverZoom = guidanceManeuverZoom,
+            defaultZoom = current.mapDefaultZoom,
+        )
+        if (current.mapGuidanceManeuverZoom == resolvedGuidanceManeuverZoom) return@withContext
+
+        preference.edit { preferences ->
+            preferences[floatPreferencesKey(AppSetting::mapGuidanceManeuverZoom.name)] = resolvedGuidanceManeuverZoom
+        }
+    }
+
+    suspend fun setMapTiltedCameraDegrees(tiltedCameraDegrees: Float) = withContext(ioDispatcher) {
+        val resolvedTiltedCameraDegrees = tiltedCameraDegrees.coerceIn(
+            minimumValue = AppSetting.MAP_TILTED_CAMERA_DEGREES_MIN,
+            maximumValue = AppSetting.MAP_TILTED_CAMERA_DEGREES_MAX,
+        )
+        if (currentSetting().mapTiltedCameraDegrees == resolvedTiltedCameraDegrees) return@withContext
+
+        preference.edit { preferences ->
+            preferences[floatPreferencesKey(AppSetting::mapTiltedCameraDegrees.name)] = resolvedTiltedCameraDegrees
+        }
+    }
+
     suspend fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) = withContext(ioDispatcher) {
         val preferenceKey = stringPreferencesKey(AppSetting::disabledGuidanceCategories.name)
         // edit ブロックは単一 writer で直列実行されるため、現在の永続値を読んで add/remove することで
@@ -258,6 +304,13 @@ class AppSettingDataSource(
         preference.edit {
             it[booleanPreferencesKey(AppSetting::hasDetectedClusterSession.name)] = hasDetected
         }
+    }
+
+    private fun resolveGuidanceManeuverZoom(guidanceManeuverZoom: Float, defaultZoom: Float): Float {
+        return guidanceManeuverZoom.coerceIn(
+            minimumValue = AppSetting.mapGuidanceManeuverZoomMin(defaultZoom),
+            maximumValue = AppSetting.MAP_GUIDANCE_MANEUVER_ZOOM_MAX,
+        )
     }
 
     suspend fun getOrCreateExtNavDeviceUuid(): String = withContext(ioDispatcher) {

@@ -13,6 +13,7 @@ internal class VehicleCameraPositionFactory {
 
     private var viewportHeightPx: Int = 0
     private var density: Float = DEFAULT_DENSITY
+    private var tiltedCameraDegrees: Float = MapCameraDefaults.VEHICLE_TILTED_CAMERA_DEGREES
 
     /**
      * 地図ビューの高さを更新する。
@@ -30,6 +31,15 @@ internal class VehicleCameraPositionFactory {
      */
     fun updateDensity(density: Float) {
         this.density = density
+    }
+
+    /**
+     * 3D 追従表示で使うチルト角度を更新する。
+     *
+     * @param tiltedCameraDegrees 3D 追従表示で使うチルト角度
+     */
+    fun updateTiltedCameraDegrees(tiltedCameraDegrees: Float) {
+        this.tiltedCameraDegrees = tiltedCameraDegrees
     }
 
     /**
@@ -113,7 +123,7 @@ internal class VehicleCameraPositionFactory {
      * @return 次に設定する camera tilt
      */
     fun vehicleTiltDegrees(perspective: Int): Float = when (perspective) {
-        MapCameraPerspective.TILTED -> VEHICLE_TILTED_CAMERA_DEGREES
+        MapCameraPerspective.TILTED -> tiltedCameraDegrees
         else -> 0f
     }
 
@@ -159,9 +169,6 @@ internal class VehicleCameraPositionFactory {
 
         /** density が未通知の間に使う既定値。 */
         const val DEFAULT_DENSITY = 1f
-
-        /** 3D 表示時のカメラ tilt。 */
-        const val VEHICLE_TILTED_CAMERA_DEGREES = 45f
 
         /** follow 中の gesture 後に追従維持を許容する viewport 高さ比。 */
         const val FOLLOW_GESTURE_TARGET_TOLERANCE_FRACTION = 0.12

@@ -161,7 +161,11 @@ fun MapScreen(
     }
 
     val navigationState = rememberNavigationEventState(NavigationEventInfo.None)
-    val cameraState = rememberMapCameraState()
+    val cameraState = rememberMapCameraState(
+        defaultZoom = appSetting.mapDefaultZoom,
+        guidanceManeuverZoom = appSetting.mapGuidanceManeuverZoom,
+        tiltedCameraDegrees = appSetting.mapTiltedCameraDegrees,
+    )
     val scaffoldState = rememberBottomSheetScaffoldState(
         bottomSheetState = rememberStandardBottomSheetState(
             initialValue = SheetValue.Hidden,
@@ -660,6 +664,7 @@ private fun MapScreenMapLayer(
     modifier: Modifier = Modifier,
 ) {
     val mapRenderScale = LocalMapRenderScale.current
+    val appSetting = LocalAppSetting.current
 
     Box(
         modifier = modifier,
@@ -669,6 +674,7 @@ private fun MapScreenMapLayer(
             googleMap = googleMap,
             cameraState = cameraState,
             isDarkMode = isMapDarkMode,
+            initialCameraZoom = appSetting.mapDefaultZoom,
             mapCanvasLayout = mapCanvasLayout,
             shouldLogDiagnostics = shouldLogDiagnostics,
             onMapUpdate = onMapUpdate,

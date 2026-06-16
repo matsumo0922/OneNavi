@@ -44,6 +44,14 @@ class AppSettingRepository(
     suspend fun setSpeedAdaptiveTtsGainMaxDb(maxGainDb: Double) =
         dataSource.setSpeedAdaptiveTtsGainMaxDb(maxGainDb)
 
+    suspend fun setMapDefaultZoom(defaultZoom: Float) = dataSource.setMapDefaultZoom(defaultZoom)
+
+    suspend fun setMapGuidanceManeuverZoom(guidanceManeuverZoom: Float) =
+        dataSource.setMapGuidanceManeuverZoom(guidanceManeuverZoom)
+
+    suspend fun setMapTiltedCameraDegrees(tiltedCameraDegrees: Float) =
+        dataSource.setMapTiltedCameraDegrees(tiltedCameraDegrees)
+
     suspend fun setGuidanceCategoryEnabled(categoryKey: String, isEnabled: Boolean) =
         dataSource.setGuidanceCategoryEnabled(categoryKey, isEnabled)
 

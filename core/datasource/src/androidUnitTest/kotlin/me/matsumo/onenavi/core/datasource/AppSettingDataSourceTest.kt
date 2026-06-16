@@ -67,6 +67,33 @@ class AppSettingDataSourceTest {
         assertTrue(setting.isSpeedAdaptiveTtsGainEnabled)
         assertEquals(AppSetting.SPEED_ADAPTIVE_TTS_GAIN_MAX_DB_MAX, setting.speedAdaptiveTtsGainMaxDb)
     }
+
+    @Test
+    fun `map camera settings are persisted with dynamic guidance zoom clamp`() = runTest {
+        val dataSource = AppSettingDataSource(
+            preferenceHelper = InMemoryPreferenceHelper(),
+            formatter = Json,
+            ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+            applicationScope = backgroundScope,
+        )
+
+        dataSource.setMapDefaultZoom(14f)
+        dataSource.setMapGuidanceManeuverZoom(13f)
+        dataSource.setMapTiltedCameraDegrees(99f)
+
+        val lowDefaultZoomSetting = dataSource.currentSetting()
+
+        assertEquals(14f, lowDefaultZoomSetting.mapDefaultZoom)
+        assertEquals(14f, lowDefaultZoomSetting.mapGuidanceManeuverZoom)
+        assertEquals(AppSetting.MAP_TILTED_CAMERA_DEGREES_MAX, lowDefaultZoomSetting.mapTiltedCameraDegrees)
+
+        dataSource.setMapDefaultZoom(18f)
+
+        val highDefaultZoomSetting = dataSource.currentSetting()
+
+        assertEquals(18f, highDefaultZoomSetting.mapDefaultZoom)
+        assertEquals(AppSetting.MAP_GUIDANCE_MANEUVER_ZOOM_MIN, highDefaultZoomSetting.mapGuidanceManeuverZoom)
+    }
 }
 
 /** テスト用に単一の DataStore を返す PreferenceHelper。 */

@@ -52,6 +52,7 @@ internal fun MapItem(
     googleMap: GoogleMap?,
     cameraState: MapCameraState,
     isDarkMode: Boolean,
+    initialCameraZoom: Float,
     mapCanvasLayout: MapCanvasLayout,
     shouldLogDiagnostics: Boolean,
     onMapUpdate: (GoogleMap?) -> Unit,
@@ -70,6 +71,7 @@ internal fun MapItem(
     val mapView = rememberMapViewWithLifecycle(
         isDarkMode = isDarkMode,
         mapRenderScale = mapRenderScale,
+        initialCameraZoom = initialCameraZoom,
     )
     val mapViewDiagnosticState = remember { MapViewDiagnosticState() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
@@ -378,15 +380,16 @@ private const val MAP_RENDER_DENSITY_SAMPLE_INTERVAL_MS = 1000L
 private fun rememberMapViewWithLifecycle(
     isDarkMode: Boolean,
     mapRenderScale: Float,
+    initialCameraZoom: Float,
 ): MapView {
     val context = LocalContext.current
     val mapColorScheme = isDarkMode.toMapColorScheme()
 
-    return remember(context, mapRenderScale) {
+    return remember(context, mapRenderScale, initialCameraZoom) {
         val mapOptions = GoogleMapOptions()
             .mapType(GoogleMap.MAP_TYPE_NORMAL)
             .mapColorScheme(mapColorScheme)
-            .camera(defaultCameraPosition())
+            .camera(defaultCameraPosition(initialCameraZoom))
             .liteMode(false)
             .tiltGesturesEnabled(true)
             .rotateGesturesEnabled(true)
@@ -431,16 +434,17 @@ private fun Context.createDensityConfigurationContext(targetDensityDpi: Int): Co
 /**
  * MapView 生成時に GoogleMap へ渡す初期カメラ位置を作る。
  *
+ * @param initialCameraZoom 初期表示に使う zoom 値
  * @return GoogleMap の初期 [CameraPosition]
  */
-private fun defaultCameraPosition(): CameraPosition = CameraPosition.Builder()
+private fun defaultCameraPosition(initialCameraZoom: Float): CameraPosition = CameraPosition.Builder()
     .target(
         LatLng(
             MapCameraDefaults.DEFAULT_LATITUDE,
             MapCameraDefaults.DEFAULT_LONGITUDE,
         ),
     )
-    .zoom(MapCameraDefaults.DEFAULT_ZOOM)
+    .zoom(initialCameraZoom)
     .build()
 
 @SuppressLint("MissingPermission")

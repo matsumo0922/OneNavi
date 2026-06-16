@@ -178,6 +178,15 @@
     <string name="setting_sound_category">案内カテゴリ別の発話</string>
     <string name="setting_sound_category_description">案内の種類ごとに、発話する・しないを選べます。</string>
 
+    <!-- Setting Camera -->
+    <string name="setting_camera">地図カメラ</string>
+    <string name="setting_camera_default_zoom">通常ズーム</string>
+    <string name="setting_camera_default_zoom_description">地図の初期表示と現在地追従で使うズームです。</string>
+    <string name="setting_camera_guidance_maneuver_zoom">交差点ズーム</string>
+    <string name="setting_camera_guidance_maneuver_zoom_description">曲がる場所に近づいたとき、真上表示へ切り替えて拡大するズームです。</string>
+    <string name="setting_camera_tilted_camera_degrees">3D チルト角度</string>
+    <string name="setting_camera_tilted_camera_degrees_description">案内開始時や 3D 追従表示で地図を傾ける角度です。</string>
+
     <!-- Setting Voice Category -->
     <string name="setting_voice_category_title">案内カテゴリ別の発話</string>
     <string name="setting_voice_category_intersection_guide">「次の信号を右です」など、曲がる場所をお知らせします。</string>

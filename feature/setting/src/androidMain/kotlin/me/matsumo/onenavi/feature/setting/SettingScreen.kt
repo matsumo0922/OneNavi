@@ -13,6 +13,7 @@ import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.ui.screen.Destination
 import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
 import me.matsumo.onenavi.feature.setting.components.SettingTopAppBar
+import me.matsumo.onenavi.feature.setting.components.section.SettingCameraSection
 import me.matsumo.onenavi.feature.setting.components.section.SettingInfoSection
 import me.matsumo.onenavi.feature.setting.components.section.SettingOthersSection
 import me.matsumo.onenavi.feature.setting.components.section.SettingPaywallSection
@@ -58,6 +59,16 @@ internal fun SettingScreen(
                     onThemeChanged = viewModel::setTheme,
                     onUseDynamicColorChanged = viewModel::setUseDynamicColor,
                     onSeedColorChanged = viewModel::setSeedColor,
+                )
+            }
+
+            item {
+                SettingCameraSection(
+                    modifier = Modifier.fillMaxWidth(),
+                    setting = setting,
+                    onMapDefaultZoomChanged = viewModel::setMapDefaultZoom,
+                    onMapGuidanceManeuverZoomChanged = viewModel::setMapGuidanceManeuverZoom,
+                    onMapTiltedCameraDegreesChanged = viewModel::setMapTiltedCameraDegrees,
                 )
             }
 
