@@ -9,6 +9,8 @@ import android.view.Display
 import android.view.Surface
 import androidx.car.app.SurfaceContainer
 import io.github.aakira.napier.Napier
+import me.matsumo.onenavi.core.common.car.CarDisplayInputTargetRect
+import me.matsumo.onenavi.core.common.car.CarDisplayInputTargetReporter
 
 /** Android Auto host Surface の上に Presentation 描画用 VirtualDisplay を構築する検証 controller。 */
 class CarVirtualDisplayProbeController(
@@ -25,7 +27,17 @@ class CarVirtualDisplayProbeController(
     private var currentViewport: CarVirtualDisplayProbeViewport? = null
     private var inputSequence = 0L
     private var isInPanMode = false
+
+    // Presentation 側の Compose layout が更新し、host callback 側の SurfaceCallback が読む可能性がある。
+    @Volatile
+    private var currentScrollTargetRect: CarDisplayInputTargetRect? = null
+
     private var currentInputState = createInitialCarVirtualDisplayProbeInputState()
+    private val inputTargetReporter = object : CarDisplayInputTargetReporter {
+        override fun updateScrollTargetRect(rect: CarDisplayInputTargetRect?) {
+            this@CarVirtualDisplayProbeController.updateScrollTargetRect(rect)
+        }
+    }
 
     fun attachSurface(surfaceContainer: SurfaceContainer) {
         val hostSurface = surfaceContainer.surface
@@ -48,6 +60,7 @@ class CarVirtualDisplayProbeController(
         releaseVirtualDisplay()
         releaseCurrentHostSurface(exceptSurface = hostSurface)
         currentHostSurface = hostSurface
+        clearScrollTargetRect()
 
         val initialViewport = createCarVirtualDisplayProbeViewport(
             surfaceWidth = normalizePositiveDimension(surfaceContainer.width, DEFAULT_SURFACE_WIDTH),
@@ -63,6 +76,7 @@ class CarVirtualDisplayProbeController(
         val updatedViewport = currentViewport?.withVisibleArea(visibleArea) ?: return
 
         currentViewport = updatedViewport
+        clearScrollTargetRect()
         presentation?.updateViewport(updatedViewport)
         Napier.i(tag = TAG) { "Viewport visible applied. visible=${updatedViewport.visibleAreaLabel}" }
     }
@@ -71,6 +85,7 @@ class CarVirtualDisplayProbeController(
         val updatedViewport = currentViewport?.withStableArea(stableArea) ?: return
 
         currentViewport = updatedViewport
+        clearScrollTargetRect()
         presentation?.updateViewport(updatedViewport)
         Napier.i(tag = TAG) { "Viewport stable applied. stable=${updatedViewport.stableAreaLabel}" }
     }
@@ -112,6 +127,7 @@ class CarVirtualDisplayProbeController(
             distanceX = distanceX,
             distanceY = distanceY,
             isInPanMode = isInPanMode,
+            scrollTargetRect = currentScrollTargetRect,
         )
 
         publishInputState(inputState)
@@ -128,6 +144,7 @@ class CarVirtualDisplayProbeController(
             velocityX = velocityX,
             velocityY = velocityY,
             isInPanMode = isInPanMode,
+            scrollTargetRect = currentScrollTargetRect,
         )
 
         publishInputState(inputState)
@@ -154,8 +171,18 @@ class CarVirtualDisplayProbeController(
 
     fun release() {
         currentViewport = null
+        clearScrollTargetRect()
         releaseVirtualDisplay()
         releaseCurrentHostSurface()
+    }
+
+    private fun clearScrollTargetRect() {
+        // viewport 変更後は surface 座標の panel bounds が古くなるため、次の layout 報告までは中心 anchor に戻す。
+        currentScrollTargetRect = null
+    }
+
+    private fun updateScrollTargetRect(rect: CarDisplayInputTargetRect?) {
+        currentScrollTargetRect = rect?.takeIf { targetRect -> targetRect.isValid }
     }
 
     private fun createVirtualDisplayResult(surface: Surface, viewport: CarVirtualDisplayProbeViewport) {
@@ -201,6 +228,7 @@ class CarVirtualDisplayProbeController(
                 display = display,
                 initialViewport = viewport,
                 initialInputState = currentInputState,
+                inputTargetReporter = inputTargetReporter,
             ).also { probePresentation ->
                 probePresentation.show()
             }

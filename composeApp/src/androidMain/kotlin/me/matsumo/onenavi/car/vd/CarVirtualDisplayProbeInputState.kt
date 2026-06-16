@@ -1,6 +1,7 @@
 package me.matsumo.onenavi.car.vd
 
 import androidx.compose.runtime.Immutable
+import me.matsumo.onenavi.core.common.car.CarDisplayInputTargetRect
 
 /** Android Auto host Surface 経由で観測した入力イベントの種類。 */
 enum class CarVirtualDisplayProbeInputKind(
@@ -168,12 +169,14 @@ internal fun createCarVirtualDisplayProbeScrollInputState(
     distanceX: Float,
     distanceY: Float,
     isInPanMode: Boolean,
+    scrollTargetRect: CarDisplayInputTargetRect? = null,
 ): CarVirtualDisplayProbeInputState {
-    return createGestureCenterCarVirtualDisplayProbeInputState(
+    return createGestureAnchorCarVirtualDisplayProbeInputState(
         sequence = sequence,
         kind = CarVirtualDisplayProbeInputKind.Scroll,
         viewport = viewport,
         isInPanMode = isInPanMode,
+        scrollTargetRect = scrollTargetRect,
     ).copy(
         distanceX = distanceX,
         distanceY = distanceY,
@@ -186,12 +189,14 @@ internal fun createCarVirtualDisplayProbeFlingInputState(
     velocityX: Float,
     velocityY: Float,
     isInPanMode: Boolean,
+    scrollTargetRect: CarDisplayInputTargetRect? = null,
 ): CarVirtualDisplayProbeInputState {
-    return createGestureCenterCarVirtualDisplayProbeInputState(
+    return createGestureAnchorCarVirtualDisplayProbeInputState(
         sequence = sequence,
         kind = CarVirtualDisplayProbeInputKind.Fling,
         viewport = viewport,
         isInPanMode = isInPanMode,
+        scrollTargetRect = scrollTargetRect,
     ).copy(
         velocityX = velocityX,
         velocityY = velocityY,
@@ -230,6 +235,37 @@ internal fun createCarVirtualDisplayProbeScaleInputState(
     )
 }
 
+private fun createGestureAnchorCarVirtualDisplayProbeInputState(
+    sequence: Long,
+    kind: CarVirtualDisplayProbeInputKind,
+    viewport: CarVirtualDisplayProbeViewport,
+    isInPanMode: Boolean,
+    scrollTargetRect: CarDisplayInputTargetRect?,
+): CarVirtualDisplayProbeInputState {
+    val targetSurfacePoint = scrollTargetRect
+        ?.takeIf { targetRect -> !isInPanMode && targetRect.isValid }
+        ?.centerSurfacePoint()
+        ?.let(viewport::coerceObservedSurfacePoint)
+
+    if (targetSurfacePoint == null) {
+        return createGestureCenterCarVirtualDisplayProbeInputState(
+            sequence = sequence,
+            kind = kind,
+            viewport = viewport,
+            isInPanMode = isInPanMode,
+        )
+    }
+
+    return createPositionedCarVirtualDisplayProbeInputState(
+        sequence = sequence,
+        kind = kind,
+        viewport = viewport,
+        hostInputX = targetSurfacePoint.surfaceX,
+        hostInputY = targetSurfacePoint.surfaceY,
+        isInPanMode = isInPanMode,
+    )
+}
+
 private fun createGestureCenterCarVirtualDisplayProbeInputState(
     sequence: Long,
     kind: CarVirtualDisplayProbeInputKind,
@@ -253,6 +289,13 @@ private val CarVirtualDisplayObservedFrame.centerSurfaceX: Float
 
 private val CarVirtualDisplayObservedFrame.centerSurfaceY: Float
     get() = top + height / 2f
+
+private fun CarDisplayInputTargetRect.centerSurfacePoint(): CarVirtualDisplaySurfacePoint {
+    return CarVirtualDisplaySurfacePoint(
+        surfaceX = centerX,
+        surfaceY = centerY,
+    )
+}
 
 private fun createPositionedCarVirtualDisplayProbeInputState(
     sequence: Long,
