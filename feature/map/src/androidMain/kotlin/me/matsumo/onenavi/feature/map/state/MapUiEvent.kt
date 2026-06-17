@@ -5,6 +5,7 @@ import androidx.compose.ui.unit.Dp
 import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.common.car.AssistantNavCoordinate
 import me.matsumo.onenavi.core.model.RouteWaypoint
+import me.matsumo.onenavi.core.model.SavedPlace
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
@@ -67,6 +68,12 @@ sealed interface MapUiEvent {
 
     /** 地点詳細の選択地点を現在のルート文脈へ経由地として追加する。 */
     data class OnPlaceAddWaypointClicked(val item: SearchResultItem) : MapUiEvent
+
+    /** 地点詳細のブックマーク保存状態を切り替える。 */
+    data class OnPlaceBookmarkClicked(val item: SearchResultItem) : MapUiEvent
+
+    /** 地図上のブックマーク marker から地点詳細を開く。 */
+    data class OnBookmarkMarkerClicked(val place: SavedPlace) : MapUiEvent
 
     data class OnRouteIndexChanged(val index: Int) : MapUiEvent
 

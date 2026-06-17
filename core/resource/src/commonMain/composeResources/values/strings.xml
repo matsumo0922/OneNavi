@@ -78,6 +78,7 @@
     <string name="home_waypoint_search_placeholder">地点を検索</string>
     <string name="home_map_search_route">ルート検索</string>
     <string name="home_map_bookmark">保存</string>
+    <string name="home_map_bookmarked">保存済み</string>
     <string name="home_map_street_view">360°</string>
     <string name="home_map_point">地点情報</string>
     <string name="home_map_point_address">住所</string>

@@ -33,6 +33,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.feature.map.components.LocalMapMarkerClickDispatcher
+import me.matsumo.onenavi.feature.map.components.MapMarkerClickDispatcher
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -63,12 +65,13 @@ internal fun MapCallOutMarkerEffect(
     val markerSpecs = remember(googleMap) { mutableMapOf<String, MapCallOutMarkerState>() }
     val markerClickHandlers = remember(googleMap) { mutableMapOf<String, () -> Unit>() }
     val previousPlacements = remember(googleMap) { mutableMapOf<String, MapCallOutPreviousPlacement>() }
+    val markerClickDispatcher = LocalMapMarkerClickDispatcher.current
     val measuredSizes = remember { mutableStateMapOf<String, IntSize>() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var placements by remember { mutableStateOf<List<MapCallOutPlacement>>(emptyList()) }
 
-    DisposableEffect(googleMap) {
-        if (onCallOutClick != null) {
+    DisposableEffect(googleMap, markerClickDispatcher) {
+        if (onCallOutClick != null && markerClickDispatcher == null) {
             googleMap.setOnMarkerClickListener { marker ->
                 val tag = marker.tag as? String ?: return@setOnMarkerClickListener false
                 val handler = markerClickHandlers[tag] ?: return@setOnMarkerClickListener false
@@ -83,10 +86,13 @@ internal fun MapCallOutMarkerEffect(
                 state.marker.remove()
             }
             markerSpecs.clear()
+            markerClickHandlers.keys.forEach { tag ->
+                markerClickDispatcher?.unregister(tag)
+            }
             markerClickHandlers.clear()
             previousPlacements.clear()
 
-            if (onCallOutClick != null) {
+            if (onCallOutClick != null && markerClickDispatcher == null) {
                 googleMap.setOnMarkerClickListener(null)
             }
         }
@@ -178,10 +184,11 @@ internal fun MapCallOutMarkerEffect(
             googleMap = googleMap,
             markers = markerSpecs,
             clickHandlers = markerClickHandlers,
+            clickDispatcher = markerClickDispatcher,
             previousPlacements = previousPlacements,
             specs = specs,
             shadowPaddingPx = shadowPaddingPx,
-            onCallOutClick = onCallOutClick ?: { _, _ -> },
+            onCallOutClick = onCallOutClick,
         )
     }
 
@@ -216,10 +223,11 @@ private fun syncCallOutMarkers(
     googleMap: GoogleMap,
     markers: MutableMap<String, MapCallOutMarkerState>,
     clickHandlers: MutableMap<String, () -> Unit>,
+    clickDispatcher: MapMarkerClickDispatcher?,
     previousPlacements: MutableMap<String, MapCallOutPreviousPlacement>,
     specs: List<MapCallOutMarkerSpec>,
     shadowPaddingPx: Float,
-    onCallOutClick: (Int, MapCallOutRequest) -> Unit,
+    onCallOutClick: ((Int, MapCallOutRequest) -> Unit)?,
 ) {
     val activeTags = specs.mapTo(mutableSetOf()) { it.tag }
     val activeRequestIds = specs.mapTo(mutableSetOf()) { it.request.id }
@@ -229,10 +237,14 @@ private fun syncCallOutMarkers(
         val (tag, state) = markerIterator.next()
         if (tag !in activeTags) {
             state.marker.remove()
+            clickDispatcher?.unregister(tag)
             markerIterator.remove()
         }
     }
 
+    clickHandlers.keys
+        .filter { tag -> tag !in activeTags }
+        .forEach { tag -> clickDispatcher?.unregister(tag) }
     clickHandlers.keys.retainAll(activeTags)
     previousPlacements.keys.retainAll(activeRequestIds)
 
@@ -243,11 +255,19 @@ private fun syncCallOutMarkers(
         )
         val anchorY = spec.placement.anchorY(shadowPaddingPx)
 
-        clickHandlers[spec.tag] = {
-            onCallOutClick(
-                spec.placement.requestIndex,
-                spec.request,
-            )
+        if (onCallOutClick != null) {
+            val clickHandler = {
+                onCallOutClick(
+                    spec.placement.requestIndex,
+                    spec.request,
+                )
+            }
+
+            clickHandlers[spec.tag] = clickHandler
+            clickDispatcher?.register(spec.tag, clickHandler)
+        } else {
+            clickHandlers.remove(spec.tag)
+            clickDispatcher?.unregister(spec.tag)
         }
 
         val position = spec.placement.position.toLatLng()

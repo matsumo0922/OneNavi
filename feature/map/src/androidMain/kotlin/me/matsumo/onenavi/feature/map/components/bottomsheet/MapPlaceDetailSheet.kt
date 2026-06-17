@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.Icon
@@ -52,6 +53,7 @@ import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.common_share
 import me.matsumo.onenavi.core.resource.home_map_bookmark
+import me.matsumo.onenavi.core.resource.home_map_bookmarked
 import me.matsumo.onenavi.core.resource.home_map_metadata
 import me.matsumo.onenavi.core.resource.home_map_metadata_accutary
 import me.matsumo.onenavi.core.resource.home_map_metadata_id
@@ -76,6 +78,7 @@ internal fun MapPlaceDetailSheet(
     selectedResult: SearchResultItem,
     isAddWaypointAction: Boolean,
     isPrimaryActionEnabled: Boolean,
+    isBookmarked: Boolean,
     onUiEvent: (MapUiEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -158,6 +161,7 @@ internal fun MapPlaceDetailSheet(
                     Icons.Default.Directions
                 },
                 isPrimaryActionEnabled = isPrimaryActionEnabled,
+                isBookmarked = isBookmarked,
                 onPrimaryActionClicked = {
                     if (isAddWaypointAction) {
                         onUiEvent(MapUiEvent.OnPlaceAddWaypointClicked(selectedResult))
@@ -171,7 +175,9 @@ internal fun MapPlaceDetailSheet(
                         )
                     }
                 },
-                onFavoriteClicked = {},
+                onBookmarkClicked = {
+                    onUiEvent(MapUiEvent.OnPlaceBookmarkClicked(selectedResult))
+                },
                 onStreetViewClicked = {},
                 onShareClicked = {},
             )
@@ -243,8 +249,9 @@ private fun ButtonSection(
     primaryActionText: StringResource,
     primaryActionIcon: ImageVector,
     isPrimaryActionEnabled: Boolean,
+    isBookmarked: Boolean,
     onPrimaryActionClicked: () -> Unit,
-    onFavoriteClicked: () -> Unit,
+    onBookmarkClicked: () -> Unit,
     onStreetViewClicked: () -> Unit,
     onShareClicked: () -> Unit,
     modifier: Modifier = Modifier,
@@ -258,9 +265,9 @@ private fun ButtonSection(
             isEnabled = isPrimaryActionEnabled,
         ),
         ButtonItem(
-            text = Res.string.home_map_bookmark,
-            icon = Icons.Outlined.Bookmark,
-            onClick = onFavoriteClicked,
+            text = if (isBookmarked) Res.string.home_map_bookmarked else Res.string.home_map_bookmark,
+            icon = if (isBookmarked) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
+            onClick = onBookmarkClicked,
         ),
         ButtonItem(
             text = Res.string.home_map_street_view,

@@ -7,6 +7,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.model.RouteWaypoint
+import me.matsumo.onenavi.core.model.SavedPlace
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
@@ -19,6 +20,8 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuideImageKey
  * @property suggestions 検索サジェスト一覧。
  * @property histories 検索履歴一覧。
  * @property selectedResult 地点詳細で選択中の地点。
+ * @property bookmarkedPlaces 地図上に表示するブックマーク一覧。
+ * @property placeDetailsBookmark 表示中の地点詳細に一致するブックマーク。
  * @property routeWaypointEditResult waypoint 編集で返す選択地点。
  * @property overlayState 地図上に重ねるオーバーレイ状態。
  * @property topAppBarHeight 案内トップパネルの高さ px。
@@ -33,6 +36,8 @@ data class MapUiState(
     val suggestions: ImmutableList<SearchSuggestionItem> = persistentListOf(),
     val histories: ImmutableList<SearchHistory> = persistentListOf(),
     val selectedResult: SearchResultItem? = null,
+    val bookmarkedPlaces: ImmutableList<SavedPlace> = persistentListOf(),
+    val placeDetailsBookmark: SavedPlace? = null,
     val routeWaypointEditResult: Pair<Int, RouteWaypoint.Place>? = null,
     val overlayState: MapOverlayState = MapOverlayState.None,
     val topAppBarHeight: Int = 0,

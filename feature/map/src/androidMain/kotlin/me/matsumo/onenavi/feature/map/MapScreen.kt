@@ -50,6 +50,7 @@ import me.matsumo.onenavi.core.common.car.CarPhoneSessionCoordinator
 import me.matsumo.onenavi.core.common.car.OneNaviDisplaySurface
 import me.matsumo.onenavi.core.datasource.location.VehicleSpeedState
 import me.matsumo.onenavi.core.model.DeveloperFeature
+import me.matsumo.onenavi.core.model.SavedPlace
 import me.matsumo.onenavi.core.navigation.newguidance.model.GpsSignalState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
@@ -329,6 +330,9 @@ fun MapScreen(
                 onRouteSelected = { index ->
                     viewModel.onUiEvent(MapUiEvent.OnRouteIndexChanged(index))
                 },
+                onBookmarkClicked = { place ->
+                    viewModel.onUiEvent(MapUiEvent.OnBookmarkMarkerClicked(place))
+                },
                 onUiEvent = viewModel::onUiEvent,
                 onSettingClicked = {
                     navBackStack.add(Destination.Setting.Root)
@@ -370,6 +374,9 @@ fun MapScreen(
                 },
                 onRouteSelected = { index ->
                     viewModel.onUiEvent(MapUiEvent.OnRouteIndexChanged(index))
+                },
+                onBookmarkClicked = { place ->
+                    viewModel.onUiEvent(MapUiEvent.OnBookmarkMarkerClicked(place))
                 },
                 onUiEvent = viewModel::onUiEvent,
                 onSettingClicked = {
@@ -458,6 +465,7 @@ private fun MapScreenCompactLayout(
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
     onRouteSelected: (Int) -> Unit,
+    onBookmarkClicked: (SavedPlace) -> Unit,
     onUiEvent: (MapUiEvent) -> Unit,
     onSettingClicked: () -> Unit,
     modifier: Modifier = Modifier,
@@ -471,6 +479,7 @@ private fun MapScreenCompactLayout(
                 modifier = Modifier.fillMaxSize(),
                 screenState = screenState,
                 overlayState = uiState.overlayState,
+                placeDetailsBookmark = uiState.placeDetailsBookmark,
                 routePreviewState = routePreviewState,
                 cameraState = cameraState,
                 onUiEvent = onUiEvent,
@@ -498,6 +507,7 @@ private fun MapScreenCompactLayout(
                 onPointOfInterestClicked = onPointOfInterestClicked,
                 onMapLongClicked = onMapLongClicked,
                 onRouteSelected = onRouteSelected,
+                onBookmarkClicked = onBookmarkClicked,
             )
 
             MapScreenContent(
@@ -560,6 +570,7 @@ private fun MapScreenSplitLayout(
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
     onRouteSelected: (Int) -> Unit,
+    onBookmarkClicked: (SavedPlace) -> Unit,
     onUiEvent: (MapUiEvent) -> Unit,
     onSettingClicked: () -> Unit,
     modifier: Modifier = Modifier,
@@ -584,6 +595,7 @@ private fun MapScreenSplitLayout(
             onPointOfInterestClicked = onPointOfInterestClicked,
             onMapLongClicked = onMapLongClicked,
             onRouteSelected = onRouteSelected,
+            onBookmarkClicked = onBookmarkClicked,
         )
 
         MapControls(
@@ -610,6 +622,7 @@ private fun MapScreenSplitLayout(
                     modifier = Modifier.fillMaxSize(),
                     screenState = screenState,
                     overlayState = uiState.overlayState,
+                    placeDetailsBookmark = uiState.placeDetailsBookmark,
                     routePreviewState = routePreviewState,
                     cameraState = cameraState,
                     onUiEvent = onUiEvent,
@@ -661,6 +674,7 @@ private fun MapScreenMapLayer(
     onPointOfInterestClicked: (PointOfInterest) -> Unit,
     onMapLongClicked: (LatLng) -> Unit,
     onRouteSelected: (Int) -> Unit,
+    onBookmarkClicked: (SavedPlace) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val mapRenderScale = LocalMapRenderScale.current
@@ -692,6 +706,7 @@ private fun MapScreenMapLayer(
                     screenState = screenState,
                     routePreviewState = routePreviewState,
                     overlayState = uiState.overlayState,
+                    bookmarkedPlaces = uiState.bookmarkedPlaces,
                     guidanceState = guidanceState,
                     vehicleLocationState = vehicleLocationState,
                     googleMap = it,
@@ -701,6 +716,7 @@ private fun MapScreenMapLayer(
                     navigationCardHeightPx = (uiState.navigationCardHeight * mapRenderScale).roundToInt(),
                     viewportPadding = viewportPadding,
                     onRouteSelected = onRouteSelected,
+                    onBookmarkClicked = onBookmarkClicked,
                 )
             }
         }
@@ -833,6 +849,7 @@ private fun MapScreenContent(
 private fun MapScreenBottomSheetContent(
     screenState: MapScreenState,
     overlayState: MapOverlayState,
+    placeDetailsBookmark: SavedPlace?,
     routePreviewState: RoutePreviewState,
     cameraState: MapCameraState,
     onUiEvent: (MapUiEvent) -> Unit,
@@ -846,6 +863,7 @@ private fun MapScreenBottomSheetContent(
                 selectedResult = overlayState.place,
                 isAddWaypointAction = screenState.supportsPlaceAddWaypoint(),
                 isPrimaryActionEnabled = screenState.canAddWaypointFromPlaceDetails(),
+                isBookmarked = placeDetailsBookmark != null,
                 onUiEvent = onUiEvent,
             )
             return
@@ -884,6 +902,7 @@ private fun MapScreenBottomSheetContent(
                 selectedResult = screenState.place,
                 isAddWaypointAction = false,
                 isPrimaryActionEnabled = true,
+                isBookmarked = placeDetailsBookmark != null,
                 onUiEvent = onUiEvent,
             )
         }
