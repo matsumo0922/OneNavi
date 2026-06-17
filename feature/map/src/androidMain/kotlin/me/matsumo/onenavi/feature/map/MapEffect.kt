@@ -114,10 +114,12 @@ private fun MapEffectContent(
     val density = LocalDensity.current
     val navigationCardHeight = with(density) { navigationCardHeightPx.toDp() }
     val cameraZoom = cameraState.cameraState.zoom
+    val showBookmarkIcon = cameraZoom >= BOOKMARK_MARKER_ICON_MIN_ZOOM
 
     BookmarkMarkersEffect(
         bookmarkedPlaces = bookmarkedPlaces,
         googleMap = googleMap,
+        showBookmarkIcon = showBookmarkIcon,
         onBookmarkClicked = onBookmarkClicked,
     )
 
@@ -252,6 +254,7 @@ private fun MapEffectContent(
 private fun BookmarkMarkersEffect(
     bookmarkedPlaces: ImmutableList<SavedPlace>,
     googleMap: GoogleMap,
+    showBookmarkIcon: Boolean,
     onBookmarkClicked: (SavedPlace) -> Unit,
 ) {
     bookmarkedPlaces.forEach { place ->
@@ -260,6 +263,7 @@ private fun BookmarkMarkersEffect(
                 googleMap = googleMap,
                 place = place,
                 zIndex = BOOKMARK_MARKER_Z_INDEX,
+                showBookmarkIcon = showBookmarkIcon,
                 onClicked = onBookmarkClicked,
             )
         }
@@ -814,6 +818,9 @@ private const val SEARCH_RESULT_MARKER_Z_INDEX = 11_000f
 
 /** ブックマーク marker の zIndex。 */
 private const val BOOKMARK_MARKER_Z_INDEX = 9_900f
+
+/** ブックマーク marker にアイコンを表示する最小ズーム。 */
+private const val BOOKMARK_MARKER_ICON_MIN_ZOOM = 13f
 
 /** waypoint 候補 marker の zIndex。 */
 private const val WAYPOINT_CANDIDATE_MARKER_Z_INDEX = 11_500f

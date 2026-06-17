@@ -29,6 +29,7 @@ import me.matsumo.onenavi.feature.map.components.callout.rememberMapComposeBitma
  * @param googleMap marker 描画先の GoogleMap
  * @param place 描画対象の保存地点
  * @param zIndex marker の zIndex
+ * @param showBookmarkIcon marker 中央にブックマークアイコンを表示する場合 true
  * @param onClicked marker がタップされた時の callback
  */
 @Composable
@@ -36,10 +37,14 @@ internal fun MapBookmarkMarker(
     googleMap: GoogleMap,
     place: SavedPlace,
     zIndex: Float,
+    showBookmarkIcon: Boolean,
     onClicked: (SavedPlace) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val icon = rememberBookmarkMarkerIcon(modifier)
+    val icon = rememberBookmarkMarkerIcon(
+        showBookmarkIcon = showBookmarkIcon,
+        modifier = modifier,
+    )
     val clickDispatcher = LocalMapMarkerClickDispatcher.current
     val markerTag = bookmarkMarkerTag(place.id)
     val currentOnClicked = rememberUpdatedState(onClicked)
@@ -68,37 +73,45 @@ internal fun MapBookmarkMarker(
 
 @Composable
 private fun rememberBookmarkMarkerIcon(
+    showBookmarkIcon: Boolean,
     modifier: Modifier = Modifier,
 ): BitmapDescriptor {
-    return rememberMapComposeBitmapDescriptor("bookmark-marker") {
+    return rememberMapComposeBitmapDescriptor("bookmark-marker", showBookmarkIcon) {
         BookmarkMarkerIcon(
             modifier = modifier,
+            showBookmarkIcon = showBookmarkIcon,
         )
     }
 }
 
 @Composable
 private fun BookmarkMarkerIcon(
+    showBookmarkIcon: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val markerSize = if (showBookmarkIcon) BookmarkMarkerSize else BookmarkMarkerDotSize
+    val markerModifier = modifier
+        .size(markerSize)
+        .clip(CircleShape)
+        .background(BookmarkMarkerBackgroundColor)
+        .border(
+            width = BookmarkMarkerBorderWidth,
+            color = BookmarkMarkerBorderColor,
+            shape = CircleShape,
+        )
+
     Box(
-        modifier = modifier
-            .size(BookmarkMarkerSize)
-            .clip(CircleShape)
-            .background(BookmarkMarkerBackgroundColor)
-            .border(
-                width = BookmarkMarkerBorderWidth,
-                color = BookmarkMarkerBorderColor,
-                shape = CircleShape,
-            ),
+        modifier = markerModifier,
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            modifier = Modifier.size(BookmarkMarkerIconSize),
-            imageVector = Icons.Outlined.Bookmark,
-            contentDescription = null,
-            tint = BookmarkMarkerIconColor,
-        )
+        if (showBookmarkIcon) {
+            Icon(
+                modifier = Modifier.size(BookmarkMarkerIconSize),
+                imageVector = Icons.Outlined.Bookmark,
+                contentDescription = null,
+                tint = BookmarkMarkerIconColor,
+            )
+        }
     }
 }
 
@@ -107,13 +120,16 @@ private fun bookmarkMarkerTag(id: String): String {
 }
 
 /** ブックマーク marker の描画領域サイズ。 */
-private val BookmarkMarkerSize = 36.dp
+private val BookmarkMarkerSize = 28.dp
+
+/** 広域表示時のブックマーク marker 点サイズ。 */
+private val BookmarkMarkerDotSize = 10.dp
 
 /** ブックマーク marker の中心アイコンサイズ。 */
-private val BookmarkMarkerIconSize = 20.dp
+private val BookmarkMarkerIconSize = 16.dp
 
 /** ブックマーク marker の枠線幅。 */
-private val BookmarkMarkerBorderWidth = 2.dp
+private val BookmarkMarkerBorderWidth = 1.5.dp
 
 /** ブックマーク marker の背景色。 */
 private val BookmarkMarkerBackgroundColor = Color(0xFF2E7D32)
