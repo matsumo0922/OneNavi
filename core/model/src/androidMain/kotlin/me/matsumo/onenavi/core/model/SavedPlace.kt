@@ -7,6 +7,7 @@ import kotlin.time.Instant
 
 /**
  * ユーザーが保存した地点。
+ * 永続化済み JSON との互換性を保つため、将来 property を追加するときは既定値または migration を用意する。
  *
  * @property id 保存地点の識別子
  * @property kind 保存地点の種別

@@ -107,8 +107,11 @@ class SavedPlaceRepository(
         dataSource.remove(WORK_ID)
     }
 
-    /** ブックマークを新規追加する。 */
+    /** ブックマークを新規追加し、同一地点が登録済みなら既存のブックマークを返す。 */
     suspend fun addBookmark(input: SavedPlaceInput): Result<SavedPlace> = runCatching {
+        val existingBookmark = findBookmark(input.toLookupKey())
+        if (existingBookmark != null) return@runCatching existingBookmark
+
         val now = nowProvider()
         val bookmark = input.toSavedPlace(
             id = bookmarkIdProvider(),
@@ -190,6 +193,14 @@ class SavedPlaceRepository(
         )
     }
 
+    private fun SavedPlaceInput.toLookupKey(): SavedPlaceLookupKey {
+        return SavedPlaceLookupKey(
+            sourcePlaceId = sourcePlaceId,
+            latitude = latitude,
+            longitude = longitude,
+        )
+    }
+
     private fun List<SavedPlace>.registrationStateOf(lookupKey: SavedPlaceLookupKey): SavedPlaceRegistrationState {
         return SavedPlaceRegistrationState(
             home = findMatchingPlace(SavedPlaceKind.HOME, lookupKey),
@@ -227,7 +238,7 @@ class SavedPlaceRepository(
         /** 職場登録に使う固定 ID。 */
         const val WORK_ID = "work"
 
-        /** 座標一致判定に使う緯度経度それぞれの許容誤差。 */
-        private const val COORDINATE_TOLERANCE = 1e-6
+        /** 座標一致判定に使う緯度経度それぞれ約 1m の許容誤差。 */
+        private const val COORDINATE_TOLERANCE = 1e-5
     }
 }

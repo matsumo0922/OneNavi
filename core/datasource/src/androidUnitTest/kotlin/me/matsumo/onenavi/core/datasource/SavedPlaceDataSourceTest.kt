@@ -13,7 +13,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import me.matsumo.onenavi.core.common.formatter
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
 import me.matsumo.onenavi.core.model.SavedPlace
 import me.matsumo.onenavi.core.model.SavedPlaceKind
@@ -90,10 +90,43 @@ class SavedPlaceDataSourceTest {
         assertEquals(emptyList(), dataSource.currentPlaces())
     }
 
+    @Test
+    fun `currentPlaces decodes unknown keys and omitted nullable fields`() = runTest {
+        val preferenceHelper = SavedPlaceInMemoryPreferenceHelper()
+        val dataSource = createDataSource(preferenceHelper)
+        val rawJson = """
+            {
+              "version": 1,
+              "unknown": "ignored",
+              "places": [
+                {
+                  "id": "home",
+                  "kind": "HOME",
+                  "name": "Home",
+                  "latitude": 35.0,
+                  "longitude": 139.0,
+                  "createdAt": 1000,
+                  "updatedAt": 2000,
+                  "unknownPlaceField": "ignored"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        preferenceHelper.writeRawJson(rawJson)
+
+        val place = dataSource.currentPlaces().single()
+
+        assertEquals("home", place.id)
+        assertEquals(SavedPlaceKind.HOME, place.kind)
+        assertEquals(null, place.sourcePlaceId)
+        assertEquals(null, place.address)
+    }
+
     private fun createDataSource(preferenceHelper: PreferenceHelper): SavedPlaceDataSource {
         return SavedPlaceDataSource(
             preferenceHelper = preferenceHelper,
-            formatter = Json,
+            formatter = formatter,
             ioDispatcher = UnconfinedTestDispatcher(),
         )
     }
@@ -128,7 +161,7 @@ private class SavedPlaceInMemoryPreferenceHelper : PreferenceHelper {
 
     suspend fun writeSavedPlaces(places: List<SavedPlace>) {
         val store = TestSavedPlaceStore(places = places)
-        writeRawJson(Json.encodeToString(store))
+        writeRawJson(formatter.encodeToString(store))
     }
 
     suspend fun writeRawJson(json: String) {

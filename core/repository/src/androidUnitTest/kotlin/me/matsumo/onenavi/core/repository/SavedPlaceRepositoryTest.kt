@@ -10,7 +10,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
+import me.matsumo.onenavi.core.common.formatter
 import me.matsumo.onenavi.core.datasource.SavedPlaceDataSource
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
 import me.matsumo.onenavi.core.model.SavedPlaceInput
@@ -67,12 +67,46 @@ class SavedPlaceRepositoryTest {
             bookmarkIdProvider = { bookmarkIds.removeFirst() },
         )
 
-        val firstBookmark = target.repository.addBookmark(createInput()).getOrThrow()
-        val secondBookmark = target.repository.addBookmark(createInput()).getOrThrow()
+        val firstBookmark = target.repository.addBookmark(
+            createInput(sourcePlaceId = "source-a"),
+        ).getOrThrow()
+        val secondBookmark = target.repository.addBookmark(
+            createInput(
+                sourcePlaceId = "source-b",
+                latitude = 35.1,
+                longitude = 139.1,
+            ),
+        ).getOrThrow()
 
         assertEquals("bookmark-1", firstBookmark.id)
         assertEquals("bookmark-2", secondBookmark.id)
         assertEquals(listOf(firstBookmark, secondBookmark), target.dataSource.currentPlaces())
+    }
+
+    @Test
+    fun `addBookmark returns existing bookmark for matching place`() = runTest {
+        val bookmarkIds = ArrayDeque(listOf("bookmark-1", "bookmark-2"))
+        val target = createTarget(
+            bookmarkIdProvider = { bookmarkIds.removeFirst() },
+        )
+        val firstBookmark = target.repository.addBookmark(
+            createInput(
+                sourcePlaceId = "source-a",
+                name = "Before",
+            ),
+        ).getOrThrow()
+
+        val duplicatedBookmark = target.repository.addBookmark(
+            createInput(
+                sourcePlaceId = "source-a",
+                name = "After",
+                latitude = 0.0,
+                longitude = 0.0,
+            ),
+        ).getOrThrow()
+
+        assertEquals(firstBookmark, duplicatedBookmark)
+        assertEquals(listOf(firstBookmark), target.dataSource.currentPlaces())
     }
 
     @Test
@@ -136,13 +170,13 @@ class SavedPlaceRepositoryTest {
     }
 
     @Test
-    fun `coordinate fallback matches places without sourcePlaceId`() = runTest {
+    fun `coordinate fallback matches meter level drift and rejects distant places`() = runTest {
         val target = createTarget()
         target.repository.setWork(
             createInput(
                 sourcePlaceId = null,
-                latitude = 35.0000001,
-                longitude = 139.0000001,
+                latitude = 35.0,
+                longitude = 139.0,
             ),
         ).getOrThrow()
 
@@ -150,13 +184,21 @@ class SavedPlaceRepositoryTest {
         val state = target.repository.observeRegistrationState(
             SavedPlaceLookupKey(
                 sourcePlaceId = "lookup-source",
-                latitude = 35.0000002,
-                longitude = 139.0000002,
+                latitude = 35.000009,
+                longitude = 139.000009,
             ),
         ).first { registrationState -> registrationState.isWork }
+        val distantState = target.repository.observeRegistrationState(
+            SavedPlaceLookupKey(
+                sourcePlaceId = null,
+                latitude = 35.00002,
+                longitude = 139.00002,
+            ),
+        ).first()
 
         assertNotNull(work)
         assertEquals(work, state.work)
+        assertFalse(distantState.isWork)
     }
 
     private fun createTarget(
@@ -165,7 +207,7 @@ class SavedPlaceRepositoryTest {
     ): TestTarget {
         val dataSource = SavedPlaceDataSource(
             preferenceHelper = InMemoryPreferenceHelper(),
-            formatter = Json,
+            formatter = formatter,
             ioDispatcher = UnconfinedTestDispatcher(),
         )
         val repository = SavedPlaceRepository(
