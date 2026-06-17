@@ -38,6 +38,7 @@ import me.matsumo.onenavi.core.datasource.location.VehicleSpeedState
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.model.RouteWaypoint
+import me.matsumo.onenavi.core.model.SavedPlace
 import me.matsumo.onenavi.core.model.SearchHistory
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.model.SearchSuggestionItem
@@ -50,6 +51,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuideImageKey
 import me.matsumo.onenavi.core.navigation.voice.debug.VoiceAnnouncementDebugSnapshot
+import me.matsumo.onenavi.core.repository.SavedPlaceRepository
 import me.matsumo.onenavi.core.repository.SearchRepository
 import me.matsumo.onenavi.feature.map.location.VehicleLocationDataSource
 import me.matsumo.onenavi.feature.map.state.ExtNavNavigationGuideImageLoader
@@ -70,6 +72,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class MapViewModel(
     private val searchRepository: SearchRepository,
+    private val savedPlaceRepository: SavedPlaceRepository,
     private val newRouteManager: NewRouteManager,
     private val newGuidanceManager: NewGuidanceManager,
     phoneDestinationSearchLauncher: PhoneDestinationSearchLauncher,
@@ -140,6 +143,7 @@ class MapViewModel(
 
     private val uiEventDelegate = UiEventDelegate(
         searchRepository = searchRepository,
+        savedPlaceRepository = savedPlaceRepository,
         newRouteManager = newRouteManager,
         newGuidanceManager = newGuidanceManager,
         phoneDestinationSearchLauncher = phoneDestinationSearchLauncher,
@@ -157,8 +161,14 @@ class MapViewModel(
         scope = viewModelScope,
         imageChanged = ::setNavigationGuideImage,
     )
+    private val bookmarkStateCoordinator = MapBookmarkStateCoordinator(
+        savedPlaceRepository = savedPlaceRepository,
+        uiState = _uiState,
+        scope = viewModelScope,
+    )
 
     init {
+        bookmarkStateCoordinator.start()
         observeNavigationGuideImageKey()
         observeGuidanceScreenState()
     }
@@ -248,6 +258,7 @@ class MapViewModel(
 
 private class UiEventDelegate(
     private val searchRepository: SearchRepository,
+    private val savedPlaceRepository: SavedPlaceRepository,
     private val newRouteManager: NewRouteManager,
     private val newGuidanceManager: NewGuidanceManager,
     private val phoneDestinationSearchLauncher: PhoneDestinationSearchLauncher,
@@ -260,6 +271,11 @@ private class UiEventDelegate(
     private val replaceCurrentScreenState: (MapScreenState) -> Unit,
     private val showBrowsing: () -> Unit,
 ) {
+    private val bookmarkActionController = MapBookmarkActionController(
+        savedPlaceRepository = savedPlaceRepository,
+        searchRepository = searchRepository,
+        openPlaceDetails = ::openBookmarkedPlaceDetails,
+    )
     private var placeSearchJob: Job? = null
     private var routeSearchJob: Job? = null
     private var addWaypointRouteSearchJob: Job? = null
@@ -302,6 +318,8 @@ private class UiEventDelegate(
             is MapUiEvent.OnAssistantPreviewRoute -> handleAssistantPreviewRoute(event.query, event.coordinate)
             is MapUiEvent.OnAssistantAddStop -> handleAssistantAddStop(event.query, event.coordinate)
             is MapUiEvent.OnPlaceAddWaypointClicked -> handlePlaceAddWaypointClicked(event.item)
+            is MapUiEvent.OnPlaceBookmarkClicked -> handlePlaceBookmarkClicked(event.item)
+            is MapUiEvent.OnBookmarkMarkerClicked -> handleBookmarkMarkerClicked(event.place)
             is MapUiEvent.OnRouteIndexChanged -> handleRouteIndexChanged(event.index)
             is MapUiEvent.OnNavigationStart -> handleNavigationStart()
             is MapUiEvent.OnNavigationStop -> handleNavigationStop()
@@ -403,6 +421,13 @@ private class UiEventDelegate(
         )
     }
 
+    private suspend fun openBookmarkedPlaceDetails(result: SearchResultItem) {
+        openPlaceDetails(
+            result = result,
+            addHistory = false,
+        )
+    }
+
     private suspend fun openPlaceDetails(
         result: SearchResultItem,
         addHistory: Boolean,
@@ -499,6 +524,18 @@ private class UiEventDelegate(
                 ),
                 addHistory = false,
             )
+        }
+    }
+
+    private fun handlePlaceBookmarkClicked(item: SearchResultItem) {
+        scope.launch {
+            bookmarkActionController.togglePlaceBookmark(item)
+        }
+    }
+
+    private fun handleBookmarkMarkerClicked(place: SavedPlace) {
+        scope.launch {
+            bookmarkActionController.openBookmarkPlaceDetails(place)
         }
     }
 

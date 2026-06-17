@@ -10,11 +10,14 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePointEvent
+import me.matsumo.onenavi.core.model.SavedPlace
 import me.matsumo.onenavi.core.model.SearchResultItem
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.RoutePreviewState
+import me.matsumo.onenavi.feature.map.components.MapBookmarkMarker
 import me.matsumo.onenavi.feature.map.components.MapGuidanceManeuverArrowEffect
 import me.matsumo.onenavi.feature.map.components.MapMarker
+import me.matsumo.onenavi.feature.map.components.MapMarkerClickDispatcherProvider
 import me.matsumo.onenavi.feature.map.components.MapNumberedMarker
 import me.matsumo.onenavi.feature.map.components.MapOriginMarker
 import me.matsumo.onenavi.feature.map.components.MapPolyline
@@ -37,6 +40,7 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
  * @param screenState 現在の地図画面状態
  * @param routePreviewState Preview 期のルート候補状態
  * @param overlayState 地図画面上に重ねるオーバーレイ状態
+ * @param bookmarkedPlaces 地図上に表示するブックマーク地点一覧
  * @param guidanceState Guidance 期の案内状態
  * @param vehicleLocationState 最新の自車位置
  * @param googleMap overlay 描画先の GoogleMap
@@ -46,6 +50,7 @@ import me.matsumo.onenavi.feature.map.state.VehicleLocationState
  * @param navigationCardHeightPx 案内中 callout が避ける下部カード高さ
  * @param viewportPadding callout が避ける host / 画面外・UI 帯 padding
  * @param onRouteSelected ルート候補が選択された時の callback
+ * @param onBookmarkClicked ブックマーク marker が選択された時の callback
  * @param modifier callout overlay 用 modifier
  */
 @Composable
@@ -53,6 +58,7 @@ internal fun MapEffect(
     screenState: MapScreenState,
     routePreviewState: RoutePreviewState,
     overlayState: MapOverlayState,
+    bookmarkedPlaces: ImmutableList<SavedPlace>,
     guidanceState: GuidanceState,
     vehicleLocationState: VehicleLocationState?,
     googleMap: GoogleMap,
@@ -62,11 +68,57 @@ internal fun MapEffect(
     navigationCardHeightPx: Int,
     viewportPadding: MapHostInsets,
     onRouteSelected: (Int) -> Unit,
+    onBookmarkClicked: (SavedPlace) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    MapMarkerClickDispatcherProvider(googleMap = googleMap) {
+        MapEffectContent(
+            modifier = modifier,
+            screenState = screenState,
+            routePreviewState = routePreviewState,
+            overlayState = overlayState,
+            bookmarkedPlaces = bookmarkedPlaces,
+            guidanceState = guidanceState,
+            vehicleLocationState = vehicleLocationState,
+            googleMap = googleMap,
+            cameraState = cameraState,
+            topAppBarHeightPx = topAppBarHeightPx,
+            bottomSheetPeekHeight = bottomSheetPeekHeight,
+            navigationCardHeightPx = navigationCardHeightPx,
+            viewportPadding = viewportPadding,
+            onRouteSelected = onRouteSelected,
+            onBookmarkClicked = onBookmarkClicked,
+        )
+    }
+}
+
+@Composable
+private fun MapEffectContent(
+    screenState: MapScreenState,
+    routePreviewState: RoutePreviewState,
+    overlayState: MapOverlayState,
+    bookmarkedPlaces: ImmutableList<SavedPlace>,
+    guidanceState: GuidanceState,
+    vehicleLocationState: VehicleLocationState?,
+    googleMap: GoogleMap,
+    cameraState: MapCameraState,
+    topAppBarHeightPx: Int,
+    bottomSheetPeekHeight: Dp,
+    navigationCardHeightPx: Int,
+    viewportPadding: MapHostInsets,
+    onRouteSelected: (Int) -> Unit,
+    onBookmarkClicked: (SavedPlace) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     val navigationCardHeight = with(density) { navigationCardHeightPx.toDp() }
     val cameraZoom = cameraState.cameraState.zoom
+
+    BookmarkMarkersEffect(
+        bookmarkedPlaces = bookmarkedPlaces,
+        googleMap = googleMap,
+        onBookmarkClicked = onBookmarkClicked,
+    )
 
     when (screenState) {
         is MapScreenState.Browsing -> Unit
@@ -191,6 +243,22 @@ internal fun MapEffect(
             routeKey = guidanceRoute?.route?.id,
             routeGeometry = routeGeometry,
             zIndex = VEHICLE_PUCK_Z_INDEX,
+        )
+    }
+}
+
+@Composable
+private fun BookmarkMarkersEffect(
+    bookmarkedPlaces: ImmutableList<SavedPlace>,
+    googleMap: GoogleMap,
+    onBookmarkClicked: (SavedPlace) -> Unit,
+) {
+    bookmarkedPlaces.forEach { place ->
+        MapBookmarkMarker(
+            googleMap = googleMap,
+            place = place,
+            zIndex = BOOKMARK_MARKER_Z_INDEX,
+            onClicked = onBookmarkClicked,
         )
     }
 }
@@ -740,6 +808,9 @@ private const val ROUTE_WAYPOINT_MARKER_Z_INDEX = 10_500f
 
 /** 検索結果 marker の zIndex 起点。 */
 private const val SEARCH_RESULT_MARKER_Z_INDEX = 11_000f
+
+/** ブックマーク marker の zIndex。 */
+private const val BOOKMARK_MARKER_Z_INDEX = 9_900f
 
 /** waypoint 候補 marker の zIndex。 */
 private const val WAYPOINT_CANDIDATE_MARKER_Z_INDEX = 11_500f
