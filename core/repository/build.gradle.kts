@@ -22,5 +22,10 @@ kotlin {
             implementation(libs.kotlinx.datetime)
             api(libs.ktor.okhttp)
         }
+
+        androidUnitTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }

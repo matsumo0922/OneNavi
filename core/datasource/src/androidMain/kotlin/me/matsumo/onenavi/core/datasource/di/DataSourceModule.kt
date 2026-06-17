@@ -7,6 +7,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import me.matsumo.onenavi.core.datasource.AppSettingDataSource
 import me.matsumo.onenavi.core.datasource.GooglePlacesSearchDataSource
+import me.matsumo.onenavi.core.datasource.SavedPlaceDataSource
 import me.matsumo.onenavi.core.datasource.SearchDataSource
 import me.matsumo.onenavi.core.datasource.SearchHistoryDataSource
 import me.matsumo.onenavi.core.datasource.helper.PreferenceHelper
@@ -23,6 +24,7 @@ val dataSourceModule = module {
     // UI を経由しないプロセス起動でも DataStore の読み込みが Koin 起動時に始まるよう即時生成する。
     singleOf(::AppSettingDataSource) { createdAtStart() }
     singleOf(::SearchHistoryDataSource)
+    singleOf(::SavedPlaceDataSource)
     singleOf(::CurrentLocationDataSource)
 
     single {
