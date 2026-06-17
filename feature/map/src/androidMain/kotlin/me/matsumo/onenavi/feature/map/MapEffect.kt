@@ -2,6 +2,7 @@ package me.matsumo.onenavi.feature.map
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -254,12 +255,14 @@ private fun BookmarkMarkersEffect(
     onBookmarkClicked: (SavedPlace) -> Unit,
 ) {
     bookmarkedPlaces.forEach { place ->
-        MapBookmarkMarker(
-            googleMap = googleMap,
-            place = place,
-            zIndex = BOOKMARK_MARKER_Z_INDEX,
-            onClicked = onBookmarkClicked,
-        )
+        key(place.id) {
+            MapBookmarkMarker(
+                googleMap = googleMap,
+                place = place,
+                zIndex = BOOKMARK_MARKER_Z_INDEX,
+                onClicked = onBookmarkClicked,
+            )
+        }
     }
 }
 

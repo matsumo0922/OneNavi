@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.matsumo.onenavi.core.model.SavedPlace
 import me.matsumo.onenavi.core.model.SavedPlaceInput
 import me.matsumo.onenavi.core.model.SavedPlaceLookupKey
@@ -21,6 +23,7 @@ import me.matsumo.onenavi.core.repository.SavedPlaceRepository
 import me.matsumo.onenavi.core.repository.SearchRepository
 import me.matsumo.onenavi.feature.map.state.MapOverlayState
 import me.matsumo.onenavi.feature.map.state.MapUiState
+import java.util.Locale
 
 /**
  * 保存地点 repository の更新を地図 UI state へ反映する coordinator。
@@ -90,19 +93,27 @@ internal class MapBookmarkActionController(
     private val searchRepository: SearchRepository,
     private val openPlaceDetails: suspend (SearchResultItem) -> Unit,
 ) {
+    private val bookmarkToggleMutex = Mutex()
 
     /** 指定地点のブックマーク保存状態を切り替える。 */
     suspend fun togglePlaceBookmark(item: SearchResultItem) {
-        val lookupKey = item.toSavedPlaceLookupKey()
-        val bookmark = savedPlaceRepository.findBookmark(lookupKey)
-        val result = if (bookmark == null) {
-            savedPlaceRepository.addBookmark(item.toSavedPlaceInput()).map { }
-        } else {
-            savedPlaceRepository.removeBookmark(bookmark.id)
+        val result = bookmarkToggleMutex.withLock {
+            togglePlaceBookmarkLocked(item)
         }
 
         result.onFailure { error ->
             Napier.e(error, TAG) { "Failed to toggle place bookmark. placeId=${item.placeId}" }
+        }
+    }
+
+    private suspend fun togglePlaceBookmarkLocked(item: SearchResultItem): Result<Unit> {
+        val lookupKey = item.toSavedPlaceLookupKey()
+        val bookmark = savedPlaceRepository.findBookmark(lookupKey)
+
+        return if (bookmark == null) {
+            savedPlaceRepository.addBookmark(item.toSavedPlaceInput()).map { }
+        } else {
+            savedPlaceRepository.removeBookmark(bookmark.id)
         }
     }
 
@@ -210,7 +221,7 @@ private fun SavedPlace.toSearchResultItem(): SearchResultItem {
 }
 
 private fun formatCoordinateName(latitude: Double, longitude: Double): String {
-    return String.format(java.util.Locale.US, "%.6f, %.6f", latitude, longitude)
+    return String.format(Locale.US, "%.6f, %.6f", latitude, longitude)
 }
 
 /** 地図長押しなどから作る synthetic placeId の prefix。 */

@@ -4,9 +4,12 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import me.matsumo.onenavi.core.common.formatter
@@ -47,6 +50,24 @@ class MapBookmarkActionControllerTest {
         assertEquals("Tokyo", addedPlace.address)
 
         target.controller.togglePlaceBookmark(item)
+
+        assertEquals(emptyList(), target.savedPlaceDataSource.currentPlaces())
+    }
+
+    @Test
+    fun `togglePlaceBookmark serializes concurrent clicks for the same place`() = runTest {
+        val target = createTarget()
+        val item = createSearchResultItem()
+        val dispatcher = StandardTestDispatcher(testScheduler)
+
+        val firstToggle = async(dispatcher) {
+            target.controller.togglePlaceBookmark(item)
+        }
+        val secondToggle = async(dispatcher) {
+            target.controller.togglePlaceBookmark(item)
+        }
+
+        awaitAll(firstToggle, secondToggle)
 
         assertEquals(emptyList(), target.savedPlaceDataSource.currentPlaces())
     }
