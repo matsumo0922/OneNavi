@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.feature.map.components.navigation
 
+import me.matsumo.onenavi.core.model.RoadClass
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -7,6 +8,22 @@ import kotlin.test.assertEquals
  * Maneuver カード下段コンテンツの優先度解決テスト。
  */
 class ManeuverBottomContentTypeTest {
+
+    @Test
+    fun 高速道路上ではパネル展開状態になる() {
+        val isExpanded = resolveManeuverPanelExpandedState(RoadClass.HIGHWAY, false)
+
+        assertEquals(true, isExpanded)
+    }
+
+    @Test
+    fun 高速道路以外ではパネル展開状態を維持する() {
+        val expandedState = resolveManeuverPanelExpandedState(RoadClass.ORDINARY, true)
+        val collapsedState = resolveManeuverPanelExpandedState(RoadClass.ORDINARY, false)
+
+        assertEquals(true, expandedState)
+        assertEquals(false, collapsedState)
+    }
 
     @Test
     fun 案内画像はパネルより優先される() {
