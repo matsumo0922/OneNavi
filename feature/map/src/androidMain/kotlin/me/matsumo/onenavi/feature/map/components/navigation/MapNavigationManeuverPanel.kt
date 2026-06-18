@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -97,7 +98,14 @@ internal fun MapNavigationManeuverPanel(
     val hourLabel = stringResource(Res.string.common_unit_hour)
     val minuteLabel = stringResource(Res.string.common_unit_minute)
     val followupLabel = stringResource(Res.string.home_map_navigation_followup)
-    var showPanel by rememberSaveable { mutableStateOf(false) }
+    val currentRoadClass = progress.currentRoadClass
+    var showPanel by rememberSaveable {
+        mutableStateOf(resolveManeuverPanelExpandedState(currentRoadClass, false))
+    }
+
+    LaunchedEffect(currentRoadClass) {
+        showPanel = resolveManeuverPanelExpandedState(currentRoadClass, showPanel)
+    }
 
     val laneCells = bannerLaneCells(banner.support)
     val followupCallout = banner.followup ?: bannerFollowupCallout(banner.support)
@@ -197,6 +205,17 @@ private fun bannerLaneCells(support: BannerSupport?): ImmutableList<LaneCell>? {
 private fun bannerFollowupCallout(support: BannerSupport?): ManeuverCallout? {
     val followupSupport = support as? BannerSupport.Followup ?: return null
     return followupSupport.maneuver
+}
+
+/**
+ * 現在道路種別から Maneuver パネルの展開状態を解決する。
+ */
+internal fun resolveManeuverPanelExpandedState(currentRoadClass: RoadClass, isExpanded: Boolean): Boolean {
+    if (currentRoadClass == RoadClass.HIGHWAY) {
+        return true
+    }
+
+    return isExpanded
 }
 
 private fun navigationManeuverBottomSectionMaxHeight(
