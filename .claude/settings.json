@@ -48,9 +48,7 @@
       "Bash(rtk grep *)",
       "Bash(rtk find *)",
       "Bash(jadx *)",
-      "Bash(npx tsc --noEmit)",
-      "Bash(./gradlew :drive-supporter-api:compileDebugKotlin *)",
-      "Bash(./gradlew :drive-supporter-api:assembleDebug *)"
+      "Bash(npx tsc --noEmit)"
     ]
   }
 }

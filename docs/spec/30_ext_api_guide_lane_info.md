@@ -1,15 +1,15 @@
-# 30. 外部ナビ API GUIDE 車線案内 encoding 調査
+# 30. 外部API GUIDE 車線案内 encoding 調査
 
 > **作成日:** 2026-05-27
 > **ステータス:** 調査完了 / 実装前
-> **対象:** 外部ナビ API ライブラリの GUIDE protobuf から、一般道交差点・高速入口の車線案内を復元する
-> **関連:** `18_external_nav_api_migration_plan.md`, `21_ext_nav_guide_proto_and_announcement.md`
+> **対象:** 外部API ライブラリの GUIDE protobuf から、一般道交差点・高速入口の車線案内を復元する
+> **関連:** `18_external_api_migration_plan.md`, `21_ext_api_guide_proto_and_announcement.md`
 
 ---
 
 ## 0. このドキュメントの目的
 
-外部ナビ API のレスポンス ZIP には `ROUTE` と `GUIDE` の 2 種類の protobuf が含まれる。
+外部API のレスポンス ZIP には `ROUTE` と `GUIDE` の 2 種類の protobuf が含まれる。
 このうち、一般道交差点や高速入口で表示される「直進 / 直進 / 右折」のような
 **車線図**は、`ROUTE` ではなく `GUIDE` 側の `GuidePoint.flags_group` から復元できる。
 
@@ -67,7 +67,7 @@ entry.field_2 absent or 0 -> normal lane
 
 理由:
 
-- 外部ナビ API の参照実装アプリの表示では、レーン画像の強調に相当するのは
+- 外部API の参照実装アプリの表示では、レーン画像の強調に相当するのは
   `target lane` 側の概念。
 - `isRecommendLane` 相当の情報は Java/Kotlin UI 層では主表示にほぼ使われず、
   実際の強調表示は `isTargetLane` 相当で行われている。

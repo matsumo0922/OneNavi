@@ -1,9 +1,9 @@
-# 21. 外部ナビ API GUIDE proto 拡張とマニューバ / 音声発話設計
+# 21. 外部API GUIDE proto 拡張とマニューバ / 音声発話設計
 
 > **作成日:** 2026-04-23
 > **ステータス:** Phase A / Phase B 完了、Phase C (追加調査) 完了、Phase D (実機検証 + アイコン実装) 残
-> **対象:** 外部ナビ API ライブラリの GUIDE protobuf から取得できる情報を最大限活用し、OneNavi 側の turn-by-turn UI / TTS 発話スケジュールを改善する
-> **関連:** `16_turn_by_turn_navigation_flow.md`, `18_external_nav_api_migration_plan.md`, `19_drive_supporter_api_integration_plan.md`, `20_navigationview_external_route_bridge_investigation.md`
+> **対象:** 外部API ライブラリの GUIDE protobuf から取得できる情報を最大限活用し、OneNavi 側の turn-by-turn UI / TTS 発話スケジュールを改善する
+> **関連:** `16_turn_by_turn_navigation_flow.md`, `18_external_api_migration_plan.md`, `19_external_api_integration_plan.md`, `20_navigationview_external_route_bridge_investigation.md`
 
 ---
 
@@ -11,11 +11,11 @@
 
 本書は 2 つの段階に分かれる。
 
-- **Phase A (完了)**: 外部ナビ API ライブラリの GUIDE proto を OneNavi の Kotlin Wire schema
+- **Phase A (完了)**: 外部API ライブラリの GUIDE proto を OneNavi の Kotlin Wire schema
   に回収し、合流左右・推奨レーン・交差点方向の encoding を実データから特定したところまで
 - **Phase B (次に実装)**: Phase A の成果を OneNavi の UI / 発話スケジューラに反映する
 
-コンテキストが切れた場合でも、本書と実コード (`../drive-supporter-api/drive-supporter-api/src/main/proto/.../guide.proto`) を読めば作業を再開できるように記述している。
+コンテキストが切れた場合でも、本書と実コード (`../ext-api/src/main/proto/.../guide.proto`) を読めば作業を再開できるように記述している。
 
 ---
 
@@ -23,16 +23,16 @@
 
 ### 1.1 前提
 
-- ルート探索と turn-by-turn 案内は **外部ナビ API ライブラリ** (別管理のプライベート
+- ルート探索と turn-by-turn 案内は **外部API ライブラリ** (別管理のプライベート
   リポジトリに存在。OneNavi ルート直下に git submodule として配置) に委譲している
-- ライブラリは外部ナビ API の `mocha/route`, `mocha/mapdealer?submit=dsr` 応答を
+- ライブラリは外部API の `mocha/route`, `mocha/mapdealer?submit=dsr` 応答を
   decode し、`Guidance` / `GuidancePoint` / `Intersection` domain model として公開する
 - OneNavi (公開 OSS) 側は `Guidance` を受け取って UI (マニューバアイコン / 距離) と
   TTS 発話 (Google Cloud TTS Chirp 3 HD) を生成する
 
 ### 1.2 発覚していた問題
 
-`feat/ext-nav-api-integration` ブランチで外部ナビ案内を走らせたところ、以下の不具合が判明。
+`feat/ext-api-integration` ブランチで外部API案内を走らせたところ、以下の不具合が判明。
 
 | # | 症状 | Phase A での解明度 |
 |---|---|---|
@@ -42,7 +42,7 @@
 
 ---
 
-## 2. 外部ナビ API が返す案内データの正体
+## 2. 外部API が返す案内データの正体
 
 ### 2.1 GUIDE バイナリの構造 (v9 guidance format)
 
@@ -87,7 +87,7 @@ GuideFile
 
 ### 3.1 Kotlin Wire proto の拡張
 
-`../drive-supporter-api/drive-supporter-api/src/main/proto/.../guide.proto` を更新し、
+`../ext-api/src/main/proto/.../guide.proto` を更新し、
 以下のフィールドを構造化 or 新規追加した。
 
 #### 追加した構造化フィールド
@@ -117,7 +117,7 @@ GuideFile
 
 ### 3.2 domain model 拡張
 
-`../drive-supporter-api/drive-supporter-api/src/main/kotlin/.../guidance/domain/`:
+`../ext-api/src/main/kotlin/.../guidance/domain/`:
 
 | 新規 / 変更 | 型 | 意味 |
 |---|---|---|
@@ -244,11 +244,11 @@ fun GuidePointFlags?.mergeSide(): MergeSide? {
 
 ### 4.4 音声発話の native 選択ロジック
 
-**結論:** 外部ナビ API ライブラリは **「全候補ブロックを常に返す」** ライブラリで、速度ベースの
+**結論:** 外部API ライブラリは **「全候補ブロックを常に返す」** ライブラリで、速度ベースの
 間引きは native closed-source 側で行われる。そのため **OneNavi 側で等価なヒューリスティクス
 を自前実装するしかない**。
 
-**根拠 (外部ナビ API 参照実装の逆解析結果):**
+**根拠 (外部API 参照実装の逆解析結果):**
 
 1. native `NTNvGuidanceManager.createGuidePhrase()` は **GPS マッチ 1 tick ごと** に呼ばれ、
    戻り値は「今発話すべきフレーズだけ」に絞られている
@@ -292,7 +292,7 @@ state per gp.index:
 
 **目的:** 4.2 で特定した `f3.c` を UI 層まで流す。
 
-- `../drive-supporter-api/drive-supporter-api/src/main/kotlin/.../guidance/domain/MergeSide.kt` (新規)
+- `../ext-api/src/main/kotlin/.../guidance/domain/MergeSide.kt` (新規)
   ```kotlin
   @Immutable
   enum class MergeSide { LEFT, RIGHT }
@@ -331,11 +331,11 @@ state per gp.index:
 
 **目的:** §4.4 の抑制ロジックを実装して 5 連発を止める。
 
-- `core/navigation/src/androidMain/kotlin/.../extnav/ExtNavAnnouncementScheduler.kt` を改修:
+- `core/navigation/src/androidMain/kotlin/.../extapi/ExtApiAnnouncementScheduler.kt` を改修:
   - `SpokenKey` (現行: gpIndex × category × distanceMetres で dedupe) を **GP 単位の 2 スロット
     state** に置き換える
-  - `ExtNavProgressSnapshot` から `vehicleSpeedMps` (or `kmh`) を取れるようにする
-    (必要なら `ExtNavGuidanceTracker` 側にも速度を持たせる)
+  - `ExtApiProgressSnapshot` から `vehicleSpeedMps` (or `kmh`) を取れるようにする
+    (必要なら `ExtApiGuidanceTracker` 側にも速度を持たせる)
   - 選択は §4.4 の「prealarm / immediate」2 スロット方式
   - CRITICAL (WrongWayDriving / WrongEntry / Zone30) は従来通り FLUSH + 即発話、本抑制の対象外
 
@@ -344,7 +344,7 @@ state per gp.index:
 - `GuideProtoMapperTest` に tokyo-gotemba サンプルでの merge side / lane info 検証を追加
   - 既存の `MergeEncodingInvestigation.kt` は disposable 調査スクリプトなので、本番テストでは
     小さな sanity check に絞る
-- `ExtNavAnnouncementSchedulerTest` (新規) で「同一 GP に対して prealarm 1 回 + immediate 1 回」
+- `ExtApiAnnouncementSchedulerTest` (新規) で「同一 GP に対して prealarm 1 回 + immediate 1 回」
   のみ発火することを検証
 
 ---
@@ -353,7 +353,7 @@ state per gp.index:
 
 全 4 ルート (tokyo-gotemba / tokyo-nagoya-hiroshima / shakuji-tsukuba / hiroshima-ferry-beppu)
 のサンプル DSR を `PhaseCEncodingInvestigation` で走査し、Q-1..Q-4 を確認。実行方法と出力
-形式は `../drive-supporter-api/drive-supporter-api/src/test/kotlin/.../PhaseCEncodingInvestigation.kt`
+形式は `../ext-api/src/test/kotlin/.../PhaseCEncodingInvestigation.kt`
 を参照。
 
 ### 6.1 各 Q の結論
@@ -385,25 +385,25 @@ state per gp.index:
 
 Phase B 着手時に最初に読むべき順:
 
-1. **proto 正本**: `../drive-supporter-api/drive-supporter-api/src/main/proto/me/matsumo/drive/supporter/api/guidance/guide.proto`
-2. **domain model**: `../drive-supporter-api/drive-supporter-api/src/main/kotlin/me/matsumo/drive/supporter/api/guidance/domain/` 配下
+1. **proto 正本**: `../ext-api/src/main/proto/me/matsumo/extapi/guidance/guide.proto`
+2. **domain model**: `../ext-api/src/main/kotlin/me/matsumo/extapi/guidance/domain/` 配下
    - `ManeuverDirection.kt` (§4.1 の実装)
    - `ManeuverHint.kt` (GuidancePoint が持つ補助情報)
    - `Intersection.kt` (angleIn/out 済み)
    - `GuidancePoint.kt` (maneuver: ManeuverHint? 済み)
-3. **mapper**: `../drive-supporter-api/drive-supporter-api/src/main/kotlin/me/matsumo/drive/supporter/api/guidance/internal/GuideProtoMapper.kt`
+3. **mapper**: `../ext-api/src/main/kotlin/me/matsumo/extapi/guidance/internal/GuideProtoMapper.kt`
    - `toIntersection` / `toManeuverHint` / `PointPositionLookup` が抽出ロジックの正本
 4. **OneNavi 側 UI / 発話**:
    - `core/navigation/src/androidMain/kotlin/me/matsumo/onenavi/core/navigation/GuidanceSessionManager.kt` (`toManeuverInfo` で UI 向け `ManeuverInfo` を組む)
-   - `core/navigation/src/androidMain/kotlin/me/matsumo/onenavi/core/navigation/extnav/ExtNavAnnouncementScheduler.kt` (発話スケジューラ)
-   - `core/navigation/src/androidMain/kotlin/me/matsumo/onenavi/core/navigation/extnav/ExtNavGuidanceTracker.kt` (進捗 snapshot)
+   - `core/navigation/src/androidMain/kotlin/me/matsumo/onenavi/core/navigation/extapi/ExtApiAnnouncementScheduler.kt` (発話スケジューラ)
+   - `core/navigation/src/androidMain/kotlin/me/matsumo/onenavi/core/navigation/extapi/ExtApiGuidanceTracker.kt` (進捗 snapshot)
    - `core/model/src/commonMain/kotlin/me/matsumo/onenavi/core/model/ManeuverModifier.kt` (UI 側 enum)
    - `core/ui/src/commonMain/kotlin/me/matsumo/onenavi/core/ui/navigation/ManeuverIcon.kt` (アイコンマッピング)
 5. **調査スクリプト (disposable)**:
-   - Phase A: `../drive-supporter-api/drive-supporter-api/src/test/kotlin/me/matsumo/drive/supporter/api/guidance/MergeEncodingInvestigation.kt` (合流左右・推奨レーン基礎調査)
-   - Phase C: `../drive-supporter-api/drive-supporter-api/src/test/kotlin/me/matsumo/drive/supporter/api/guidance/PhaseCEncodingInvestigation.kt` (Q-1 車線減少 / Q-2 推奨レーン側 / Q-3 f3.a / Q-4 u108)
-   - `@Ignore` を外して `./gradlew :drive-supporter-api:drive-supporter-api:testDebugUnitTest --tests "*<Class>*"` で実行
-   - 出力は `drive-supporter-api/drive-supporter-api/build/test-results/testDebugUnitTest/TEST-*.xml` の `<system-out>`
+   - Phase A: `../ext-api/src/test/kotlin/me/matsumo/extapi/guidance/MergeEncodingInvestigation.kt` (合流左右・推奨レーン基礎調査)
+   - Phase C: `../ext-api/src/test/kotlin/me/matsumo/extapi/guidance/PhaseCEncodingInvestigation.kt` (Q-1 車線減少 / Q-2 推奨レーン側 / Q-3 f3.a / Q-4 u108)
+   - `@Ignore` を外して `./gradlew :ext-api:ext-api:testDebugUnitTest --tests "*<Class>*"` で実行
+   - 出力は `ext-api/build/test-results/testDebugUnitTest/TEST-*.xml` の `<system-out>`
 
 ---
 
@@ -466,7 +466,7 @@ Phase B の Task 3 実装後は 2 発話に減る想定:
   structured 化しても wire 互換。
 - **D-2102 (2026-04-23):** `Intersection.approachAngle` (実体は `GuidePointAttr.kind` = GP 連番) は
   誤用だったため削除。`angleIn` / `angleOut` / `direction` に置き換える破壊的変更を実施。
-  既存参照は `ExtNavGuidanceTrackerTest` のみだったため修正コスト小。
+  既存参照は `ExtApiGuidanceTrackerTest` のみだったため修正コスト小。
 - **D-2103 (2026-04-23):** 合流の左右は `GuidePointFlags.f3.c` を正本とする。`f4` も一致するが、
   `f3.c` のほうが `(a=7)` + `(c=1|2)` で merge-type かどうかを同時に判定できるため採用。
 - **D-2104 (2026-04-23):** TTS 発話抑制は OneNavi 側で実装。native 相当の

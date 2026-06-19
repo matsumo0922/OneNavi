@@ -2,10 +2,10 @@
 
 ## Decision Log
 
-### D-100: 外部ナビ API ライブラリを案内の primary source にする
+### D-100: 外部API ライブラリを案内の primary source にする
 
 - **Date:** 2026-04-22
-- **Decision:** ルート検索、turn-by-turn 案内、交通情報、案内画像は外部ナビ API ライブラリを primary source とする。
+- **Decision:** ルート検索、turn-by-turn 案内、交通情報、案内画像は外部API ライブラリを primary source とする。
 - **Rationale:** OneNavi 側で日本語案内品質を過剰に再構築せず、provider 固有処理を private 実装へ閉じ込められる。
 
 ### D-101: 地図表示は Google Maps SDK に寄せる
@@ -23,7 +23,7 @@
 ### D-103: provider 実名は公開 repo に出さない
 
 - **Date:** 2026-04-22
-- **Decision:** 外部ナビ API の事業者・製品名は N 社表記に統一する。
+- **Decision:** 外部API の事業者・製品名は 外部API 提供元表記に統一する。
 - **Rationale:** OneNavi は public OSS であり、private 実装の具体名や認証情報を公開側へ漏らさない。
 
 ## Open Questions
@@ -37,7 +37,7 @@
 ### Q-002: 外部ルートと Google Maps overlay の形状一致
 
 - **Status:** IN PROGRESS
-- **Question:** 外部ナビ API ライブラリの route geometry を Google Routes API / Google Maps overlay とどの粒度で一致させるか。
+- **Question:** 外部API ライブラリの route geometry を Google Routes API / Google Maps overlay とどの粒度で一致させるか。
 - **Reference:** `docs/spec/23_route_compare_dev_tool.md`
 - **Priority:** HIGH
 

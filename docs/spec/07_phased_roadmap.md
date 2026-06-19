@@ -2,7 +2,7 @@
 
 ## Phase 1: Google Map + Route Preview Stabilization
 
-**Goal:** Google Maps 上で外部ナビ API ライブラリのルート候補を安定して表示し、ルート選択までの体験を固める。
+**Goal:** Google Maps 上で外部API ライブラリのルート候補を安定して表示し、ルート選択までの体験を固める。
 
 ### Scope
 
@@ -15,7 +15,7 @@
 
 ## Phase 2: Active Guidance
 
-**Goal:** 外部ナビ API ライブラリの案内情報を使い、スマホ画面で turn-by-turn ナビを成立させる。
+**Goal:** 外部API ライブラリの案内情報を使い、スマホ画面で turn-by-turn ナビを成立させる。
 
 ### Scope
 
@@ -57,7 +57,7 @@
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| 外部ナビ API の provider 実名露出 | 法的・運用リスク | N 社表記と公開 repo grep を徹底 |
+| 外部API の provider 実名露出 | 法的・運用リスク | 外部API 提供元表記と公開 repo grep を徹底 |
 | Google Maps overlay と外部ルート形状の不一致 | ナビ体験低下 | route-compare で waypoint 戦略を検証 |
 | Cloud TTS 遅延 | 音声案内遅延 | cache と Android TTS fallback |
 | Android Auto 公開 API 制約 | Auto 対応遅延 | Phase 4 に分離して検証 |

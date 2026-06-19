@@ -2,7 +2,7 @@
 
 ## 概要
 
-OneNavi のターンバイターン案内は、Google Maps の地図表示と外部ナビ API ライブラリの案内情報を組み合わせて実現する。
+OneNavi のターンバイターン案内は、Google Maps の地図表示と外部API ライブラリの案内情報を組み合わせて実現する。
 
 旧地図/ナビ provider の trip session、observer、route progress、voice instruction は参照しない。
 
@@ -10,7 +10,7 @@ OneNavi のターンバイターン案内は、Google Maps の地図表示と外
 
 ```text
 User destination
-  -> external nav API library route search
+  -> external API library route search
   -> route candidates
   -> route preview state
   -> Google Maps overlay
@@ -42,7 +42,7 @@ Location update
 
 ```text
 Off route
-  -> external nav API library reroute
+  -> external API library reroute
   -> active route replacement
   -> map overlay refresh
   -> notification / TTS

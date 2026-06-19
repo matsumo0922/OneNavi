@@ -10,10 +10,10 @@
 ## 0. 前提
 
 - 事業者名・製品名・パッケージ root の実名は追加コード / コメント / ドキュメントに書かない。
-- 外部 API 由来の公開表記は「外部ナビ API ライブラリ」、クラス prefix は `ExtNav` を使う。
+- 外部 API 由来の公開表記は「外部API ライブラリ」、クラス prefix は `ExtApi` を使う。
 - 案内中の通常 GPS tick では ROUTE / GUIDE を再取得しない。
 - 渋滞・規制 overlay は tracker / `GuidanceProgress` に混ぜない。
-- `GuidanceProgress` は UI 向け、`ExtNavProgressSnapshot` は周辺コンポーネント向け。
+- `GuidanceProgress` は UI 向け、`ExtApiProgressSnapshot` は周辺コンポーネント向け。
 - `GuidanceProgress.snappedLocation` は案内 route geometry 上に投影した位置であり、案内中以外の現在地モデルにはしない。
 - 地図表示用の自車位置は `VehicleLocationState` を正とし、案内中は route-snapped、案内中以外は SDK road-snapped / raw GPS を内部で切り替える。
 
@@ -24,12 +24,12 @@
 - [x] `GuidanceState.Guiding(route, progress)` のモデル化
 - [x] `GuidanceProgress` / `GuidanceManeuverInfo` / `LaneGuidance` / `DirectionSign` / `HighwayPanel`
 - [x] `UserLocation`
-- [x] `ExtNavProgressSnapshot`
-- [x] `ExtNavRerouteDecision`
-- [x] `ExtNavAnnouncement`
+- [x] `ExtApiProgressSnapshot`
+- [x] `ExtApiRerouteDecision`
+- [x] `ExtApiAnnouncement`
 - [x] `RouteDistanceMapper`
-- [x] `ExtNavGuidanceTracker` の初期実装（attach / origin tick / snapshot）
-- [x] `ExtNavGuidanceTracker` の DI 登録
+- [x] `ExtApiGuidanceTracker` の初期実装（attach / origin tick / snapshot）
+- [x] `ExtApiGuidanceTracker` の DI 登録
 - [x] `NewGuidanceManager` から tracker へ origin tick を流す smoke 接続
 
 ---
@@ -138,10 +138,10 @@ TBT バナー、ETA、停止ボタンなどの UI は後回しにする。
 
 ナビ開始ログで `routeId=Recommended` のままになっている。連続検索やリルート検証での payload 取り違えを避けるために直す。
 
-- [ ] `ExtNavRouteRegistry.beginSession()` を追加し、検索開始時に旧 payload を clear する
-- [ ] `ExtNavRouteDataSource.searchRoutes()` で session id を作り、全 `RouteDetail.id` / `ExtNavRoutePayload.id` に含める
+- [ ] `ExtApiRouteRegistry.beginSession()` を追加し、検索開始時に旧 payload を clear する
+- [ ] `ExtApiRouteDataSource.searchRoutes()` で session id を作り、全 `RouteDetail.id` / `ExtApiRoutePayload.id` に含める
 - [ ] `routeGuidance.priority?.name ?: "route-${index}"` だけを route id にしない
-- [ ] `ExtNavRouteRegistryTest` を追加する
+- [ ] `ExtApiRouteRegistryTest` を追加する
 
 受け入れ条件:
 
@@ -166,15 +166,15 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 
 ### 2.6 `NewGuidanceManager` 接続
 
-- [x] `ExtNavRouteRegistry.get(route.id)` から payload を取得する
+- [x] `ExtApiRouteRegistry.get(route.id)` から payload を取得する
 - [x] `tracker.attach(payload, route)` を呼ぶ
 - [x] origin を 1 tick として `tracker.onLocation(location)` に流す
 - [x] `locationDataSource.lastKnown()` で初期 tick を試す
-- [ ] lastKnown が null の場合は `ExtNavGuidanceBootstrap` を使う
+- [ ] lastKnown が null の場合は `ExtApiGuidanceBootstrap` を使う
 - [x] `locationUpdates()` を collect して `tracker.onLocation(location)` に流す
 - [x] origin tick 直後の `tracker.snapshot.value` を `GuidanceState.Guiding(route, progress)` に反映する
 - [x] `tracker.snapshot` を collect して `GuidanceState.Guiding(route, progress)` を継続更新する
-- [ ] snapshot を `ExtNavRerouteDetector` / `ExtNavAnnouncementScheduler` / 到着判定へ fan-out する
+- [ ] snapshot を `ExtApiRerouteDetector` / `ExtApiAnnouncementScheduler` / 到着判定へ fan-out する
 - [x] stop / release で tracker を detach する
 - [x] stop / release で session job を止める
 - [ ] stop / release で detector、scheduler を止める
@@ -186,7 +186,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [x] `stopGuidance()` で `Idle`
 - [ ] reroute request 時は `Rerouting` を経て新 route に attach し直す
 
-### 2.7 `ExtNavGuidanceTracker`
+### 2.7 `ExtApiGuidanceTracker`
 
 初期実装と origin tick smoke は完了。実 GPS / Fake GPS で連続 tick を確認した時点で完了扱いにする。
 
@@ -202,7 +202,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [x] `snappedLocation` と `bearingDegrees` を `GuidanceProgress` に入れる
 - [x] `durationRemainingSeconds` / `etaEpochMillis` を route 所要時間比率から計算する
 - [x] `nextGuidancePointIndex` を GP 累積距離の二分探索で決める
-- [ ] `nextManeuver` / `followupManeuver` は `ExtNavGuidanceMapper` 経由で作る
+- [ ] `nextManeuver` / `followupManeuver` は `ExtApiGuidanceMapper` 経由で作る
 - [x] mapper が埋められないデータは null / empty に倒す
 - [x] off-route candidate は `projectionErrorMeters` / GPS 精度 / 速度 / bearing 差から 1 tick 分だけ判定する
 - [x] reroute の確定、再探索、音声発話、ネットワーク I/O は持たない
@@ -220,9 +220,9 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [ ] GP が 0 件の route では `nextManeuver = null`
 - [ ] geometry が 0 点 / 1 点でも crash しない
 - [ ] route から外れた GPS で `isOffRouteCandidate = true` になりうる
-- [ ] `ExtNavGuidanceTrackerTest` で上記を確認する
+- [ ] `ExtApiGuidanceTrackerTest` で上記を確認する
 
-### 2.8 `ExtNavGuidanceMapper`
+### 2.8 `ExtApiGuidanceMapper`
 
 - [ ] `GuidancePoint.phrases[]` の category から `ManeuverType` を決める
 - [ ] geometry の前後 bearing から `ManeuverModifier` を決める
@@ -236,9 +236,9 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 
 - [ ] mapper は外部ライブラリ型を UI 層へ漏らさない
 - [ ] 不確実なデータは null / empty に倒す
-- [ ] `ExtNavGuidanceTracker` の簡易 maneuver 生成を mapper 呼び出しに置き換えられる
+- [ ] `ExtApiGuidanceTracker` の簡易 maneuver 生成を mapper 呼び出しに置き換えられる
 
-### 2.9 `ExtNavGuidanceBootstrap`
+### 2.9 `ExtApiGuidanceBootstrap`
 
 - [ ] route origin 起点の `GuidanceProgress` を作る
 - [ ] 残距離 / 残時間 / ETA を route summary から詰める
@@ -250,7 +250,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [ ] 初回 GPS tick 前でも `GuidanceState.Guiding(route, progress)` を出せる
 - [ ] bootstrap 後の通常 tick で tracker snapshot に自然に置き換わる
 
-### 2.10 `ExtNavRerouteDetector`
+### 2.10 `ExtApiRerouteDetector`
 
 - [ ] `attach(route)` / `onSnapshot(snapshot)` / `detach()` を実装する
 - [ ] off-route candidate の連続 tick / 継続秒数を debounce する
@@ -266,7 +266,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [ ] cooldown 中は再要求しない
 - [ ] `rawLocation == null` では `Request` を出さない
 
-### 2.11 `ExtNavAnnouncementScheduler`
+### 2.11 `ExtApiAnnouncementScheduler`
 
 - [ ] `attach(payload, route)` で GP 累積距離と phrase slot を準備する
 - [ ] `onSnapshot(snapshot)` で予告 / 直前 / 通過 slot を判定する
@@ -280,12 +280,12 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 - [ ] GP 通過後に古い発話が enqueue されない
 - [ ] 速度に応じた先読み / 遅延が unit test で確認できる
 
-### 2.12 `ExtNavVoicePlayer`
+### 2.12 `ExtApiVoicePlayer`
 
-- [ ] `enqueue(ExtNavAnnouncement)` を実装する
+- [ ] `enqueue(ExtApiAnnouncement)` を実装する
 - [ ] `clear()` を実装する
 - [ ] TTS / SSML / AudioFocus をこのクラスに閉じる
-- [ ] scheduler は再生実装に依存せず `ExtNavVoicePlayer` だけを見る
+- [ ] scheduler は再生実装に依存せず `ExtApiVoicePlayer` だけを見る
 
 受け入れ条件:
 
@@ -295,12 +295,12 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 ### 2.13 DI
 
 - [x] `CurrentLocationDataSource` を datasource module に登録する
-- [x] `ExtNavGuidanceTracker` を navigation module に登録する
-- [ ] `ExtNavGuidanceMapper` を必要に応じて登録、または internal object として使う
-- [ ] `ExtNavGuidanceBootstrap` を登録する
-- [ ] `ExtNavRerouteDetector` を登録する
-- [ ] `ExtNavAnnouncementScheduler` を登録する
-- [ ] `ExtNavVoicePlayer` の具象実装を登録する
+- [x] `ExtApiGuidanceTracker` を navigation module に登録する
+- [ ] `ExtApiGuidanceMapper` を必要に応じて登録、または internal object として使う
+- [ ] `ExtApiGuidanceBootstrap` を登録する
+- [ ] `ExtApiRerouteDetector` を登録する
+- [ ] `ExtApiAnnouncementScheduler` を登録する
+- [ ] `ExtApiVoicePlayer` の具象実装を登録する
 - [x] `NewGuidanceManager` の constructor を更新する
 
 受け入れ条件:
@@ -315,7 +315,7 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 カメラフォーカスは次の案内地点のみを対象にする。
 
 - [x] `GuidanceManeuverInfo` に案内地点座標を追加する、または map 表示専用の `GuidancePointCallOutState` を追加する
-- [x] `ExtNavGuidanceTracker.buildManeuverInfo()` で GP の geometry 累積距離から案内地点座標を算出して渡す
+- [x] `ExtApiGuidanceTracker.buildManeuverInfo()` で GP の geometry 累積距離から案内地点座標を算出して渡す
 - [x] `progress.nextManeuver` / `progress.followupManeuver` から最大 2 件の案内地点 CallOut request を作る
 - [x] CallOut の target は `MapCallOutTarget.PointFixed` を使い、tail 先端を案内地点座標に固定する
 - [x] CallOut の優先度は「次の案内地点 > その次の案内地点」とし、route preview callout より案内中 CallOut を優先表示する
@@ -359,11 +359,11 @@ Tracker の origin smoke は通ったので、次は実 GPS tick を流して進
 ### Unit
 
 - [x] `RouteDistanceMapperTest`
-- [ ] `ExtNavGuidanceTrackerTest`
-- [ ] `ExtNavGuidanceMapperTest`
-- [ ] `ExtNavGuidanceBootstrapTest`
-- [ ] `ExtNavRerouteDetectorTest`
-- [ ] `ExtNavAnnouncementSchedulerTest`
+- [ ] `ExtApiGuidanceTrackerTest`
+- [ ] `ExtApiGuidanceMapperTest`
+- [ ] `ExtApiGuidanceBootstrapTest`
+- [ ] `ExtApiRerouteDetectorTest`
+- [ ] `ExtApiAnnouncementSchedulerTest`
 - [ ] `NewGuidanceManagerTest`
 
 ### Manual / Fake GPS
@@ -405,7 +405,7 @@ rtk ./gradlew :composeApp:compileDebugKotlinAndroid
 ```
 
 ```bash
-rtk ./gradlew :core:navigation:testDebugUnitTest --tests me.matsumo.onenavi.core.navigation.extnav.RouteDistanceMapperTest
+rtk ./gradlew :core:navigation:testDebugUnitTest --tests me.matsumo.onenavi.core.navigation.extapi.RouteDistanceMapperTest
 ```
 
 ```bash
@@ -428,7 +428,7 @@ rtk git diff --cached | grep -iEf .claude/forbidden.txt
 
 - `core:navigation:testDebugUnitTest` は既存の `PhonemeConverterTest` の未解決参照で compile が落ちる状態がある。
   mapper / guidance 系のテスト確認時は、この既存問題と切り分ける。
-- `ExtNavGuidanceTracker` の `LaneGuidance` / `DirectionSign` / `HighwayPanel` は mapper 実装後に埋める。
+- `ExtApiGuidanceTracker` の `LaneGuidance` / `DirectionSign` / `HighwayPanel` は mapper 実装後に埋める。
 - `RouteDistanceMapper` は中間アンカーを受け取れるが、tracker 側はまず始点 / 終点アンカーで動かす。
   GP のズレが大きい route では mapper に中間アンカーを渡す処理を追加する。
 - 現在の route id は `Recommended` など priority 名だけなので、継続走行テストを詰める前に session id 付きへ変更する。
