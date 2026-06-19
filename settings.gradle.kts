@@ -10,14 +10,14 @@ fun optionalGradleOrEnvironmentProperty(name: String, environmentName: String): 
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
 
-val extNavApiPath = optionalGradleOrEnvironmentProperty(
-    name = "extNavApiPath",
-    environmentName = "EXT_NAV_API_PATH",
+val extApiPath = optionalGradleOrEnvironmentProperty(
+    name = "extApiPath",
+    environmentName = "EXT_API_PATH",
 )
-val extNavApiRepositoryPath = optionalGradleOrEnvironmentProperty(
-    name = "extNavApiRepositoryPath",
-    environmentName = "EXT_NAV_API_REPOSITORY_PATH",
-) ?: "${System.getProperty("user.home")}/.gradle/local-repos/ext-nav-api"
+val extApiRepositoryPath = optionalGradleOrEnvironmentProperty(
+    name = "extApiRepositoryPath",
+    environmentName = "EXT_API_REPOSITORY_PATH",
+) ?: "${System.getProperty("user.home")}/.gradle/local-repos/ext-api"
 
 pluginManagement {
     includeBuild("build-logic")
@@ -36,9 +36,8 @@ dependencyResolutionManagement {
         maven("https://storage.googleapis.com/r8-releases/raw")
         maven("https://jitpack.io")
         maven {
-            name = "externalNavApi"
-            url = uri(extNavApiRepositoryPath)
-            content { includeGroup("me.matsumo.drive.supporter") }
+            name = "externalApi"
+            url = uri(extApiRepositoryPath)
         }
     }
 }
@@ -57,6 +56,6 @@ include(":feature:map")
 include(":feature:setting")
 include(":feature:billing")
 
-extNavApiPath?.let { path ->
+extApiPath?.let { path ->
     includeBuild(path)
 }

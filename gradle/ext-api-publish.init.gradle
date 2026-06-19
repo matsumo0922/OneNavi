@@ -1,9 +1,9 @@
 import org.gradle.api.publish.maven.MavenPublication
 
-def configuredRepositoryPath = gradle.startParameter.projectProperties["extNavApiRepositoryPath"]
-    ?: System.getenv("EXT_NAV_API_REPOSITORY_PATH")
+def configuredRepositoryPath = gradle.startParameter.projectProperties["extApiRepositoryPath"]
+    ?: System.getenv("EXT_API_REPOSITORY_PATH")
 def repositoryPath = configuredRepositoryPath
-    ?: "${System.getProperty("user.home")}/.gradle/local-repos/ext-nav-api"
+    ?: "${System.getProperty("user.home")}/.gradle/local-repos/ext-api"
 
 allprojects {
     plugins.withId("com.android.library") {
@@ -29,7 +29,7 @@ allprojects {
                 }
                 repositories {
                     maven {
-                        name = "externalNavApi"
+                        name = "externalApi"
                         url = uri(repositoryPath)
                     }
                 }

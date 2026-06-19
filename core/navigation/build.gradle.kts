@@ -13,9 +13,9 @@ android {
 kotlin {
     sourceSets {
         androidMain.dependencies {
-            val extNavApiVersion = providers
-                .gradleProperty("extNavApiVersion")
-                .orElse(providers.environmentVariable("EXT_NAV_API_VERSION"))
+            val extApiVersion = providers
+                .gradleProperty("extApiVersion")
+                .orElse(providers.environmentVariable("EXT_API_VERSION"))
                 .orElse("latest.release")
 
             implementation(project(":core:common"))
@@ -28,7 +28,7 @@ kotlin {
             implementation(libs.ktor.content.negotiation)
             implementation(libs.ktor.serialization.json)
             implementation(libs.kotlinx.serialization.json)
-            implementation("me.matsumo.drive.supporter:drive-supporter-api:${extNavApiVersion.get()}")
+            implementation("me.matsumo.drive.supporter:drive-supporter-api:${extApiVersion.get()}")
         }
 
         androidUnitTest.dependencies {
