@@ -1,6 +1,8 @@
 package me.matsumo.onenavi.core.navigation.extnav
 
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import me.matsumo.drive.supporter.api.core.model.Coord
@@ -21,6 +23,12 @@ import me.matsumo.drive.supporter.api.guidance.domain.ManeuverDirection
 import me.matsumo.drive.supporter.api.guidance.domain.ManeuverHint
 import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
 import me.matsumo.drive.supporter.api.guidance.domain.SsmlPhrase
+import me.matsumo.drive.supporter.api.sapa.domain.SapaDetail
+import me.matsumo.drive.supporter.api.sapa.domain.SapaFacility
+import me.matsumo.drive.supporter.api.sapa.domain.SapaFacilityType
+import me.matsumo.drive.supporter.api.sapa.domain.SapaId
+import me.matsumo.drive.supporter.api.sapa.domain.SapaParkingStatus
+import me.matsumo.drive.supporter.api.sapa.domain.SapaParkingStatusKind
 import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.RoadClass
@@ -28,11 +36,13 @@ import me.matsumo.onenavi.core.model.RoadClassSegment
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityServiceKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceNoticeKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.HighwayBoundary
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneConfidence
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneLayout
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneSource
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacilityService
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -395,7 +405,37 @@ class GuidanceRouteMapperTest {
         assertNull(facilityEvent.anchor.sourceGuidancePointIndex)
     }
 
-    private fun buildUncoveredFacilityGuidance(): RouteGuidance = RouteGuidance(
+    @Test
+    fun `SA PA 詳細がある通過施設イベントは設備サービスを保持する`() {
+        val mapper = GuidanceRouteMapper()
+        val route = buildRoute()
+        val sapaDetail = buildSapaDetail()
+        val payload = ExtNavRoutePayload(
+            id = route.id,
+            routeGuidance = buildUncoveredFacilityGuidance(
+                imageRefs = persistentListOf(GuideImageRef(major = 7, minor = 228)),
+            ),
+            sapaDetailsById = persistentMapOf(sapaDetail.id to sapaDetail),
+        )
+
+        val guidanceRoute = mapper.map(payload = payload, route = route)
+
+        val facility = guidanceRoute.events
+            .first { event -> event.details.facility?.kind == FacilityKind.PA }
+            .details
+            .facility
+        assertEquals("詳細PA", facility?.name)
+
+        val services = facility?.services.orEmpty()
+        assertTrue(services.hasService(FacilityServiceKind.PARKING_STATUS, "P 空"))
+        assertTrue(services.hasService(FacilityServiceKind.TOILET, "トイレ"))
+        assertTrue(services.hasService(FacilityServiceKind.ATM, "ATM"))
+        assertTrue(services.hasService(FacilityServiceKind.EV_CHARGER, "EV充電"))
+    }
+
+    private fun buildUncoveredFacilityGuidance(
+        imageRefs: ImmutableList<GuideImageRef> = persistentListOf(),
+    ): RouteGuidance = RouteGuidance(
         index = 1,
         priority = null,
         summary = DsrRouteSummary(
@@ -439,13 +479,39 @@ class GuidanceRouteMapperTest {
                 angleIn = 0,
                 angleOut = 0,
                 direction = ManeuverDirection.Straight,
-                imageRefs = persistentListOf(),
+                imageRefs = imageRefs,
                 facilityHint = GuidanceFacilityHint(kind = GuidanceFacilityKind.PARKING_AREA),
             ),
         ),
-        imageIds = persistentListOf(),
+        imageIds = imageRefs,
         polyline = persistentListOf(),
     )
+
+    private fun buildSapaDetail(): SapaDetail = SapaDetail(
+        id = SapaId("00000000228"),
+        icId = null,
+        name = "詳細PA",
+        parkingStatus = SapaParkingStatus(
+            code = "0",
+            text = "空",
+            updateTime = null,
+            kind = SapaParkingStatusKind.Empty,
+        ),
+        largeCarParkingStatus = null,
+        facilities = persistentListOf(
+            SapaFacility.Known(type = SapaFacilityType.Toilet),
+            SapaFacility.Known(type = SapaFacilityType.CashDispenser),
+            SapaFacility.Unknown(rawName = "ev_stand"),
+        ),
+        gasStation = null,
+    )
+
+    private fun List<StepFacilityService>.hasService(kind: FacilityServiceKind, label: String): Boolean =
+        any { service ->
+            val isSameKind = service.kind == kind
+            val isSameLabel = service.label == label
+            isSameKind && isSameLabel
+        }
 
     private fun buildMixedBlockGuidance(): RouteGuidance = RouteGuidance(
         index = 1,

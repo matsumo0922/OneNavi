@@ -41,11 +41,98 @@ data class GuidanceEventDetails(
 data class StepFacility(
     val kind: FacilityKind,
     val name: String,
-    val services: ImmutableList<String>,
+    val services: ImmutableList<StepFacilityService>,
 )
 
 /** 施設種別。 */
 enum class FacilityKind { IC, JCT, SA, PA, TOLL_GATE }
+
+/**
+ * 施設で利用できる設備や混雑情報。
+ *
+ * @property kind 設備種別。
+ * @property label ナビ画面に表示する短いラベル。
+ */
+@Immutable
+data class StepFacilityService(
+    val kind: FacilityServiceKind,
+    val label: String,
+)
+
+/** 施設設備の表示種別。 */
+enum class FacilityServiceKind {
+    /** 通常車の駐車場状況。 */
+    PARKING_STATUS,
+
+    /** 大型車の駐車場状況。 */
+    LARGE_CAR_PARKING_STATUS,
+
+    /** ガソリンスタンド。 */
+    GAS_STATION,
+
+    /** スマート IC。 */
+    SMART_IC,
+
+    /** トイレ。 */
+    TOILET,
+
+    /** 多目的トイレ。 */
+    ACCESSIBLE_TOILET,
+
+    /** 道路情報端末。 */
+    HIGHWAY_INFO_TERMINAL,
+
+    /** 軽食。 */
+    SNACK,
+
+    /** ショッピング。 */
+    SHOPPING,
+
+    /** レストラン。 */
+    RESTAURANT,
+
+    /** コンビニ。 */
+    CONVENIENCE_STORE,
+
+    /** 授乳室。 */
+    NURSING_ROOM,
+
+    /** ベビーベッド。 */
+    BABY_BED,
+
+    /** 宿泊・休憩施設。 */
+    LODGING,
+
+    /** 入浴施設。 */
+    BATH,
+
+    /** インフォメーション。 */
+    INFORMATION,
+
+    /** ATM。 */
+    ATM,
+
+    /** シャワー。 */
+    SHOWER,
+
+    /** 洗車場。 */
+    CAR_WASH,
+
+    /** コインランドリー。 */
+    LAUNDROMAT,
+
+    /** ドラッグストア。 */
+    DRUGSTORE,
+
+    /** 郵便ポスト。 */
+    POSTBOX,
+
+    /** EV 充電設備。 */
+    EV_CHARGER,
+
+    /** その他。 */
+    OTHER,
+}
 
 /**
  * 料金。整形済み文字列ではなく金額そのものを持つ。

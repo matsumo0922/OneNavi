@@ -1,11 +1,13 @@
 package me.matsumo.onenavi.core.navigation.newguidance.presentation
 
 import androidx.compose.runtime.Immutable
+import kotlinx.collections.immutable.ImmutableList
 import me.matsumo.onenavi.core.model.ManeuverModifier
 import me.matsumo.onenavi.core.model.ManeuverType
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.HighwayBoundary
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacilityService
 
 /**
  * フルリスト表示 1 行分の presentation 値 (L3)。
@@ -106,6 +108,16 @@ sealed interface GuidanceListDetail {
     @Immutable
     data class Boundary(
         val kind: HighwayBoundary,
+    ) : GuidanceListDetail
+
+    /**
+     * SA / PA の設備一覧。
+     *
+     * @property services 表示する設備サービス。
+     */
+    @Immutable
+    data class FacilityServices(
+        val services: ImmutableList<StepFacilityService>,
     ) : GuidanceListDetail
 
     /**

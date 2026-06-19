@@ -59,6 +59,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListI
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.LanePresentation
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.HighwayBoundary
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacilityService
 import me.matsumo.onenavi.core.resource.Res
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_destination
 import me.matsumo.onenavi.core.resource.home_map_navigation_panel_direction_sign
@@ -865,6 +866,12 @@ private fun MapNavigationGuidancePanelDetail(
             overflow = TextOverflow.Ellipsis,
         )
 
+        is GuidanceListDetail.FacilityServices -> MapNavigationGuidancePanelFacilityServicesDetail(
+            modifier = modifier,
+            services = detail.services,
+            secondaryContentColor = secondaryContentColor,
+        )
+
         is GuidanceListDetail.Lanes -> MapNavigationGuidancePanelLaneDetail(
             modifier = modifier,
             lane = detail.lane,
@@ -872,6 +879,25 @@ private fun MapNavigationGuidancePanelDetail(
             secondaryContentColor = secondaryContentColor,
         )
     }
+}
+
+@Composable
+private fun MapNavigationGuidancePanelFacilityServicesDetail(
+    services: ImmutableList<StepFacilityService>,
+    secondaryContentColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    val serviceText = remember(services) {
+        services.joinToString(separator = "・") { service -> service.label }
+    }
+    Text(
+        modifier = modifier,
+        text = serviceText,
+        color = secondaryContentColor,
+        style = MaterialTheme.typography.bodyMedium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable

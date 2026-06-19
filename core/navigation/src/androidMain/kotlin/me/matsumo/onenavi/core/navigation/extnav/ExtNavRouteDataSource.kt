@@ -2,14 +2,18 @@ package me.matsumo.onenavi.core.navigation.extnav
 
 import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import me.matsumo.drive.supporter.api.DriveSupporterClient
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.core.result.ApiResult
 import me.matsumo.drive.supporter.api.guidance.domain.CongestionLevel
@@ -22,6 +26,8 @@ import me.matsumo.drive.supporter.api.route.domain.CarPriority
 import me.matsumo.drive.supporter.api.route.domain.Route
 import me.matsumo.drive.supporter.api.route.domain.RouteSearchCriteria
 import me.matsumo.drive.supporter.api.route.domain.RouteWaypoint
+import me.matsumo.drive.supporter.api.sapa.domain.SapaDetail
+import me.matsumo.drive.supporter.api.sapa.domain.SapaId
 import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.model.CongestionSegment
 import me.matsumo.onenavi.core.model.CongestionSegmentSource
@@ -104,6 +110,7 @@ class ExtNavRouteDataSource(
         if (guidance.routes.isEmpty()) {
             error("guidance.resolveGuidance returned no routes")
         }
+        val sapaDetailsById = fetchSapaDetailsById(client, guidance.routes)
 
         val originPoint = RoutePoint(originLatitude, originLongitude)
         val destinationPoint = RoutePoint(destinationLatitude, destinationLongitude)
@@ -153,6 +160,7 @@ class ExtNavRouteDataSource(
                 ExtNavRoutePayload(
                     id = routeId,
                     routeGuidance = routeGuidance,
+                    sapaDetailsById = sapaDetailsById,
                 ),
             )
 
@@ -928,6 +936,25 @@ class ExtNavRouteDataSource(
         null -> null
     }
 
+    /** ルート候補群に含まれる SA/PA 詳細をまとめて取得する。失敗時は空で返す。 */
+    private suspend fun fetchSapaDetailsById(client: DriveSupporterClient, routeGuidances: ImmutableList<RouteGuidance>): ImmutableMap<SapaId, SapaDetail> {
+        val sapaIds = routeGuidances
+            .flatMap { routeGuidance -> ExtNavSapaIdExtractor.collect(routeGuidance) }
+            .distinctBy { sapaId -> sapaId.value }
+            .toImmutableList()
+        if (sapaIds.isEmpty()) return persistentMapOf()
+
+        return when (val result = client.sapa.fetchDetails(sapaIds, true)) {
+            is ApiResult.Success -> {
+                result.value
+                    .associateBy { detail -> detail.id }
+                    .toImmutableMap()
+            }
+
+            is ApiResult.Failure -> persistentMapOf()
+        }
+    }
+
     private fun <T> ApiResult<T>.unwrap(hint: String): T = when (this) {
         is ApiResult.Success -> value
         is ApiResult.Failure -> error("$hint failed: $failure")
@@ -996,9 +1023,14 @@ private data class InterchangeNameHint(
 /**
  * ExtNav 由来のルート 1 本分のペイロード。`Guidance.routes` の 1 要素に対応する。
  * セッション管理層が [ExtNavRouteRegistry] 経由で取得する。
+ *
+ * @property id OneNavi 内で扱う route ID。
+ * @property routeGuidance 外部ナビ API ライブラリ由来のルート案内。
+ * @property sapaDetailsById SA/PA 詳細設備。取得できない場合は空。
  */
 @Immutable
 data class ExtNavRoutePayload(
     val id: String,
     val routeGuidance: RouteGuidance,
+    val sapaDetailsById: ImmutableMap<SapaId, SapaDetail> = persistentMapOf(),
 )

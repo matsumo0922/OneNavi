@@ -5,10 +5,16 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
+import me.matsumo.drive.supporter.api.sapa.domain.SapaDetail
+import me.matsumo.drive.supporter.api.sapa.domain.SapaFacility
+import me.matsumo.drive.supporter.api.sapa.domain.SapaFacilityType
+import me.matsumo.drive.supporter.api.sapa.domain.SapaParkingStatus
+import me.matsumo.drive.supporter.api.sapa.domain.SapaParkingStatusKind
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityServiceKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventDetails
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventId
@@ -26,6 +32,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneSource
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.RouteAnchor
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.SourceRef
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacility
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacilityService
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepRoadName
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepSignpost
 import kotlin.math.abs
@@ -153,6 +160,7 @@ internal class GuidanceRouteMapper {
                 context = context,
                 route = route,
                 cumulativeMetres = cumulativeMetres,
+                payload = payload,
             ) ?: continue
             val nearestIntersection = context.nearestIntersection
             if (nearestIntersection != null) consumedIntersections += nearestIntersection
@@ -165,6 +173,7 @@ internal class GuidanceRouteMapper {
             consumedIntersections = consumedIntersections,
             route = route,
             cumulativeMetres = cumulativeMetres,
+            payload = payload,
         )
         events.sortBy { event -> event.anchor.geometryDistanceFromStartMeters }
         return events.toImmutableList()
@@ -181,6 +190,7 @@ internal class GuidanceRouteMapper {
         consumedIntersections: Set<IntersectionAnchor>,
         route: RouteDetail,
         cumulativeMetres: DoubleArray,
+        payload: ExtNavRoutePayload,
     ) {
         for (intersectionIndex in intersectionAnchors.indices) {
             val intersectionAnchor = intersectionAnchors[intersectionIndex]
@@ -190,6 +200,7 @@ internal class GuidanceRouteMapper {
                 intersectionIndex = intersectionIndex,
                 route = route,
                 cumulativeMetres = cumulativeMetres,
+                payload = payload,
             ) ?: continue
             events += event
         }
@@ -206,11 +217,13 @@ internal class GuidanceRouteMapper {
         intersectionIndex: Int,
         route: RouteDetail,
         cumulativeMetres: DoubleArray,
+        payload: ExtNavRoutePayload,
     ): GuidanceEvent? {
         val intersection = intersectionAnchor.intersection
         val rawKind = intersection.facilityHint?.kind ?: return null
         val facilityKind = rawKind.toFacilityKind() ?: return null
         val refinedKind = facilityKind.refinedByName(intersection.name)
+        val sapaDetail = intersection.imageRefs.sapaDetailOrNull(payload)
         val geometryMetres = intersectionAnchor.geometryMetres
         val location = RouteGeometryMath.pointAt(
             geometry = route.geometry,
@@ -220,8 +233,8 @@ internal class GuidanceRouteMapper {
         )
         val facility = StepFacility(
             kind = refinedKind,
-            name = intersection.name,
-            services = persistentListOf(),
+            name = sapaDetail?.name?.takeIf { name -> name.isNotBlank() } ?: intersection.name,
+            services = sapaDetail?.toFacilityServices() ?: persistentListOf(),
         )
         val details = GuidanceEventDetails(
             facility = facility,
@@ -298,6 +311,7 @@ internal class GuidanceRouteMapper {
         context: EventContext,
         route: RouteDetail,
         cumulativeMetres: DoubleArray,
+        payload: ExtNavRoutePayload,
     ): GuidanceEvent? {
         val categories = guidancePoint.guidanceCategories()
         val eventSourceRefs = guidancePoint.buildSourceRefs(context.guidancePointIndex)
@@ -308,7 +322,11 @@ internal class GuidanceRouteMapper {
                 pieceIndex = null,
             ),
         )
-        val facility = resolveFacility(guidancePoint = guidancePoint, context = context)
+        val facility = resolveFacility(
+            guidancePoint = guidancePoint,
+            context = context,
+            payload = payload,
+        )
         val primary = buildPrimaryManeuver(
             guidancePoint = guidancePoint,
             context = context,
@@ -456,6 +474,7 @@ internal class GuidanceRouteMapper {
     private fun resolveFacility(
         guidancePoint: ExtNavGuidancePoint,
         context: EventContext,
+        payload: ExtNavRoutePayload,
     ): StepFacility? {
         val guidancePointFacilityKind = guidancePoint.maneuver?.facilityHint?.kind
         val intersectionFacilityKind = context.nearestIntersection?.intersection?.facilityHint?.kind
@@ -463,10 +482,121 @@ internal class GuidanceRouteMapper {
         val facilityKind = rawKind.toFacilityKind() ?: return null
         val name = context.nearestIntersection?.intersection?.name.orEmpty()
         val refinedKind = facilityKind.refinedByName(name)
+        val sapaDetail = guidancePoint.imageRefs.sapaDetailOrNull(payload)
+            ?: context.nearestIntersection?.intersection?.imageRefs?.sapaDetailOrNull(payload)
         return StepFacility(
             kind = refinedKind,
-            name = name,
-            services = persistentListOf(),
+            name = sapaDetail?.name?.takeIf { detailName -> detailName.isNotBlank() } ?: name,
+            services = sapaDetail?.toFacilityServices() ?: persistentListOf(),
+        )
+    }
+
+    /** 画像参照に対応する SA/PA 詳細を payload から取り出す。 */
+    private fun List<ExtNavGuideImageRef>.sapaDetailOrNull(payload: ExtNavRoutePayload): SapaDetail? {
+        val sapaId = ExtNavSapaIdExtractor.firstFrom(this) ?: return null
+        return payload.sapaDetailsById[sapaId]
+    }
+
+    /** SA/PA 詳細をナビ画面向けの設備サービス一覧へ変換する。 */
+    private fun SapaDetail.toFacilityServices(): ImmutableList<StepFacilityService> {
+        val services = mutableListOf<StepFacilityService>()
+
+        parkingStatus?.toService(FacilityServiceKind.PARKING_STATUS, PARKING_STATUS_LABEL_PREFIX)
+            ?.let { service -> services += service }
+        largeCarParkingStatus?.toService(
+            FacilityServiceKind.LARGE_CAR_PARKING_STATUS,
+            LARGE_CAR_PARKING_STATUS_LABEL_PREFIX,
+        )
+            ?.let { service -> services += service }
+
+        services += facilities.mapNotNull { facility -> facility.toServiceOrNull() }
+
+        val gasStationName = gasStation?.category?.name?.takeIf { name -> name.isNotBlank() }
+        if (gasStationName != null) {
+            services += StepFacilityService(
+                kind = FacilityServiceKind.GAS_STATION,
+                label = gasStationName,
+            )
+        }
+
+        return services
+            .distinctBy { service -> service.kind to service.label }
+            .toImmutableList()
+    }
+
+    /** 駐車場ステータスを表示サービスへ変換する。 */
+    private fun SapaParkingStatus.toService(kind: FacilityServiceKind, labelPrefix: String): StepFacilityService? {
+        val statusText = text?.takeIf { value -> value.isNotBlank() } ?: this.kind.toParkingStatusLabelOrNull()
+        if (statusText == null) return null
+
+        return StepFacilityService(
+            kind = kind,
+            label = "$labelPrefix$statusText",
+        )
+    }
+
+    /** 既知または未知の設備を表示サービスへ変換する。 */
+    private fun SapaFacility.toServiceOrNull(): StepFacilityService? = when (this) {
+        is SapaFacility.Known -> type.toService()
+        is SapaFacility.Unknown -> rawName.toUnknownFacilityService()
+    }
+
+    /** 既知の SA/PA 設備種別を表示サービスへ変換する。 */
+    private fun SapaFacilityType.toService(): StepFacilityService {
+        val service = when (this) {
+            SapaFacilityType.GasolineStand -> FacilityServiceKind.GAS_STATION to "GS"
+            SapaFacilityType.SmartIc -> FacilityServiceKind.SMART_IC to "スマートIC"
+            SapaFacilityType.Toilet -> FacilityServiceKind.TOILET to "トイレ"
+            SapaFacilityType.ToiletForHandicap -> FacilityServiceKind.ACCESSIBLE_TOILET to "多目的トイレ"
+            SapaFacilityType.HighwayInfoTerminal -> FacilityServiceKind.HIGHWAY_INFO_TERMINAL to "道路情報"
+            SapaFacilityType.Snack -> FacilityServiceKind.SNACK to "軽食"
+            SapaFacilityType.Shopping -> FacilityServiceKind.SHOPPING to "ショッピング"
+            SapaFacilityType.Restaurant -> FacilityServiceKind.RESTAURANT to "レストラン"
+            SapaFacilityType.ConvenienceStore -> FacilityServiceKind.CONVENIENCE_STORE to "コンビニ"
+            SapaFacilityType.NursingRoom -> FacilityServiceKind.NURSING_ROOM to "授乳室"
+            SapaFacilityType.BabyBed -> FacilityServiceKind.BABY_BED to "ベビーベッド"
+            SapaFacilityType.RestIn -> FacilityServiceKind.LODGING to "宿泊"
+            SapaFacilityType.Bath -> FacilityServiceKind.BATH to "入浴"
+            SapaFacilityType.Information -> FacilityServiceKind.INFORMATION to "案内"
+            SapaFacilityType.CashDispenser -> FacilityServiceKind.ATM to "ATM"
+            SapaFacilityType.Shower -> FacilityServiceKind.SHOWER to "シャワー"
+            SapaFacilityType.CoinCarWash -> FacilityServiceKind.CAR_WASH to "洗車"
+            SapaFacilityType.CoinLaundry -> FacilityServiceKind.LAUNDROMAT to "ランドリー"
+            SapaFacilityType.DrugStore -> FacilityServiceKind.DRUGSTORE to "ドラッグストア"
+            SapaFacilityType.Post -> FacilityServiceKind.POSTBOX to "ポスト"
+            SapaFacilityType.Other -> FacilityServiceKind.OTHER to "その他"
+        }
+
+        return StepFacilityService(
+            kind = service.first,
+            label = service.second,
+        )
+    }
+
+    /** 未知の rawName を表示可能な設備へ変換する。 */
+    private fun String.toUnknownFacilityService(): StepFacilityService? {
+        val service = when (this) {
+            "ev_stand" -> FacilityServiceKind.EV_CHARGER to "EV充電"
+            else -> FacilityServiceKind.OTHER to takeIf { rawName -> rawName.isNotBlank() }
+        }
+
+        return service.toStepFacilityService()
+    }
+
+    /** 駐車場ステータス未文言時の fallback を返す。 */
+    private fun SapaParkingStatusKind.toParkingStatusLabelOrNull(): String? = when (this) {
+        SapaParkingStatusKind.Empty -> "空"
+        SapaParkingStatusKind.Crowded -> "混雑"
+        SapaParkingStatusKind.Full -> "満車"
+        SapaParkingStatusKind.Unknown -> null
+    }
+
+    /** kind と label の組を [StepFacilityService] に変換する。 */
+    private fun Pair<FacilityServiceKind, String?>.toStepFacilityService(): StepFacilityService? {
+        val serviceLabel = second?.takeIf { label -> label.isNotBlank() } ?: return null
+        return StepFacilityService(
+            kind = first,
+            label = serviceLabel,
         )
     }
 
@@ -712,6 +842,12 @@ internal class GuidanceRouteMapper {
 
         /** 高速入口 / 出口と GP を対応付ける最大距離。 */
         private const val HIGHWAY_BOUNDARY_TOLERANCE_METRES: Double = 600.0
+
+        /** 通常車の駐車場状況ラベル prefix。 */
+        private const val PARKING_STATUS_LABEL_PREFIX: String = "P "
+
+        /** 大型車の駐車場状況ラベル prefix。 */
+        private const val LARGE_CAR_PARKING_STATUS_LABEL_PREFIX: String = "大型 "
 
         /** 裾の通知に変換する category とその通知種別の対応。 */
         private val NOTICE_KIND_BY_CATEGORY: Map<GuidanceCategory, GuidanceNoticeKind> = mapOf(
