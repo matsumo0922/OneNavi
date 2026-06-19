@@ -1012,14 +1012,10 @@ class ExtNavRouteDataSource(
         )
 
         return when (result) {
-            is ApiResult.Success -> result.value.bestMatchFor(target.name)
+            is ApiResult.Success -> result.value.bestSapaSearchMatchFor(target.name)
             is ApiResult.Failure -> null
         }
     }
-
-    private fun ImmutableList<SapaSearchResult>.bestMatchFor(targetName: String): SapaSearchResult? =
-        firstOrNull { result -> ExtNavSapaNameNormalizer.matches(result.name, targetName) }
-            ?: firstOrNull()
 
     /** SA/PA 詳細検索対象。 */
     @Immutable
@@ -1120,3 +1116,7 @@ data class ExtNavRoutePayload(
     val routeGuidance: RouteGuidance,
     val sapaDetailsByName: ImmutableMap<String, SapaDetail> = persistentMapOf(),
 )
+
+/** SA/PA 検索結果から対象名に一致する候補だけを選ぶ。 */
+internal fun ImmutableList<SapaSearchResult>.bestSapaSearchMatchFor(targetName: String): SapaSearchResult? =
+    firstOrNull { result -> ExtNavSapaNameNormalizer.matches(result.name, targetName) }
