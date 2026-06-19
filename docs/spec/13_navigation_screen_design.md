@@ -2,7 +2,7 @@
 
 ## Overview
 
-本ドキュメントは、Google Maps surface と外部ナビ API ライブラリを前提にしたナビ画面設計の正本である。
+本ドキュメントは、Google Maps surface と外部API ライブラリを前提にしたナビ画面設計の正本である。
 
 旧地図/ナビ provider の observer、route line、trip session、通知、SDK built-in UI は参照しない。
 
@@ -46,7 +46,7 @@ core/navigation
   ├─ reroute coordination
   └─ TTS scheduling
 
-external nav integration
+external api integration
   ├─ route search
   ├─ guidance feed
   ├─ congestion
@@ -59,7 +59,7 @@ external nav integration
 |---|---|
 | Google Maps | map surface、camera、marker、polyline overlay |
 | OneNavi UI | maneuver、lane、signboard、trip progress、controls |
-| 外部ナビ API ライブラリ | route/guidance/congestion/source data |
+| 外部API ライブラリ | route/guidance/congestion/source data |
 
 ## Foreground And Notification
 

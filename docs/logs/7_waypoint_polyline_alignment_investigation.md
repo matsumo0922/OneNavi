@@ -7,20 +7,20 @@
 ## 調査方針
 
 - アプリ側の座標変換・geometry 組み立て・描画入力を確認する。
-- 経由地なし / 経由地ありの外部ナビ API 出力を同条件で採取して比較する。
+- 経由地なし / 経由地ありの外部API 出力を同条件で採取して比較する。
 - Google Routes API の route polyline を別基準として取得し、外部ルート polyline との距離差を定量化する。
 - 確認できた事実、否定した仮説、未確定事項を分けて記録する。
 
 ## これまでに確認済みの事実
 
-- `docs/spec/23_route_compare_dev_tool.md` には、外部ナビ API ライブラリ経由の route polyline は WGS84 として扱う前提が記録されている。
+- `docs/spec/23_route_compare_dev_tool.md` には、外部API ライブラリ経由の route polyline は WGS84 として扱う前提が記録されている。
 - ライブデータでも、WGS84 入力かつ WGS84 指定で取得した polyline の先頭点は入力 origin 付近にあり、旧日本測地系から WGS84 へ追加変換すると約 400m 以上離れるケースを確認した。
 - したがって、現在の通常 route path に対して「旧日本測地系として追加変換する」仮説は棄却する。
 - 直前の修正では、exact origin / destination を dense polyline に混ぜ込む描画上の接続線を除去した。この修正は endpoint 周辺の直線混入には効くが、スクリーンショットで見える経由地ありルート全体の道路ズレを単独では説明しきれていない。
 
 ## 現時点の未確定事項
 
-- 経由地ありの場合だけ、外部ナビ API の route polyline 自体が Google Maps の道路形状と大きく異なるのか。
+- 経由地ありの場合だけ、外部API の route polyline 自体が Google Maps の道路形状と大きく異なるのか。
 - OneNavi 側で経由地あり route の geometry を誤って結合・間引き・座標順序変換しているのか。
 - UI 上で古い Navigating polyline / RoutePreview polyline / selected waypoint preview が重なり、見た目としてズレているのか。
 
@@ -33,7 +33,7 @@ Google Routes API を別基準として比較しようとしたが、手元の A
 - Android 用 key: Android application 制限により拒否
 - dev-tools 用 key: HTTP referrer 制限により拒否
 
-このため、Google Routes API との live 比較は未実施。以降は外部ナビ API の method 差分比較で原因を切り分けた。
+このため、Google Routes API との live 比較は未実施。以降は外部API の method 差分比較で原因を切り分けた。
 
 ### 経由地 method の比較
 

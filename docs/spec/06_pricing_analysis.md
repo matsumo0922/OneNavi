@@ -2,7 +2,7 @@
 
 ## Premise
 
-OneNavi は OSS として公開し、Google API キーや外部ナビ API の認証情報は各ユーザーが自分で用意する前提。公開 repo は共通の認証情報を持たない。
+OneNavi は OSS として公開し、Google API キーや外部API の認証情報は各ユーザーが自分で用意する前提。公開 repo は共通の認証情報を持たない。
 
 ## Service-by-Service Analysis
 
@@ -33,7 +33,7 @@ OneNavi は OSS として公開し、Google API キーや外部ナビ API の認
 | Fallback | Android 内蔵 TTS |
 | Notes | 定型フレーズ cache で呼び出し量を抑える |
 
-### 4. 外部ナビ API ライブラリ
+### 4. 外部API ライブラリ
 
 | Item | Value |
 |---|---|

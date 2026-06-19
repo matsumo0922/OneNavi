@@ -15,7 +15,7 @@ OneNavi
 │  ├─ guidance progress
 │  ├─ congestion segments
 │  └─ maneuver / lane / signboard models
-├─ External Nav Integration
+├─ External API Integration
 │  ├─ route search
 │  ├─ turn-by-turn guidance
 │  ├─ reroute
@@ -39,7 +39,7 @@ OneNavi
 ```text
 User input
   -> search / shared destination
-  -> external nav API library
+  -> external API library
   -> route candidates
   -> Google Maps route overlay
   -> route preview UI
@@ -50,7 +50,7 @@ User input
 ```text
 Location update
   -> guidance tracker
-  -> external nav API guidance feed / route progress
+  -> external API guidance feed / route progress
   -> navigating state
   -> maneuver panel / route line / camera
   -> TTS queue
@@ -60,7 +60,7 @@ Location update
 
 ```text
 Off-route detection
-  -> external nav API reroute
+  -> external API reroute
   -> route candidates update
   -> map overlay refresh
   -> user notification and TTS
@@ -73,7 +73,7 @@ Off-route detection
 | Google Maps SDK | 地図表示、camera、route overlay |
 | Google Routes API | 料金取得、route-compare 検証、補助的な polyline 再現 |
 | Google Cloud TTS | 高品質な日本語音声 |
-| 外部ナビ API ライブラリ | ルート検索、案内、交通情報、案内画像 |
+| 外部API ライブラリ | ルート検索、案内、交通情報、案内画像 |
 
 ## Key Design Decisions
 
@@ -83,11 +83,11 @@ Off-route detection
 
 ### 2. 公開 repo に provider 実名を露出しない
 
-外部ナビ API の事業者・製品名は N 社表記に統一し、公開 repo には認証情報や具体名を置かない。
+外部API の事業者・製品名は 外部API 提供元表記に統一し、公開 repo には認証情報や具体名を置かない。
 
 ### 3. 地図 SDK と案内 provider を分離する
 
-Google Maps は描画、外部ナビ API ライブラリは案内 source。UI model は provider 固有型を直接持たない。
+Google Maps は描画、外部API ライブラリは案内 source。UI model は provider 固有型を直接持たない。
 
 ### 4. Android Auto は再設計する
 
