@@ -1,6 +1,5 @@
 package me.matsumo.onenavi.core.navigation.extnav
 
-import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
@@ -412,10 +411,8 @@ class GuidanceRouteMapperTest {
         val sapaDetail = buildSapaDetail()
         val payload = ExtNavRoutePayload(
             id = route.id,
-            routeGuidance = buildUncoveredFacilityGuidance(
-                imageRefs = persistentListOf(GuideImageRef(major = 7, minor = 228)),
-            ),
-            sapaDetailsById = persistentMapOf(sapaDetail.id to sapaDetail),
+            routeGuidance = buildUncoveredFacilityGuidance(),
+            sapaDetailsByName = persistentMapOf(ExtNavSapaNameNormalizer.normalize("テストPA") to sapaDetail),
         )
 
         val guidanceRoute = mapper.map(payload = payload, route = route)
@@ -433,9 +430,7 @@ class GuidanceRouteMapperTest {
         assertTrue(services.hasService(FacilityServiceKind.EV_CHARGER, "EV充電"))
     }
 
-    private fun buildUncoveredFacilityGuidance(
-        imageRefs: ImmutableList<GuideImageRef> = persistentListOf(),
-    ): RouteGuidance = RouteGuidance(
+    private fun buildUncoveredFacilityGuidance(): RouteGuidance = RouteGuidance(
         index = 1,
         priority = null,
         summary = DsrRouteSummary(
@@ -479,11 +474,11 @@ class GuidanceRouteMapperTest {
                 angleIn = 0,
                 angleOut = 0,
                 direction = ManeuverDirection.Straight,
-                imageRefs = imageRefs,
+                imageRefs = persistentListOf(),
                 facilityHint = GuidanceFacilityHint(kind = GuidanceFacilityKind.PARKING_AREA),
             ),
         ),
-        imageIds = imageRefs,
+        imageIds = persistentListOf(),
         polyline = persistentListOf(),
     )
 

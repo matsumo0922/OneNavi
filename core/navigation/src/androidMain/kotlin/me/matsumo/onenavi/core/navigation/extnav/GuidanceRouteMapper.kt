@@ -223,7 +223,7 @@ internal class GuidanceRouteMapper {
         val rawKind = intersection.facilityHint?.kind ?: return null
         val facilityKind = rawKind.toFacilityKind() ?: return null
         val refinedKind = facilityKind.refinedByName(intersection.name)
-        val sapaDetail = intersection.imageRefs.sapaDetailOrNull(payload)
+        val sapaDetail = intersection.name.sapaDetailOrNull(payload)
         val geometryMetres = intersectionAnchor.geometryMetres
         val location = RouteGeometryMath.pointAt(
             geometry = route.geometry,
@@ -482,8 +482,7 @@ internal class GuidanceRouteMapper {
         val facilityKind = rawKind.toFacilityKind() ?: return null
         val name = context.nearestIntersection?.intersection?.name.orEmpty()
         val refinedKind = facilityKind.refinedByName(name)
-        val sapaDetail = guidancePoint.imageRefs.sapaDetailOrNull(payload)
-            ?: context.nearestIntersection?.intersection?.imageRefs?.sapaDetailOrNull(payload)
+        val sapaDetail = name.sapaDetailOrNull(payload)
         return StepFacility(
             kind = refinedKind,
             name = sapaDetail?.name?.takeIf { detailName -> detailName.isNotBlank() } ?: name,
@@ -491,11 +490,9 @@ internal class GuidanceRouteMapper {
         )
     }
 
-    /** 画像参照に対応する SA/PA 詳細を payload から取り出す。 */
-    private fun List<ExtNavGuideImageRef>.sapaDetailOrNull(payload: ExtNavRoutePayload): SapaDetail? {
-        val sapaId = ExtNavSapaIdExtractor.firstFrom(this) ?: return null
-        return payload.sapaDetailsById[sapaId]
-    }
+    /** SA/PA 名に対応する詳細を payload から取り出す。 */
+    private fun String.sapaDetailOrNull(payload: ExtNavRoutePayload): SapaDetail? =
+        payload.sapaDetailsByName[ExtNavSapaNameNormalizer.normalize(this)]
 
     /** SA/PA 詳細をナビ画面向けの設備サービス一覧へ変換する。 */
     private fun SapaDetail.toFacilityServices(): ImmutableList<StepFacilityService> {
