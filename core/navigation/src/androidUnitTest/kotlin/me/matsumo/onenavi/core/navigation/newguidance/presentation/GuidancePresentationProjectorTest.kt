@@ -1,5 +1,6 @@
 package me.matsumo.onenavi.core.navigation.newguidance.presentation
 
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
@@ -12,6 +13,7 @@ import me.matsumo.onenavi.core.navigation.extnav.RouteGeometryMath
 import me.matsumo.onenavi.core.navigation.newguidance.progress.GuidanceRouteSelector
 import me.matsumo.onenavi.core.navigation.newguidance.progress.RouteProjectionContext
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityKind
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.FacilityServiceKind
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventDetails
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.GuidanceEventId
@@ -25,6 +27,7 @@ import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneMark
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.LaneSource
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.RouteAnchor
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacility
+import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepFacilityService
 import me.matsumo.onenavi.core.navigation.newguidance.semantic.StepSignpost
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -231,6 +234,38 @@ class GuidancePresentationProjectorTest {
         assertEquals(1, presentation.listItems.size)
     }
 
+    @Test
+    fun `SA PA 設備サービスはリスト行の detail に乗る`() {
+        val services = persistentListOf(
+            StepFacilityService(
+                kind = FacilityServiceKind.TOILET,
+                label = "トイレ",
+            ),
+            StepFacilityService(
+                kind = FacilityServiceKind.ATM,
+                label = "ATM",
+            ),
+        )
+        val guidanceRoute = GuidanceRoute(
+            totalDistanceMeters = 400.0,
+            totalDurationSeconds = 300,
+            tollTotalYen = null,
+            events = listOf(
+                facilityEvent(
+                    id = "event-pa",
+                    geometryMeters = 100.0,
+                    kind = FacilityKind.PA,
+                    services = services,
+                ),
+            ).toImmutableList(),
+        )
+        val context = buildContext()
+
+        val presentation = project(guidanceRoute = guidanceRoute, context = context)
+
+        assertEquals(GuidanceListDetail.FacilityServices(services = services), presentation.listItems.single().detail)
+    }
+
     private fun project(
         guidanceRoute: GuidanceRoute,
         context: RouteProjectionContext,
@@ -314,12 +349,13 @@ class GuidancePresentationProjectorTest {
         id: String,
         geometryMeters: Double,
         kind: FacilityKind,
+        services: ImmutableList<StepFacilityService> = persistentListOf(),
     ): GuidanceEvent = GuidanceEvent(
         id = GuidanceEventId(id),
         anchor = anchorAt(geometryMeters = geometryMeters, guidancePointIndex = null),
         primary = null,
         details = emptyDetails(
-            facility = StepFacility(kind = kind, name = "料金所", services = persistentListOf()),
+            facility = StepFacility(kind = kind, name = "料金所", services = services),
         ),
         sourceRefs = persistentListOf(),
     )
