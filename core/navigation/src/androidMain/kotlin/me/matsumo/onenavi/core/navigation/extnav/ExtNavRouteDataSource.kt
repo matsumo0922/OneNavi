@@ -8,17 +8,14 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import me.matsumo.drive.supporter.api.DriveSupporterClient
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.core.result.ApiResult
 import me.matsumo.drive.supporter.api.guidance.domain.CongestionLevel
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
-import me.matsumo.drive.supporter.api.guidance.domain.GuidanceFacilityKind
 import me.matsumo.drive.supporter.api.guidance.domain.Intersection
 import me.matsumo.drive.supporter.api.guidance.domain.RouteCongestionSegment
 import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
@@ -28,7 +25,6 @@ import me.matsumo.drive.supporter.api.route.domain.Route
 import me.matsumo.drive.supporter.api.route.domain.RouteSearchCriteria
 import me.matsumo.drive.supporter.api.route.domain.RouteWaypoint
 import me.matsumo.drive.supporter.api.sapa.domain.SapaDetail
-import me.matsumo.drive.supporter.api.sapa.domain.SapaSearchResult
 import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.model.CongestionSegment
 import me.matsumo.onenavi.core.model.CongestionSegmentSource
@@ -111,7 +107,6 @@ class ExtNavRouteDataSource(
         if (guidance.routes.isEmpty()) {
             error("guidance.resolveGuidance returned no routes")
         }
-        val sapaDetailsByName = fetchSapaDetailsByName(client, guidance.routes)
 
         val originPoint = RoutePoint(originLatitude, originLongitude)
         val destinationPoint = RoutePoint(destinationLatitude, destinationLongitude)
@@ -161,7 +156,6 @@ class ExtNavRouteDataSource(
                 ExtNavRoutePayload(
                     id = routeId,
                     routeGuidance = routeGuidance,
-                    sapaDetailsByName = sapaDetailsByName,
                 ),
             )
 
@@ -937,103 +931,6 @@ class ExtNavRouteDataSource(
         null -> null
     }
 
-    /** ルート候補群に含まれる SA/PA 詳細をまとめて取得する。失敗時は空で返す。 */
-    private suspend fun fetchSapaDetailsByName(
-        client: DriveSupporterClient,
-        routeGuidances: ImmutableList<RouteGuidance>,
-    ): ImmutableMap<String, SapaDetail> {
-        val targets = routeGuidances
-            .flatMap(::collectSapaLookupTargets)
-            .distinctBy { target -> target.distinctKey }
-            .toImmutableList()
-        if (targets.isEmpty()) return persistentMapOf()
-
-        val searchMatches = coroutineScope {
-            targets
-                .map { target ->
-                    async {
-                        val searchResult = searchSapaNearTarget(client, target)
-                        SapaSearchMatch(target = target, searchResult = searchResult)
-                    }
-                }
-                .awaitAll()
-        }
-            .filter { match -> match.searchResult != null }
-
-        val sapaIds = searchMatches
-            .mapNotNull { match -> match.searchResult?.id }
-            .distinctBy { sapaId -> sapaId.value }
-            .toImmutableList()
-        if (sapaIds.isEmpty()) return persistentMapOf()
-
-        val detailsById = when (val result = client.sapa.fetchDetails(sapaIds, true)) {
-            is ApiResult.Success -> {
-                result.value
-                    .associateBy { detail -> detail.id }
-            }
-
-            is ApiResult.Failure -> persistentMapOf()
-        }
-
-        val detailsByName = mutableMapOf<String, SapaDetail>()
-        for (match in searchMatches) {
-            val searchResult = match.searchResult ?: continue
-            val detail = detailsById[searchResult.id] ?: continue
-            detailsByName[ExtNavSapaNameNormalizer.normalize(match.target.name)] = detail
-            detailsByName[ExtNavSapaNameNormalizer.normalize(searchResult.name)] = detail
-        }
-
-        return detailsByName.toImmutableMap()
-    }
-
-    private fun collectSapaLookupTargets(routeGuidance: RouteGuidance): List<SapaLookupTarget> =
-        routeGuidance.intersections.mapNotNull(::toSapaLookupTargetOrNull)
-
-    private fun toSapaLookupTargetOrNull(intersection: Intersection): SapaLookupTarget? {
-        val facilityKind = intersection.facilityHint?.kind
-        if (facilityKind != GuidanceFacilityKind.PARKING_AREA) return null
-
-        val normalizedName = ExtNavSapaNameNormalizer.normalize(intersection.name)
-        if (normalizedName.isBlank()) return null
-
-        return SapaLookupTarget(
-            name = intersection.name,
-            coord = intersection.position,
-        )
-    }
-
-    private suspend fun searchSapaNearTarget(
-        client: DriveSupporterClient,
-        target: SapaLookupTarget,
-    ): SapaSearchResult? {
-        val result = client.sapa.searchNear(
-            coord = target.coord,
-            radiusMeters = SAPA_SEARCH_RADIUS_METRES,
-        )
-
-        return when (result) {
-            is ApiResult.Success -> result.value.bestSapaSearchMatchFor(target.name)
-            is ApiResult.Failure -> null
-        }
-    }
-
-    /** SA/PA 詳細検索対象。 */
-    @Immutable
-    private data class SapaLookupTarget(
-        val name: String,
-        val coord: Coord,
-    ) {
-        val distinctKey: String
-            get() = "${ExtNavSapaNameNormalizer.normalize(name)}:${coord.latMsec}:${coord.lonMsec}"
-    }
-
-    /** SA/PA 詳細検索対象と検索結果の組。 */
-    @Immutable
-    private data class SapaSearchMatch(
-        val target: SapaLookupTarget,
-        val searchResult: SapaSearchResult?,
-    )
-
     private fun <T> ApiResult<T>.unwrap(hint: String): T = when (this) {
         is ApiResult.Success -> value
         is ApiResult.Failure -> error("$hint failed: $failure")
@@ -1041,9 +938,6 @@ class ExtNavRouteDataSource(
 
     /** 道路種別セグメント推定で使う距離しきい値ほか。 */
     private companion object {
-        /** SA/PA spot 近傍検索の半径。 */
-        private const val SAPA_SEARCH_RADIUS_METRES: Int = 5_000
-
         private const val ANCHOR_SOURCE_TOLERANCE_METRES: Double = 1.0
         private const val ANCHOR_GEOMETRY_TOLERANCE_METRES: Double = 1.0
         private const val ENTRY_EVENT_SNAP_TOLERANCE_METRES: Double = 600.0
@@ -1116,7 +1010,3 @@ data class ExtNavRoutePayload(
     val routeGuidance: RouteGuidance,
     val sapaDetailsByName: ImmutableMap<String, SapaDetail> = persistentMapOf(),
 )
-
-/** SA/PA 検索結果から対象名に一致する候補だけを選ぶ。 */
-internal fun ImmutableList<SapaSearchResult>.bestSapaSearchMatchFor(targetName: String): SapaSearchResult? =
-    firstOrNull { result -> ExtNavSapaNameNormalizer.matches(result.name, targetName) }
