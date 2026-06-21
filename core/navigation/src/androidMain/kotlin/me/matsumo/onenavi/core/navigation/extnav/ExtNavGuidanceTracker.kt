@@ -104,11 +104,13 @@ class ExtNavGuidanceTracker {
         if (guidanceStartTimestampMillis == null) {
             guidanceStartTimestampMillis = location.timestampMillis
         }
+        val shouldRecoverFromDeadReckoning = _snapshot.value?.positionSource == VehiclePositionSource.DEAD_RECKONING
+        val previousProjection = if (shouldRecoverFromDeadReckoning) null else lastProjection
         val projection = projectLocation(
             route = attached.route,
             cumulativeMetres = attached.cumulativeMetres,
             location = location,
-            previousProjection = lastProjection,
+            previousProjection = previousProjection,
         )
 
         val snapshot = buildSnapshot(

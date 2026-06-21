@@ -300,7 +300,7 @@ class ExtNavGuidanceTrackerTest {
     }
 
     @Test
-    fun `長距離 DR 後の実測復帰は最後の実測 projection から再探索する`() {
+    fun `長距離 DR 後の手前実測復帰は全 route から再探索する`() {
         val route = buildDenseLongRoute()
         val tracker = attachTracker(route = route)
         tracker.onLocation(locationAt(point = route.origin, speedMps = 30f))
@@ -317,6 +317,28 @@ class ExtNavGuidanceTrackerTest {
         val snapshot = tracker.snapshot.value
         assertEquals(VehiclePositionSource.OBSERVED, snapshot?.positionSource)
         assertEquals(0.0, snapshot?.currentCumulativeMeters ?: -1.0, 1.0)
+        assertEquals(RouteMatchState.ON_ROUTE, snapshot?.routeMatchState)
+    }
+
+    @Test
+    fun `長距離 DR 後の前方実測復帰は全 route から再探索する`() {
+        val route = buildDenseLongRoute()
+        val tracker = attachTracker(route = route)
+        tracker.onLocation(locationAt(point = route.origin, speedMps = 30f))
+
+        val didAdvance = tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = 200L * ONE_SECOND_NANOS,
+            nowWallClockMillis = 200L * ONE_SECOND_MILLIS,
+        )
+        val deadReckoningPoint = requireNotNull(tracker.snapshot.value?.progress?.snappedLocation)
+        assertTrue(didAdvance)
+        assertTrue((tracker.snapshot.value?.currentCumulativeMeters ?: 0.0) > 5_900.0)
+
+        tracker.onLocation(locationAt(point = deadReckoningPoint, speedMps = 30f))
+
+        val snapshot = tracker.snapshot.value
+        assertEquals(VehiclePositionSource.OBSERVED, snapshot?.positionSource)
+        assertTrue((snapshot?.currentCumulativeMeters ?: 0.0) > 5_900.0)
         assertEquals(RouteMatchState.ON_ROUTE, snapshot?.routeMatchState)
     }
 
