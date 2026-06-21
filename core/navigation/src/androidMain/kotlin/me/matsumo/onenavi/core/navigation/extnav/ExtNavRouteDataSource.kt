@@ -49,7 +49,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.CongestionTrend as ExtNavC
 import me.matsumo.drive.supporter.api.guidance.domain.RouteCongestionSource as ExtNavRouteCongestionSource
 
 /**
- * 外部ナビ API ライブラリを使ったルート検索データソース。
+ * 外部API ライブラリを使ったルート検索データソース。
  * `GuidanceClient.resolveGuidance` と priority 別の `RouteClient.search` を並列に発行し、
  * 中立な [RouteDetail] モデルに射影する。ルート探索エンドポイントは priority 1 件しか
  * 返さないため、複数候補は `resolveGuidance` の `Guidance.routes` から抽出する。
@@ -59,6 +59,7 @@ class ExtNavRouteDataSource(
     private val clientProvider: ExtNavClientProvider,
     private val authGateway: ExtNavAuthGateway,
     private val registry: ExtNavRouteRegistry,
+    private val roadTypeGateway: ExtNavRoadTypeGateway? = null,
 ) : RouteDataSource {
 
     override suspend fun searchRoutes(
@@ -119,12 +120,16 @@ class ExtNavRouteDataSource(
             val geometry = buildGeometry(routeGuidance, originPoint, destinationPoint)
             val interchangeNameHint = routeGuidance.priority
                 ?.let { priority -> interchangeNameHints[priority] }
-            val roadClassSegments = buildRoadClassSegments(routeGuidance, geometry, interchangeNameHint)
+            val distanceMetres = routeGuidance.summary.distanceMetres.toDouble()
+            val roadClassSegments = refineShortRouteRoadClassSegments(
+                geometry = geometry,
+                routeDistanceMetres = distanceMetres,
+                roadClassSegments = buildRoadClassSegments(routeGuidance, geometry, interchangeNameHint),
+            )
             val congestionSegments = buildCongestionSegments(routeGuidance, geometry)
             val pointEvents = ExtNavRoutePointEventMapper.map(routeGuidance, geometry)
             val routeIncidents = ExtNavRouteIncidentMapper.map(routeGuidance, geometry)
             val tollYen = routeGuidance.summary.tollYen.takeIf { it > 0 }
-            val distanceMetres = routeGuidance.summary.distanceMetres.toDouble()
             val timeSeconds = routeGuidance.summary.timeSeconds.toDouble()
 
             val routePriority = routePriorityFor(routeGuidance.priority)
@@ -177,6 +182,32 @@ class ExtNavRouteDataSource(
         }
     }
 
+    private suspend fun refineShortRouteRoadClassSegments(
+        geometry: ImmutableList<RoutePoint>,
+        routeDistanceMetres: Double,
+        roadClassSegments: ImmutableList<RoadClassSegment>,
+    ): ImmutableList<RoadClassSegment> {
+        val gateway = roadTypeGateway ?: return roadClassSegments
+        val shouldRefine = ExtNavRoadClassSegmentRefiner.shouldRefineShortRoute(
+            routeDistanceMeters = routeDistanceMetres,
+            geometry = geometry,
+            roadClassSegments = roadClassSegments,
+        )
+        if (!shouldRefine) return roadClassSegments
+
+        val samplePoints = ExtNavRoadClassSegmentRefiner.samplePoints(geometry)
+        val roadClassSamples = samplePoints
+            .mapNotNull { point -> gateway.fetchRoadClass(point).getOrNull() }
+        if (roadClassSamples.size != samplePoints.size) return roadClassSegments
+
+        return ExtNavRoadClassSegmentRefiner.refineShortRoute(
+            routeDistanceMeters = routeDistanceMetres,
+            geometry = geometry,
+            roadClassSegments = roadClassSegments,
+            roadClassSamples = roadClassSamples,
+        )
+    }
+
     private fun routeIdFor(routeGuidance: RouteGuidance): String =
         routeGuidance.priority?.name ?: "route-${routeGuidance.index}"
 
@@ -206,7 +237,7 @@ class ExtNavRouteDataSource(
     }
 
     /**
-     * [routeGuidance] の渋滞区間（外部ナビ API ライブラリが route バイナリから算出済み）を中立モデルに詰め替える。
+     * [routeGuidance] の渋滞区間（外部API ライブラリが route バイナリから算出済み）を中立モデルに詰め替える。
      *
      * polyline index はライブラリ側で [RouteGuidance.polyline] に対して計算されている。OneNavi の
      * [geometry] は先頭に出発地を足している場合があるため、その分だけ index をずらしてから [geometry] の
@@ -1001,7 +1032,7 @@ private data class InterchangeNameHint(
  * セッション管理層が [ExtNavRouteRegistry] 経由で取得する。
  *
  * @property id OneNavi 内で扱う route ID。
- * @property routeGuidance 外部ナビ API ライブラリ由来のルート案内。
+ * @property routeGuidance 外部API ライブラリ由来のルート案内。
  * @property sapaDetailsByName SA/PA 詳細設備。正規化した SA/PA 名を key にし、取得できない場合は空。
  */
 @Immutable
