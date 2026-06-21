@@ -50,7 +50,7 @@ internal class VoiceAnnouncementSelector(
         tick: VoiceTick,
         state: VoiceAnnouncementSpeechState,
     ): VoiceAnnouncementSelection? {
-        if (!tick.isRouteUsable) return null
+        if (!tick.canAnnounce) return null
 
         var best: VoiceAnnouncementSelection? = null
 
@@ -90,7 +90,7 @@ internal class VoiceAnnouncementSelector(
         state: VoiceAnnouncementSpeechState,
         limit: Int,
     ): List<VoiceAnnouncementPreviewSelection> {
-        if (!tick.isRouteUsable) return emptyList()
+        if (!tick.canAnnounce) return emptyList()
         if (limit <= 0) return emptyList()
 
         val result = mutableListOf<VoiceAnnouncementPreviewSelection>()
@@ -186,11 +186,11 @@ internal class VoiceAnnouncementSelector(
      * 未発話段を恒久的に抑止する。現在地が GP 位置に到達済みかで判定する level 方式で、毎 tick
      * 通過済みの全 index を返す (記録側が冪等に union する想定)。
      *
-     * route が発話不能状態 (OFF_ROUTE_CONFIRMED 等) の tick では空を返す。投影距離だけが進んで
-     * いる可能性があり、通過済みと誤記録すると復帰時に案内を失うため、発話状態は維持する。
+     * route が発話不能状態、または推定位置の tick では空を返す。投影距離だけが進んでいる可能性があり、
+     * 通過済みと誤記録すると復帰時に案内を失うため、発話状態は維持する。
      */
     fun passedTargetIndices(plan: VoiceAnnouncementPlan, tick: VoiceTick): List<Int> {
-        if (!tick.isRouteUsable) return emptyList()
+        if (!tick.canCommitPassedTargets) return emptyList()
 
         val passed = mutableListOf<Int>()
 

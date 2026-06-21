@@ -51,7 +51,7 @@ internal class VoiceAnnouncementPrefetcher(
      * @param tick 発話判定用の tick
      */
     fun onTick(tick: VoiceTick) {
-        if (!tick.isRouteUsable) return
+        if (!tick.canAnnounce) return
 
         prefetchFrom(currentCumulativeMeters = tick.currentCumulativeMeters)
     }

@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import me.matsumo.onenavi.core.datasource.location.CurrentLocationDataSource
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.RoadClass
@@ -31,10 +30,8 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavProgressSnapshot
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDecision
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
-import me.matsumo.onenavi.core.navigation.extnav.ExtNavTunnelSegmentProvider
 import me.matsumo.onenavi.core.navigation.extnav.RouteGeometryMath
 import me.matsumo.onenavi.core.navigation.extnav.RouteStopProgress
-import me.matsumo.onenavi.core.navigation.extnav.TunnelMapStatus
 import me.matsumo.onenavi.core.navigation.newguidance.model.GpsSignalState
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceProgress
@@ -62,7 +59,6 @@ class NewGuidanceManager internal constructor(
     private val voiceController: VoiceAnnouncementController? = null,
     private val rerouteDetector: ExtNavRerouteDetector? = null,
     private val routeRepository: RouteRepository? = null,
-    private val tunnelSegmentProvider: ExtNavTunnelSegmentProvider? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
 
@@ -150,14 +146,12 @@ class NewGuidanceManager internal constructor(
         )
 
         prepareJob = scope.launch {
-            val tunnelMapStatus = prepareTunnelMap(route)
             if (!isCurrentGuidanceRequest(requestGeneration, route)) {
                 return@launch
             }
 
             val trackerSnapshot = startTrackerForRoute(
                 route = route,
-                tunnelMapStatus = tunnelMapStatus,
                 announceOpening = resetReroute,
             )
             activeSessionId = sessionId
@@ -241,7 +235,6 @@ class NewGuidanceManager internal constructor(
      */
     private fun startTrackerForRoute(
         route: RouteDetail,
-        tunnelMapStatus: TunnelMapStatus,
         announceOpening: Boolean,
     ): ExtNavProgressSnapshot? {
         val registry = routeRegistry
@@ -260,7 +253,6 @@ class NewGuidanceManager internal constructor(
         val attachment = tracker.attach(
             payload = payload,
             route = route,
-            tunnelMapStatus = tunnelMapStatus,
         )
         rerouteDetector?.attach(route)
         val snapshot = tracker.initializeAtRouteOrigin(
@@ -715,7 +707,10 @@ class NewGuidanceManager internal constructor(
         if (!isActiveSession(sessionId) || !isTrackerAttached) return
         if (!shouldForwardObservedLocation(location)) return
 
-        tracker.onLocation(location)
+        tracker.onLocation(
+            location = location,
+            canSeedDeadReckoning = location.isUsableObservedLocation(),
+        )
     }
 
     /**
@@ -910,25 +905,6 @@ class NewGuidanceManager internal constructor(
     }
 
     /**
-     * 選択 route のトンネル区間を準備する。
-     *
-     * @param route 準備対象 route
-     * @return トンネル区間状態。失敗時は Unavailable
-     */
-    private suspend fun prepareTunnelMap(route: RouteDetail): TunnelMapStatus {
-        val provider = tunnelSegmentProvider ?: return TunnelMapStatus.Ready(persistentListOf())
-
-        return runCatching {
-            withTimeout(TUNNEL_PREPARE_TIMEOUT_MILLIS) {
-                provider.prepare(route)
-            }
-        }.getOrElse { error ->
-            Napier.w(tag = TAG, throwable = error) { "Tunnel map preparation failed: routeId=${route.id}" }
-            TunnelMapStatus.Unavailable
-        }
-    }
-
-    /**
      * 測位信号状態と freshness を初期化する。
      */
     private fun resetSignalState() {
@@ -999,9 +975,6 @@ class NewGuidanceManager internal constructor(
 
         /** guidance request generation を進める加算値。 */
         const val GUIDANCE_REQUEST_GENERATION_INCREMENT = 1L
-
-        /** トンネル prepare の待ち時間上限。 */
-        const val TUNNEL_PREPARE_TIMEOUT_MILLIS = 3_000L
 
         /** DR / GPS signal clock の tick 間隔。 */
         const val DR_TICK_INTERVAL_MILLIS = 200L

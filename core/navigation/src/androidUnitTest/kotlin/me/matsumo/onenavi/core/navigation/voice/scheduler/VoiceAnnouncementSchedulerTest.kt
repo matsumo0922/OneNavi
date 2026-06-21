@@ -536,23 +536,21 @@ class VoiceAnnouncementSchedulerTest {
         val scheduler = schedulerOf()
         scheduler.attach(planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0))))
 
-        val command = scheduler.onTick(tickOf(current = 850.0, isRouteUsable = false))
+        val command = scheduler.onTick(tickOf(current = 850.0, canAnnounce = false))
 
         assertNull(command)
     }
 
     @Test
-    fun `route が発話不能な tick で通過扱いせず復帰後に再評価する`() {
+    fun `DR tick でも発話候補を評価する`() {
         val scheduler = schedulerOf()
         scheduler.attach(planOf(targetOf(index = 0, geometryMeters = 1_000.0, middleStage("m800", 800.0))))
 
-        val deadReckoningTick = scheduler.onTick(tickOf(current = 850.0, isRouteUsable = false))
-        val observedTick = scheduler.onTick(tickOf(current = 850.0, isRouteUsable = true))
+        val command = scheduler.onTick(tickOf(current = 850.0, canCommitPassedTargets = false))
 
-        assertNull(deadReckoningTick)
         assertEquals(
             VoiceAnnouncementId("m800"),
-            assertIs<VoiceAnnouncementCommand.StartSpeaking>(observedTick).request.stageId,
+            assertIs<VoiceAnnouncementCommand.StartSpeaking>(command).request.stageId,
         )
     }
 
@@ -764,10 +762,12 @@ class VoiceAnnouncementSchedulerTest {
     private fun tickOf(
         current: Double,
         speed: Double? = null,
-        isRouteUsable: Boolean = true,
+        canAnnounce: Boolean = true,
+        canCommitPassedTargets: Boolean = true,
     ): VoiceTick = VoiceTick(
         currentCumulativeMeters = current,
         speedMetersPerSecond = speed,
-        isRouteUsable = isRouteUsable,
+        canAnnounce = canAnnounce,
+        canCommitPassedTargets = canCommitPassedTargets,
     )
 }

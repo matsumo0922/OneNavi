@@ -18,12 +18,27 @@ internal class VoiceTickFactory {
      * @param snapshot tracker が発行した進捗 snapshot
      * @return 発話判定用の tick
      */
-    fun from(snapshot: ExtNavProgressSnapshot): VoiceTick = VoiceTick(
-        currentCumulativeMeters = snapshot.currentCumulativeMeters,
-        speedMetersPerSecond = snapshot.vehicleSpeedMps?.toDouble(),
-        isRouteUsable = snapshot.routeMatchState.isUsableForVoiceAnnouncement() &&
-            snapshot.positionSource == VehiclePositionSource.OBSERVED,
-    )
+    fun from(snapshot: ExtNavProgressSnapshot): VoiceTick {
+        val isRouteUsable = snapshot.routeMatchState.isUsableForVoiceAnnouncement()
+        val isPositionAnnounceable = snapshot.positionSource.canAnnounceVoice()
+        val canAnnounce = isRouteUsable && isPositionAnnounceable
+
+        return VoiceTick(
+            currentCumulativeMeters = snapshot.currentCumulativeMeters,
+            speedMetersPerSecond = snapshot.vehicleSpeedMps?.toDouble(),
+            canAnnounce = canAnnounce,
+            canCommitPassedTargets = canAnnounce && snapshot.positionSource == VehiclePositionSource.OBSERVED,
+        )
+    }
+}
+
+/**
+ * 発話判定へ流してよい位置 source かを返す。
+ */
+private fun VehiclePositionSource.canAnnounceVoice(): Boolean = when (this) {
+    VehiclePositionSource.OBSERVED -> true
+    VehiclePositionSource.DEAD_RECKONING -> true
+    VehiclePositionSource.INITIAL -> false
 }
 
 /**

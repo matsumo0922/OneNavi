@@ -16,8 +16,6 @@ import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRoutePayload
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
-import me.matsumo.onenavi.core.navigation.extnav.ExtNavTunnelSegment
-import me.matsumo.onenavi.core.navigation.extnav.TunnelMapStatus
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceEvent
 import me.matsumo.onenavi.core.navigation.newguidance.model.GuidanceState
 import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
@@ -107,16 +105,6 @@ class NewGuidanceManagerTest {
         val manager = NewGuidanceManager(
             routeRegistry = routeRegistry,
             guidanceTracker = tracker,
-            tunnelSegmentProvider = {
-                TunnelMapStatus.Ready(
-                    segments = listOf(
-                        ExtNavTunnelSegment(
-                            startGeometryMeters = 0.0,
-                            endGeometryMeters = 500.0,
-                        ),
-                    ).toImmutableList(),
-                )
-            },
             scope = this,
         )
         val events = mutableListOf<GuidanceEvent>()

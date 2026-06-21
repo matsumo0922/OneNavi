@@ -657,7 +657,7 @@ class VoiceAnnouncementSelectorTest {
 
         val selection = selector.select(
             plan = plan,
-            tick = tickOf(current = 850.0, isRouteUsable = false),
+            tick = tickOf(current = 850.0, canAnnounce = false),
             state = emptyState(),
         )
 
@@ -714,16 +714,15 @@ class VoiceAnnouncementSelectorTest {
     }
 
     @Test
-    fun `route が発話不能な tick では通過済みを記録しない`() {
+    fun `通過済み commit 不可の tick では通過済みを記録しない`() {
         val selector = VoiceAnnouncementSelector(VoiceAnnouncementConfig())
         val plan = planOf(
             targetOf(index = 0, geometryMeters = 500.0, stages = listOf(finalStage("f0"))),
         )
 
-        // 投影距離は GP に到達しているが OFF_ROUTE 等で発話不能 → 通過済みにしない。
         val passed = selector.passedTargetIndices(
             plan = plan,
-            tick = tickOf(current = 520.0, isRouteUsable = false),
+            tick = tickOf(current = 520.0, canCommitPassedTargets = false),
         )
 
         assertTrue(passed.isEmpty())
@@ -917,11 +916,13 @@ class VoiceAnnouncementSelectorTest {
     private fun tickOf(
         current: Double,
         speed: Double? = null,
-        isRouteUsable: Boolean = true,
+        canAnnounce: Boolean = true,
+        canCommitPassedTargets: Boolean = true,
     ): VoiceTick = VoiceTick(
         currentCumulativeMeters = current,
         speedMetersPerSecond = speed,
-        isRouteUsable = isRouteUsable,
+        canAnnounce = canAnnounce,
+        canCommitPassedTargets = canCommitPassedTargets,
     )
 
     private fun emptyState(): VoiceAnnouncementSpeechState = VoiceAnnouncementSpeechState()

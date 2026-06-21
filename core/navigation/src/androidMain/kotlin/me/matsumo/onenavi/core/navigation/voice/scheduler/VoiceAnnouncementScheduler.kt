@@ -38,7 +38,7 @@ import me.matsumo.onenavi.core.navigation.voice.suppression.VoiceAnnouncementSpe
  * [onTick] / [onSpeechFinished] / [attach] / [detach] は単一の実行系から直列に呼ぶこと。
  *
  * 各 tick の流れ:
- * 1. 通過済み案内地点を状態へ畳み込む ([VoiceAnnouncementSelector.passedTargetIndices])。
+ * 1. 観測 tick の場合だけ通過済み案内地点を状態へ畳み込む ([VoiceAnnouncementSelector.passedTargetIndices])。
  * 2. 最緊急の発話候補を 1 件選ぶ ([VoiceAnnouncementSelector.select])。
  * 3. PLAY / BARGE_IN / ENQUEUE を判定し ([VoiceAnnouncementSelectionPolicy])、選ばれた段を必ず処理済みにする。
  *    level トリガなので処理済みにしないと同じ段が鳴り続ける。
@@ -285,7 +285,7 @@ internal class VoiceAnnouncementScheduler(
      * 古くなった候補はここで破棄するが、実際に鳴らしていないため発話済み content にはしない。
      */
     private fun queueCandidateAt(tick: VoiceTick): VoiceAnnouncementRequest? {
-        if (!tick.isRouteUsable) return null
+        if (!tick.canAnnounce) return null
 
         while (pendingQueue.isNotEmpty()) {
             val request = pendingQueue.first()

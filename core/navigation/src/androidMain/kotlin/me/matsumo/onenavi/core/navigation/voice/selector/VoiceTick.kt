@@ -12,11 +12,13 @@ import androidx.compose.runtime.Immutable
  *
  * @property currentCumulativeMeters 現 tick の geometry 累積距離 (m)
  * @property speedMetersPerSecond 自車速度 (m/s)。取得できない場合は null
- * @property isRouteUsable route 一致状態が発話可能か。OFF_ROUTE_CONFIRMED 等では false
+ * @property canAnnounce route 一致状態が発話可能か。OFF_ROUTE_CONFIRMED 等では false
+ * @property canCommitPassedTargets 通過済み案内地点を恒久的に記録してよいか
  */
 @Immutable
 internal data class VoiceTick(
     val currentCumulativeMeters: Double,
     val speedMetersPerSecond: Double?,
-    val isRouteUsable: Boolean,
+    val canAnnounce: Boolean,
+    val canCommitPassedTargets: Boolean,
 )

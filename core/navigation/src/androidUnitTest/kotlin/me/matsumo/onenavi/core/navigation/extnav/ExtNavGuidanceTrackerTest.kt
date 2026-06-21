@@ -17,6 +17,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.SsmlPhrase
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
+import me.matsumo.onenavi.core.navigation.newguidance.model.RouteMatchState
 import me.matsumo.onenavi.core.navigation.newguidance.model.VehiclePositionSource
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListDetail
 import me.matsumo.onenavi.core.navigation.newguidance.presentation.GuidanceListIcon
@@ -142,13 +143,8 @@ class ExtNavGuidanceTrackerTest {
     }
 
     @Test
-    fun `停止中のトンネル途絶では DR を進めない`() {
-        val tracker = attachTrackerWithTunnel(
-            tunnelSegment = ExtNavTunnelSegment(
-                startGeometryMeters = 0.0,
-                endGeometryMeters = 500.0,
-            ),
-        )
+    fun `停止中の GPS 途絶では DR を進めない`() {
+        val tracker = attachTracker()
         val route = buildRoute()
         tracker.onLocation(locationAt(point = route.origin, speedMps = 0f))
 
@@ -162,13 +158,38 @@ class ExtNavGuidanceTrackerTest {
     }
 
     @Test
-    fun `低速トンネルでは保持速度で DR を進める`() {
-        val tracker = attachTrackerWithTunnel(
-            tunnelSegment = ExtNavTunnelSegment(
-                startGeometryMeters = 0.0,
-                endGeometryMeters = 500.0,
-            ),
+    fun `低速 GPS 途絶では DR を進めない`() {
+        val tracker = attachTracker()
+        val route = buildRoute()
+        tracker.onLocation(locationAt(point = route.origin, speedMps = 2.0f))
+
+        val didAdvance = tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = ONE_SECOND_NANOS,
+            nowWallClockMillis = ONE_SECOND_MILLIS,
         )
+
+        assertFalse(didAdvance)
+        assertEquals(VehiclePositionSource.OBSERVED, tracker.snapshot.value?.positionSource)
+    }
+
+    @Test
+    fun `速度なしの GPS 途絶では DR を進めない`() {
+        val tracker = attachTracker()
+        val route = buildRoute()
+        tracker.onLocation(locationAt(point = route.origin, speedMps = null))
+
+        val didAdvance = tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = ONE_SECOND_NANOS,
+            nowWallClockMillis = ONE_SECOND_MILLIS,
+        )
+
+        assertFalse(didAdvance)
+        assertEquals(VehiclePositionSource.OBSERVED, tracker.snapshot.value?.positionSource)
+    }
+
+    @Test
+    fun `GPS 途絶ではトンネル情報なしで保持速度の DR を進める`() {
+        val tracker = attachTracker()
         val route = buildRoute()
         tracker.onLocation(locationAt(point = route.origin, speedMps = 3f))
 
@@ -184,15 +205,10 @@ class ExtNavGuidanceTrackerTest {
     }
 
     @Test
-    fun `長いトンネルでは最大 DR 距離でクランプする`() {
-        val tracker = attachTrackerWithTunnel(
-            tunnelSegment = ExtNavTunnelSegment(
-                startGeometryMeters = 0.0,
-                endGeometryMeters = 10_000.0,
-            ),
-            route = buildLongRoute(),
-        )
-        tracker.onLocation(locationAt(point = buildLongRoute().origin, speedMps = 30f))
+    fun `長距離 DR は 3000m で止めず route 上を進む`() {
+        val route = buildLongRoute()
+        val tracker = attachTracker(route = route)
+        tracker.onLocation(locationAt(point = route.origin, speedMps = 30f))
 
         val didAdvance = tracker.advanceDeadReckoning(
             nowElapsedRealtimeNanos = 200L * ONE_SECOND_NANOS,
@@ -202,40 +218,31 @@ class ExtNavGuidanceTrackerTest {
         val snapshot = tracker.snapshot.value
         assertTrue(didAdvance)
         assertEquals(VehiclePositionSource.DEAD_RECKONING, snapshot?.positionSource)
-        assertTrue((snapshot?.currentCumulativeMeters ?: 0.0) <= 3_000.1)
+        assertTrue((snapshot?.currentCumulativeMeters ?: 0.0) > 5_900.0)
     }
 
     @Test
-    fun `出口近くで停止した DR はトンネル出口を越えない`() {
-        val tracker = attachTrackerWithTunnel(
-            tunnelSegment = ExtNavTunnelSegment(
-                startGeometryMeters = 0.0,
-                endGeometryMeters = 100.0,
-            ),
-        )
+    fun `DR は route 末端を越えない`() {
         val route = buildRoute()
+        val tracker = attachTracker(route = route)
         tracker.onLocation(locationAt(point = route.origin, speedMps = 30f))
 
         val didAdvance = tracker.advanceDeadReckoning(
-            nowElapsedRealtimeNanos = 10L * ONE_SECOND_NANOS,
-            nowWallClockMillis = 10L * ONE_SECOND_MILLIS,
+            nowElapsedRealtimeNanos = 100L * ONE_SECOND_NANOS,
+            nowWallClockMillis = 100L * ONE_SECOND_MILLIS,
         )
 
         val snapshot = tracker.snapshot.value
         assertTrue(didAdvance)
-        assertEquals(100.0, snapshot?.currentCumulativeMeters ?: 0.0, 0.2)
+        val totalGeometryMeters = RouteGeometryMath.cumulativeMetres(route.geometry).last()
+        assertEquals(totalGeometryMeters, snapshot?.currentCumulativeMeters ?: 0.0, 0.2)
+        assertEquals(0.0, snapshot?.distanceRemainingMeters ?: -1.0, 0.2)
     }
 
     @Test
-    fun `トンネル分岐風 geometry でも DR snapshot は観測値を持たない`() {
+    fun `DR snapshot は観測値を持たない`() {
         val route = buildBranchLikeRoute()
-        val tracker = attachTrackerWithTunnel(
-            tunnelSegment = ExtNavTunnelSegment(
-                startGeometryMeters = 0.0,
-                endGeometryMeters = 1_000.0,
-            ),
-            route = route,
-        )
+        val tracker = attachTracker(route = route)
         tracker.onLocation(locationAt(point = route.origin, speedMps = 15f))
 
         val didAdvance = tracker.advanceDeadReckoning(
@@ -251,10 +258,48 @@ class ExtNavGuidanceTrackerTest {
         assertNull(snapshot?.progress?.observedLocation)
     }
 
-    private fun attachTrackerWithTunnel(
-        tunnelSegment: ExtNavTunnelSegment,
-        route: RouteDetail = buildRoute(),
-    ): ExtNavGuidanceTracker {
+    @Test
+    fun `OFF_ROUTE snapshot からは DR を開始しない`() {
+        val tracker = attachTracker()
+        val route = buildRoute()
+        val farPoint = RoutePoint(
+            latitude = ORIGIN_LATITUDE + 0.01,
+            longitude = ORIGIN_LONGITUDE,
+        )
+        tracker.onLocation(locationAt(point = route.origin, speedMps = 30f))
+        tracker.onLocation(locationAt(point = farPoint, speedMps = 30f))
+
+        val didAdvance = tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = 2L * ONE_SECOND_NANOS,
+            nowWallClockMillis = 2L * ONE_SECOND_MILLIS,
+        )
+
+        assertFalse(didAdvance)
+        assertEquals(RouteMatchState.OFF_ROUTE_CANDIDATE, tracker.snapshot.value?.routeMatchState)
+    }
+
+    @Test
+    fun `DR seed は usable observed snapshot を保持する`() {
+        val tracker = attachTracker()
+        val route = buildRoute()
+        tracker.onLocation(locationAt(point = route.origin, speedMps = 30f))
+        tracker.onLocation(
+            location = locationAt(point = route.destination, speedMps = 0f),
+            canSeedDeadReckoning = false,
+        )
+
+        val didAdvance = tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = ONE_SECOND_NANOS,
+            nowWallClockMillis = ONE_SECOND_MILLIS,
+        )
+
+        val snapshot = tracker.snapshot.value
+        assertTrue(didAdvance)
+        assertEquals(VehiclePositionSource.DEAD_RECKONING, snapshot?.positionSource)
+        assertEquals(30.0, snapshot?.currentCumulativeMeters ?: 0.0, 0.2)
+    }
+
+    private fun attachTracker(route: RouteDetail = buildRoute()): ExtNavGuidanceTracker {
         val tracker = ExtNavGuidanceTracker()
         tracker.attach(
             payload = ExtNavRoutePayload(
@@ -262,7 +307,6 @@ class ExtNavGuidanceTrackerTest {
                 routeGuidance = buildRouteGuidance(),
             ),
             route = route,
-            tunnelMapStatus = TunnelMapStatus.Ready(listOf(tunnelSegment).toImmutableList()),
         )
         return tracker
     }
@@ -456,7 +500,7 @@ class ExtNavGuidanceTrackerTest {
 
     private fun locationAt(
         point: RoutePoint,
-        speedMps: Float = 10f,
+        speedMps: Float? = 10f,
     ): UserLocation = UserLocation(
         latitude = point.latitude,
         longitude = point.longitude,
