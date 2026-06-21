@@ -166,7 +166,6 @@ class ExtNavGuidanceTracker {
             elapsedRealtimeNanos = nowElapsedRealtimeNanos,
         )
 
-        lastProjection = projection
         deadReckoningState = previousState.copy(
             currentCumulativeMeters = currentCumulativeMeters,
             lastElapsedRealtimeNanos = nowElapsedRealtimeNanos,

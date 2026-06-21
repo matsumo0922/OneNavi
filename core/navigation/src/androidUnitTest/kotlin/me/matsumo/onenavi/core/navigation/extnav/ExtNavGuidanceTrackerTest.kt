@@ -299,6 +299,27 @@ class ExtNavGuidanceTrackerTest {
         assertEquals(30.0, snapshot?.currentCumulativeMeters ?: 0.0, 0.2)
     }
 
+    @Test
+    fun `長距離 DR 後の実測復帰は最後の実測 projection から再探索する`() {
+        val route = buildDenseLongRoute()
+        val tracker = attachTracker(route = route)
+        tracker.onLocation(locationAt(point = route.origin, speedMps = 30f))
+
+        val didAdvance = tracker.advanceDeadReckoning(
+            nowElapsedRealtimeNanos = 200L * ONE_SECOND_NANOS,
+            nowWallClockMillis = 200L * ONE_SECOND_MILLIS,
+        )
+        assertTrue(didAdvance)
+        assertTrue((tracker.snapshot.value?.currentCumulativeMeters ?: 0.0) > 5_900.0)
+
+        tracker.onLocation(locationAt(point = route.origin, speedMps = 30f))
+
+        val snapshot = tracker.snapshot.value
+        assertEquals(VehiclePositionSource.OBSERVED, snapshot?.positionSource)
+        assertEquals(0.0, snapshot?.currentCumulativeMeters ?: -1.0, 1.0)
+        assertEquals(RouteMatchState.ON_ROUTE, snapshot?.routeMatchState)
+    }
+
     private fun attachTracker(route: RouteDetail = buildRoute()): ExtNavGuidanceTracker {
         val tracker = ExtNavGuidanceTracker()
         tracker.attach(
@@ -339,6 +360,29 @@ class ExtNavGuidanceTrackerTest {
             destination = destination,
             intermediateWaypoints = persistentListOf(),
             geometry = listOf(origin, destination).toImmutableList(),
+            distanceMeters = 10_000.0,
+            durationSeconds = 600.0,
+            steps = persistentListOf(),
+            tollFee = 0,
+        )
+    }
+
+    private fun buildDenseLongRoute(): RouteDetail {
+        val geometry = (0..1_000).map { pointIndex ->
+            RoutePoint(
+                latitude = ORIGIN_LATITUDE,
+                longitude = ORIGIN_LONGITUDE + 0.1 * pointIndex / 1_000.0,
+            )
+        }.toImmutableList()
+        val origin = geometry.first()
+        val destination = geometry.last()
+
+        return RouteDetail(
+            id = "route-dense-long-test",
+            origin = origin,
+            destination = destination,
+            intermediateWaypoints = persistentListOf(),
+            geometry = geometry,
             distanceMeters = 10_000.0,
             durationSeconds = 600.0,
             steps = persistentListOf(),
