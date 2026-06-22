@@ -3,6 +3,7 @@ package me.matsumo.onenavi.core.navigation.extnav
 import me.matsumo.drive.supporter.api.core.model.Coord
 import me.matsumo.drive.supporter.api.core.result.ApiFailure
 import me.matsumo.drive.supporter.api.core.result.ApiResult
+import me.matsumo.drive.supporter.api.roadtype.domain.CarRoadType
 import me.matsumo.drive.supporter.api.roadtype.domain.RoadTypeResult
 import me.matsumo.onenavi.core.model.RoadClass
 import me.matsumo.onenavi.core.model.RoutePoint
@@ -24,15 +25,15 @@ class ExtNavRoadTypeGateway internal constructor(
     )
 
     /**
-     * [point] の道路種別を取得する。
+     * [point] の道路種別を取得する。判定不能な結果は null として扱う。
      */
-    suspend fun fetchRoadClass(point: RoutePoint): Result<RoadClass> {
+    suspend fun fetchRoadClass(point: RoutePoint): Result<RoadClass?> {
         backend.ensureSignedIn().getOrElse { cause ->
             return Result.failure(cause)
         }
 
         return when (val result = backend.fetchRoadType(point.toCoord())) {
-            is ApiResult.Success -> Result.success(result.value.toRoadClass())
+            is ApiResult.Success -> Result.success(result.value.toRoadClassOrNull())
             is ApiResult.Failure -> Result.failure(ExtNavRoadTypeApiException(result.failure))
         }
     }
@@ -74,5 +75,9 @@ class ExtNavRoadTypeApiException(
 private fun RoutePoint.toCoord(): Coord =
     Coord.fromDegrees(latDeg = latitude, lonDeg = longitude)
 
-private fun RoadTypeResult.toRoadClass(): RoadClass =
-    if (isHighway) RoadClass.HIGHWAY else RoadClass.ORDINARY
+private fun RoadTypeResult.toRoadClassOrNull(): RoadClass? {
+    val roadType = primaryRoadType
+    if (roadType == CarRoadType.Unknown) return null
+
+    return if (roadType.isHighway) RoadClass.HIGHWAY else RoadClass.ORDINARY
+}

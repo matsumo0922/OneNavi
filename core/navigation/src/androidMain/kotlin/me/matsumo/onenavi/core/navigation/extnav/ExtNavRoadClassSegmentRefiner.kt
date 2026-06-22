@@ -29,6 +29,7 @@ internal object ExtNavRoadClassSegmentRefiner {
         if (geometry.size < MIN_GEOMETRY_POINT_COUNT) return false
         if (roadClassSegments.isEmpty()) return true
 
+        // 短距離 route で高速道路扱いに寄りすぎるケースだけを保守的に補正する。
         return roadClassSegments.any { segment -> segment.roadClass == RoadClass.HIGHWAY }
     }
 

@@ -92,9 +92,17 @@ class NewGuidanceManager internal constructor(
     private var didFlushUsableObservedLocation: Boolean = false
     private var lastObservedReceivedAtElapsedNanos: Long? = null
     private var lastUsableObservedAtElapsedNanos: Long? = null
+
+    @Volatile
     private var roadTypeRequestJob: Job? = null
+
+    @Volatile
     private var roadTypeOverride: RoadClassOverride? = null
+
+    @Volatile
     private var lastRoadTypeRequestPoint: RoutePoint? = null
+
+    @Volatile
     private var lastRoadTypeRequestWallClockMillis: Long? = null
 
     /** Guidance 期の現在状態。 */
