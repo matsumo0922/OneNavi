@@ -16,7 +16,7 @@ import kotlinx.collections.immutable.toImmutableList
  * @param hasTolls 有料道路区間を含むかどうか
  * @param tollFee 有料道路の料金（円）。null の場合は料金不明。
  * @param congestionSegments geometry に沿った渋滞区間。ルート計算時点のスナップショット。渋滞が無ければ空。
- * @param priorityLabel ルート種別の表示名（例: 「推奨」「渋滞回避」）。外部ナビ API 由来の場合のみ設定される。
+ * @param priorityLabel ルート種別の表示名（例: 「推奨」「渋滞回避」）。外部API 由来の場合のみ設定される。
  */
 @Immutable
 data class RouteItem(
@@ -68,7 +68,7 @@ data class RoadSegmentDistance(
 
 /**
  * ルート全体の詳細情報。案内開始に必要なルートデータを保持する。
- * 取得元の DataSource（外部ナビ API など）に依存しない中立なモデル。
+ * 取得元の DataSource（外部API など）に依存しない中立なモデル。
  *
  * @param id アプリ内で使うルート ID
  * @param origin 出発地
@@ -78,7 +78,7 @@ data class RoadSegmentDistance(
  * @param distanceMeters ルート全体の距離
  * @param durationSeconds ルート全体の所要時間
  * @param steps 案内ステップ
- * @param roadClassSegments geometry を道路種別（高速 / 一般道）ごとに区切ったセグメント列。経路サマリ由来で境界は近似。空の場合は色分けしない。
+ * @param roadClassSegments geometry を道路種別（高速 / 一般道）ごとに区切ったセグメント列。経路サマリ由来を基本に、短距離 route は座標道路種別で補正する。空の場合は色分けしない。
  * @param congestionSegments geometry に沿った渋滞区間。ルート計算時点のスナップショット。渋滞が無ければ空。
  * @param pointEvents geometry 上へ表示する信号機 / 一時停止 / 踏切などの地点イベント。
  * @param priority ルート種別（推奨 / 渋滞回避 / 等）。取得元が複数候補を返さないソースでは null。
