@@ -1424,9 +1424,7 @@ class ExtNavGuidanceTracker {
 
         return DeadReckoningState(
             speedMps = speedMps,
-            startCumulativeMeters = currentCumulativeMeters,
             currentCumulativeMeters = currentCumulativeMeters,
-            startElapsedRealtimeNanos = elapsedRealtimeNanos,
             lastElapsedRealtimeNanos = elapsedRealtimeNanos,
             projection = projection,
         )
@@ -1459,17 +1457,13 @@ class ExtNavGuidanceTracker {
      * DR 中に使う実測由来の保持値。
      *
      * @param speedMps DR に使う速度
-     * @param startCumulativeMeters DR 開始時の route geometry 累積距離
      * @param currentCumulativeMeters 現在の DR route geometry 累積距離
-     * @param startElapsedRealtimeNanos DR 開始時の monotonic clock
      * @param lastElapsedRealtimeNanos 前回 DR tick の monotonic clock
      * @param projection DR の基準にする route projection
      */
     private data class DeadReckoningState(
         val speedMps: Float,
-        val startCumulativeMeters: Double,
         val currentCumulativeMeters: Double,
-        val startElapsedRealtimeNanos: Long,
         val lastElapsedRealtimeNanos: Long,
         val projection: RouteProjection,
     )
