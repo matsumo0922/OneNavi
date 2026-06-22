@@ -15,6 +15,7 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavClientProvider
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuideImageGateway
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
+import me.matsumo.onenavi.core.navigation.extnav.ExtNavRoadTypeGateway
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavTunnelSegmentProvider
@@ -155,6 +156,7 @@ val navigationModule: Module = module {
             rerouteDetector = get(),
             routeRepository = get(),
             tunnelSegmentProvider = get(),
+            roadTypeGateway = get(),
         )
     }
     single<HttpClient>(qualifier = named("googleCloudTts")) {
@@ -188,6 +190,12 @@ val navigationModule: Module = module {
             appConfig = get(),
         )
     }
+    single {
+        ExtNavRoadTypeGateway(
+            clientProvider = get(),
+            authGateway = get(),
+        )
+    }
     single { ExtNavRouteRegistry() }
     single {
         ExtNavGuideImageGateway(
@@ -201,6 +209,7 @@ val navigationModule: Module = module {
             clientProvider = get(),
             authGateway = get(),
             registry = get(),
+            roadTypeGateway = get(),
         )
     }
 }
