@@ -28,11 +28,12 @@ class VoiceTickFactoryTest {
     }
 
     @Test
-    fun `DR tick は route 上でも発話不能として扱う`() {
+    fun `DR tick は発話可能だが通過済み commit は不可として扱う`() {
         val factory = VoiceTickFactory()
         val tick = factory.from(buildSnapshot(positionSource = VehiclePositionSource.DEAD_RECKONING))
 
-        assertFalse(tick.isRouteUsable)
+        assertTrue(tick.canAnnounce)
+        assertFalse(tick.canCommitPassedTargets)
     }
 
     @Test
@@ -40,7 +41,17 @@ class VoiceTickFactoryTest {
         val factory = VoiceTickFactory()
         val tick = factory.from(buildSnapshot(positionSource = VehiclePositionSource.OBSERVED))
 
-        assertTrue(tick.isRouteUsable)
+        assertTrue(tick.canAnnounce)
+        assertTrue(tick.canCommitPassedTargets)
+    }
+
+    @Test
+    fun `初期 tick は route 上でも発話不能として扱う`() {
+        val factory = VoiceTickFactory()
+        val tick = factory.from(buildSnapshot(positionSource = VehiclePositionSource.INITIAL))
+
+        assertFalse(tick.canAnnounce)
+        assertFalse(tick.canCommitPassedTargets)
     }
 
     private fun buildSnapshot(positionSource: VehiclePositionSource): ExtNavProgressSnapshot {

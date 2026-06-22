@@ -61,19 +61,16 @@ class ExtNavGuidanceTracker {
      *
      * @param payload Preview 時に取得した外部ナビ API ライブラリ由来 payload
      * @param route 案内対象の中立 route
-     * @param tunnelMapStatus 選択 route に紐づくトンネル区間の準備状態
      * @return tick 非依存の attach 時成果物
      */
     @Suppress("unused")
     internal fun attach(
         payload: ExtNavRoutePayload,
         route: RouteDetail,
-        tunnelMapStatus: TunnelMapStatus = emptyTunnelMapStatus(),
     ): ExtNavGuidanceAttachment {
         val attached = buildAttachedRoute(
             payload = payload,
             route = route,
-            tunnelMapStatus = tunnelMapStatus,
         )
         attachedRoute = attached
         lastProjection = null
@@ -93,15 +90,27 @@ class ExtNavGuidanceTracker {
      */
     @Suppress("unused")
     fun onLocation(location: UserLocation) {
+        onLocation(location, true)
+    }
+
+    /**
+     * GPS 位置を 1 tick 投入し、DR seed 更新可否も指定して進捗を更新する。
+     *
+     * @param location 端末から得た位置
+     * @param canSeedDeadReckoning この tick を次回 DR の基準に使ってよいか
+     */
+    fun onLocation(location: UserLocation, canSeedDeadReckoning: Boolean) {
         val attached = attachedRoute ?: return
         if (guidanceStartTimestampMillis == null) {
             guidanceStartTimestampMillis = location.timestampMillis
         }
+        val shouldRecoverFromDeadReckoning = _snapshot.value?.positionSource == VehiclePositionSource.DEAD_RECKONING
+        val previousProjection = if (shouldRecoverFromDeadReckoning) null else lastProjection
         val projection = projectLocation(
             route = attached.route,
             cumulativeMetres = attached.cumulativeMetres,
             location = location,
-            previousProjection = lastProjection,
+            previousProjection = previousProjection,
         )
 
         val snapshot = buildSnapshot(
@@ -111,7 +120,13 @@ class ExtNavGuidanceTracker {
         )
         lastProjection = projection
         previousRawPoint = location.toRoutePoint()
-        deadReckoningState = snapshot.deadReckoningSeed(location)
+        if (canSeedDeadReckoning) {
+            deadReckoningState = snapshot.deadReckoningSeed(
+                location = location,
+                projection = projection,
+                totalGeometryMetres = attached.totalGeometryMetres,
+            )
+        }
         _snapshot.value = snapshot
     }
 
@@ -128,32 +143,22 @@ class ExtNavGuidanceTracker {
     ): Boolean {
         val attached = attachedRoute ?: return false
         val previousState = deadReckoningState ?: return false
-        val previousProjection = lastProjection ?: return false
-        val speedMps = previousState.speedMps.takeIf { speed -> speed >= MIN_DEAD_RECKONING_SPEED_MPS }
-            ?: return false
-        val tunnelSegment = attached.tunnelMapStatus.findReachableSegment(
-            currentCumulativeMeters = previousState.currentCumulativeMeters,
-            speedMps = speedMps,
-        ) ?: return false
+        val hasFiniteDeadReckoningSpeed = previousState.speedMps.isFinite()
+        val hasMinimumDeadReckoningSpeed = previousState.speedMps >= MIN_DEAD_RECKONING_SPEED_MPS
+        if (!hasFiniteDeadReckoningSpeed || !hasMinimumDeadReckoningSpeed) return false
+        if (previousState.currentCumulativeMeters >= attached.totalGeometryMetres) return false
 
+        val speedMps = previousState.speedMps
         val elapsedSeconds = ((nowElapsedRealtimeNanos - previousState.lastElapsedRealtimeNanos).coerceAtLeast(0L)) /
             NANOS_PER_SECOND.toDouble()
-        val totalDurationSeconds = ((nowElapsedRealtimeNanos - previousState.startElapsedRealtimeNanos).coerceAtLeast(0L)) /
-            NANOS_PER_SECOND.toDouble()
+        if (elapsedSeconds <= 0.0) return false
+
         val nextDistanceMeters = previousState.currentCumulativeMeters + speedMps * elapsedSeconds
-        val cappedByDuration = totalDurationSeconds >= MAX_DEAD_RECKONING_DURATION_SECONDS
-        val cappedByDistance = nextDistanceMeters - previousState.startCumulativeMeters >= MAX_DEAD_RECKONING_DISTANCE_METRES
-        val cappedByExit = nextDistanceMeters >= tunnelSegment.endGeometryMeters
-        val currentCumulativeMeters = when {
-            cappedByExit -> tunnelSegment.endGeometryMeters
-            cappedByDistance -> previousState.startCumulativeMeters + MAX_DEAD_RECKONING_DISTANCE_METRES
-            cappedByDuration -> previousState.currentCumulativeMeters
-            else -> nextDistanceMeters
-        }.coerceIn(0.0, attached.totalGeometryMetres)
+        val currentCumulativeMeters = nextDistanceMeters.coerceIn(0.0, attached.totalGeometryMetres)
         val projection = projectionAtDistance(
             attached = attached,
             currentCumulativeMeters = currentCumulativeMeters,
-            fallback = previousProjection,
+            fallback = previousState.projection,
         )
         val snapshot = buildDeadReckoningSnapshot(
             attached = attached,
@@ -163,10 +168,10 @@ class ExtNavGuidanceTracker {
             elapsedRealtimeNanos = nowElapsedRealtimeNanos,
         )
 
-        lastProjection = projection
         deadReckoningState = previousState.copy(
             currentCumulativeMeters = currentCumulativeMeters,
             lastElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+            projection = projection,
         )
         clearOffRouteCandidate()
         _snapshot.value = snapshot
@@ -231,7 +236,6 @@ class ExtNavGuidanceTracker {
     private fun buildAttachedRoute(
         payload: ExtNavRoutePayload,
         route: RouteDetail,
-        tunnelMapStatus: TunnelMapStatus,
     ): AttachedRoute {
         val cumulativeMetres = buildCumulativeGeometryMetres(route.geometry)
         val totalGeometryMetres = cumulativeMetres.lastOrNull() ?: 0.0
@@ -261,7 +265,6 @@ class ExtNavGuidanceTracker {
             projectionContext = projectionContext,
             primaryEventMetres = primaryEventMetres,
             speedLimitSegments = speedLimitSegments,
-            tunnelMapStatus = tunnelMapStatus,
         )
     }
 
@@ -1398,48 +1401,32 @@ class ExtNavGuidanceTracker {
         RouteGeometryMath.normalizeDegrees(degrees)
 
     /**
-     * DR を開始または継続できるトンネル区間を返す。
-     *
-     * @param currentCumulativeMeters 現在の route geometry 累積距離
-     * @param speedMps DR に使う速度
-     * @return 到達可能なトンネル区間。無ければ null
-     */
-    private fun TunnelMapStatus.findReachableSegment(
-        currentCumulativeMeters: Double,
-        speedMps: Float,
-    ): ExtNavTunnelSegment? {
-        val ready = this as? TunnelMapStatus.Ready ?: return null
-        val entryGateMeters = speedMps * LOST_SIGNAL_THRESHOLD_SECONDS +
-            TUNNEL_BOUNDARY_ERROR_METRES +
-            TUNNEL_ENTRY_TICK_MARGIN_METRES
-
-        return ready.segments.firstOrNull { segment ->
-            val isInside = segment.contains(currentCumulativeMeters)
-            val isBeforeEntry = currentCumulativeMeters < segment.startGeometryMeters
-            val distanceToEntryMeters = segment.startGeometryMeters - currentCumulativeMeters
-            val isWithinEntryGate = distanceToEntryMeters <= entryGateMeters
-            val canEnterFromBefore = isBeforeEntry && isWithinEntryGate
-
-            isInside || canEnterFromBefore
-        }
-    }
-
-    /**
      * 実測 snapshot から次回 DR の初期値を作る。
      *
      * @param location 実測 tick
-     * @return DR 初期値。速度が無効な場合は null
+     * @param projection 実測 tick の route projection
+     * @param totalGeometryMetres route geometry の総距離
+     * @return DR 初期値。route 外・速度無効・低速・終端到達済みの場合は null
      */
-    private fun ExtNavProgressSnapshot.deadReckoningSeed(location: UserLocation): DeadReckoningState? {
+    private fun ExtNavProgressSnapshot.deadReckoningSeed(
+        location: UserLocation,
+        projection: RouteProjection,
+        totalGeometryMetres: Double,
+    ): DeadReckoningState? {
+        if (positionSource != VehiclePositionSource.OBSERVED) return null
+        if (routeMatchState != RouteMatchState.ON_ROUTE) return null
+        if (currentCumulativeMeters >= totalGeometryMetres) return null
+
         val speedMps = location.speedMps?.takeIf { speed -> speed.isFinite() } ?: return null
+        if (speedMps < MIN_DEAD_RECKONING_SPEED_MPS) return null
+
         val elapsedRealtimeNanos = location.elapsedRealtimeNanos ?: return null
 
         return DeadReckoningState(
             speedMps = speedMps,
-            startCumulativeMeters = currentCumulativeMeters,
             currentCumulativeMeters = currentCumulativeMeters,
-            startElapsedRealtimeNanos = elapsedRealtimeNanos,
             lastElapsedRealtimeNanos = elapsedRealtimeNanos,
+            projection = projection,
         )
     }
 
@@ -1454,7 +1441,6 @@ class ExtNavGuidanceTracker {
      * @param projectionContext 道路種別 / ETA を解決する geometry コンテキスト
      * @param primaryEventMetres 主案内イベントの geometry 距離一覧 (off-route 判定用)
      * @param speedLimitSegments geometry 距離基準へ変換済みの制限速度区間
-     * @param tunnelMapStatus route geometry 距離基準のトンネル区間状態
      */
     private class AttachedRoute(
         val route: RouteDetail,
@@ -1465,24 +1451,21 @@ class ExtNavGuidanceTracker {
         val projectionContext: RouteProjectionContext,
         val primaryEventMetres: List<Double>,
         val speedLimitSegments: List<SpeedLimitGeometrySegment>,
-        val tunnelMapStatus: TunnelMapStatus,
     )
 
     /**
      * DR 中に使う実測由来の保持値。
      *
      * @param speedMps DR に使う速度
-     * @param startCumulativeMeters DR 開始時の route geometry 累積距離
      * @param currentCumulativeMeters 現在の DR route geometry 累積距離
-     * @param startElapsedRealtimeNanos DR 開始時の monotonic clock
      * @param lastElapsedRealtimeNanos 前回 DR tick の monotonic clock
+     * @param projection DR の基準にする route projection
      */
     private data class DeadReckoningState(
         val speedMps: Float,
-        val startCumulativeMeters: Double,
         val currentCumulativeMeters: Double,
-        val startElapsedRealtimeNanos: Long,
         val lastElapsedRealtimeNanos: Long,
+        val projection: RouteProjection,
     )
 
     /**
@@ -1636,21 +1619,6 @@ class ExtNavGuidanceTracker {
 
         /** DR を開始できる最小速度。 */
         private const val MIN_DEAD_RECKONING_SPEED_MPS: Float = 2.2f
-
-        /** DR 途絶判定に使う秒数。 */
-        private const val LOST_SIGNAL_THRESHOLD_SECONDS: Double = 3.0
-
-        /** トンネル境界誤差として入口 gate に足す距離。 */
-        private const val TUNNEL_BOUNDARY_ERROR_METRES: Double = 20.0
-
-        /** 入口判定で tick 遅延ぶんとして足す距離。 */
-        private const val TUNNEL_ENTRY_TICK_MARGIN_METRES: Double = 10.0
-
-        /** DR を継続できる最大秒数。 */
-        private const val MAX_DEAD_RECKONING_DURATION_SECONDS: Double = 120.0
-
-        /** DR を継続できる最大距離。 */
-        private const val MAX_DEAD_RECKONING_DISTANCE_METRES: Double = 3_000.0
 
         /** 表示対象にする最小制限速度。 */
         private const val MIN_SPEED_LIMIT_KMH: Int = 20

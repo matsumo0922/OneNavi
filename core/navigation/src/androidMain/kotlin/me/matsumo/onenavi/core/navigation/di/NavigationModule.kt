@@ -9,7 +9,6 @@ import kotlinx.serialization.json.Json
 import me.matsumo.drive.supporter.api.core.model.LogLevel
 import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.model.AppConfig
-import me.matsumo.onenavi.core.navigation.extnav.EmptyExtNavTunnelSegmentProvider
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavAuthGateway
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavClientProvider
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
@@ -18,7 +17,6 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRoadTypeGateway
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
-import me.matsumo.onenavi.core.navigation.extnav.ExtNavTunnelSegmentProvider
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
 import me.matsumo.onenavi.core.navigation.tts.CachedGoogleCloudTtsSynthesizer
@@ -55,7 +53,6 @@ import org.koin.dsl.module
 val navigationModule: Module = module {
     single { NewRouteManager(routeRepository = get()) }
     single { ExtNavGuidanceTracker() }
-    single<ExtNavTunnelSegmentProvider> { EmptyExtNavTunnelSegmentProvider }
     single { ExtNavRerouteDetector() }
     single { VoiceAnnouncementConfig() }
     single { VoiceAnnouncementPlanBuilder() }
@@ -155,7 +152,6 @@ val navigationModule: Module = module {
             voiceController = get(),
             rerouteDetector = get(),
             routeRepository = get(),
-            tunnelSegmentProvider = get(),
             roadTypeGateway = get(),
         )
     }
