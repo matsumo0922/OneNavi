@@ -3,7 +3,17 @@ import type {LatLng} from "./geo-utils";
 import {parseGpx} from "./gpx-parser";
 import {getStatus} from "./connection";
 import {deleteRoute, listRoutes, saveRoute, type SavedRoute} from "./routes";
-import {clearRoute, findRoute, onMapClick, showGpxPath, updateCurrentPosition, updateWaypointMarkers,} from "./map";
+import {
+  clearRoute,
+  findRoute,
+  hideRoutePointCallout,
+  onRoutePointSelected,
+  showGpxPath,
+  showRoutePointCallout,
+  type RoutePointCandidate,
+  updateCurrentPosition,
+  updateWaypointMarkers,
+} from "./map";
 
 /**
  * UI コントロールのバインディングとイベントハンドリングを行う。
@@ -113,6 +123,7 @@ export class ControlsManager {
     });
 
     document.getElementById("btn-clear")!.addEventListener("click", () => {
+      hideRoutePointCallout();
       this.waypoints = [];
       this.saveWaypoints();
       this.engine.stop();
@@ -155,6 +166,7 @@ export class ControlsManager {
     this.saveWaypoints();
     this.engine.stop();
     clearRoute();
+    hideRoutePointCallout();
     this.renderWaypointList();
     updateWaypointMarkers(this.waypoints);
   }
@@ -235,12 +247,18 @@ export class ControlsManager {
   }
 
   private bindMapClick(): void {
-    onMapClick((latLng: LatLng) => {
-      this.waypoints.push(latLng);
-      this.saveWaypoints();
-      this.renderWaypointList();
-      updateWaypointMarkers(this.waypoints);
+    onRoutePointSelected((candidate) => {
+      showRoutePointCallout(candidate, this.waypoints, (insertIndex, insertedCandidate) => {
+        this.insertRoutePoint(insertIndex, insertedCandidate);
+      });
     });
+  }
+
+  private insertRoutePoint(insertIndex: number, candidate: RoutePointCandidate): void {
+    this.waypoints.splice(insertIndex, 0, candidate.position);
+    this.saveWaypoints();
+    this.renderWaypointList();
+    updateWaypointMarkers(this.waypoints);
   }
 
   private async startRouteSimulation(): Promise<void> {
@@ -308,6 +326,7 @@ export class ControlsManager {
       removeButton.ariaLabel = `Remove ${label}`;
       removeButton.textContent = "\u00d7";
       removeButton.addEventListener("click", () => {
+        hideRoutePointCallout();
         this.waypoints.splice(index, 1);
         this.saveWaypoints();
         this.renderWaypointList();

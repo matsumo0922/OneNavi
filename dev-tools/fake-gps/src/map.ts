@@ -4,22 +4,31 @@ import type { LatLng } from "./geo-utils";
 const DEFAULT_CENTER = { lat: 35.6812, lng: 139.7671 };
 const DEFAULT_ZOOM = 14;
 
+export interface RoutePointCandidate {
+  name: string;
+  address: string;
+  position: LatLng;
+}
+
 let map: google.maps.Map;
 let currentMarker: google.maps.marker.AdvancedMarkerElement | null = null;
 let markerHeadingEl: HTMLElement | null = null;
 let waypointMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 let directionsService: google.maps.DirectionsService;
 let directionsRenderer: google.maps.DirectionsRenderer;
+let geocoder: google.maps.Geocoder;
 let gpxPolyline: google.maps.Polyline | null = null;
+let routePointInfoWindow: google.maps.InfoWindow | null = null;
 
-/** 地図クリック時のコールバック */
-let onMapClickCallback: ((latLng: LatLng) => void) | null = null;
+/** 地点候補選択時のコールバック */
+let onRoutePointSelectedCallback: ((candidate: RoutePointCandidate) => void) | null = null;
 
 /**
  * Google Maps を初期化する。
  */
 export async function initMap(): Promise<void> {
   const { Map } = (await google.maps.importLibrary("maps")) as google.maps.MapsLibrary;
+  const { Geocoder } = (await google.maps.importLibrary("geocoding")) as google.maps.GeocodingLibrary;
   await google.maps.importLibrary("marker");
   await google.maps.importLibrary("places");
 
@@ -37,6 +46,7 @@ export async function initMap(): Promise<void> {
   });
 
   directionsService = new google.maps.DirectionsService();
+  geocoder = new Geocoder();
   directionsRenderer = new google.maps.DirectionsRenderer({
     map,
     suppressMarkers: true,
@@ -48,9 +58,7 @@ export async function initMap(): Promise<void> {
   });
 
   map.addListener("click", (event: google.maps.MapMouseEvent) => {
-    if (event.latLng && onMapClickCallback) {
-      onMapClickCallback({ lat: event.latLng.lat(), lng: event.latLng.lng() });
-    }
+    void handleMapClick(event);
   });
 
   // 初期位置に現在地マーカーを表示
@@ -84,15 +92,13 @@ function initPlaceAutocomplete(): void {
     if (!placePrediction) return;
 
     const place = placePrediction.toPlace();
-    await place.fetchFields({ fields: ["location"] });
+    await place.fetchFields({ fields: ["displayName", "formattedAddress", "location"] });
 
-    if (place.location && onMapClickCallback) {
+    if (place.location && onRoutePointSelectedCallback) {
+      const candidate = createRoutePointCandidateFromPlace(placePrediction, place);
       map.panTo(place.location);
       map.setZoom(16);
-      onMapClickCallback({
-        lat: place.location.lat(),
-        lng: place.location.lng(),
-      });
+      onRoutePointSelectedCallback(candidate);
     }
   });
 }
@@ -106,8 +112,266 @@ function stopKeyboardEventPropagation(event: KeyboardEvent): void {
   event.stopPropagation();
 }
 
-export function onMapClick(callback: (latLng: LatLng) => void): void {
-  onMapClickCallback = callback;
+export function onRoutePointSelected(callback: (candidate: RoutePointCandidate) => void): void {
+  onRoutePointSelectedCallback = callback;
+}
+
+export function showRoutePointCallout(
+  candidate: RoutePointCandidate,
+  waypoints: LatLng[],
+  onInserted: (insertIndex: number, candidate: RoutePointCandidate) => void,
+): void {
+  const content = createRoutePointCalloutContent(candidate, waypoints, onInserted);
+
+  if (routePointInfoWindow === null) {
+    routePointInfoWindow = new google.maps.InfoWindow({
+      maxWidth: 320,
+    });
+  }
+
+  routePointInfoWindow.setContent(content);
+  routePointInfoWindow.setPosition(candidate.position);
+  routePointInfoWindow.open({
+    map,
+    shouldFocus: false,
+  });
+}
+
+export function hideRoutePointCallout(): void {
+  routePointInfoWindow?.close();
+}
+
+async function handleMapClick(event: google.maps.MapMouseEvent): Promise<void> {
+  if (!event.latLng || !onRoutePointSelectedCallback) return;
+
+  const position = {
+    lat: event.latLng.lat(),
+    lng: event.latLng.lng(),
+  };
+  const candidate = await createRoutePointCandidateFromMapClick(position);
+
+  onRoutePointSelectedCallback(candidate);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createRoutePointCandidateFromPlace(placePrediction: any, place: any): RoutePointCandidate {
+  const position = {
+    lat: place.location.lat(),
+    lng: place.location.lng(),
+  };
+  const name = getPlaceName(placePrediction, place);
+  const address = place.formattedAddress ?? place.formatted_address ?? "住所なし";
+
+  return {
+    name,
+    address,
+    position,
+  };
+}
+
+async function createRoutePointCandidateFromMapClick(position: LatLng): Promise<RoutePointCandidate> {
+  const geocodeResult = await reverseGeocode(position);
+  const address = geocodeResult?.formatted_address ?? "住所なし";
+  const name = geocodeResult?.address_components[0]?.long_name ?? "選択地点";
+
+  return {
+    name,
+    address,
+    position,
+  };
+}
+
+function reverseGeocode(position: LatLng): Promise<google.maps.GeocoderResult | null> {
+  return new Promise((resolve) => {
+    geocoder.geocode({ location: position }, (results, status) => {
+      if (status !== google.maps.GeocoderStatus.OK) {
+        resolve(null);
+        return;
+      }
+
+      resolve(results?.[0] ?? null);
+    });
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getPlaceName(placePrediction: any, place: any): string {
+  const displayName = place.displayName?.text ?? place.displayName;
+  if (typeof displayName === "string" && displayName.length > 0) return displayName;
+
+  const predictionText = placePrediction.text?.toString();
+  if (typeof predictionText === "string" && predictionText.length > 0) return predictionText;
+
+  return "検索地点";
+}
+
+function createRoutePointCalloutContent(
+  candidate: RoutePointCandidate,
+  waypoints: LatLng[],
+  onInserted: (insertIndex: number, candidate: RoutePointCandidate) => void,
+): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "route-callout";
+  stopCalloutPropagation(container);
+
+  const title = document.createElement("div");
+  title.className = "route-callout-title";
+  title.textContent = "Route point";
+
+  const fields = document.createElement("div");
+  fields.className = "route-callout-fields";
+  fields.append(
+    createCalloutField("Name", candidate.name),
+    createCalloutField("Address", candidate.address),
+    createCalloutField("Coordinates", formatCoordinates(candidate.position)),
+  );
+
+  const insertLabel = document.createElement("label");
+  insertLabel.className = "route-callout-insert-label";
+  insertLabel.textContent = "Insert into ROUTE";
+
+  const select = document.createElement("select");
+  select.className = "route-callout-select";
+  for (const option of createInsertOptions(waypoints)) {
+    select.appendChild(option);
+  }
+  select.value = `${waypoints.length}`;
+
+  const addButton = document.createElement("button");
+  addButton.className = "route-callout-add";
+  addButton.type = "button";
+  addButton.textContent = "Add to ROUTE";
+  addButton.addEventListener("click", () => {
+    onInserted(Number(select.value), candidate);
+    hideRoutePointCallout();
+  });
+
+  container.append(title, fields, insertLabel, select, addButton);
+
+  return container;
+}
+
+function stopCalloutPropagation(container: HTMLElement): void {
+  const eventNames = ["click", "pointerdown", "keydown", "keyup"] as const;
+  for (const eventName of eventNames) {
+    container.addEventListener(eventName, (event) => {
+      event.stopPropagation();
+    });
+  }
+}
+
+function createCalloutField(label: string, value: string): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "route-callout-field";
+
+  const labelElement = document.createElement("span");
+  labelElement.className = "route-callout-field-label";
+  labelElement.textContent = label;
+
+  const valueElement = document.createElement("span");
+  valueElement.className = "route-callout-field-value";
+  valueElement.textContent = value;
+  valueElement.title = value;
+
+  const copyButton = document.createElement("button");
+  copyButton.className = "route-callout-copy";
+  copyButton.type = "button";
+  copyButton.title = `Copy ${label}`;
+  copyButton.ariaLabel = `Copy ${label}`;
+  copyButton.textContent = "\u29c9";
+  copyButton.addEventListener("click", () => {
+    void copyCalloutText(value, copyButton);
+  });
+
+  row.append(labelElement, valueElement, copyButton);
+
+  return row;
+}
+
+function createInsertOptions(waypoints: LatLng[]): HTMLOptionElement[] {
+  const options: HTMLOptionElement[] = [];
+
+  for (let insertIndex = 0; insertIndex <= waypoints.length; insertIndex++) {
+    const option = document.createElement("option");
+    option.value = `${insertIndex}`;
+    option.textContent = getInsertOptionLabel(insertIndex, waypoints.length);
+    options.push(option);
+  }
+
+  return options;
+}
+
+function getInsertOptionLabel(insertIndex: number, waypointCount: number): string {
+  if (waypointCount === 0) return "Set as Start";
+  if (insertIndex === 0) return "Before Start";
+  if (insertIndex === waypointCount) return waypointCount === 1 ? "After Start" : "After End";
+
+  const beforeLabel = getRoutePointLabel(insertIndex - 1, waypointCount);
+  const afterLabel = getRoutePointLabel(insertIndex, waypointCount);
+
+  return `Between ${beforeLabel} and ${afterLabel}`;
+}
+
+function getRoutePointLabel(index: number, waypointCount: number): string {
+  const isFirstWaypoint = index === 0;
+  if (isFirstWaypoint) return "Start";
+
+  const isLastWaypoint = index === waypointCount - 1;
+  const hasMultipleWaypoints = waypointCount > 1;
+  if (isLastWaypoint && hasMultipleWaypoints) return "End";
+
+  return `Via ${index}`;
+}
+
+function formatCoordinates(position: LatLng): string {
+  return `${position.lat},${position.lng}`;
+}
+
+async function copyCalloutText(text: string, button: HTMLButtonElement): Promise<void> {
+  const didCopy = await writeClipboardText(text);
+  if (!didCopy) {
+    window.alert("コピーに失敗しました");
+    return;
+  }
+
+  showCalloutCopiedFeedback(button);
+}
+
+async function writeClipboardText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return writeClipboardTextWithFallback(text);
+  }
+}
+
+function writeClipboardTextWithFallback(text: string): boolean {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.readOnly = true;
+  textArea.style.position = "fixed";
+  textArea.style.top = "-1000px";
+
+  document.body.appendChild(textArea);
+  textArea.select();
+
+  try {
+    return document.execCommand("copy");
+  } finally {
+    document.body.removeChild(textArea);
+  }
+}
+
+function showCalloutCopiedFeedback(button: HTMLButtonElement): void {
+  const originalTitle = button.title;
+  button.classList.add("copied");
+  button.title = "Copied";
+
+  window.setTimeout(() => {
+    button.classList.remove("copied");
+    button.title = originalTitle;
+  }, 1200);
 }
 
 /**
