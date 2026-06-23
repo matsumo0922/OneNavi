@@ -21,11 +21,7 @@ class ExtNavAuthGatewayTest {
 
     @Test
     fun `isSessionComplete は SignedIn かつ全必須フィールドが揃っていれば true を返す`() {
-        val state = AuthState.SignedIn(
-            session = buildCompleteSession(),
-            navitimeId = "user@example.com",
-            courseType = "premium",
-        )
+        val state = buildSignedInState()
 
         assertTrue(isSessionComplete(state))
     }
@@ -46,10 +42,8 @@ class ExtNavAuthGatewayTest {
 
     @Test
     fun `isSessionComplete は authToken が空なら false を返す`() {
-        val state = AuthState.SignedIn(
+        val state = buildSignedInState(
             session = buildCompleteSession().copy(authToken = ""),
-            navitimeId = "user@example.com",
-            courseType = "premium",
         )
 
         assertFalse(isSessionComplete(state))
@@ -57,10 +51,8 @@ class ExtNavAuthGatewayTest {
 
     @Test
     fun `isSessionComplete は sid が空なら false を返す`() {
-        val state = AuthState.SignedIn(
+        val state = buildSignedInState(
             session = buildCompleteSession().copy(sid = ""),
-            navitimeId = "user@example.com",
-            courseType = "premium",
         )
 
         assertFalse(isSessionComplete(state))
@@ -68,10 +60,8 @@ class ExtNavAuthGatewayTest {
 
     @Test
     fun `isSessionComplete は nid が空で isAnonymous になるなら false を返す`() {
-        val state = AuthState.SignedIn(
+        val state = buildSignedInState(
             session = buildCompleteSession().copy(nid = ""),
-            navitimeId = "user@example.com",
-            courseType = "premium",
         )
 
         assertFalse(isSessionComplete(state))
@@ -79,10 +69,8 @@ class ExtNavAuthGatewayTest {
 
     @Test
     fun `isSessionComplete は courseType が空で isAnonymous になるなら false を返す`() {
-        val state = AuthState.SignedIn(
+        val state = buildSignedInState(
             session = buildCompleteSession().copy(courseType = ""),
-            navitimeId = "user@example.com",
-            courseType = "premium",
         )
 
         assertFalse(isSessionComplete(state))
@@ -152,11 +140,7 @@ class ExtNavAuthGatewayTest {
     @Test
     fun `session が完全な SignedIn なら signIn を呼ばない`() = runTest {
         val fakeBackend = FakeExtNavAuthBackend(
-            initialState = AuthState.SignedIn(
-                session = buildCompleteSession(),
-                navitimeId = "user@example.com",
-                courseType = "premium",
-            ),
+            initialState = buildSignedInState(),
         )
         val gateway = buildGateway(fakeBackend)
 
@@ -171,11 +155,7 @@ class ExtNavAuthGatewayTest {
         val fakeBackend = FakeExtNavAuthBackend(
             initialState = AuthState.SignedOut,
             signInResult = ApiResult.Success(
-                AuthState.SignedIn(
-                    session = buildCompleteSession(),
-                    navitimeId = "user@example.com",
-                    courseType = "premium",
-                ),
+                buildSignedInState(),
             ),
         )
         val gateway = buildGateway(fakeBackend)
@@ -189,17 +169,11 @@ class ExtNavAuthGatewayTest {
     @Test
     fun `SignedIn だが必須フィールド欠落の場合は signOut して再ログインする`() = runTest {
         val fakeBackend = FakeExtNavAuthBackend(
-            initialState = AuthState.SignedIn(
+            initialState = buildSignedInState(
                 session = buildCompleteSession().copy(sid = ""),
-                navitimeId = "user@example.com",
-                courseType = "premium",
             ),
             signInResult = ApiResult.Success(
-                AuthState.SignedIn(
-                    session = buildCompleteSession(),
-                    navitimeId = "user@example.com",
-                    courseType = "premium",
-                ),
+                buildSignedInState(),
             ),
         )
         val gateway = buildGateway(fakeBackend)
@@ -216,11 +190,7 @@ class ExtNavAuthGatewayTest {
         val fakeBackend = FakeExtNavAuthBackend(
             initialState = AuthState.Anonymous(session = buildCompleteSession()),
             signInResult = ApiResult.Success(
-                AuthState.SignedIn(
-                    session = buildCompleteSession(),
-                    navitimeId = "user@example.com",
-                    courseType = "premium",
-                ),
+                buildSignedInState(),
             ),
         )
         val gateway = buildGateway(fakeBackend)
@@ -304,15 +274,6 @@ class ExtNavAuthGatewayTest {
 
     // ---- ヘルパー ----
 
-    private fun buildCompleteSession(): AuthSession = AuthSession(
-        authToken = "header.payload.signature",
-        expires = Long.MAX_VALUE,
-        jti = "jti-value",
-        sid = "session-id",
-        nid = "user-nid",
-        courseType = "premium",
-    )
-
     private fun buildGateway(
         fakeBackend: FakeExtNavAuthBackend,
         loginId: String = "user@example.com",
@@ -351,18 +312,7 @@ class ExtNavAuthGatewayTest {
 private class FakeExtNavAuthBackend(
     private val initialState: AuthState,
     private val signInResult: ApiResult<AuthState.SignedIn> = ApiResult.Success(
-        AuthState.SignedIn(
-            session = AuthSession(
-                authToken = "header.payload.signature",
-                expires = Long.MAX_VALUE,
-                jti = "jti-value",
-                sid = "session-id",
-                nid = "user-nid",
-                courseType = "premium",
-            ),
-            navitimeId = "user@example.com",
-            courseType = "premium",
-        ),
+        buildSignedInState(),
     ),
 ) : ExtNavAuthBackend {
 
@@ -387,3 +337,22 @@ private class FakeExtNavAuthBackend(
         return ApiResult.Success(Unit)
     }
 }
+
+private fun buildSignedInState(
+    session: AuthSession = buildCompleteSession(),
+    externalUserId: String = "user@example.com",
+    courseType: String = "premium",
+): AuthState.SignedIn = AuthState.SignedIn(
+    session,
+    externalUserId,
+    courseType,
+)
+
+private fun buildCompleteSession(): AuthSession = AuthSession(
+    authToken = "header.payload.signature",
+    expires = Long.MAX_VALUE,
+    jti = "jti-value",
+    sid = "session-id",
+    nid = "user-nid",
+    courseType = "premium",
+)
