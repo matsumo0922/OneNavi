@@ -276,27 +276,109 @@ export class ControlsManager {
     container.innerHTML = "";
 
     for (let index = 0; index < this.waypoints.length; index++) {
-      const wp = this.waypoints[index];
-      const label = index === 0 ? "Start" : index === this.waypoints.length - 1 && this.waypoints.length > 1 ? "End" : `Via ${index}`;
+      const waypoint = this.waypoints[index];
+      const label = this.getWaypointLabel(index);
+      const coordinates = this.formatWaypointCoordinates(waypoint);
 
       const item = document.createElement("div");
       item.className = "waypoint-item";
-      item.innerHTML = `
-        <span class="label">${label}</span>
-        <span class="name">${wp.lat.toFixed(5)}, ${wp.lng.toFixed(5)}</span>
-        <button class="remove-btn" data-index="${index}">&times;</button>
-      `;
 
-      const removeBtn = item.querySelector(".remove-btn")!;
-      removeBtn.addEventListener("click", () => {
+      const labelElement = document.createElement("span");
+      labelElement.className = "label";
+      labelElement.textContent = label;
+
+      const nameElement = document.createElement("span");
+      nameElement.className = "name";
+      nameElement.textContent = `${waypoint.lat.toFixed(5)}, ${waypoint.lng.toFixed(5)}`;
+
+      const copyButton = document.createElement("button");
+      copyButton.className = "copy-btn";
+      copyButton.type = "button";
+      copyButton.title = "Copy coordinates";
+      copyButton.ariaLabel = `Copy ${label} coordinates`;
+      copyButton.textContent = "\u29c9";
+      copyButton.addEventListener("click", () => {
+        void this.copyWaypointCoordinates(coordinates, copyButton);
+      });
+
+      const removeButton = document.createElement("button");
+      removeButton.className = "remove-btn";
+      removeButton.type = "button";
+      removeButton.title = "Remove waypoint";
+      removeButton.ariaLabel = `Remove ${label}`;
+      removeButton.textContent = "\u00d7";
+      removeButton.addEventListener("click", () => {
         this.waypoints.splice(index, 1);
         this.saveWaypoints();
         this.renderWaypointList();
         updateWaypointMarkers(this.waypoints);
       });
 
+      item.append(labelElement, nameElement, copyButton, removeButton);
       container.appendChild(item);
     }
+  }
+
+  private getWaypointLabel(index: number): string {
+    const isFirstWaypoint = index === 0;
+    if (isFirstWaypoint) return "Start";
+
+    const isLastWaypoint = index === this.waypoints.length - 1;
+    const hasMultipleWaypoints = this.waypoints.length > 1;
+    if (isLastWaypoint && hasMultipleWaypoints) return "End";
+
+    return `Via ${index}`;
+  }
+
+  private formatWaypointCoordinates(waypoint: LatLng): string {
+    return `${waypoint.lat},${waypoint.lng}`;
+  }
+
+  private async copyWaypointCoordinates(coordinates: string, button: HTMLButtonElement): Promise<void> {
+    const didCopy = await this.writeClipboardText(coordinates);
+    if (!didCopy) {
+      window.alert("座標のコピーに失敗しました");
+      return;
+    }
+
+    this.showCopiedFeedback(button);
+  }
+
+  private async writeClipboardText(text: string): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return this.writeClipboardTextWithFallback(text);
+    }
+  }
+
+  private writeClipboardTextWithFallback(text: string): boolean {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.readOnly = true;
+    textArea.style.position = "fixed";
+    textArea.style.top = "-1000px";
+
+    document.body.appendChild(textArea);
+    textArea.select();
+
+    try {
+      return document.execCommand("copy");
+    } finally {
+      document.body.removeChild(textArea);
+    }
+  }
+
+  private showCopiedFeedback(button: HTMLButtonElement): void {
+    const originalTitle = button.title;
+    button.classList.add("copied");
+    button.title = "Copied";
+
+    window.setTimeout(() => {
+      button.classList.remove("copied");
+      button.title = originalTitle;
+    }, 1200);
   }
 
   private startStatusPolling(): void {
