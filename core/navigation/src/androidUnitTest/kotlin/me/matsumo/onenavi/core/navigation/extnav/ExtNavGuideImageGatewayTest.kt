@@ -14,7 +14,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * [ExtNavGuideImageGateway] の案内画像キー変換テスト。
+ * [ExtNavGuideImageGateway] の案内画像キー変換・dedup・キャッシュテスト。
  */
 class ExtNavGuideImageGatewayTest {
 
@@ -141,6 +141,172 @@ class ExtNavGuideImageGatewayTest {
         assertEquals(2, images.size)
         assertEquals(setOf(tollGateKey, junctionKey), images.map { image -> image.key }.toSet())
         assertTrue(images.all { image -> image.bytes.contentEquals(responseBytes) })
+    }
+
+    // ---- 空 ID / 重複 ID dedup の regression tests ----
+
+    @Test
+    fun `filterValidKeys は minor が 0 以下のキーを除外する`() {
+        val keys = listOf(
+            GuideImageKey(major = 5, minor = 0),
+            GuideImageKey(major = 5, minor = -1),
+            GuideImageKey(major = 5, minor = 100),
+            GuideImageKey(major = 201, minor = 200),
+        )
+
+        val validKeys = keys.filterValidKeys()
+
+        assertEquals(
+            listOf(
+                GuideImageKey(major = 5, minor = 100),
+                GuideImageKey(major = 201, minor = 200),
+            ),
+            validKeys,
+        )
+    }
+
+    @Test
+    fun `filterValidKeys は重複キーも除外する`() {
+        val key = GuideImageKey(major = 5, minor = 100)
+        val keys = listOf(key, key, GuideImageKey(major = 101, minor = 100))
+
+        val validKeys = keys.filterValidKeys()
+
+        assertEquals(
+            listOf(
+                GuideImageKey(major = 5, minor = 100),
+                GuideImageKey(major = 101, minor = 100),
+            ),
+            validKeys,
+        )
+    }
+
+    @Test
+    fun `fetchAll は空 minor のキーのみなら API を呼ばない`() = runTest {
+        val backend = FakeGuideImageGatewayBackend()
+        val gateway = ExtNavGuideImageGateway(
+            backend = backend,
+            routeRegistry = ExtNavRouteRegistry(),
+        )
+
+        val keys = listOf(
+            GuideImageKey(major = 5, minor = 0),
+            GuideImageKey(major = 201, minor = -1),
+        )
+        val images = gateway.fetchAll(keys).getOrThrow()
+
+        assertEquals(emptyList(), images)
+        assertEquals(0, backend.ensureSignedInCallCount)
+        assertEquals(0, backend.fetchCallCount)
+    }
+
+    @Test
+    fun `fetchAll は空 minor を除外して有効な ID だけ API に送る`() = runTest {
+        val validKey = GuideImageKey(major = 5, minor = 100)
+        val responseBytes = byteArrayOf(4, 5, 6)
+        val backend = FakeGuideImageGatewayBackend().apply {
+            fetchResult = ApiResult.Success(
+                persistentListOf(
+                    buildGuideImage(id = 100, bytes = responseBytes),
+                ),
+            )
+        }
+        val gateway = ExtNavGuideImageGateway(
+            backend = backend,
+            routeRegistry = ExtNavRouteRegistry(),
+        )
+
+        val keys = listOf(
+            GuideImageKey(major = 201, minor = 0),
+            validKey,
+            GuideImageKey(major = 101, minor = -5),
+        )
+        val images = gateway.fetchAll(keys).getOrThrow()
+
+        assertEquals(listOf(100), requireNotNull(backend.lastRequest).ids.toList())
+        assertEquals(1, images.size)
+        assertEquals(validKey, images.first().key)
+        assertTrue(images.first().bytes.contentEquals(responseBytes))
+    }
+
+    // ---- キャッシュ hit の regression tests ----
+
+    @Test
+    fun `fetchAll はキャッシュ済み minor に対して再 fetch しない`() = runTest {
+        val key = GuideImageKey(major = 5, minor = 100)
+        val responseBytes = byteArrayOf(7, 8, 9)
+        val backend = FakeGuideImageGatewayBackend().apply {
+            fetchResult = ApiResult.Success(
+                persistentListOf(
+                    buildGuideImage(id = 100, bytes = responseBytes),
+                ),
+            )
+        }
+        val gateway = ExtNavGuideImageGateway(
+            backend = backend,
+            routeRegistry = ExtNavRouteRegistry(),
+        )
+
+        gateway.fetchAll(listOf(key)).getOrThrow()
+        val secondImages = gateway.fetchAll(listOf(key)).getOrThrow()
+
+        assertEquals(1, backend.fetchCallCount)
+        assertEquals(1, secondImages.size)
+        assertTrue(secondImages.first().bytes.contentEquals(responseBytes))
+    }
+
+    @Test
+    fun `fetchAll はキャッシュ未命中の minor だけ API に送る`() = runTest {
+        val cachedKey = GuideImageKey(major = 5, minor = 100)
+        val newKey = GuideImageKey(major = 201, minor = 200)
+        val cachedBytes = byteArrayOf(1, 2, 3)
+        val newBytes = byteArrayOf(4, 5, 6)
+        val backend = FakeGuideImageGatewayBackend()
+        val gateway = ExtNavGuideImageGateway(
+            backend = backend,
+            routeRegistry = ExtNavRouteRegistry(),
+        )
+
+        backend.fetchResult = ApiResult.Success(
+            persistentListOf(buildGuideImage(id = 100, bytes = cachedBytes)),
+        )
+        gateway.fetchAll(listOf(cachedKey)).getOrThrow()
+
+        backend.fetchResult = ApiResult.Success(
+            persistentListOf(buildGuideImage(id = 200, bytes = newBytes)),
+        )
+        val secondImages = gateway.fetchAll(listOf(cachedKey, newKey)).getOrThrow()
+
+        assertEquals(2, backend.fetchCallCount)
+        assertEquals(listOf(200), requireNotNull(backend.lastRequest).ids.toList())
+        assertEquals(2, secondImages.size)
+        val imageByKey = secondImages.associateBy { image -> image.key }
+        assertTrue(imageByKey[cachedKey]!!.bytes.contentEquals(cachedBytes))
+        assertTrue(imageByKey[newKey]!!.bytes.contentEquals(newBytes))
+    }
+
+    @Test
+    fun `fetchAll は major の異なる同一 minor でキャッシュを再利用する`() = runTest {
+        val firstKey = GuideImageKey(major = 5, minor = 100)
+        val secondKey = GuideImageKey(major = 201, minor = 100)
+        val responseBytes = byteArrayOf(10, 11, 12)
+        val backend = FakeGuideImageGatewayBackend().apply {
+            fetchResult = ApiResult.Success(
+                persistentListOf(buildGuideImage(id = 100, bytes = responseBytes)),
+            )
+        }
+        val gateway = ExtNavGuideImageGateway(
+            backend = backend,
+            routeRegistry = ExtNavRouteRegistry(),
+        )
+
+        gateway.fetchAll(listOf(firstKey)).getOrThrow()
+        val secondImages = gateway.fetchAll(listOf(secondKey)).getOrThrow()
+
+        assertEquals(1, backend.fetchCallCount)
+        assertEquals(1, secondImages.size)
+        assertEquals(secondKey, secondImages.first().key)
+        assertTrue(secondImages.first().bytes.contentEquals(responseBytes))
     }
 }
 
