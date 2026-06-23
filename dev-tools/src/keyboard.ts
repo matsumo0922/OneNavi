@@ -31,8 +31,7 @@ export class KeyboardController {
   }
 
   private onKeyDown = (event: KeyboardEvent): void => {
-    // テキスト入力中は無視
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+    if (this.shouldIgnoreKeyboardShortcut(event)) {
       return;
     }
 
@@ -56,6 +55,46 @@ export class KeyboardController {
       this.stopTick();
     }
   };
+
+  private shouldIgnoreKeyboardShortcut(event: KeyboardEvent): boolean {
+    const eventTargets = event.composedPath();
+    const activeElements = this.getActiveElements();
+    const hasEditableEventTarget = eventTargets.some((eventTarget) => this.isEditableEventTarget(eventTarget));
+    const hasEditableActiveElement = activeElements.some((activeElement) => this.isEditableElement(activeElement));
+
+    return hasEditableEventTarget || hasEditableActiveElement;
+  }
+
+  private isEditableEventTarget(eventTarget: EventTarget): boolean {
+    if (!(eventTarget instanceof Element)) return false;
+
+    return this.isEditableElement(eventTarget);
+  }
+
+  private getActiveElements(): Element[] {
+    const activeElements: Element[] = [];
+    let activeElement = document.activeElement;
+
+    while (activeElement !== null) {
+      activeElements.push(activeElement);
+      activeElement = activeElement.shadowRoot?.activeElement ?? null;
+    }
+
+    return activeElements;
+  }
+
+  private isEditableElement(element: Element): boolean {
+    if (element instanceof HTMLInputElement) return true;
+    if (element instanceof HTMLTextAreaElement) return true;
+    if (element instanceof HTMLSelectElement) return true;
+    if (element instanceof HTMLElement && element.isContentEditable) return true;
+
+    const tagName = element.tagName.toLowerCase();
+    const isPlaceAutocomplete = tagName === "gmp-place-autocomplete" || tagName.includes("place-autocomplete");
+    if (isPlaceAutocomplete) return true;
+
+    return element.closest("#panel-search") !== null;
+  }
 
   private togglePause(): void {
     const state = this.engine.getState();
