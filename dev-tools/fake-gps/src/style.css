@@ -92,6 +92,111 @@ body {
   width: 100%;
 }
 
+/* ── Route point callout ───────────────────── */
+.route-callout {
+  width: min(280px, calc(100vw - 56px));
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.route-callout-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.route-callout-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.route-callout-field {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.route-callout-field-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.route-callout-field-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.route-callout-copy {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 5px;
+  background: var(--bg-inset);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  transition: background 0.12s, color 0.12s;
+}
+
+.route-callout-copy:hover {
+  background: rgba(66, 133, 244, 0.08);
+  color: var(--primary);
+}
+
+.route-callout-copy.copied {
+  color: var(--green);
+}
+
+.route-callout-insert-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.route-callout-select {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.route-callout-add {
+  min-height: 32px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.route-callout-add:hover {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
 /* ── Cards ─────────────────────────────────── */
 .card {
   background: var(--bg-inset);
@@ -303,17 +408,40 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.waypoint-item .copy-btn,
 .waypoint-item .remove-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
+  border-radius: 5px;
   cursor: pointer;
   color: var(--text-muted);
   font-size: 15px;
   line-height: 1;
-  padding: 0 2px;
+  padding: 0;
+  transition: background 0.12s, color 0.12s;
+}
+
+.waypoint-item .copy-btn {
+  font-size: 13px;
+}
+
+.waypoint-item .copy-btn:hover {
+  background: rgba(66, 133, 244, 0.08);
+  color: var(--primary);
+}
+
+.waypoint-item .copy-btn.copied {
+  color: var(--green);
 }
 
 .waypoint-item .remove-btn:hover {
+  background: rgba(234, 67, 53, 0.08);
   color: var(--red);
 }
 
