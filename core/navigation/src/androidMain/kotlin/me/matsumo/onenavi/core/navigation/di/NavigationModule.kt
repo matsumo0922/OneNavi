@@ -152,7 +152,6 @@ val navigationModule: Module = module {
             voiceController = get(),
             rerouteDetector = get(),
             routeRepository = get(),
-            roadTypeGateway = get(),
         )
     }
     single<HttpClient>(qualifier = named("googleCloudTts")) {
