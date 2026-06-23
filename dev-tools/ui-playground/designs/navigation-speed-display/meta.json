@@ -1,4 +1,0 @@
-{
-  "title": "Navigation / 速度表示",
-  "description": "ナビ案内中の地図上に表示する現在速度と制限速度標識のモック。案内パネル、ETA カード、map controls と干渉しないよう、compact は案内パネル下の左寄せ、split は可視地図側の左上へ配置する。"
-}

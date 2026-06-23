@@ -10,7 +10,7 @@
 - route preview overlay
 - 複数 route candidate の表示
 - 渋滞 segment の route line 反映
-- route-compare dev tool による shape reproduction 検証
+- route shape reproduction 検証
 - provider 実名・旧 provider 参照の撤去
 
 ## Phase 2: Active Guidance
@@ -58,6 +58,6 @@
 | Risk | Impact | Mitigation |
 |---|---|---|
 | 外部API の provider 実名露出 | 法的・運用リスク | 外部API 提供元表記と公開 repo grep を徹底 |
-| Google Maps overlay と外部ルート形状の不一致 | ナビ体験低下 | route-compare で waypoint 戦略を検証 |
+| Google Maps overlay と外部ルート形状の不一致 | ナビ体験低下 | route shape reproduction で waypoint 戦略を検証 |
 | Cloud TTS 遅延 | 音声案内遅延 | cache と Android TTS fallback |
 | Android Auto 公開 API 制約 | Auto 対応遅延 | Phase 4 に分離して検証 |

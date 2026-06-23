@@ -71,7 +71,7 @@ Off-route detection
 | Service | Usage |
 |---|---|
 | Google Maps SDK | 地図表示、camera、route overlay |
-| Google Routes API | 料金取得、route-compare 検証、補助的な polyline 再現 |
+| Google Routes API | 料金取得、補助的な polyline 再現 |
 | Google Cloud TTS | 高品質な日本語音声 |
 | 外部API ライブラリ | ルート検索、案内、交通情報、案内画像 |
 

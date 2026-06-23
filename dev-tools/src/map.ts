@@ -26,7 +26,7 @@ export async function initMap(): Promise<void> {
   map = new Map(document.getElementById("map")!, {
     center: DEFAULT_CENTER,
     zoom: DEFAULT_ZOOM,
-    mapId: "fake-gps-map",
+    mapId: "dev-tools-map",
     gestureHandling: "greedy",
     disableDefaultUI: false,
     zoomControl: true,

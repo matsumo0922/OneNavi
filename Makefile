@@ -1,13 +1,11 @@
 #!/usr/bin/make -f
 
 SPEED ?= 60
-FAKE_GPS_DIR := dev-tools/fake-gps
+DEV_TOOLS_DIR := dev-tools
 # Vite dev server (GPS ブリッジ middleware を内包) のポート
-FAKE_GPS_PORT := 5173
-ROUTE_COMPARE_DIR := dev-tools/route-compare
-UI_PLAYGROUND_DIR := dev-tools/ui-playground
+DEV_TOOLS_PORT := 5173
 
-.PHONY: detekt dhu route-demo-1 clean-dhu ext-api-setup fake-gps fake-gps-setup fake-gps-dev fake-gps-status fake-gps-stop route-compare route-compare-setup route-compare-dev ui-playground ui-playground-setup ui-playground-dev
+.PHONY: detekt dhu route-demo-1 clean-dhu ext-api-setup dev-tools dev-tools-setup dev-tools-dev dev-tools-status dev-tools-stop
 
 detekt:
 	./gradlew detekt --auto-correct --continue
@@ -20,46 +18,22 @@ dhu:
 ext-api-setup:
 	scripts/setup_ext_api.sh
 
-# ── Fake GPS (Android Emulator) ──
+# ── Dev Tools (Android Emulator GPS) ──
 
-fake-gps-setup:
-	cd $(FAKE_GPS_DIR) && npm install
-	@if [ ! -f $(FAKE_GPS_DIR)/.env ]; then \
-		cp $(FAKE_GPS_DIR)/.env.example $(FAKE_GPS_DIR)/.env; \
-		echo "[fake-gps] .env created. Set VITE_GOOGLE_API_KEY in $(FAKE_GPS_DIR)/.env"; \
+dev-tools-setup:
+	cd $(DEV_TOOLS_DIR) && npm install
+	@if [ ! -f $(DEV_TOOLS_DIR)/.env ]; then \
+		cp $(DEV_TOOLS_DIR)/.env.example $(DEV_TOOLS_DIR)/.env; \
+		echo "[dev-tools] .env created. Set VITE_GOOGLE_API_KEY in $(DEV_TOOLS_DIR)/.env"; \
 	fi
 
-fake-gps-dev:
-	cd $(FAKE_GPS_DIR) && npx vite
+dev-tools-dev:
+	cd $(DEV_TOOLS_DIR) && npx vite
 
-fake-gps: fake-gps-setup fake-gps-dev
+dev-tools: dev-tools-setup dev-tools-dev
 
-fake-gps-status:
-	@curl -s --max-time 3 http://localhost:$(FAKE_GPS_PORT)/status | python3 -m json.tool 2>/dev/null || echo "[fake-gps] Not connected (dev server not running?)"
+dev-tools-status:
+	@curl -s --max-time 3 http://localhost:$(DEV_TOOLS_PORT)/status | python3 -m json.tool 2>/dev/null || echo "[dev-tools] Not connected (dev server not running?)"
 
-fake-gps-stop:
-	@curl -s --max-time 3 -X POST http://localhost:$(FAKE_GPS_PORT)/stop | python3 -m json.tool 2>/dev/null || echo "[fake-gps] Not connected"
-
-# ── Route Compare (debug) ──
-
-route-compare-setup:
-	cd $(ROUTE_COMPARE_DIR) && npm install
-	@if [ ! -f $(ROUTE_COMPARE_DIR)/.env ]; then \
-		cp $(ROUTE_COMPARE_DIR)/.env.example $(ROUTE_COMPARE_DIR)/.env; \
-		echo "[route-compare] .env created. Set VITE_GOOGLE_API_KEY in $(ROUTE_COMPARE_DIR)/.env"; \
-	fi
-
-route-compare-dev:
-	cd $(ROUTE_COMPARE_DIR) && npx vite
-
-route-compare: route-compare-setup route-compare-dev
-
-# ── UI Playground (design preview) ──
-
-ui-playground-setup:
-	cd $(UI_PLAYGROUND_DIR) && npm install
-
-ui-playground-dev:
-	cd $(UI_PLAYGROUND_DIR) && npx vite
-
-ui-playground: ui-playground-setup ui-playground-dev
+dev-tools-stop:
+	@curl -s --max-time 3 -X POST http://localhost:$(DEV_TOOLS_PORT)/stop | python3 -m json.tool 2>/dev/null || echo "[dev-tools] Not connected"

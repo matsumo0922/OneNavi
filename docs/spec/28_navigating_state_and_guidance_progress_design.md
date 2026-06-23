@@ -1341,7 +1341,7 @@ MapViewModel.handleNavigationStop
 
 ### 7.2 統合テスト（実機・手動 QA）
 
-- `docs/spec/15` の Fake GPS Dev Tool でドライブシミュレーション
+- `docs/spec/15` の dev-tools でドライブシミュレーション
 - 短距離（市街地）・中距離（高速混在）の 2 ルートで:
   - 自車マーカーが polyline 上に乗っているか（投影精度）
   - 次ターンバナーの距離が GPS tick に応じて減っていくか
@@ -1406,4 +1406,4 @@ projection モデルとして分離する。周辺コンポーネントが必要
 - `docs/spec/19_external_api_integration_plan.md` — 外部ライブラリ統合計画
 - `docs/spec/21_ext_api_guide_proto_and_announcement.md` — GP / 音声案内の設計
 - `docs/spec/24_new_guidance_manager_design.md` — `NewGuidanceManager` 全体設計（v2）
-- `docs/spec/15_fake_gps_dev_tool.md` — ドライブシミュレーション用 Fake GPS
+- `docs/spec/15_dev_tools.md` — ドライブシミュレーション用 dev-tools

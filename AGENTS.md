@@ -100,7 +100,6 @@ cd ../OneNavi-<task-slug>
 
 ## Dev Tools (`dev-tools/`)
 
-UI 確認・デバッグ用の独立した Vite ベース mini app 群（本番モジュールには非統合）。
+デバッグ用の独立した Vite ベース mini app（本番モジュールには非統合）。
 
-- `dev-tools/fake-gps`（`docs/spec/15_fake_gps_dev_tool.md`）
-- `dev-tools/route-compare`（`docs/spec/23_route_compare_dev_tool.md`）
+- `dev-tools`（`docs/spec/15_dev_tools.md`）

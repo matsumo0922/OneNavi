@@ -394,7 +394,7 @@ NewGuidanceManager.startGuidance(route: GoogleRoute)
 
 ### 8.2 統合テスト (実機・手動 QA)
 
-- 開発ツール (`docs/spec/23` の route-compare / `docs/spec/15` の Fake GPS) でドライブシミュレーション
+- 開発ツール (`docs/spec/15` の dev-tools) でドライブシミュレーション
 - shakuji-tsukuba ルートで GP の発話タイミング・callout 更新を目視
 - 意図的な逸脱で再探索 → polyline 差し替えを目視
 - 目的地到達で `Arrived` 状態になるか確認
@@ -446,5 +446,4 @@ NewGuidanceManager.startGuidance(route: GoogleRoute)
 - `docs/spec/19_external_api_integration_plan.md` — 外部ライブラリ統合計画
 - `docs/spec/21_ext_api_guide_proto_and_announcement.md` — GP / 音声案内の検討
 - `docs/spec/22_route_token_and_custom_navigator_evaluation.md` — Navigator 路線の評価 (v1 で採用したが v2 で廃止)
-- `docs/spec/23_route_compare_dev_tool.md` — Routes API による polyline 再現 (v1 で前提にしたが v2 で不要に)
-- `docs/spec/15_fake_gps_dev_tool.md` — ドライブシミュレーション用 Fake GPS
+- `docs/spec/15_dev_tools.md` — ドライブシミュレーション用 dev-tools

@@ -239,14 +239,12 @@ GPS 途絶中はフレームごとの推定 pose で滑らかに補間。古い 
 
 ## Dev Tools
 
-本番モジュールには統合されない、UI 確認・デバッグ用の独立した mini app 群です。
-開発のフィードバックループを短くするために自作しました（`make <name>` で起動）。
+本番モジュールには統合されない、デバッグ用の独立した mini app です。
+開発のフィードバックループを短くするために自作しました（`make dev-tools` で起動）。
 
 | ツール | 用途 |
 |---|---|
-| `dev-tools/fake-gps` | Emulator の gRPC `setGps` 経由で bearing / speed / satellites まで含めた GPS を注入し、**ルート走行をエミュレータ上でシミュレーション**。`adb emu geo fix` では bearing が固定されてしまう問題を回避。 |
-| `dev-tools/route-compare` | 案内データ源の polyline を Google Routes API で再現し、形状追従精度をブラウザで比較。 |
-| `dev-tools/ui-playground` | UI デザイン案を HTML モックとして一覧 / 詳細プレビュー。複数ビューポートで確認。 |
+| `dev-tools` | Emulator の gRPC `setGps` 経由で bearing / speed / satellites まで含めた GPS を注入し、**ルート走行をエミュレータ上でシミュレーション**。`adb emu geo fix` では bearing が固定されてしまう問題を回避。 |
 
 ## Contribute
 
