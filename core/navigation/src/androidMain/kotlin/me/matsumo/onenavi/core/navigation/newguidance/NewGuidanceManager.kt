@@ -10,7 +10,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +18,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import me.matsumo.onenavi.core.datasource.location.CurrentLocationDataSource
 import me.matsumo.onenavi.core.datasource.location.UserLocation
 import me.matsumo.onenavi.core.model.RoadClass
@@ -31,7 +29,6 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavProgressSnapshot
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDecision
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRerouteDetector
-import me.matsumo.onenavi.core.navigation.extnav.ExtNavRoadTypeGateway
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.extnav.RouteGeometryMath
 import me.matsumo.onenavi.core.navigation.extnav.RouteStopProgress
@@ -62,7 +59,6 @@ class NewGuidanceManager internal constructor(
     private val voiceController: VoiceAnnouncementController? = null,
     private val rerouteDetector: ExtNavRerouteDetector? = null,
     private val routeRepository: RouteRepository? = null,
-    private val roadTypeGateway: ExtNavRoadTypeGateway? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
 
@@ -89,18 +85,6 @@ class NewGuidanceManager internal constructor(
     private var didFlushUsableObservedLocation: Boolean = false
     private var lastObservedReceivedAtElapsedNanos: Long? = null
     private var lastUsableObservedAtElapsedNanos: Long? = null
-
-    @Volatile
-    private var roadTypeRequestJob: Job? = null
-
-    @Volatile
-    private var roadTypeOverride: RoadClassOverride? = null
-
-    @Volatile
-    private var lastRoadTypeRequestPoint: RoutePoint? = null
-
-    @Volatile
-    private var lastRoadTypeRequestWallClockMillis: Long? = null
 
     /** Guidance 期の現在状態。 */
     val state: StateFlow<GuidanceState> = _state.asStateFlow()
@@ -376,21 +360,16 @@ class NewGuidanceManager internal constructor(
         route: RouteDetail,
         snapshot: ExtNavProgressSnapshot,
     ): Boolean {
-        val adjustedSnapshot = GuidanceRoadClassOverride.apply(
-            snapshot = snapshot,
-            override = roadTypeOverride,
-            nowMillis = System.currentTimeMillis(),
-        )
         val activeRoute = currentRoute ?: route
-        val canCommitObservedProgress = adjustedSnapshot.positionSource == VehiclePositionSource.OBSERVED
-        if (canCommitObservedProgress && isDestinationReached(adjustedSnapshot)) {
+        val canCommitObservedProgress = snapshot.positionSource == VehiclePositionSource.OBSERVED
+        if (canCommitObservedProgress && isDestinationReached(snapshot)) {
             completeDestinationGuidance(route = activeRoute)
             return false
         }
 
         val updatedRoute = if (canCommitObservedProgress) {
             activeRoute.withPassedIntermediateWaypointsRemoved(
-                currentCumulativeMeters = adjustedSnapshot.currentCumulativeMeters,
+                currentCumulativeMeters = snapshot.currentCumulativeMeters,
             )
         } else {
             activeRoute
@@ -404,10 +383,10 @@ class NewGuidanceManager internal constructor(
 
         _state.value = GuidanceState.Guiding(
             route = updatedRoute,
-            progress = adjustedSnapshot.progress,
-            presentation = adjustedSnapshot.presentation,
+            progress = snapshot.progress,
+            presentation = snapshot.presentation,
         )
-        voiceController?.onSnapshot(adjustedSnapshot)
+        voiceController?.onSnapshot(snapshot)
         return true
     }
 
@@ -732,79 +711,6 @@ class NewGuidanceManager internal constructor(
             location = location,
             canSeedDeadReckoning = location.isUsableObservedLocation(),
         )
-        requestRoadTypeIfNeeded(location, sessionId)
-    }
-
-    /**
-     * 観測位置周辺の道路種別を必要に応じて取得する。
-     *
-     * API 呼び出しは throttle し、失敗しても tracker 由来の道路種別をそのまま使って案内を続ける。
-     *
-     * @param location 端末から得た位置
-     * @param sessionId この案内開始に対応する session id
-     */
-    private fun requestRoadTypeIfNeeded(
-        location: UserLocation,
-        sessionId: Long,
-    ) {
-        val gateway = roadTypeGateway ?: return
-        if (!location.isUsableObservedLocation()) return
-
-        val point = location.toRoutePoint()
-        val nowMillis = System.currentTimeMillis()
-        if (!shouldRequestRoadType(point, nowMillis)) return
-        if (roadTypeRequestJob?.isActive == true) return
-
-        lastRoadTypeRequestPoint = point
-        lastRoadTypeRequestWallClockMillis = nowMillis
-        roadTypeRequestJob = scope.launch {
-            val roadClass = fetchRoadClassOrNull(gateway, point) ?: return@launch
-            if (!isActiveSession(sessionId)) return@launch
-
-            roadTypeOverride = RoadClassOverride(
-                roadClass = roadClass,
-                coordinate = point,
-                updatedAtMillis = System.currentTimeMillis(),
-            )
-        }
-    }
-
-    /**
-     * 前回リクエスト位置・時刻から、道路種別 API を再取得すべきかを判定する。
-     */
-    private fun shouldRequestRoadType(point: RoutePoint, nowMillis: Long): Boolean {
-        val lastPoint = lastRoadTypeRequestPoint ?: return true
-        val lastRequestedAt = lastRoadTypeRequestWallClockMillis ?: return true
-        val elapsedMillis = nowMillis - lastRequestedAt
-        if (elapsedMillis >= ROAD_TYPE_REFRESH_INTERVAL_MILLIS) return true
-
-        val distanceMeters = RouteGeometryMath.haversineMetres(lastPoint, point)
-        return distanceMeters >= ROAD_TYPE_REFRESH_DISTANCE_METRES
-    }
-
-    /**
-     * 道路種別 API を呼び、失敗時は null に丸める。
-     */
-    private suspend fun fetchRoadClassOrNull(
-        gateway: ExtNavRoadTypeGateway,
-        point: RoutePoint,
-    ): RoadClass? {
-        return try {
-            withTimeout(ROAD_TYPE_REQUEST_TIMEOUT_MILLIS) {
-                gateway.fetchRoadClass(point)
-            }.getOrElse { cause ->
-                Napier.d(tag = TAG) { "Road type lookup failed: ${cause.message}" }
-                null
-            }
-        } catch (timeout: TimeoutCancellationException) {
-            Napier.d(tag = TAG, throwable = timeout) { "Road type lookup timed out" }
-            null
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (error: Throwable) {
-            Napier.d(tag = TAG, throwable = error) { "Road type lookup crashed" }
-            null
-        }
     }
 
     /**
@@ -851,11 +757,6 @@ class NewGuidanceManager internal constructor(
         collectingSessionId = null
         sessionJobs.forEach { job -> job.cancel() }
         sessionJobs = emptyList()
-        roadTypeRequestJob?.cancel()
-        roadTypeRequestJob = null
-        roadTypeOverride = null
-        lastRoadTypeRequestPoint = null
-        lastRoadTypeRequestWallClockMillis = null
         isSessionActive = false
         isTrackerAttached = false
         didFlushUsableObservedLocation = false
@@ -1022,12 +923,6 @@ class NewGuidanceManager internal constructor(
     private fun UserLocation.isUsableObservedLocation(): Boolean =
         accuracyMeters.isFinite() && accuracyMeters <= USABLE_LOCATION_ACCURACY_METRES
 
-    private fun UserLocation.toRoutePoint(): RoutePoint =
-        RoutePoint(
-            latitude = latitude,
-            longitude = longitude,
-        )
-
     /**
      * 案内中の非キャンセル例外を [GuidanceState.Failed] に変換する。
      *
@@ -1080,15 +975,6 @@ class NewGuidanceManager internal constructor(
 
         /** guidance request generation を進める加算値。 */
         const val GUIDANCE_REQUEST_GENERATION_INCREMENT = 1L
-
-        /** 道路種別 API の待ち時間上限。 */
-        const val ROAD_TYPE_REQUEST_TIMEOUT_MILLIS = 2_000L
-
-        /** 道路種別 API を時間で再取得する最小間隔。 */
-        const val ROAD_TYPE_REFRESH_INTERVAL_MILLIS = 10_000L
-
-        /** 道路種別 API を距離で再取得する最小移動距離。 */
-        const val ROAD_TYPE_REFRESH_DISTANCE_METRES = 80.0
 
         /** DR / GPS signal clock の tick 間隔。 */
         const val DR_TICK_INTERVAL_MILLIS = 200L

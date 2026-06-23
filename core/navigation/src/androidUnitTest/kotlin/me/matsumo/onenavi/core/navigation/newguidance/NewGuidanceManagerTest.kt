@@ -11,6 +11,8 @@ import kotlinx.coroutines.test.runTest
 import me.matsumo.drive.supporter.api.guidance.domain.DsrRouteSummary
 import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
 import me.matsumo.onenavi.core.datasource.location.UserLocation
+import me.matsumo.onenavi.core.model.RoadClass
+import me.matsumo.onenavi.core.model.RoadClassSegment
 import me.matsumo.onenavi.core.model.RouteDetail
 import me.matsumo.onenavi.core.model.RoutePoint
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
@@ -134,6 +136,50 @@ class NewGuidanceManagerTest {
         runCurrent()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `初期進捗の currentRoadClass は route geometry の先頭 roadClassSegments から決まる`() = runTest {
+        val route = buildHighwayRoute()
+        val manager = NewGuidanceManager(scope = this)
+
+        manager.startGuidance(route = route)
+        runCurrent()
+
+        val state = assertIs<GuidanceState.Guiding>(manager.state.value)
+        assertEquals(RoadClass.HIGHWAY, state.progress.currentRoadClass)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `案内中に位置 tick を投入しても currentRoadClass は route geometry 由来のまま維持される`() = runTest {
+        val route = buildHighwayRoute()
+        val routeRegistry = ExtNavRouteRegistry()
+        val tracker = ExtNavGuidanceTracker()
+        routeRegistry.put(
+            ExtNavRoutePayload(
+                id = route.id,
+                routeGuidance = buildRouteGuidance(),
+            ),
+        )
+        val manager = NewGuidanceManager(
+            routeRegistry = routeRegistry,
+            guidanceTracker = tracker,
+            scope = this,
+        )
+
+        manager.startGuidance(route = route)
+        runCurrent()
+        tracker.onLocation(locationAt(route.origin, speedMps = 30f))
+        runCurrent()
+
+        val state = assertIs<GuidanceState.Guiding>(manager.state.value)
+        // 道路種別 API polling が行われていないため、route geometry 由来の HIGHWAY がそのまま維持される。
+        assertEquals(RoadClass.HIGHWAY, state.progress.currentRoadClass)
+
+        manager.stopGuidance()
+        runCurrent()
+    }
+
     private fun buildRoute(): RouteDetail {
         val origin = RoutePoint(latitude = 35.0, longitude = 139.0)
         val destination = RoutePoint(latitude = 35.5, longitude = 139.5)
@@ -146,6 +192,29 @@ class NewGuidanceManagerTest {
             distanceMeters = 5_000.0,
             durationSeconds = 600.0,
             steps = persistentListOf(),
+        )
+    }
+
+    private fun buildHighwayRoute(): RouteDetail {
+        val origin = RoutePoint(latitude = 35.0, longitude = 139.0)
+        val destination = RoutePoint(latitude = 35.5, longitude = 139.5)
+        val geometry = persistentListOf(origin, destination)
+        return RouteDetail(
+            id = "route-highway",
+            origin = origin,
+            destination = destination,
+            intermediateWaypoints = persistentListOf(),
+            geometry = geometry,
+            distanceMeters = 5_000.0,
+            durationSeconds = 600.0,
+            steps = persistentListOf(),
+            roadClassSegments = persistentListOf(
+                RoadClassSegment(
+                    startPointIndex = 0,
+                    endPointIndex = geometry.lastIndex,
+                    roadClass = RoadClass.HIGHWAY,
+                ),
+            ),
         )
     }
 
