@@ -31,8 +31,7 @@ export class KeyboardController {
   }
 
   private onKeyDown = (event: KeyboardEvent): void => {
-    // テキスト入力中は無視
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+    if (this.shouldIgnoreKeyboardShortcut(event)) {
       return;
     }
 
@@ -56,6 +55,21 @@ export class KeyboardController {
       this.stopTick();
     }
   };
+
+  private shouldIgnoreKeyboardShortcut(event: KeyboardEvent): boolean {
+    return event.composedPath().some((eventTarget) => this.isEditableEventTarget(eventTarget));
+  }
+
+  private isEditableEventTarget(eventTarget: EventTarget): boolean {
+    if (!(eventTarget instanceof HTMLElement)) return false;
+
+    if (eventTarget instanceof HTMLInputElement) return true;
+    if (eventTarget instanceof HTMLTextAreaElement) return true;
+    if (eventTarget instanceof HTMLSelectElement) return true;
+    if (eventTarget.isContentEditable) return true;
+
+    return eventTarget.tagName.toLowerCase() === "gmp-place-autocomplete";
+  }
 
   private togglePause(): void {
     const state = this.engine.getState();
