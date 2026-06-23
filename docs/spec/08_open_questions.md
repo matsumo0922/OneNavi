@@ -38,7 +38,7 @@
 
 - **Status:** IN PROGRESS
 - **Question:** 外部API ライブラリの route geometry を Google Routes API / Google Maps overlay とどの粒度で一致させるか。
-- **Reference:** `docs/spec/23_route_compare_dev_tool.md`
+- **Reference:** `docs/logs/7_waypoint_polyline_alignment_investigation.md`
 - **Priority:** HIGH
 
 ### Q-003: Cloud TTS と Android TTS の切替条件

@@ -1,4 +1,0 @@
-{
-  "title": "Navigation / 下部 ETA カード",
-  "description": "ナビ案内中に画面下部へ表示する ETA カードのモック。残り時間・残り距離・到着時刻と操作ボタン（案内終了 / 別ルート / 経由地追加 / 迂回ルート / その他）を Material Icons 風で並べる。ETA 色は残ルート上の渋滞合計通過時間で 緑(<5分) / 黄(<15分) / 赤(>=15分) を出し分ける（葉アイコンは対象外）。phone-portrait=緑, phone-landscape=黄, tablet-portrait=赤, tablet-landscape=緑(広幅) で 3 状態を提示。"
-}

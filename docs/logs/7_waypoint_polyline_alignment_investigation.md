@@ -13,7 +13,7 @@
 
 ## これまでに確認済みの事実
 
-- `docs/spec/23_route_compare_dev_tool.md` には、外部API ライブラリ経由の route polyline は WGS84 として扱う前提が記録されている。
+- 過去の route comparison 調査では、外部API ライブラリ経由の route polyline は WGS84 として扱う前提で検証していた。
 - ライブデータでも、WGS84 入力かつ WGS84 指定で取得した polyline の先頭点は入力 origin 付近にあり、旧日本測地系から WGS84 へ追加変換すると約 400m 以上離れるケースを確認した。
 - したがって、現在の通常 route path に対して「旧日本測地系として追加変換する」仮説は棄却する。
 - 直前の修正では、exact origin / destination を dense polyline に混ぜ込む描画上の接続線を除去した。この修正は endpoint 周辺の直線混入には効くが、スクリーンショットで見える経由地ありルート全体の道路ズレを単独では説明しきれていない。

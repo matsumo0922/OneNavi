@@ -1,7 +1,7 @@
 import type { LatLng } from "./geo-utils";
 
 // Vite dev server に同居するブリッジ (vite.config.ts) の /routes エンドポイントと通信する。
-// 保存ルートは dev-tools/fake-gps/routes/ 配下に 1 ルート 1 JSON で永続化され git 管理できる。
+// 保存ルートは dev-tools/routes/ 配下に 1 ルート 1 JSON で永続化され git 管理できる。
 
 /** 保存済みルート 1 件。 */
 export interface SavedRoute {
