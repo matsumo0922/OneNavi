@@ -57,18 +57,43 @@ export class KeyboardController {
   };
 
   private shouldIgnoreKeyboardShortcut(event: KeyboardEvent): boolean {
-    return event.composedPath().some((eventTarget) => this.isEditableEventTarget(eventTarget));
+    const eventTargets = event.composedPath();
+    const activeElements = this.getActiveElements();
+    const hasEditableEventTarget = eventTargets.some((eventTarget) => this.isEditableEventTarget(eventTarget));
+    const hasEditableActiveElement = activeElements.some((activeElement) => this.isEditableElement(activeElement));
+
+    return hasEditableEventTarget || hasEditableActiveElement;
   }
 
   private isEditableEventTarget(eventTarget: EventTarget): boolean {
-    if (!(eventTarget instanceof HTMLElement)) return false;
+    if (!(eventTarget instanceof Element)) return false;
 
-    if (eventTarget instanceof HTMLInputElement) return true;
-    if (eventTarget instanceof HTMLTextAreaElement) return true;
-    if (eventTarget instanceof HTMLSelectElement) return true;
-    if (eventTarget.isContentEditable) return true;
+    return this.isEditableElement(eventTarget);
+  }
 
-    return eventTarget.tagName.toLowerCase() === "gmp-place-autocomplete";
+  private getActiveElements(): Element[] {
+    const activeElements: Element[] = [];
+    let activeElement = document.activeElement;
+
+    while (activeElement !== null) {
+      activeElements.push(activeElement);
+      activeElement = activeElement.shadowRoot?.activeElement ?? null;
+    }
+
+    return activeElements;
+  }
+
+  private isEditableElement(element: Element): boolean {
+    if (element instanceof HTMLInputElement) return true;
+    if (element instanceof HTMLTextAreaElement) return true;
+    if (element instanceof HTMLSelectElement) return true;
+    if (element instanceof HTMLElement && element.isContentEditable) return true;
+
+    const tagName = element.tagName.toLowerCase();
+    const isPlaceAutocomplete = tagName === "gmp-place-autocomplete" || tagName.includes("place-autocomplete");
+    if (isPlaceAutocomplete) return true;
+
+    return element.closest("#panel-search") !== null;
   }
 
   private togglePause(): void {

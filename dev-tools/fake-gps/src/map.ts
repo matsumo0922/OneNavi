@@ -30,6 +30,7 @@ export async function initMap(): Promise<void> {
     gestureHandling: "greedy",
     disableDefaultUI: false,
     zoomControl: true,
+    keyboardShortcuts: false,
     mapTypeControl: false,
     streetViewControl: false,
     fullscreenControl: false,
@@ -69,6 +70,7 @@ function initPlaceAutocomplete(): void {
   const autocompleteEl = new PlaceAutocompleteElement({}) as HTMLElement;
   autocompleteEl.id = "search-input";
   autocompleteEl.style.width = "100%";
+  protectAutocompleteKeyboardInput(autocompleteEl);
   searchContainer.appendChild(autocompleteEl);
 
   map.addListener("bounds_changed", () => {
@@ -93,6 +95,15 @@ function initPlaceAutocomplete(): void {
       });
     }
   });
+}
+
+function protectAutocompleteKeyboardInput(autocompleteEl: HTMLElement): void {
+  autocompleteEl.addEventListener("keydown", stopKeyboardEventPropagation);
+  autocompleteEl.addEventListener("keyup", stopKeyboardEventPropagation);
+}
+
+function stopKeyboardEventPropagation(event: KeyboardEvent): void {
+  event.stopPropagation();
 }
 
 export function onMapClick(callback: (latLng: LatLng) => void): void {
