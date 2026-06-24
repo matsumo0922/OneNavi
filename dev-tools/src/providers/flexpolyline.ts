@@ -12,31 +12,43 @@ for (let index = 0; index < ENCODING.length; index++) {
 }
 
 interface Decoder {
-  next(): number;
+  /** 符号なし varint を 1 つ読む（header 用。zigzag しない）。 */
+  nextUnsigned(): number;
+  /** 符号付き varint を 1 つ読む（座標デルタ用。zigzag する）。 */
+  nextSigned(): number;
   hasNext(): boolean;
 }
 
 function createDecoder(encoded: string): Decoder {
   let position = 0;
 
+  const readVarint = (): number => {
+    let result = 0;
+    let shift = 0;
+    let value: number;
+
+    do {
+      const charCode = encoded.charCodeAt(position++);
+      value = DECODING[charCode];
+      if (value === undefined) {
+        throw new Error(`flexpolyline: invalid char '${encoded[position - 1]}'`);
+      }
+      result |= (value & 0x1f) << shift;
+      shift += 5;
+    } while (value >= 0x20);
+
+    return result;
+  };
+
   return {
     hasNext(): boolean {
       return position < encoded.length;
     },
-    next(): number {
-      let result = 0;
-      let shift = 0;
-      let value: number;
-
-      do {
-        const charCode = encoded.charCodeAt(position++);
-        value = DECODING[charCode];
-        if (value === undefined) {
-          throw new Error(`flexpolyline: invalid char '${encoded[position - 1]}'`);
-        }
-        result |= (value & 0x1f) << shift;
-        shift += 5;
-      } while (value >= 0x20);
+    nextUnsigned(): number {
+      return readVarint();
+    },
+    nextSigned(): number {
+      const result = readVarint();
 
       // ZigZag decode
       return result & 1 ? ~(result >>> 1) : result >>> 1;
@@ -50,12 +62,12 @@ export function decodeFlexiblePolyline(encoded: string): LatLng[] {
 
   const decoder = createDecoder(encoded);
 
-  // header (version + content)
-  const version = decoder.next();
+  // header (version + content) は符号なし varint
+  const version = decoder.nextUnsigned();
   if (version !== 1) {
     throw new Error(`flexpolyline: unsupported version ${version}`);
   }
-  const headerContent = decoder.next();
+  const headerContent = decoder.nextUnsigned();
   const precision = headerContent & 0x0f;
   const thirdDim = (headerContent >> 4) & 0x07;
 
@@ -66,9 +78,9 @@ export function decodeFlexiblePolyline(encoded: string): LatLng[] {
   let lng = 0;
 
   while (decoder.hasNext()) {
-    lat += decoder.next();
-    lng += decoder.next();
-    if (thirdDim) decoder.next(); // 3rd dimension は捨てる
+    lat += decoder.nextSigned();
+    lng += decoder.nextSigned();
+    if (thirdDim) decoder.nextSigned(); // 3rd dimension は捨てる
 
     coordinates.push({ lat: lat / latLngFactor, lng: lng / latLngFactor });
   }
