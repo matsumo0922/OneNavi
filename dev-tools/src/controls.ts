@@ -3,6 +3,7 @@ import type {LatLng} from "./geo-utils";
 import {parseGpx} from "./gpx-parser";
 import {getStatus} from "./connection";
 import {deleteRoute, listRoutes, saveRoute, type SavedRoute} from "./routes";
+import {activeProvider, setActiveProvider, type ProviderId} from "./providers";
 import {
   clearRoute,
   findRoute,
@@ -46,6 +47,7 @@ export class ControlsManager {
     this.bindPlaybackButtons();
     this.bindSpeedButtons();
     this.bindRateButtons();
+    this.bindProviderToggle();
     this.bindWaypointButtons();
     this.bindSavedRoutes();
     this.bindGpxImport();
@@ -115,6 +117,37 @@ export class ControlsManager {
         }
       });
     }
+  }
+
+  private bindProviderToggle(): void {
+    const toggle = document.getElementById("provider-toggle");
+    if (!toggle) return;
+
+    const buttons = toggle.querySelectorAll<HTMLButtonElement>(".provider-btn");
+    const syncActive = (): void => {
+      const current = activeProvider().id;
+      for (const button of buttons) {
+        button.classList.toggle("active", button.dataset.provider === current);
+      }
+      document.documentElement.style.setProperty("--provider-accent", activeProvider().accent);
+    };
+
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        const id = button.dataset.provider as ProviderId;
+        if (id === activeProvider().id) return;
+
+        setActiveProvider(id);
+        syncActive();
+
+        // 既にルートが引かれていれば、新プロバイダで即引き直す
+        if (this.waypoints.length >= 2) {
+          void this.startRouteSimulation();
+        }
+      });
+    }
+
+    syncActive();
   }
 
   private bindWaypointButtons(): void {
@@ -265,12 +298,15 @@ export class ControlsManager {
     if (this.waypoints.length < 2) return;
 
     try {
-      const path = await findRoute(this.waypoints);
-      if (path.length >= 2) {
-        this.engine.startRoute(path);
+      const result = await findRoute(this.waypoints);
+      if (result.coords.length >= 2) {
+        this.engine.startRoute(result.coords);
       }
     } catch (error) {
       console.error("Route search failed:", error);
+      window.alert(
+        `ルート探索に失敗しました\n${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 

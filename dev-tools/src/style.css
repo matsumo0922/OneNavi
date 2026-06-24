@@ -578,11 +578,267 @@ body {
 }
 
 /* ── Scrollbar ─────────────────────────────── */
-#panel::-webkit-scrollbar {
+#panel::-webkit-scrollbar,
+.bench-body::-webkit-scrollbar,
+.bench-output::-webkit-scrollbar {
   width: 5px;
 }
 
-#panel::-webkit-scrollbar-thumb {
+#panel::-webkit-scrollbar-thumb,
+.bench-body::-webkit-scrollbar-thumb {
   background: #ccd1d8;
   border-radius: 3px;
+}
+
+.bench-output::-webkit-scrollbar-thumb {
+  background: #39414c;
+  border-radius: 3px;
+}
+
+/* ── Route provider toggle ─────────────────── */
+/* アクティブなプロバイダの色 = 地図のルート線の色（提供元を色で示す）。 */
+.provider-toggle {
+  display: flex;
+  gap: 5px;
+  background: var(--bg-inset);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+}
+
+.provider-btn {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 7px 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.provider-btn:not(.active):hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.provider-btn[data-provider="google"].active {
+  background: #4285f4;
+  color: #ffffff;
+}
+
+.provider-btn[data-provider="here"].active {
+  background: #00afaa;
+  color: #ffffff;
+}
+
+/* Find route はアクティブ provider の色（押した先のルート線と同色）。 */
+#btn-find-route {
+  background: var(--provider-accent, var(--primary));
+}
+
+#btn-find-route:hover {
+  background: var(--provider-accent, var(--primary));
+  filter: brightness(0.93);
+}
+
+/* ── API Bench ─────────────────────────────── */
+.bench {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 360px;
+  max-height: calc(100vh - 28px);
+  background: var(--bg-panel);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bench-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.bench-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.bench-title em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: #00afaa;
+  margin-left: 5px;
+  letter-spacing: 0.6px;
+}
+
+.bench-toggle {
+  border: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--bg-inset);
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.bench-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.bench-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px 14px;
+  overflow-y: auto;
+}
+
+.bench.collapsed .bench-body {
+  display: none;
+}
+
+.bench-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bench-chip {
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.bench-chip:hover {
+  background: var(--bg-hover);
+}
+
+.bench-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+
+.bench-label span {
+  margin-left: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.bench-url {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  background: var(--bg-inset);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.bench-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.bench-actions .btn {
+  flex: 1;
+}
+
+.bench-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.bench-pill {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.bench-pill.ok {
+  background: rgba(52, 168, 83, 0.15);
+  color: var(--green);
+}
+
+.bench-pill.err {
+  background: rgba(234, 67, 53, 0.15);
+  color: var(--red);
+}
+
+.bench-pill.warn {
+  background: rgba(251, 188, 5, 0.18);
+  color: #b8860b;
+}
+
+.bench-meta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* JSON 出力だけはダークなターミナル面（生 API の手触り）。 */
+.bench-output {
+  margin: 0;
+  background: #0e1116;
+  color: #c7d2da;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  max-height: 42vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bench-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* 画面が狭い時は bench を左パネルの下へ回す。 */
+@media (max-width: 820px) {
+  .bench {
+    left: 14px;
+    right: 14px;
+    width: auto;
+    top: auto;
+    bottom: 14px;
+    max-height: 50vh;
+  }
 }

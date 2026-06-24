@@ -21,6 +21,10 @@
 
       <section class="card">
         <div class="card-title">Route</div>
+        <div class="provider-toggle" id="provider-toggle" role="group" aria-label="Route provider">
+          <button class="provider-btn" data-provider="google">Google</button>
+          <button class="provider-btn" data-provider="here">HERE</button>
+        </div>
         <div id="waypoint-list" class="waypoint-list"></div>
         <p class="hint">地図をタップ、または検索で地点を追加</p>
         <div class="btn-group">
@@ -97,6 +101,27 @@
         <span><kbd>Space</kbd> Pause / Resume</span>
       </footer>
     </div>
+
+    <aside id="api-bench" class="bench collapsed">
+      <header class="bench-header">
+        <span class="bench-title">API Bench <em>HERE</em></span>
+        <button id="bench-toggle" class="bench-toggle" aria-label="Toggle API bench">&#9776;</button>
+      </header>
+      <div class="bench-body">
+        <div id="bench-presets" class="bench-presets"></div>
+        <label class="bench-label" for="bench-url">
+          Endpoint <span>apikey は自動付与</span>
+        </label>
+        <textarea id="bench-url" class="bench-url" rows="4" spellcheck="false"></textarea>
+        <div class="bench-actions">
+          <button id="bench-send" class="btn btn-primary">Send</button>
+          <button id="bench-plot" class="btn btn-ghost">Plot</button>
+          <button id="bench-clear-plot" class="btn btn-ghost">Clear plot</button>
+        </div>
+        <div id="bench-status" class="bench-status"></div>
+        <pre id="bench-output" class="bench-output">// Send でレスポンスを表示</pre>
+      </div>
+    </aside>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
