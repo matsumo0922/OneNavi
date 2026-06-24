@@ -123,6 +123,27 @@ Status の `● Connected` は、ブリッジが discovery ini から実行中 E
   どちらの経路かが色で分かる。トグルの選択中ボタンも同じ色。
 - ルート表示中に provider を切り替えると、同じ waypoints で即座に引き直す。
 
+### ルートオプション (HERE)
+
+HERE Routing v8 (GET /routes) の全共通オプションを Route カード内の「HERE options」折りたたみ
+セクションで編集できる。値は `localStorage` に永続化し、次回 Find route 時に反映する。
+
+- **スキーマ駆動**: オプションは宣言的スキーマ (`options/here-routing-schema.ts`) で定義し、
+  汎用フォーム (`options/form.ts`) がコントロール種別ごとに UI を生成する。**この仕組みは
+  ルート検索と API Bench で共通利用できる**（将来 Bench からも同じフォームで編集可能にする）。
+- **コントロール種別**: enum 単一 → `select`、enum 複数 → トグルチップ (`multiselect`)、
+  真偽 → チェックボックス、数値 → number 入力、自由入力 → text 入力。
+- **対象オプション**（car ナビ用途中心の共通セット）: `transportMode` / `routingMode` /
+  `alternatives` / `units` / `lang` / `departureTime` / `arrivalTime` / `traffic[mode]` /
+  `avoid[features]` / `avoid[zoneCategories]` / `avoid[areas]` / `exclude[countries]` /
+  `return` / `spans` / `currency` / `vehicle[*]`（トラック寸法）/ `pedestrian[speed]` /
+  `scooter[allowHighway]` / `taxi[allowDriveThroughTaxiRoads]` / `billingTag`。
+  EV / fuel / driver / networkRestrictedTruck の深いネストは対象外。
+- **直列化**: `options/query.ts` が値を URL クエリへ反映（空・未設定は送らない、multiselect は
+  `,` 結合、boolean は true のみ送出）。`polyline` / `summary` は描画に必須なので provider が
+  `return` に常時付与する（ユーザー選択と和集合）。
+- **既定値**: 未設定の `transportMode` は car、未設定の `lang` は ja-JP を provider が補う。
+
 ### API Bench
 
 HERE の各 REST API を直接叩いて JSON を確認し、ジオメトリを地図へ重ねる開発用プレイグラウンド
@@ -327,6 +348,12 @@ dev-tools/
     │   ├── google.ts        ← Google Directions プロバイダ
     │   ├── here.ts          ← HERE Routing v8 プロバイダ
     │   └── flexpolyline.ts  ← HERE flexible polyline デコーダ
+    ├── options/
+    │   ├── types.ts                ← 汎用オプションスキーマ型
+    │   ├── here-routing-schema.ts  ← HERE Routing v8 オプション定義
+    │   ├── form.ts                 ← スキーマ駆動の汎用フォーム (共通)
+    │   ├── query.ts                ← 値→クエリ直列化 (共通)
+    │   └── store.ts                ← オプション値の永続化
     └── style.css            ← スタイル
 ```
 

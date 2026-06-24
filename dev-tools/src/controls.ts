@@ -4,6 +4,9 @@ import {parseGpx} from "./gpx-parser";
 import {getStatus} from "./connection";
 import {deleteRoute, listRoutes, saveRoute, type SavedRoute} from "./routes";
 import {activeProvider, setActiveProvider, type ProviderId} from "./providers";
+import {createOptionsForm} from "./options/form";
+import {HERE_ROUTING_GROUPS} from "./options/here-routing-schema";
+import {getHereRoutingOptions, setHereRoutingOptions} from "./options/store";
 import {
   clearRoute,
   findRoute,
@@ -48,6 +51,7 @@ export class ControlsManager {
     this.bindSpeedButtons();
     this.bindRateButtons();
     this.bindProviderToggle();
+    this.bindRouteOptions();
     this.bindWaypointButtons();
     this.bindSavedRoutes();
     this.bindGpxImport();
@@ -148,6 +152,28 @@ export class ControlsManager {
     }
 
     syncActive();
+  }
+
+  /**
+   * HERE ルート検索オプションの編集フォームを構築し、折りたたみを制御する。
+   */
+  private bindRouteOptions(): void {
+    const body = document.getElementById("route-options-body");
+    const toggle = document.getElementById("route-options-toggle");
+    if (!body || !toggle) return;
+
+    const form = createOptionsForm(
+      HERE_ROUTING_GROUPS,
+      getHereRoutingOptions(),
+      (values) => setHereRoutingOptions(values),
+    );
+    body.appendChild(form.element);
+
+    toggle.addEventListener("click", () => {
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!expanded));
+      body.hidden = expanded;
+    });
   }
 
   private bindWaypointButtons(): void {

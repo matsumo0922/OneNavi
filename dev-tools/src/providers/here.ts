@@ -1,9 +1,15 @@
 import type { LatLng } from "../geo-utils";
 import { callHere } from "../here";
+import { HERE_ROUTING_FIELDS } from "../options/here-routing-schema";
+import { applyOptionValues } from "../options/query";
+import { getHereRoutingOptions } from "../options/store";
 import { decodeFlexiblePolyline } from "./flexpolyline";
 import type { ProviderRouteResult, RouteProvider } from "./types";
 
 const ROUTING_V8_URL = "https://router.hereapi.com/v8/routes";
+
+/** 描画・距離算出に必須で、ユーザー設定に関わらず常時付与する return 値。 */
+const FORCED_RETURN = ["polyline", "summary"];
 
 /** HERE Routing v8 のセクション形状（必要分のみ）。 */
 interface HereSection {
@@ -34,11 +40,18 @@ export class HereRouteProvider implements RouteProvider {
     url.searchParams.set("transportMode", "car");
     url.searchParams.set("origin", `${origin.lat},${origin.lng}`);
     url.searchParams.set("destination", `${destination.lat},${destination.lng}`);
-    url.searchParams.set("return", "polyline,summary");
-    url.searchParams.set("lang", "ja-JP");
     for (const via of vias) {
       url.searchParams.append("via", `${via.lat},${via.lng}`);
     }
+
+    // ユーザー設定オプションを反映（transportMode / return 等を上書きしうる）
+    applyOptionValues(url, getHereRoutingOptions(), HERE_ROUTING_FIELDS);
+
+    if (!url.searchParams.has("lang")) {
+      url.searchParams.set("lang", "ja-JP");
+    }
+
+    applyForcedReturn(url);
 
     const result = await callHere(url.toString());
     if (!result.ok) {
@@ -56,6 +69,18 @@ export class HereRouteProvider implements RouteProvider {
 
     return { coords, distanceMeters, durationSeconds, raw: result.json };
   }
+}
+
+/** return に polyline / summary を必ず含める（ユーザー選択と和集合を取る）。 */
+function applyForcedReturn(url: URL): void {
+  const current = (url.searchParams.get("return") ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const merged = new Set([...current, ...FORCED_RETURN]);
+
+  url.searchParams.set("return", [...merged].join(","));
 }
 
 function decodeSections(sections: HereSection[]): LatLng[] {

@@ -644,6 +644,153 @@ body {
   filter: brightness(0.93);
 }
 
+/* ── Options (schema-driven form) ──────────── */
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.options-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.options-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.options-caret {
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+.options-toggle[aria-expanded="true"] .options-caret {
+  transform: rotate(90deg);
+}
+
+.opt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.opt-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.opt-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.opt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.opt-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.opt-unit {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.opt-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.opt-control {
+  font-family: inherit;
+}
+
+.opt-select,
+.opt-input {
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.opt-select:focus,
+.opt-input:focus {
+  outline: none;
+  border-color: var(--provider-accent, var(--primary));
+}
+
+.opt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.opt-chip {
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.opt-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.opt-chip.active {
+  background: var(--provider-accent, var(--primary));
+  border-color: var(--provider-accent, var(--primary));
+  color: #fff;
+}
+
+.opt-check {
+  width: 34px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--provider-accent, var(--primary));
+  align-self: flex-start;
+}
+
 /* ── API Bench ─────────────────────────────── */
 .bench {
   position: absolute;
