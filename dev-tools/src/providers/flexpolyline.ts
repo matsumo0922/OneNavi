@@ -4,7 +4,7 @@ import type { LatLng } from "../geo-utils";
 // 仕様: https://github.com/heremaps/flexible-polyline
 // 外部依存を増やさないため最小実装で持つ。
 
-const ENCODING = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
+const ENCODING = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 const DECODING: Record<number, number> = {};
 for (let index = 0; index < ENCODING.length; index++) {
@@ -22,9 +22,11 @@ interface Decoder {
 function createDecoder(encoded: string): Decoder {
   let position = 0;
 
+  // 32-bit シフトのオーバーフローを避けるため累積は乗算で行う
+  // （高精度ポリラインでは値が 2^31 を超えるため）。
   const readVarint = (): number => {
     let result = 0;
-    let shift = 0;
+    let multiplier = 1;
     let value: number;
 
     do {
@@ -33,8 +35,8 @@ function createDecoder(encoded: string): Decoder {
       if (value === undefined) {
         throw new Error(`flexpolyline: invalid char '${encoded[position - 1]}'`);
       }
-      result |= (value & 0x1f) << shift;
-      shift += 5;
+      result += (value & 0x1f) * multiplier;
+      multiplier *= 32;
     } while (value >= 0x20);
 
     return result;
@@ -50,8 +52,8 @@ function createDecoder(encoded: string): Decoder {
     nextSigned(): number {
       const result = readVarint();
 
-      // ZigZag decode
-      return result & 1 ? ~(result >>> 1) : result >>> 1;
+      // ZigZag decode（ビット演算を使わず 2^53 までの値を扱う）
+      return result % 2 === 1 ? -(result + 1) / 2 : result / 2;
     },
   };
 }
