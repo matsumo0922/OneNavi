@@ -984,7 +984,6 @@ body {
   bottom: 14px;
   left: 324px;
   right: 14px;
-  max-height: 46vh;
   background: var(--bg-panel);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -995,6 +994,34 @@ body {
 }
 
 .detail.hidden {
+  display: none;
+}
+
+/* 上端のドラッグハンドルで高さ調節 */
+.detail-resize {
+  flex-shrink: 0;
+  height: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.detail-resize::before {
+  content: "";
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  transition: background 0.12s;
+}
+
+.detail-resize:hover::before {
+  background: var(--text-muted);
+}
+
+.detail.collapsed .detail-resize {
   display: none;
 }
 

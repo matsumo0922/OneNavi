@@ -105,13 +105,23 @@ const SPEED_COLORS = {
   traffic: "#00afaa",
 } as const;
 
+/** body 高さ永続化キー。 */
+const HEIGHT_STORAGE_KEY = "onenavi-dev-detail-height";
+
+/** body 高さの既定値 (px)。 */
+const DEFAULT_BODY_HEIGHT = 260;
+
+/** body 高さの下限 (px)。 */
+const MIN_BODY_HEIGHT = 140;
+
 let panel: HTMLElement | null = null;
 let body: HTMLElement | null = null;
 let activeTab: DetailTab = "summary";
 let lastSections: HereSection[] = [];
 let lastRaw: unknown = null;
+let bodyHeight = restoreBodyHeight();
 
-/** 詳細パネルを初期化する（タブ・折りたたみのバインド）。 */
+/** 詳細パネルを初期化する（タブ・折りたたみ・高さ調節のバインド）。 */
 export function initRouteDetail(): void {
   panel = document.getElementById("route-detail");
   body = document.getElementById("detail-body");
@@ -119,7 +129,9 @@ export function initRouteDetail(): void {
 
   bindTabs();
   bindCollapse();
-  bindResize();
+  bindHeightResize();
+  bindWindowResize();
+  applyBodyHeight();
 }
 
 /** HERE レスポンスを解析し、詳細パネルを表示する。 */
@@ -157,12 +169,72 @@ function bindCollapse(): void {
   });
 }
 
-function bindResize(): void {
+function bindWindowResize(): void {
   window.addEventListener("resize", () => {
-    if (activeTab === "graph" && panel && !panel.classList.contains("hidden")) {
-      renderActiveTab();
-    }
+    if (panel?.classList.contains("hidden")) return;
+
+    // ビューポート縮小時に高さを収め直し、graph はサイズ追従で再描画
+    applyBodyHeight();
+    if (activeTab === "graph") renderActiveTab();
   });
+}
+
+/** 上端ハンドルのドラッグで body 高さを調節する。 */
+function bindHeightResize(): void {
+  const handle = document.getElementById("detail-resize");
+  if (!handle || !body) return;
+
+  handle.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+
+    const startY = event.clientY;
+    const startHeight = body!.clientHeight;
+
+    const onMove = (moveEvent: PointerEvent): void => {
+      // ハンドルは上端なので、上方向ドラッグ（Y 減少）で高くする
+      bodyHeight = startHeight + (startY - moveEvent.clientY);
+      applyBodyHeight();
+      if (activeTab === "graph") renderActiveTab();
+    };
+
+    const onUp = (): void => {
+      handle.releasePointerCapture(event.pointerId);
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      persistBodyHeight();
+    };
+
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+  });
+}
+
+function applyBodyHeight(): void {
+  if (body) body.style.height = `${clampBodyHeight(bodyHeight)}px`;
+}
+
+function clampBodyHeight(height: number): number {
+  const max = Math.max(MIN_BODY_HEIGHT, window.innerHeight - 120);
+  return Math.min(max, Math.max(MIN_BODY_HEIGHT, Math.round(height)));
+}
+
+function persistBodyHeight(): void {
+  bodyHeight = clampBodyHeight(bodyHeight);
+  try {
+    localStorage.setItem(HEIGHT_STORAGE_KEY, String(bodyHeight));
+  } catch {
+    // localStorage が使えない環境は無視
+  }
+}
+
+function restoreBodyHeight(): number {
+  try {
+    const stored = Number(localStorage.getItem(HEIGHT_STORAGE_KEY));
+    return Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_BODY_HEIGHT;
+  } catch {
+    return DEFAULT_BODY_HEIGHT;
+  }
 }
 
 function collectSections(raw: unknown): HereSection[] {
