@@ -8,8 +8,20 @@ import type { ProviderRouteResult, RouteProvider } from "./types";
 
 const ROUTING_V8_URL = "https://router.hereapi.com/v8/routes";
 
-/** 描画・距離算出に必須で、ユーザー設定に関わらず常時付与する return 値。 */
-const FORCED_RETURN = ["polyline", "summary"];
+/** 描画・距離算出・詳細表示に必須で、ユーザー設定に関わらず常時付与する return 値。 */
+const FORCED_RETURN = ["polyline", "summary", "actions", "instructions", "travelSummary", "tolls"];
+
+/** 詳細パネル（speed graph 等）に必須で常時付与する spans 値。 */
+const FORCED_SPANS = [
+  "length",
+  "duration",
+  "baseDuration",
+  "speedLimit",
+  "maxSpeed",
+  "dynamicSpeedInfo",
+  "functionalClass",
+  "names",
+];
 
 /** HERE Routing v8 のセクション形状（必要分のみ）。 */
 interface HereSection {
@@ -50,8 +62,12 @@ export class HereRouteProvider implements RouteProvider {
     if (!url.searchParams.has("lang")) {
       url.searchParams.set("lang", "ja-JP");
     }
+    if (!url.searchParams.has("currency")) {
+      url.searchParams.set("currency", "JPY");
+    }
 
-    applyForcedReturn(url);
+    mergeCsvParam(url, "return", FORCED_RETURN);
+    mergeCsvParam(url, "spans", FORCED_SPANS);
 
     const result = await callHere(url.toString());
     if (!result.ok) {
@@ -71,16 +87,16 @@ export class HereRouteProvider implements RouteProvider {
   }
 }
 
-/** return に polyline / summary を必ず含める（ユーザー選択と和集合を取る）。 */
-function applyForcedReturn(url: URL): void {
-  const current = (url.searchParams.get("return") ?? "")
+/** CSV 形式のクエリパラメータに、必須値をユーザー選択と和集合で必ず含める。 */
+function mergeCsvParam(url: URL, key: string, forced: readonly string[]): void {
+  const current = (url.searchParams.get(key) ?? "")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
 
-  const merged = new Set([...current, ...FORCED_RETURN]);
+  const merged = new Set([...current, ...forced]);
 
-  url.searchParams.set("return", [...merged].join(","));
+  url.searchParams.set(key, [...merged].join(","));
 }
 
 function decodeSections(sections: HereSection[]): LatLng[] {

@@ -7,6 +7,7 @@ import {activeProvider, setActiveProvider, type ProviderId} from "./providers";
 import {createOptionsForm} from "./options/form";
 import {HERE_ROUTING_GROUPS} from "./options/here-routing-schema";
 import {getHereRoutingOptions, setHereRoutingOptions} from "./options/store";
+import {hideRouteDetail, showRouteDetail} from "./route-detail";
 import {
   clearRoute,
   findRoute,
@@ -183,6 +184,7 @@ export class ControlsManager {
 
     document.getElementById("btn-clear")!.addEventListener("click", () => {
       hideRoutePointCallout();
+      hideRouteDetail();
       this.waypoints = [];
       this.saveWaypoints();
       this.engine.stop();
@@ -327,6 +329,13 @@ export class ControlsManager {
       const result = await findRoute(this.waypoints);
       if (result.coords.length >= 2) {
         this.engine.startRoute(result.coords);
+      }
+
+      // 詳細パネルは HERE 固有データ（spans/tolls/snaps）を扱うため HERE 時のみ表示
+      if (activeProvider().id === "here") {
+        showRouteDetail(result.raw);
+      } else {
+        hideRouteDetail();
       }
     } catch (error) {
       console.error("Route search failed:", error);
