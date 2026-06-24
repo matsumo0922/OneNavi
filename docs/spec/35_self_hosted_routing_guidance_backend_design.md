@@ -533,6 +533,13 @@ data class Guidance(
 
 ```kotlin
 data class RouteGuidance(
+    /**
+     * [新backendでのadditive field（§8.3.2）] 候補ルート1本の安定ID。
+     * server が `sha256(routeCandidateId + requestHash)` で確定して返す。
+     * `ServerRouteDataSource` はこれを `RouteDetail.id` へコピーし、registry key にも使う。
+     * 旧backend（ZIP由来）では未提供のため nullable / default で互換を保つ。
+     */
+    val routePackageId: String? = null,
     /** ZIP 内のルートインデックス (1, 2, 3, ...)。`RSROUTE1/ROUTE<index>/` に対応 */
     val index: Int,
     /**
@@ -1478,8 +1485,11 @@ data class RouteProjection(
 #### 8.3.2 routePackageId（候補1本＝RouteDetail.id / registry key）
 
 - `RouteDetail.id` = `routePackageId`。app registryのkeyもこれ。同一形でも出発時刻/traffic/options違いは別パッケージ＝別IDになり、registryが内容を取り違えない。
-- **DB cache PKには使わない。** `route_cache`のPKは`cache_id`（§15.2、レスポンス単位）。`requestHash`は§17.3で`cache_id`へ畳む。`routePackageId`はguidance_jsonの中（各候補）に入る。
-- `RouteDetail`に`routeCandidateId`等の新fieldは足さない。Androidが持つルートIDは`RouteDetail.id`（=routePackageId）のみ。
+- **serverが計算してwireに載せる。** `routePackageId`はserver側で`sha256(routeCandidateId + requestHash)`として確定し、**`RouteGuidance`へ追加するfield `routePackageId: String`**で各候補に付けて返す。`ServerRouteDataSource`は`RouteGuidance.routePackageId`を**そのまま`RouteDetail.id`へコピー**する。
+  - **client側で再計算しない。** geometry fingerprint / requestHash の canonicalization をAndroidとserverで二重実装すると必ずズレる。算出はserver一箇所に閉じ、Androidは受け取った値を使うだけ。
+  - これは`RouteGuidance`（nav-core wire model）への**唯一のadditive field追加**。既存の`index`/`priority`等は不変で、tracker/voiceは新fieldを読まない（無視で動く）。旧`routeIdFor(priority?.name ?: "route-$index")`へは戻さない。
+- **DB cache PKには使わない。** `route_cache`のPKは`cache_id`（§15.2、レスポンス単位）。`requestHash`は§17.3で`cache_id`へ畳む。`routePackageId`はguidance_jsonの中（各候補の`RouteGuidance.routePackageId`）に入る。
+- `RouteDetail`側には新fieldを足さない（`id`に`routePackageId`を入れるだけ）。`routeCandidateId`はwireに出さない（§8.3.1）。
 
 #### 8.3.3 要素 stable ID
 
@@ -1830,7 +1840,7 @@ data class DecisionPointSemantic(
 
 | `Congestion.transitMinutes` : `Int?` | HANDOFF-PLAN §3対応表 + 正規化コンテキスト | field名だけで推測せず、モデル契約テストに固定したmapperで明示代入する。 | 欠損可否を型とgolden sampleで確定し、null/empty/UNKNOWNを使い分ける。 |
 
-| `RouteDetail.id` : `String` | `routePackageId`（§8.3.2） | `sha256(routeCandidateId + requestHash)`。同一形でも出発時刻/traffic/options違いは別ID。app registry keyと同一値。**DB cache PK（`cache_id`）とは別物**。 | 形の同一性照合はserver内部の`routeCandidateId`で行い、wireへは出さない（RouteDetailにshape比較用fieldを足さない）。外部プロバイダの一時IDをwireへ露出しない。 |
+| `RouteDetail.id` : `String` | `RouteGuidance.routePackageId`（serverがwireで提供、§8.3.2） | server計算の`sha256(routeCandidateId + requestHash)`をそのままコピー。client再計算しない。app registry keyと同一値。**DB cache PK（`cache_id`）とは別物**。 | server未提供（旧backend）時のみ暫定fallback。形の同一性照合はserver内部の`routeCandidateId`で行いwireへ出さない。 |
 
 | `RouteDetail.origin` : `RoutePoint` | HANDOFF-PLAN §3対応表 + 正規化コンテキスト | field名だけで推測せず、モデル契約テストに固定したmapperで明示代入する。 | 欠損可否を型とgolden sampleで確定し、null/empty/UNKNOWNを使い分ける。 |
 
@@ -2668,6 +2678,7 @@ requestHash = SHA-256(
 7. 案内画像gateway（`ExtNavGuideImageGateway`）の**内部fetch先を新serverへ向け替える**（型・signatureは不変、major/minor surrogate維持）。中立interface化を選ぶ場合のみ`MapViewModel`の依存差し替えが入る（TODO-19）。junction asset prefetchは既存image cache境界をそのまま使う。
 8. reroute requestのcurrent/remaining points生成（既存rerouteフロー内）。**traffic refresh専用配線はS1〜S3では追加しない**。S4で入れる場合は§19.0の選択に従い消費層追加（TODO-20）。
 9. **複数候補の要求リストを`ServerRouteDataSource`内部で固定**する。現行`ExtNavRouteDataSource`は`priorities = {Recommended, AvoidCongestion, Express, Free}`をhardcodeしており、`searchRoutes`境界にpriority引数は無い。`ServerRouteDataSource`も同じ既定`requestedPriorities`（`RouteOptions`へ`[RECOMMENDED, AVOID_CONGESTION, EXPRESS, FREE]`）を必ず組み、複数候補を返す。設定で可変にする場合もdefaultはこの4種とし、**binding差し替え後に候補UIが1本化しない**ことを受入基準（§21.3）で確認する。`RouteOptions.requestedPriorities`のAPI default（`[RECOMMENDED]`）は外部APIの素の既定であって、OneNaviの`ServerRouteDataSource`はそれに依存せず明示指定する。
+10. **nav-core wire modelへ`RouteGuidance.routePackageId: String?`をadditiveに追加**（§8.3.2）。serverが各候補へ付与し、`ServerRouteDataSource`が`RouteDetail.id`へコピーする。`RouteGuidance`への追加はこの1 fieldのみ。既存fieldは不変で、tracker/voice/旧backendは未読のまま動く（旧backendはnull）。`RouteDetail`には新fieldを足さない。
 
 ### 18.3 DI
 
@@ -2688,10 +2699,12 @@ val routeDataModule = module {
             registry = get(),             // ExtNavRouteRegistry（tracker/voiceが参照）
             // searchRoutesで:
             //  1) server Guidance を取得
-            //  2) 各 RouteGuidance → RouteResult/RouteDetail を組む
-            //  3) registry.put(ExtNavRoutePayload(id=RouteDetail.id,
+            //  2) 各 RouteGuidance について RouteDetail.id = routeGuidance.routePackageId
+            //       （serverが付けた値をコピー。client側hash再計算はしない。§8.3.2）
+            //  3) RouteResult/RouteDetail を組む
+            //  4) registry.put(ExtNavRoutePayload(id=RouteDetail.id,
             //       routeGuidance=server RouteGuidance, sapaDetailsByName=...)) を登録
-            //  4) requestedPriorities は現行互換の4種を明示指定（§18.2-9）
+            //  5) requestedPriorities は現行互換の4種を明示指定（§18.2-9）
         )
     }
 }
@@ -2965,7 +2978,7 @@ assert:
 - **候補ルートUIが1本化しない**: `ServerRouteDataSource`が既定priority群（推奨/渋滞回避/高速優先/一般道優先）で複数候補を返し、候補選択UIが従来どおり並ぶ。
 - **registry payload充足**: `ExtNavRouteRegistry.get(RouteDetail.id)`がserver由来`ExtNavRoutePayload`を返し、tracker/voiceが無改修で動く。
 - **画像解決**: `GuideImageRef.minor`でserverから画像が引け、既存minor単位cacheが効く。
-- **ID健全性（server側検査）**: 同一形・traffic違いのrouteでserver内部`routeCandidateId`が一致し`routePackageId`（=`RouteDetail.id`）が異なる。`route_cache`のPKは`cache_id`で、`routeCandidateId`/`routePackageId`を兼用していない。`routeCandidateId`がwire（`RouteDetail`/`RouteGuidance`）に漏れていない。`groupId`は束ねキーのままで音声選抜が崩れない。
+- **ID健全性**: `RouteDetail.id`はserver提供の`RouteGuidance.routePackageId`と一致する（Androidでのhash再計算が無い）。同一形・traffic違いのrouteでserver内部`routeCandidateId`が一致し`routePackageId`が異なる。`route_cache`のPKは`cache_id`で、`routeCandidateId`/`routePackageId`を兼用していない。`routeCandidateId`はwireに漏れていない（wireに出る候補IDは`routePackageId`のみ）。`groupId`は束ねキーのままで音声選抜が崩れない。
 - HERE keyがAPK/通信response/logに存在しない。
 - すべてのwire座標がWGS84範囲内。
 
