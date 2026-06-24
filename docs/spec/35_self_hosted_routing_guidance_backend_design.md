@@ -1456,20 +1456,21 @@ data class RouteProjection(
 
 ### 8.3 route candidate ID と要素 stable ID
 
-ID契約は2層に分ける。**route candidate ID（候補ルート1本のID）を先に確定し**、要素ID（guidance point等）はその上に積む。priorityをIDに使わない（同一priorityのalternativesが衝突するため）。
+ID契約は2層に分ける。**route candidate ID（候補ルート1本のID）を先に確定し**、要素ID（guidance point等）はその上に積む。IDの同一性は**geometryのみ**で決め、priority/labelやprovider由来の順序（alternatives順）をIDに入れない。これらは呼び出しごとに揺れるため、入れるとrefresh/reroute後に同一ルートのIDが変わる。
 
 #### 8.3.1 route candidate ID
 
 ```text
-route-candidate-id-input =
-  modelVersion + routeGeometryFingerprint + requestedPriority + alternativeIndex
-route-candidate-id = base32(sha256(route-candidate-id-input))[0..19]
+route-candidate-id-input = modelVersion + routeGeometryFingerprint
+route-candidate-id       = base32(sha256(route-candidate-id-input))[0..19]
 ```
 
-- `routeGeometryFingerprint`: 正規化済みpolyline（WGS84、重複端点除去、座標量子化）から算出する候補の同一性キー。
-- `requestedPriority` + `alternativeIndex`: 同一geometryでもlabel違い／同一label内の複数alternativesを一意化する。`alternativeIndex`は候補内の0始まり連番。
-- これが`RouteDetail.id` / route registry key / 案内画像prefetchの紐付け / rerouteの同label選択 / traffic refreshのstable ID維持の**唯一の正本**。
-- **既存`ExtNavRouteDataSource.routeIdFor`が`priority?.name`を返す実装は廃止し、本IDへ置換する**（priorityベースIDは同一priority alternativesで衝突する）。重複geometryの集約後にlabelが一意化されてから採番する（§11.3.1）。
+- `routeGeometryFingerprint`: 正規化済みpolyline（WGS84、重複端点除去、座標量子化）から算出する候補の**唯一の同一性キー**。geometryが同一なら（どのpriorityで生成されても、provider alternatives順がどうでも）route-candidate-idは同一になる。
+- **priority/labelはIDに含めない。** 同一geometryが複数priorityで返った場合は§11.3.1で1候補へdedupし、labelは別fieldとしてattachする（label変更でIDは変わらない）。
+- **provider alternatives順（alternativeIndex）もIDに含めない。** 真に異なるalternativesは異なるgeometry＝異なるfingerprintで自然に分かれる。
+- 万一、別候補が量子化衝突で同一fingerprintになった場合のみ、**geometry由来の決定的disambiguator**（full-precision polylineのsha256など、provider順に依存しない安定値）でtie-breakする。連番index等のprovider順依存値は使わない。
+- これが`RouteDetail.id` / route registry key / 案内画像prefetchの紐付け / rerouteの同一ルート判定 / traffic refreshのstable ID維持の**唯一の正本**。
+- **既存`ExtNavRouteDataSource.routeIdFor`が`priority?.name`を返す実装は廃止し、本IDへ置換する**（priorityベースIDは同一priority alternativesで衝突し、refreshでも揺れる）。
 
 #### 8.3.2 要素 stable ID（route candidate ID配下）
 
@@ -1825,7 +1826,7 @@ data class DecisionPointSemantic(
 
 | `Congestion.transitMinutes` : `Int?` | HANDOFF-PLAN §3対応表 + 正規化コンテキスト | field名だけで推測せず、モデル契約テストに固定したmapperで明示代入する。 | 欠損可否を型とgolden sampleで確定し、null/empty/UNKNOWNを使い分ける。 |
 
-| `RouteDetail.id` : `String` | route candidate ID（§8.3.1） | `modelVersion + geometryFingerprint + requestedPriority + alternativeIndex`のSHA-256短縮。priorityをIDに使わず、同一priorityのalternativesも一意。 | 外部プロバイダの一時IDをwire契約へ露出しない。geometry不変ならreroute/refresh後も維持。 |
+| `RouteDetail.id` : `String` | route candidate ID（§8.3.1） | `modelVersion + routeGeometryFingerprint`のSHA-256短縮。priority/label・provider alternatives順はIDに含めない。 | 外部プロバイダの一時IDをwire契約へ露出しない。geometry不変ならreroute/refresh後も同一ID。fingerprint衝突時のみgeometry由来の決定的tie-break。 |
 
 | `RouteDetail.origin` : `RoutePoint` | HANDOFF-PLAN §3対応表 + 正規化コンテキスト | field名だけで推測せず、モデル契約テストに固定したmapperで明示代入する。 | 欠損可否を型とgolden sampleで確定し、null/empty/UNKNOWNを使い分ける。 |
 
