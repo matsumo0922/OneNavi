@@ -1458,28 +1458,33 @@ data class RouteProjection(
 
 1つのIDを「同一ルート判定」「DB cache PK」「app registry key」に兼用すると破綻する。`guidance_json`はrequest/出発時刻/車両/options/dataset revision/trafficで変わるため、geometry-only IDをcache PKにすると別内容が衝突する。よって**3種を明確に分ける**。
 
-| ID | 算出 | 何を表すか | 使う場所 |
-|---|---|---|---|
-| `routeCandidateId` | `sha256(modelVersion + routeGeometryFingerprint)` | **ルート形状の同一性**（traffic/出発時刻が違っても同じ形なら同じ） | reroute/refreshの「同一ルート？」判定、要素stable IDの土台、dedup |
-| `routePackageId` | `sha256(routeCandidateId + requestHash)`（requestHash=§17.3: origin/dest/via/出発bucket/vehicle/options/datasetRevisions/trafficBucket） | **生成された案内パッケージ1個の同一性**（形＋生成文脈） | `RouteDetail.id`、app registry key、DB cache PK、atomic swap単位 |
-| `element-stable-id` | `base32(sha256(routeCandidateId + kind + round(measure*10) + occurrence))[0..19]` | パッケージ内の案内要素 | guidance point / intersection / block.id 等 |
+| ID | 算出 | 何を表すか | 使う場所 | スコープ |
+|---|---|---|---|---|
+| `cache_id` | `sha256(requestHash + modelVersion + providerContract)` | **1リクエスト＝Guidance全体**の同一性 | DB `route_cache` PK、idempotency照合 | server内部（DB） |
+| `routeCandidateId` | `sha256(modelVersion + routeGeometryFingerprint)` | **ルート形状の同一性**（traffic/出発時刻が違っても同じ形なら同じ） | server内部の要素stable ID土台、dedup、`route_candidate_index`での横断照合 | **server内部のみ（wire非搭載）** |
+| `routePackageId` | `sha256(routeCandidateId + requestHash)` | **候補ルート1本**の同一性（形＋生成文脈） | `RouteDetail.id`、app registry key | wire（`RouteDetail.id`として） |
+| `element-stable-id` | `base32(sha256(routeCandidateId + kind + round(measure*10) + occurrence))[0..19]` | パッケージ内の案内要素 | guidance point / intersection / block.id 等 | wire |
 
-#### 8.3.1 routeCandidateId（形状の同一性）
+粒度の整理: `cache_id`は**レスポンス（複数候補を含むGuidance全体）**単位、`routePackageId`は**その中の候補1本**単位。両者は別物で、`routePackageId`をDB cache PKに使わない。
+
+#### 8.3.1 routeCandidateId（形状の同一性・server内部）
 
 - `routeGeometryFingerprint`: 正規化済みpolyline（WGS84、重複端点除去、座標量子化）から算出する**唯一の形状キー**。どのpriorityで生成されても、provider alternatives順がどうでも、形が同じなら同一。
 - priority/label・provider alternatives順（alternativeIndex）は含めない。真に異なるalternativesは異なるgeometryで自然に分かれる。量子化衝突時のみ full-precision polyline sha256 等の**geometry由来の決定的な値**でtie-break（連番index等の不安定値は使わない）。
+- **wireには載せない。** `RouteDetail`/`RouteGuidance`のshapeを変えない（§18.1）ため、`routeCandidateId`はserver内部の要素ID算出・dedup・`route_candidate_index`での横断照合に閉じる。
+- 「形が同じか」のpackage跨ぎ照合は**server側で完結**する（refresh/reroute時にserverが`routeCandidateId`で前回と突き合わせ、要素stable IDを維持する）。Androidは§19.2どおり新packageを原子的にswapするだけで、shape比較を持たない。
 - **既存`ExtNavRouteDataSource.routeIdFor`（`priority?.name`）は廃止**。priorityベースIDは同一priority alternativesで衝突し、refreshでも揺れる。
 
-#### 8.3.2 routePackageId（cache/registry/RouteDetail.id）
+#### 8.3.2 routePackageId（候補1本＝RouteDetail.id / registry key）
 
-- `RouteDetail.id` = `routePackageId`。app registryのkeyもこれ。同一形でも出発時刻/traffic/options違いは別パッケージ＝別IDになり、cacheやregistryが内容を取り違えない。
-- DB `route_cache`のPKは`routePackageId`（§15.2）。`requestHash`は§17.3でこのIDへ畳む。
-- `routeCandidateId`はwireにも別fieldとして載せ、Android/サーバが「形が同じか」をpackage跨ぎで比較できるようにする（refresh時のatomic swap判定・stable element照合に使う）。
+- `RouteDetail.id` = `routePackageId`。app registryのkeyもこれ。同一形でも出発時刻/traffic/options違いは別パッケージ＝別IDになり、registryが内容を取り違えない。
+- **DB cache PKには使わない。** `route_cache`のPKは`cache_id`（§15.2、レスポンス単位）。`requestHash`は§17.3で`cache_id`へ畳む。`routePackageId`はguidance_jsonの中（各候補）に入る。
+- `RouteDetail`に`routeCandidateId`等の新fieldは足さない。Androidが持つルートIDは`RouteDetail.id`（=routePackageId）のみ。
 
 #### 8.3.3 要素 stable ID
 
-- `routeCandidateId`基準で算出するため、traffic refreshで形が同じなら要素IDも維持される。geometryが変わった区間だけ新ID、未変更prefixはfingerprint照合で再利用してよい。
-- `RouteDetail.id`の算出を「routeId + route measure...」と循環説明しない（candidate→package→element の順で確定する）。
+- `routeCandidateId`（server内部）基準で算出するため、traffic refreshで形が同じなら要素IDも維持される。geometryが変わった区間だけ新ID、未変更prefixはfingerprint照合で再利用してよい。これによりAndroidはshape比較なしに、同じblock.id＝同じ案内として扱える。
+- `RouteDetail.id`の算出を「routeId + route measure...」と循環説明しない（cache_id / candidate / package / element を上記スコープで確定する）。
 
 ## 9. 沿線スナップ・map-match詳細
 
@@ -1825,7 +1830,7 @@ data class DecisionPointSemantic(
 
 | `Congestion.transitMinutes` : `Int?` | HANDOFF-PLAN §3対応表 + 正規化コンテキスト | field名だけで推測せず、モデル契約テストに固定したmapperで明示代入する。 | 欠損可否を型とgolden sampleで確定し、null/empty/UNKNOWNを使い分ける。 |
 
-| `RouteDetail.id` : `String` | `routePackageId`（§8.3.2） | `sha256(routeCandidateId + requestHash)`。同一形でも出発時刻/traffic/options違いは別ID。app registry key・DB cache PKと同一値。 | 形の同一性比較は別fieldの`routeCandidateId`で行う。外部プロバイダの一時IDをwireへ露出しない。 |
+| `RouteDetail.id` : `String` | `routePackageId`（§8.3.2） | `sha256(routeCandidateId + requestHash)`。同一形でも出発時刻/traffic/options違いは別ID。app registry keyと同一値。**DB cache PK（`cache_id`）とは別物**。 | 形の同一性照合はserver内部の`routeCandidateId`で行い、wireへは出さない（RouteDetailにshape比較用fieldを足さない）。外部プロバイダの一時IDをwireへ露出しない。 |
 
 | `RouteDetail.origin` : `RoutePoint` | HANDOFF-PLAN §3対応表 + 正規化コンテキスト | field名だけで推測せず、モデル契約テストに固定したmapperで明示代入する。 | 欠損可否を型とgolden sampleで確定し、null/empty/UNKNOWNを使い分ける。 |
 
@@ -2405,7 +2410,8 @@ CREATE TABLE lexicon.suffix_rule (
 
 -- route_cache は「1リクエスト＝1レスポンス（複数候補を含む Guidance 全体）」単位。
 -- PKはリクエスト由来の cache_id であって、候補ごとの RouteDetail.id(routePackageId) ではない。
--- guidance_json には各候補が自分の routePackageId / routeCandidateId を持って入る（§8.3）。
+-- guidance_json は wire の Guidance そのもの。各候補は RouteDetail.id(=routePackageId) を持つが、
+-- routeCandidateId は wire 非搭載（§8.3.1）なので guidance_json には入らず、server が geometry から派生する。
 CREATE TABLE nav.route_cache (
     cache_id              text PRIMARY KEY,   -- sha256(request_hash + model_version + provider_contract)。レスポンス単位
     request_hash          char(64) NOT NULL,  -- §17.3: origin/dest/via/出発bucket/vehicle/options/datasetRevisions/trafficBucket
@@ -2413,7 +2419,7 @@ CREATE TABLE nav.route_cache (
     model_version         text NOT NULL,
     provider_contract     text NOT NULL,
     dataset_revisions     jsonb NOT NULL,
-    guidance_json         jsonb NOT NULL,     -- Guidance 全体。候補ID(routePackageId/routeCandidateId)は内側
+    guidance_json         jsonb NOT NULL,     -- wire Guidance 全体。候補は routePackageId(=RouteDetail.id) を持つ
     created_at            timestamptz NOT NULL DEFAULT now(),
     expires_at            timestamptz NOT NULL,
     last_accessed_at      timestamptz NOT NULL DEFAULT now(),
@@ -2421,8 +2427,9 @@ CREATE TABLE nav.route_cache (
 );
 
 -- 候補形状での横断検索（refresh/rerouteの「同一ルートあり？」用）が要るなら、
--- guidance_json内のrouteCandidateIdを展開した補助表 nav.route_candidate_index(cache_id, route_candidate_id, route_package_id) を別途持つ。
--- route_cache のPKを routeCandidateId に兼用しない（出発時刻/traffic違いを取り違えるため）。
+-- server が geometry から算出した routeCandidateId を保持する補助表
+-- nav.route_candidate_index(cache_id, route_candidate_id, route_package_id) を別途持つ（guidance_json には依存しない）。
+-- route_cache のPKを routeCandidateId / routePackageId に兼用しない（出発時刻/traffic違いを取り違えるため）。
 
 CREATE INDEX ix_route_cache_expiry
     ON nav.route_cache (expires_at);
@@ -2958,7 +2965,7 @@ assert:
 - **候補ルートUIが1本化しない**: `ServerRouteDataSource`が既定priority群（推奨/渋滞回避/高速優先/一般道優先）で複数候補を返し、候補選択UIが従来どおり並ぶ。
 - **registry payload充足**: `ExtNavRouteRegistry.get(RouteDetail.id)`がserver由来`ExtNavRoutePayload`を返し、tracker/voiceが無改修で動く。
 - **画像解決**: `GuideImageRef.minor`でserverから画像が引け、既存minor単位cacheが効く。
-- **ID健全性**: 同一形・traffic違いのrouteで`routeCandidateId`が一致し`routePackageId`が異なる。cache PKに`routeCandidateId`を使っていない。`groupId`は束ねキーのままで音声選抜が崩れない。
+- **ID健全性（server側検査）**: 同一形・traffic違いのrouteでserver内部`routeCandidateId`が一致し`routePackageId`（=`RouteDetail.id`）が異なる。`route_cache`のPKは`cache_id`で、`routeCandidateId`/`routePackageId`を兼用していない。`routeCandidateId`がwire（`RouteDetail`/`RouteGuidance`）に漏れていない。`groupId`は束ねキーのままで音声選抜が崩れない。
 - HERE keyがAPK/通信response/logに存在しない。
 - すべてのwire座標がWGS84範囲内。
 
