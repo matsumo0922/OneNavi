@@ -578,11 +578,722 @@ body {
 }
 
 /* ── Scrollbar ─────────────────────────────── */
-#panel::-webkit-scrollbar {
+#panel::-webkit-scrollbar,
+.bench-body::-webkit-scrollbar,
+.bench-output::-webkit-scrollbar {
   width: 5px;
 }
 
-#panel::-webkit-scrollbar-thumb {
+#panel::-webkit-scrollbar-thumb,
+.bench-body::-webkit-scrollbar-thumb {
   background: #ccd1d8;
   border-radius: 3px;
+}
+
+.bench-output::-webkit-scrollbar-thumb {
+  background: #39414c;
+  border-radius: 3px;
+}
+
+/* ── Route provider toggle ─────────────────── */
+/* アクティブなプロバイダの色 = 地図のルート線の色（提供元を色で示す）。 */
+.provider-toggle {
+  display: flex;
+  gap: 5px;
+  background: var(--bg-inset);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+}
+
+.provider-btn {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 7px 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.provider-btn:not(.active):hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.provider-btn[data-provider="google"].active {
+  background: #4285f4;
+  color: #ffffff;
+}
+
+.provider-btn[data-provider="here"].active {
+  background: #00afaa;
+  color: #ffffff;
+}
+
+/* Find route はアクティブ provider の色（押した先のルート線と同色）。 */
+#btn-find-route {
+  background: var(--provider-accent, var(--primary));
+}
+
+#btn-find-route:hover {
+  background: var(--provider-accent, var(--primary));
+  filter: brightness(0.93);
+}
+
+/* ── Options (schema-driven form) ──────────── */
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.options-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.options-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.options-caret {
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+.options-toggle[aria-expanded="true"] .options-caret {
+  transform: rotate(90deg);
+}
+
+.opt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.opt-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.opt-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.opt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.opt-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.opt-unit {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.opt-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.opt-control {
+  font-family: inherit;
+}
+
+.opt-select,
+.opt-input {
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.opt-select:focus,
+.opt-input:focus {
+  outline: none;
+  border-color: var(--provider-accent, var(--primary));
+}
+
+.opt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.opt-chip {
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.opt-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.opt-chip.active {
+  background: var(--provider-accent, var(--primary));
+  border-color: var(--provider-accent, var(--primary));
+  color: #fff;
+}
+
+.opt-check {
+  width: 34px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--provider-accent, var(--primary));
+  align-self: flex-start;
+}
+
+/* ── API Bench ─────────────────────────────── */
+.bench {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 360px;
+  max-height: calc(100vh - 28px);
+  background: var(--bg-panel);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bench-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.bench-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.bench-title em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: #00afaa;
+  margin-left: 5px;
+  letter-spacing: 0.6px;
+}
+
+.bench-toggle {
+  border: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--bg-inset);
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.bench-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.bench-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px 14px;
+  overflow-y: auto;
+}
+
+.bench.collapsed .bench-body {
+  display: none;
+}
+
+.bench-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bench-chip {
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.bench-chip:hover {
+  background: var(--bg-hover);
+}
+
+.bench-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+
+.bench-label span {
+  margin-left: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.bench-url {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  background: var(--bg-inset);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.bench-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.bench-actions .btn {
+  flex: 1;
+}
+
+.bench-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.bench-pill {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.bench-pill.ok {
+  background: rgba(52, 168, 83, 0.15);
+  color: var(--green);
+}
+
+.bench-pill.err {
+  background: rgba(234, 67, 53, 0.15);
+  color: var(--red);
+}
+
+.bench-pill.warn {
+  background: rgba(251, 188, 5, 0.18);
+  color: #b8860b;
+}
+
+.bench-meta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* JSON 出力だけはダークなターミナル面（生 API の手触り）。 */
+.bench-output {
+  margin: 0;
+  background: #0e1116;
+  color: #c7d2da;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  max-height: 42vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bench-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Route detail (bottom dock) ────────────── */
+.detail {
+  position: absolute;
+  bottom: 14px;
+  left: 324px;
+  right: 14px;
+  background: var(--bg-panel);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.detail.hidden {
+  display: none;
+}
+
+/* 上端のドラッグハンドルで高さ調節 */
+.detail-resize {
+  flex-shrink: 0;
+  height: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.detail-resize::before {
+  content: "";
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  transition: background 0.12s;
+}
+
+.detail-resize:hover::before {
+  background: var(--text-muted);
+}
+
+.detail.collapsed .detail-resize {
+  display: none;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.detail-tab {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 9px 10px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.detail-tab:hover {
+  color: var(--text);
+}
+
+.detail-tab.active {
+  color: var(--provider-accent, var(--primary));
+  border-bottom-color: var(--provider-accent, var(--primary));
+}
+
+.detail-collapse {
+  flex-shrink: 0;
+  border: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--bg-inset);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.12s;
+}
+
+.detail-collapse:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.detail.collapsed .detail-collapse {
+  transform: rotate(180deg);
+}
+
+.detail.collapsed .detail-body {
+  display: none;
+}
+
+.detail-body {
+  padding: 12px;
+  overflow: auto;
+}
+
+.detail-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 24px 0;
+}
+
+/* Summary / Snaps の key-value グリッド */
+.detail-kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  font-size: 12px;
+}
+
+.detail-kv dt {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.detail-kv dd {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Turn-by-turn */
+.detail-turns {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.turn-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.turn-glyph {
+  flex-shrink: 0;
+  width: 22px;
+  text-align: center;
+  font-size: 16px;
+  color: var(--provider-accent, var(--primary));
+}
+
+.turn-main {
+  min-width: 0;
+}
+
+.turn-instruction {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.turn-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+/* Speed graph */
+.speed-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.speed-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.speed-legend-item i {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.speed-chart {
+  width: 100%;
+  height: 200px;
+  display: block;
+}
+
+/* Snaps */
+.detail-snaps {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.snap-item {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.snap-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--provider-accent, var(--primary));
+}
+
+/* Tolls */
+.toll-total {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.detail-tolls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toll-item {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+}
+
+.toll-head {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.toll-fare {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.toll-price {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.toll-methods {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Response (raw JSON) */
+.detail-raw {
+  margin: 0;
+  background: #0e1116;
+  color: #c7d2da;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.detail-body::-webkit-scrollbar,
+.detail-raw::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.detail-body::-webkit-scrollbar-thumb {
+  background: #ccd1d8;
+  border-radius: 3px;
+}
+
+.detail-raw::-webkit-scrollbar-thumb {
+  background: #39414c;
+  border-radius: 3px;
+}
+
+/* 画面が狭い時は bench を左パネルの下へ回す。 */
+@media (max-width: 820px) {
+  .bench {
+    left: 14px;
+    right: 14px;
+    width: auto;
+    top: auto;
+    bottom: 14px;
+    max-height: 50vh;
+  }
+
+  .detail {
+    left: 14px;
+  }
 }

@@ -3,6 +3,11 @@ import type {LatLng} from "./geo-utils";
 import {parseGpx} from "./gpx-parser";
 import {getStatus} from "./connection";
 import {deleteRoute, listRoutes, saveRoute, type SavedRoute} from "./routes";
+import {activeProvider, setActiveProvider, type ProviderId} from "./providers";
+import {createOptionsForm} from "./options/form";
+import {HERE_ROUTING_GROUPS} from "./options/here-routing-schema";
+import {getHereRoutingOptions, setHereRoutingOptions} from "./options/store";
+import {hideRouteDetail, showRouteDetail} from "./route-detail";
 import {
   clearRoute,
   findRoute,
@@ -46,6 +51,8 @@ export class ControlsManager {
     this.bindPlaybackButtons();
     this.bindSpeedButtons();
     this.bindRateButtons();
+    this.bindProviderToggle();
+    this.bindRouteOptions();
     this.bindWaypointButtons();
     this.bindSavedRoutes();
     this.bindGpxImport();
@@ -117,6 +124,59 @@ export class ControlsManager {
     }
   }
 
+  private bindProviderToggle(): void {
+    const toggle = document.getElementById("provider-toggle");
+    if (!toggle) return;
+
+    const buttons = toggle.querySelectorAll<HTMLButtonElement>(".provider-btn");
+    const syncActive = (): void => {
+      const current = activeProvider().id;
+      for (const button of buttons) {
+        button.classList.toggle("active", button.dataset.provider === current);
+      }
+      document.documentElement.style.setProperty("--provider-accent", activeProvider().accent);
+    };
+
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        const id = button.dataset.provider as ProviderId;
+        if (id === activeProvider().id) return;
+
+        setActiveProvider(id);
+        syncActive();
+
+        // 既にルートが引かれていれば、新プロバイダで即引き直す
+        if (this.waypoints.length >= 2) {
+          void this.startRouteSimulation();
+        }
+      });
+    }
+
+    syncActive();
+  }
+
+  /**
+   * HERE ルート検索オプションの編集フォームを構築し、折りたたみを制御する。
+   */
+  private bindRouteOptions(): void {
+    const body = document.getElementById("route-options-body");
+    const toggle = document.getElementById("route-options-toggle");
+    if (!body || !toggle) return;
+
+    const form = createOptionsForm(
+      HERE_ROUTING_GROUPS,
+      getHereRoutingOptions(),
+      (values) => setHereRoutingOptions(values),
+    );
+    body.appendChild(form.element);
+
+    toggle.addEventListener("click", () => {
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!expanded));
+      body.hidden = expanded;
+    });
+  }
+
   private bindWaypointButtons(): void {
     document.getElementById("btn-find-route")!.addEventListener("click", () => {
       this.startRouteSimulation();
@@ -124,6 +184,7 @@ export class ControlsManager {
 
     document.getElementById("btn-clear")!.addEventListener("click", () => {
       hideRoutePointCallout();
+      hideRouteDetail();
       this.waypoints = [];
       this.saveWaypoints();
       this.engine.stop();
@@ -265,12 +326,22 @@ export class ControlsManager {
     if (this.waypoints.length < 2) return;
 
     try {
-      const path = await findRoute(this.waypoints);
-      if (path.length >= 2) {
-        this.engine.startRoute(path);
+      const result = await findRoute(this.waypoints);
+      if (result.coords.length >= 2) {
+        this.engine.startRoute(result.coords);
+      }
+
+      // 詳細パネルは HERE 固有データ（spans/tolls/snaps）を扱うため HERE 時のみ表示
+      if (activeProvider().id === "here") {
+        showRouteDetail(result.raw);
+      } else {
+        hideRouteDetail();
       }
     } catch (error) {
       console.error("Route search failed:", error);
+      window.alert(
+        `ルート探索に失敗しました\n${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 

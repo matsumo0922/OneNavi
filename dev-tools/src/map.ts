@@ -1,4 +1,5 @@
 import type { LatLng } from "./geo-utils";
+import { activeProvider, type ProviderRouteResult } from "./providers";
 
 /** デフォルトの初期位置 (東京駅) */
 const DEFAULT_CENTER = { lat: 35.6812, lng: 139.7671 };
@@ -14,10 +15,11 @@ let map: google.maps.Map;
 let currentMarker: google.maps.marker.AdvancedMarkerElement | null = null;
 let markerHeadingEl: HTMLElement | null = null;
 let waypointMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
-let directionsService: google.maps.DirectionsService;
-let directionsRenderer: google.maps.DirectionsRenderer;
 let geocoder: google.maps.Geocoder;
+let routePolyline: google.maps.Polyline | null = null;
 let gpxPolyline: google.maps.Polyline | null = null;
+let benchOverlays: google.maps.Polyline[] = [];
+let benchMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 let routePointInfoWindow: google.maps.InfoWindow | null = null;
 
 /** 地点候補選択時のコールバック */
@@ -45,17 +47,7 @@ export async function initMap(): Promise<void> {
     fullscreenControl: false,
   });
 
-  directionsService = new google.maps.DirectionsService();
   geocoder = new Geocoder();
-  directionsRenderer = new google.maps.DirectionsRenderer({
-    map,
-    suppressMarkers: true,
-    polylineOptions: {
-      strokeColor: "#4285f4",
-      strokeWeight: 5,
-      strokeOpacity: 0.8,
-    },
-  });
 
   map.addListener("click", (event: google.maps.MapMouseEvent) => {
     void handleMapClick(event);
@@ -441,59 +433,104 @@ export function updateWaypointMarkers(waypoints: LatLng[]): void {
 }
 
 /**
- * DirectionsService でルートを検索し、ポリライン座標を返す。
+ * アクティブなプロバイダ (Google / HERE) でルートを探索し、結果を返す。
+ * ルート線はプロバイダのアクセントカラーで描画する（色が現在の経路提供元を表す）。
  */
-export async function findRoute(waypoints: LatLng[]): Promise<LatLng[]> {
-  if (waypoints.length < 2) return [];
+export async function findRoute(waypoints: LatLng[]): Promise<ProviderRouteResult> {
+  const empty: ProviderRouteResult = {
+    coords: [],
+    distanceMeters: null,
+    durationSeconds: null,
+    raw: null,
+  };
+  if (waypoints.length < 2) return empty;
 
-  const origin = waypoints[0];
-  const destination = waypoints[waypoints.length - 1];
-  const vias = waypoints.slice(1, -1).map((wp) => ({
-    location: new google.maps.LatLng(wp.lat, wp.lng),
-    stopover: true,
-  }));
+  const provider = activeProvider();
+  const result = await provider.computeRoute(waypoints);
 
-  const result = await directionsService.route({
-    origin: new google.maps.LatLng(origin.lat, origin.lng),
-    destination: new google.maps.LatLng(destination.lat, destination.lng),
-    waypoints: vias,
-    travelMode: google.maps.TravelMode.DRIVING,
+  drawRoutePolyline(result.coords, provider.accent);
+  fitToPath(result.coords);
+
+  return result;
+}
+
+/** ルート線を 1 本の polyline として描画する（既存があれば置換）。 */
+function drawRoutePolyline(coords: LatLng[], color: string): void {
+  routePolyline?.setMap(null);
+  routePolyline = null;
+  if (coords.length === 0) return;
+
+  routePolyline = new google.maps.Polyline({
+    map,
+    path: coords,
+    strokeColor: color,
+    strokeWeight: 5,
+    strokeOpacity: 0.85,
   });
+}
 
-  directionsRenderer.setDirections(result);
-
-  // polyline 座標を抽出
-  const path: LatLng[] = [];
-  const legs = result.routes[0]?.legs ?? [];
-  for (const leg of legs) {
-    for (const step of leg.steps ?? []) {
-      const decodedPath = step.path ?? [];
-      for (const point of decodedPath) {
-        path.push({ lat: point.lat(), lng: point.lng() });
-      }
-    }
+function fitToPath(coords: LatLng[]): void {
+  if (coords.length === 0) return;
+  const bounds = new google.maps.LatLngBounds();
+  for (const point of coords) {
+    bounds.extend(point);
   }
-
-  // ルート全体をフィット
-  if (path.length > 0) {
-    const bounds = new google.maps.LatLngBounds();
-    for (const point of path) {
-      bounds.extend(point);
-    }
-    map.fitBounds(bounds);
-  }
-
-  return path;
+  map.fitBounds(bounds);
 }
 
 /**
  * ルート表示をクリアする。
  */
 export function clearRoute(): void {
-  directionsRenderer?.setDirections({
-    routes: [],
-  } as unknown as google.maps.DirectionsResult);
+  routePolyline?.setMap(null);
+  routePolyline = null;
   clearGpxPolyline();
+}
+
+/** API bench から任意のジオメトリ／地点を地図に重ねる。 */
+export function drawBenchGeometry(
+  lines: LatLng[][],
+  points: LatLng[],
+  color: string,
+): void {
+  clearBenchOverlays();
+
+  for (const line of lines) {
+    if (line.length < 2) continue;
+    benchOverlays.push(
+      new google.maps.Polyline({
+        map,
+        path: line,
+        strokeColor: color,
+        strokeWeight: 4,
+        strokeOpacity: 0.9,
+      }),
+    );
+  }
+
+  for (const point of points) {
+    const dot = document.createElement("div");
+    dot.className = "bench-dot";
+    dot.style.background = color;
+    benchMarkers.push(
+      new google.maps.marker.AdvancedMarkerElement({
+        map,
+        position: point,
+        content: dot,
+      }),
+    );
+  }
+
+  const all = [...lines.flat(), ...points];
+  fitToPath(all);
+}
+
+/** API bench のオーバーレイを消す。 */
+export function clearBenchOverlays(): void {
+  for (const overlay of benchOverlays) overlay.setMap(null);
+  benchOverlays = [];
+  for (const marker of benchMarkers) marker.map = null;
+  benchMarkers = [];
 }
 
 function clearGpxPolyline(): void {

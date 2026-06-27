@@ -2,6 +2,8 @@ import { initMap } from "./map";
 import { SimulationEngine } from "./simulation";
 import { ControlsManager } from "./controls";
 import { KeyboardController } from "./keyboard";
+import { initApiBench } from "./bench";
+import { initRouteDetail } from "./route-detail";
 
 async function main(): Promise<void> {
   // Google Maps API を動的にロード
@@ -30,6 +32,8 @@ async function main(): Promise<void> {
 
   controls.bind();
   keyboard.attach();
+  initApiBench();
+  initRouteDetail();
 }
 
 function loadGoogleMapsApi(apiKey: string): Promise<void> {

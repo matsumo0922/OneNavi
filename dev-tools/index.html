@@ -21,11 +21,28 @@
 
       <section class="card">
         <div class="card-title">Route</div>
+        <div class="provider-toggle" id="provider-toggle" role="group" aria-label="Route provider">
+          <button class="provider-btn" data-provider="google">Google</button>
+          <button class="provider-btn" data-provider="here">HERE</button>
+        </div>
         <div id="waypoint-list" class="waypoint-list"></div>
         <p class="hint">地図をタップ、または検索で地点を追加</p>
         <div class="btn-group">
           <button id="btn-find-route" class="btn btn-primary">Find route</button>
           <button id="btn-clear" class="btn btn-ghost">Clear</button>
+        </div>
+
+        <div class="options" id="route-options">
+          <button
+            class="options-toggle"
+            id="route-options-toggle"
+            type="button"
+            aria-expanded="false"
+          >
+            <span class="options-toggle-label">HERE options</span>
+            <span class="options-caret">&#9656;</span>
+          </button>
+          <div class="options-body" id="route-options-body" hidden></div>
         </div>
       </section>
 
@@ -97,6 +114,45 @@
         <span><kbd>Space</kbd> Pause / Resume</span>
       </footer>
     </div>
+
+    <aside id="api-bench" class="bench collapsed">
+      <header class="bench-header">
+        <span class="bench-title">API Bench <em>HERE</em></span>
+        <button id="bench-toggle" class="bench-toggle" aria-label="Toggle API bench">&#9776;</button>
+      </header>
+      <div class="bench-body">
+        <div id="bench-presets" class="bench-presets"></div>
+        <label class="bench-label" for="bench-url">
+          Endpoint <span>apikey は自動付与</span>
+        </label>
+        <textarea id="bench-url" class="bench-url" rows="4" spellcheck="false"></textarea>
+        <div class="bench-actions">
+          <button id="bench-send" class="btn btn-primary">Send</button>
+          <button id="bench-plot" class="btn btn-ghost">Plot</button>
+          <button id="bench-clear-plot" class="btn btn-ghost">Clear plot</button>
+        </div>
+        <div id="bench-status" class="bench-status"></div>
+        <pre id="bench-output" class="bench-output">// Send でレスポンスを表示</pre>
+      </div>
+    </aside>
+
+    <section id="route-detail" class="detail hidden">
+      <div class="detail-resize" id="detail-resize" title="Drag to resize"></div>
+      <header class="detail-header">
+        <nav class="detail-tabs" id="detail-tabs">
+          <button class="detail-tab active" data-tab="summary" type="button">Summary</button>
+          <button class="detail-tab" data-tab="turns" type="button">Turn-by-turn</button>
+          <button class="detail-tab" data-tab="graph" type="button">Graph</button>
+          <button class="detail-tab" data-tab="snaps" type="button">Snaps</button>
+          <button class="detail-tab" data-tab="tolls" type="button">Tolls</button>
+          <button class="detail-tab" data-tab="raw" type="button">Response</button>
+        </nav>
+        <button class="detail-collapse" id="detail-collapse" type="button" aria-label="Toggle detail">
+          &#9662;
+        </button>
+      </header>
+      <div class="detail-body" id="detail-body"></div>
+    </section>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
