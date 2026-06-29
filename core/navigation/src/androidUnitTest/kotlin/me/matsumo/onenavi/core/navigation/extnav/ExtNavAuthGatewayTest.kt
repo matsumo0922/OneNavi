@@ -293,6 +293,8 @@ class ExtNavAuthGatewayTest {
         developerPin = "",
         googleApiKey = "",
         googleCloudTtsApiKey = "",
+        serverRouteBaseUrl = "",
+        serverRouteForceExistingSource = true,
         adMobAppId = "",
         adMobInterstitialAdUnitId = "",
         adMobBannerAdUnitId = "",

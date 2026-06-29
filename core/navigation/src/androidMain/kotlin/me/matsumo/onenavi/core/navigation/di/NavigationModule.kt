@@ -19,6 +19,13 @@ import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteDataSource
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavRouteRegistry
 import me.matsumo.onenavi.core.navigation.newguidance.NewGuidanceManager
 import me.matsumo.onenavi.core.navigation.newguidance.NewRouteManager
+import me.matsumo.onenavi.core.navigation.server.GuidanceApiClient
+import me.matsumo.onenavi.core.navigation.server.GuidanceApiConfig
+import me.matsumo.onenavi.core.navigation.server.GuidanceMigrationStage
+import me.matsumo.onenavi.core.navigation.server.GuidanceProviderConfig
+import me.matsumo.onenavi.core.navigation.server.GuidanceRouteDataSourceSelector
+import me.matsumo.onenavi.core.navigation.server.HttpGuidanceApiClient
+import me.matsumo.onenavi.core.navigation.server.ServerRouteDataSource
 import me.matsumo.onenavi.core.navigation.tts.CachedGoogleCloudTtsSynthesizer
 import me.matsumo.onenavi.core.navigation.tts.DefaultMilestoneAnnouncementProvider
 import me.matsumo.onenavi.core.navigation.tts.DefaultOpeningAnnouncementProvider
@@ -172,6 +179,41 @@ val navigationModule: Module = module {
             }
         }
     }
+    single<HttpClient>(qualifier = named("serverRoute")) {
+        HttpClient(OkHttp) {
+            install(HttpTimeout) {
+                connectTimeoutMillis = 5_000
+                requestTimeoutMillis = 15_000
+                socketTimeoutMillis = 15_000
+            }
+            install(ContentNegotiation) {
+                json(
+                    Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                        encodeDefaults = true
+                    },
+                )
+            }
+        }
+    }
+    single {
+        val appConfig = get<AppConfig>()
+        GuidanceApiConfig(baseUrl = appConfig.serverRouteBaseUrl)
+    }
+    single {
+        val appConfig = get<AppConfig>()
+        GuidanceProviderConfig(
+            stage = GuidanceMigrationStage.S1,
+            forceExistingSource = appConfig.serverRouteForceExistingSource,
+        )
+    }
+    single<GuidanceApiClient> {
+        HttpGuidanceApiClient(
+            httpClient = get(named("serverRoute")),
+            config = get(),
+        )
+    }
     single {
         ExtNavClientProvider(
             context = androidContext(),
@@ -199,12 +241,26 @@ val navigationModule: Module = module {
             routeRegistry = get(),
         )
     }
-    single<RouteDataSource> {
+    single<RouteDataSource>(qualifier = named("existingRouteDataSource")) {
         ExtNavRouteDataSource(
             clientProvider = get(),
             authGateway = get(),
             registry = get(),
             roadTypeGateway = get(),
+        )
+    }
+    single<RouteDataSource>(qualifier = named("serverRouteDataSource")) {
+        ServerRouteDataSource(
+            apiClient = get(),
+            registry = get(),
+        )
+    }
+    single<RouteDataSource> {
+        GuidanceRouteDataSourceSelector(
+            existingSource = get(named("existingRouteDataSource")),
+            serverSource = get(named("serverRouteDataSource")),
+            providerConfig = get(),
+            apiConfig = get(),
         )
     }
 }
