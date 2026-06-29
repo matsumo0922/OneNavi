@@ -21,14 +21,7 @@ ext-api-setup:
 # ── Server Route API live test ──
 
 live-test:
-	@if [ ! -f .env ]; then \
-		echo "[live-test] .env is required. Set SERVER_ROUTE_BASE_URL and Cloudflare Access header op:// refs."; \
-		exit 1; \
-	fi
-	op run --env-file=.env -- env SERVER_ROUTE_LIVE_TESTS=true ./gradlew :core:navigation:testDebugUnitTest \
-		--tests 'me.matsumo.onenavi.core.navigation.server.GuidanceApiClientLiveTest' \
-		--rerun-tasks \
-		--no-configuration-cache
+	scripts/run_server_route_live_test.sh
 
 # ── Dev Tools (Android Emulator GPS) ──
 
