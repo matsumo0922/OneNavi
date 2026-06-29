@@ -33,6 +33,7 @@ kotlin {
 
         androidUnitTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.ktor.client.mock)
             implementation(libs.kotlinx.coroutines.test)
         }
     }

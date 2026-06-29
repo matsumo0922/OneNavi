@@ -2,6 +2,7 @@ package me.matsumo.onenavi.core.navigation.server
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -14,6 +15,8 @@ import io.ktor.http.isSuccess
  */
 internal data class GuidanceApiConfig(
     val baseUrl: String,
+    val cloudflareAccessClientId: String = "",
+    val cloudflareAccessClientSecret: String = "",
 ) {
     /**
      * route endpoint の URL を返す。
@@ -24,6 +27,12 @@ internal data class GuidanceApiConfig(
 
         return "$normalizedBaseUrl/api/v1/route"
     }
+
+    /**
+     * Cloudflare Access service token を付与できる設定かを返す。
+     */
+    fun hasCloudflareAccessToken(): Boolean =
+        cloudflareAccessClientId.isNotBlank() && cloudflareAccessClientSecret.isNotBlank()
 }
 
 /**
@@ -49,6 +58,10 @@ internal class HttpGuidanceApiClient(
         runCatching {
             val response = httpClient.post(config.routeEndpointUrl()) {
                 contentType(ContentType.Application.Json)
+                if (config.hasCloudflareAccessToken()) {
+                    header(CF_ACCESS_CLIENT_ID_HEADER, config.cloudflareAccessClientId)
+                    header(CF_ACCESS_CLIENT_SECRET_HEADER, config.cloudflareAccessClientSecret)
+                }
                 setBody(request)
             }
             response.ensureSuccess()
@@ -71,3 +84,9 @@ internal class HttpGuidanceApiClient(
 internal class GuidanceApiException(
     val statusCode: Int,
 ) : Exception("server route request failed: HTTP $statusCode")
+
+/** Cloudflare Access service token の client id header。 */
+private const val CF_ACCESS_CLIENT_ID_HEADER: String = "CF-Access-Client-Id"
+
+/** Cloudflare Access service token の client secret header。 */
+private const val CF_ACCESS_CLIENT_SECRET_HEADER: String = "CF-Access-Client-Secret"

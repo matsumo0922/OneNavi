@@ -143,6 +143,8 @@ buildkonfig {
         setField("GOOGLE_CLOUD_TTS_API_KEY")
         setField("SERVER_ROUTE_BASE_URL")
         setField("SERVER_ROUTE_FORCE_EXISTING_SOURCE", "true")
+        setField("SERVER_ROUTE_CF_ACCESS_CLIENT_ID")
+        setField("SERVER_ROUTE_CF_ACCESS_CLIENT_SECRET")
         setField("PURCHASE_ANDROID_API_KEY")
 
         setField("ADMOB_ANDROID_APP_ID", admobTestAppId)
