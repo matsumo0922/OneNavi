@@ -53,6 +53,7 @@ class RouteGuidanceMapperTest {
         val congestionSegment = routeDetail.congestionSegments.single()
         val incident = routeDetail.routeIncidents.single()
         val tollDetail = routeDetail.tollDetails.single()
+        val speedLimitSegment = mapping.payload.routeGuidance.speedLimitSegments.single()
 
         assertEquals(CongestionSeverity.SLOW, congestionSegment.severity)
         assertEquals(0, congestionSegment.startPolylinePointIndex)
@@ -70,6 +71,9 @@ class RouteGuidanceMapperTest {
         assertEquals(1_230, routeDetail.tollFee)
         assertEquals(1_230, routeItem.tollFee)
         assertEquals(1_230, mapping.payload.routeGuidance.summary.tollDetails.single().amount)
+        assertEquals(10, speedLimitSegment.startDistanceFromRouteStartMetres)
+        assertEquals(1_010, speedLimitSegment.endDistanceFromRouteStartMetres)
+        assertEquals(60, speedLimitSegment.limitKmh)
     }
 
     @Test
@@ -162,6 +166,15 @@ class RouteGuidanceMapperTest {
                         currency = "JPY",
                         amount = 1_230.0,
                     ),
+                ),
+            ),
+            speedLimitSegments = listOf(
+                RouteSpeedLimitSegmentDto(
+                    id = "speed-limit-1",
+                    startMeasureMetres = 10.4,
+                    endMeasureMetres = 1_010.2,
+                    speedLimitKmh = 60,
+                    source = "HERE",
                 ),
             ),
             congestionSegments = listOf(

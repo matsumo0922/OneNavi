@@ -11,6 +11,7 @@ import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementBlock
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementPiece
 import me.matsumo.drive.supporter.api.guidance.domain.GuideAnnouncementWindow
 import me.matsumo.drive.supporter.api.guidance.domain.RouteGuidance
+import me.matsumo.drive.supporter.api.guidance.domain.SpeedLimitSegment
 import me.matsumo.drive.supporter.api.guidance.domain.SsmlPhrase
 import me.matsumo.drive.supporter.api.guidance.domain.StreetSegment
 import me.matsumo.drive.supporter.api.guidance.domain.TollDetail
@@ -148,6 +149,24 @@ internal class RouteGuidanceMapper {
             intersections = emptyList<me.matsumo.drive.supporter.api.guidance.domain.Intersection>().toImmutableList(),
             imageIds = emptyList<me.matsumo.drive.supporter.api.guidance.domain.GuideImageRef>().toImmutableList(),
             polyline = polyline,
+            speedLimitSegments = speedLimitSegments
+                .map { segment -> segment.toSpeedLimitSegment() }
+                .toImmutableList(),
+        )
+    }
+
+    private fun RouteSpeedLimitSegmentDto.toSpeedLimitSegment(): SpeedLimitSegment {
+        val startDistanceMetres = startMeasureMetres
+            .roundToInt()
+            .coerceAtLeast(0)
+        val endDistanceMetres = endMeasureMetres
+            .roundToInt()
+            .coerceAtLeast(startDistanceMetres)
+
+        return SpeedLimitSegment(
+            startDistanceFromRouteStartMetres = startDistanceMetres,
+            endDistanceFromRouteStartMetres = endDistanceMetres,
+            limitKmh = speedLimitKmh,
         )
     }
 
