@@ -128,11 +128,27 @@ buildkonfig {
     packageName = "me.matsumo.onenavi"
 
     defaultConfigs {
-        fun setField(name: String, defaultValue: String = "") {
+        fun String.isOnePasswordReference(): Boolean =
+            trim().startsWith("op://")
+
+        fun setField(
+            name: String,
+            defaultValue: String = "",
+            preferEnvironment: Boolean = false,
+            suppressOnePasswordReference: Boolean = false,
+        ) {
             val envValue = System.getenv(name)
             val propertyValue = localProperties.getProperty(name)
+            val rawValue = if (preferEnvironment) {
+                envValue ?: propertyValue
+            } else {
+                propertyValue ?: envValue
+            }
+            val resolvedValue = rawValue
+                ?.takeUnless { value -> suppressOnePasswordReference && value.isOnePasswordReference() }
+                ?: defaultValue
 
-            buildConfigField(FieldSpec.Type.STRING, name, propertyValue ?: envValue ?: defaultValue)
+            buildConfigField(FieldSpec.Type.STRING, name, resolvedValue)
         }
 
         setField("VERSION_NAME", libs.versions.versionName.get())
@@ -141,6 +157,18 @@ buildkonfig {
         setField("DEVELOPER_PIN", "1234")
         setField("GOOGLE_API_KEY")
         setField("GOOGLE_CLOUD_TTS_API_KEY")
+        setField("SERVER_ROUTE_BASE_URL")
+        setField("SERVER_ROUTE_FORCE_EXISTING_SOURCE", "true")
+        setField(
+            name = "SERVER_ROUTE_CF_ACCESS_CLIENT_ID_HEADER",
+            preferEnvironment = true,
+            suppressOnePasswordReference = true,
+        )
+        setField(
+            name = "SERVER_ROUTE_CF_ACCESS_CLIENT_SECRET_HEADER",
+            preferEnvironment = true,
+            suppressOnePasswordReference = true,
+        )
         setField("PURCHASE_ANDROID_API_KEY")
 
         setField("ADMOB_ANDROID_APP_ID", admobTestAppId)

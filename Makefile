@@ -5,7 +5,7 @@ DEV_TOOLS_DIR := dev-tools
 # Vite dev server (GPS ブリッジ middleware を内包) のポート
 DEV_TOOLS_PORT := 5173
 
-.PHONY: detekt dhu route-demo-1 clean-dhu ext-api-setup dev-tools dev-tools-setup dev-tools-dev dev-tools-status dev-tools-stop
+.PHONY: detekt dhu route-demo-1 clean-dhu ext-api-setup live-test dev-tools dev-tools-setup dev-tools-dev dev-tools-status dev-tools-stop
 
 detekt:
 	./gradlew detekt --auto-correct --continue
@@ -17,6 +17,11 @@ dhu:
 
 ext-api-setup:
 	scripts/setup_ext_api.sh
+
+# ── Server Route API live test ──
+
+live-test:
+	scripts/run_server_route_live_test.sh
 
 # ── Dev Tools (Android Emulator GPS) ──
 
