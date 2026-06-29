@@ -5,7 +5,7 @@ DEV_TOOLS_DIR := dev-tools
 # Vite dev server (GPS ブリッジ middleware を内包) のポート
 DEV_TOOLS_PORT := 5173
 
-.PHONY: detekt dhu route-demo-1 clean-dhu ext-api-setup dev-tools dev-tools-setup dev-tools-dev dev-tools-status dev-tools-stop
+.PHONY: detekt dhu route-demo-1 clean-dhu ext-api-setup live-test dev-tools dev-tools-setup dev-tools-dev dev-tools-status dev-tools-stop
 
 detekt:
 	./gradlew detekt --auto-correct --continue
@@ -17,6 +17,18 @@ dhu:
 
 ext-api-setup:
 	scripts/setup_ext_api.sh
+
+# ── Server Route API live test ──
+
+live-test:
+	@if [ ! -f .env ]; then \
+		echo "[live-test] .env is required. Set SERVER_ROUTE_BASE_URL and Cloudflare Access header op:// refs."; \
+		exit 1; \
+	fi
+	op run --env-file=.env -- env SERVER_ROUTE_LIVE_TESTS=true ./gradlew :core:navigation:testDebugUnitTest \
+		--tests 'me.matsumo.onenavi.core.navigation.server.GuidanceApiClientLiveTest' \
+		--rerun-tasks \
+		--no-configuration-cache
 
 # ── Dev Tools (Android Emulator GPS) ──
 

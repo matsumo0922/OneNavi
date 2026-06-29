@@ -13,7 +13,7 @@ import io.ktor.http.isSuccess
 /**
  * server route API の接続設定。
  */
-internal data class GuidanceApiConfig(
+internal class GuidanceApiConfig(
     val baseUrl: String,
     val cloudflareAccessClientIdHeader: String = "",
     val cloudflareAccessClientSecretHeader: String = "",
