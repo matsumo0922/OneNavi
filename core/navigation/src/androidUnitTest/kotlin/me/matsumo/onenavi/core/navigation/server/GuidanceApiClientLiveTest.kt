@@ -24,8 +24,8 @@ class GuidanceApiClientLiveTest {
             httpClient = httpClient,
             config = GuidanceApiConfig(
                 baseUrl = requiredEnv(SERVER_ROUTE_BASE_URL_ENV),
-                cloudflareAccessClientId = requiredEnv(SERVER_ROUTE_CF_ACCESS_CLIENT_ID_ENV),
-                cloudflareAccessClientSecret = requiredEnv(SERVER_ROUTE_CF_ACCESS_CLIENT_SECRET_ENV),
+                cloudflareAccessClientIdHeader = requiredEnv(SERVER_ROUTE_CF_ACCESS_CLIENT_ID_HEADER_ENV),
+                cloudflareAccessClientSecretHeader = requiredEnv(SERVER_ROUTE_CF_ACCESS_CLIENT_SECRET_HEADER_ENV),
             ),
         )
 
@@ -92,10 +92,10 @@ class GuidanceApiClientLiveTest {
         /** live e2e test で叩く server route API の base URL。 */
         const val SERVER_ROUTE_BASE_URL_ENV: String = "SERVER_ROUTE_BASE_URL"
 
-        /** Cloudflare Access service token の client id。 */
-        const val SERVER_ROUTE_CF_ACCESS_CLIENT_ID_ENV: String = "SERVER_ROUTE_CF_ACCESS_CLIENT_ID"
+        /** Cloudflare Access service token の client id header 行。 */
+        const val SERVER_ROUTE_CF_ACCESS_CLIENT_ID_HEADER_ENV: String = "SERVER_ROUTE_CF_ACCESS_CLIENT_ID_HEADER"
 
-        /** Cloudflare Access service token の client secret。 */
-        const val SERVER_ROUTE_CF_ACCESS_CLIENT_SECRET_ENV: String = "SERVER_ROUTE_CF_ACCESS_CLIENT_SECRET"
+        /** Cloudflare Access service token の client secret header 行。 */
+        const val SERVER_ROUTE_CF_ACCESS_CLIENT_SECRET_HEADER_ENV: String = "SERVER_ROUTE_CF_ACCESS_CLIENT_SECRET_HEADER"
     }
 }

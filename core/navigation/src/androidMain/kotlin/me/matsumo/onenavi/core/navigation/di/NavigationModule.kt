@@ -201,8 +201,8 @@ val navigationModule: Module = module {
         val appConfig = get<AppConfig>()
         GuidanceApiConfig(
             baseUrl = appConfig.serverRouteBaseUrl,
-            cloudflareAccessClientId = appConfig.serverRouteCfAccessClientId,
-            cloudflareAccessClientSecret = appConfig.serverRouteCfAccessClientSecret,
+            cloudflareAccessClientIdHeader = appConfig.serverRouteCfAccessClientIdHeader,
+            cloudflareAccessClientSecretHeader = appConfig.serverRouteCfAccessClientSecretHeader,
         )
     }
     single {
