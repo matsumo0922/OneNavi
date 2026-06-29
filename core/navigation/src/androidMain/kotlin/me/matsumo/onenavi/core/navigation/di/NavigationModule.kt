@@ -191,6 +191,7 @@ val navigationModule: Module = module {
                     Json {
                         ignoreUnknownKeys = true
                         isLenient = true
+                        coerceInputValues = true
                         encodeDefaults = true
                     },
                 )

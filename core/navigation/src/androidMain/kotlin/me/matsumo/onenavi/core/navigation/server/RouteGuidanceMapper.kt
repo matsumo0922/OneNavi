@@ -140,7 +140,7 @@ internal class RouteGuidanceMapper {
                 tollYen = tollFee.toYenOrNull() ?: 0,
                 tollDetails = tollDetails.toExtNavTollDetails(),
                 streets = emptyList<StreetSegment>().toImmutableList(),
-                priority = priority.ordinal,
+                priority = priority.summaryPriorityOrdinal(),
                 trafficCongestionAvoidanceRate = 0f,
             ),
             guidancePoints = guidancePoints
@@ -411,6 +411,7 @@ internal class RouteGuidanceMapper {
         when (this) {
             RouteIncidentCategoryDto.REGULATION -> RouteIncidentMarkerCategory.Regulation
             RouteIncidentCategoryDto.INCIDENT -> RouteIncidentMarkerCategory.Accident
+            RouteIncidentCategoryDto.UNKNOWN -> RouteIncidentMarkerCategory.Regulation
         }
 
     private fun RouteIncidentKindDto.displayText(): String =
@@ -473,6 +474,7 @@ internal class RouteGuidanceMapper {
             RoutePriorityDto.EXPRESS -> ExtNavCarPriority.Express
             RoutePriorityDto.FREE -> ExtNavCarPriority.Free
             RoutePriorityDto.DISTANCE -> ExtNavCarPriority.Distance
+            RoutePriorityDto.UNKNOWN -> ExtNavCarPriority.Recommended
         }
 
     private fun RoutePriorityDto.toRoutePriority(): RoutePriority =
@@ -482,6 +484,18 @@ internal class RouteGuidanceMapper {
             RoutePriorityDto.EXPRESS -> RoutePriority.Express
             RoutePriorityDto.FREE -> RoutePriority.Free
             RoutePriorityDto.DISTANCE -> RoutePriority.Distance
+            RoutePriorityDto.UNKNOWN -> RoutePriority.Recommended
+        }
+
+    private fun RoutePriorityDto.summaryPriorityOrdinal(): Int =
+        when (this) {
+            RoutePriorityDto.RECOMMENDED,
+            RoutePriorityDto.UNKNOWN,
+            -> RoutePriorityDto.RECOMMENDED.ordinal
+            RoutePriorityDto.AVOID_CONGESTION -> RoutePriorityDto.AVOID_CONGESTION.ordinal
+            RoutePriorityDto.EXPRESS -> RoutePriorityDto.EXPRESS.ordinal
+            RoutePriorityDto.FREE -> RoutePriorityDto.FREE.ordinal
+            RoutePriorityDto.DISTANCE -> RoutePriorityDto.DISTANCE.ordinal
         }
 
     private companion object {

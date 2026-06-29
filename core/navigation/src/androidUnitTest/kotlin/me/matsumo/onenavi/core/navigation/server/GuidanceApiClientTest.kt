@@ -122,6 +122,94 @@ class GuidanceApiClientTest {
         assertEquals(HttpStatusCode.Forbidden.value, exception.statusCode)
     }
 
+    @Test
+    fun `未知の response enum 値は UNKNOWN に丸めて decode する`() = runTest {
+        val httpClient = mockHttpClient { scope, _ ->
+            scope.respondJson(
+                """
+                {
+                  "candidates": [
+                    {
+                      "routePackageId": "route-1",
+                      "priority": "AI_ROUTE",
+                      "mergedFromPriorities": ["RECOMMENDED", "SCENIC"],
+                      "geometry": [
+                        {"latitude": 35.0, "longitude": 139.0},
+                        {"latitude": 35.1, "longitude": 139.1}
+                      ],
+                      "polyline": "encoded",
+                      "summary": {"durationSeconds": 60, "lengthMetres": 1200},
+                      "congestionSegments": [
+                        {
+                          "id": "congestion-1",
+                          "startMeasureMetres": 0.0,
+                          "endMeasureMetres": 100.0,
+                          "level": "HEAVY",
+                          "source": "HERE"
+                        }
+                      ],
+                      "routeIncidents": [
+                        {
+                          "id": "incident-1",
+                          "startMeasureMetres": 0.0,
+                          "endMeasureMetres": 100.0,
+                          "category": "WEATHER",
+                          "kind": "FOG",
+                          "source": "JARTIC"
+                        }
+                      ],
+                      "maneuvers": [
+                        {
+                          "id": "maneuver-1",
+                          "type": "U_TURN",
+                          "rawAction": "unknown",
+                          "routeMeasureMetres": 0.0
+                        }
+                      ],
+                      "diagnostics": [
+                        {
+                          "level": "ERROR",
+                          "message": "candidate diagnostic",
+                          "priority": "SCENIC"
+                        }
+                      ]
+                    }
+                  ],
+                  "diagnostics": [
+                    {
+                      "level": "NOTICE",
+                      "message": "top diagnostic",
+                      "priority": "AI_ROUTE"
+                    }
+                  ]
+                }
+                """.trimIndent(),
+            )
+        }
+        val apiClient = HttpGuidanceApiClient(
+            httpClient = httpClient,
+            config = GuidanceApiConfig(baseUrl = "https://route.example.test"),
+        )
+
+        val result = apiClient.route(routeRequest())
+        val response = result.getOrThrow()
+        val candidate = response.candidates.single()
+
+        assertEquals(RoutePriorityDto.UNKNOWN, candidate.priority)
+        assertEquals(
+            listOf(RoutePriorityDto.RECOMMENDED, RoutePriorityDto.UNKNOWN),
+            candidate.mergedFromPriorities,
+        )
+        assertEquals(RouteCongestionLevelDto.UNKNOWN, candidate.congestionSegments.single().level)
+        assertEquals(RouteIncidentCategoryDto.UNKNOWN, candidate.routeIncidents.single().category)
+        assertEquals(RouteIncidentKindDto.UNKNOWN, candidate.routeIncidents.single().kind)
+        assertEquals(RouteManeuverTypeDto.UNKNOWN, candidate.maneuvers.single().type)
+        assertEquals(RouteDiagnosticLevelDto.UNKNOWN, candidate.diagnostics.single().level)
+        assertEquals(RoutePriorityDto.UNKNOWN, candidate.diagnostics.single().priority)
+        assertEquals(RouteDiagnosticLevelDto.UNKNOWN, response.diagnostics.single().level)
+        assertEquals(RoutePriorityDto.UNKNOWN, response.diagnostics.single().priority)
+    }
+
     private fun mockHttpClient(handler: MockEngineHandler): HttpClient {
         val engine = MockEngine { request -> handler.respond(this, request) }
 
@@ -180,6 +268,7 @@ class GuidanceApiClientTest {
         val json = Json {
             ignoreUnknownKeys = true
             isLenient = true
+            coerceInputValues = true
             encodeDefaults = true
         }
     }
