@@ -31,4 +31,7 @@ enum class DeveloperFeature {
 
     /** Android Auto host から取得した車両ハードウェア値の診断一覧を表示する。 */
     CAR_HARDWARE_DIAGNOSTICS,
+
+    /** 経路探索を OneNavi backend (HERE + JARTIC) の server route source から取得する。 */
+    USE_SERVER_ROUTE_SOURCE,
 }
