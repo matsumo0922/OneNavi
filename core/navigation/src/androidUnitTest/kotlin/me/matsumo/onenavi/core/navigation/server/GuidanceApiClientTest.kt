@@ -39,8 +39,8 @@ class GuidanceApiClientTest {
             httpClient = httpClient,
             config = GuidanceApiConfig(
                 baseUrl = "https://route.example.test/",
-                cloudflareAccessClientIdHeader = "$CF_ACCESS_CLIENT_ID_HEADER: client-id",
-                cloudflareAccessClientSecretHeader = "$CF_ACCESS_CLIENT_SECRET_HEADER: client-secret",
+                cloudflareAccessClientId = "client-id",
+                cloudflareAccessClientSecret = "client-secret",
             ),
         )
 
@@ -67,8 +67,8 @@ class GuidanceApiClientTest {
             httpClient = httpClient,
             config = GuidanceApiConfig(
                 baseUrl = "https://route.example.test",
-                cloudflareAccessClientIdHeader = "$CF_ACCESS_CLIENT_ID_HEADER: client-id",
-                cloudflareAccessClientSecretHeader = "",
+                cloudflareAccessClientId = "client-id",
+                cloudflareAccessClientSecret = "",
             ),
         )
 
@@ -78,26 +78,6 @@ class GuidanceApiClientTest {
         assertTrue(result.isSuccess)
         assertNull(request.headers[CF_ACCESS_CLIENT_ID_HEADER])
         assertNull(request.headers[CF_ACCESS_CLIENT_SECRET_HEADER])
-    }
-
-    @Test
-    fun `Cloudflare Access header line が不正なら失敗する`() = runTest {
-        val httpClient = mockHttpClient { scope, _ ->
-            scope.respondJson("""{"candidates":[]}""")
-        }
-        val apiClient = HttpGuidanceApiClient(
-            httpClient = httpClient,
-            config = GuidanceApiConfig(
-                baseUrl = "https://route.example.test",
-                cloudflareAccessClientIdHeader = "client-id",
-                cloudflareAccessClientSecretHeader = "$CF_ACCESS_CLIENT_SECRET_HEADER: client-secret",
-            ),
-        )
-
-        val result = apiClient.route(routeRequest())
-
-        assertTrue(result.isFailure)
-        assertTrue(result.exceptionOrNull() is IllegalArgumentException)
     }
 
     @Test
