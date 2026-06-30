@@ -11,7 +11,6 @@ data class AppConfig(
     val googleApiKey: String,
     val googleCloudTtsApiKey: String,
     val serverRouteBaseUrl: String,
-    val serverRouteForceExistingSource: Boolean,
     val serverRouteCfAccessClientIdHeader: String,
     val serverRouteCfAccessClientSecretHeader: String,
     val adMobAppId: String,

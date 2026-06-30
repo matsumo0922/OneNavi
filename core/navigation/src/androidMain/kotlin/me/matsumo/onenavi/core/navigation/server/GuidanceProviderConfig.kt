@@ -14,11 +14,9 @@ internal enum class GuidanceMigrationStage {
  * route source 選択の設定。
  *
  * @param stage route source の移行段階
- * @param forceExistingSource true の間は runtime 設定に関わらず既存 source へ固定する build-time kill-switch
  */
 internal data class GuidanceProviderConfig(
     val stage: GuidanceMigrationStage = GuidanceMigrationStage.S1,
-    val forceExistingSource: Boolean = false,
 )
 
 /**
@@ -55,10 +53,9 @@ internal class GuidanceRouteDataSourceSelector(
      */
     private fun selectedSource(): RouteDataSource {
         val canUseServerSource = providerConfig.stage == GuidanceMigrationStage.S1
-        val isRollbackForced = providerConfig.forceExistingSource
         val hasServerEndpoint = apiConfig.baseUrl.isNotBlank()
         val isEnabledByUser = serverRouteEnabledProvider()
-        val shouldUseServerSource = canUseServerSource && !isRollbackForced && hasServerEndpoint && isEnabledByUser
+        val shouldUseServerSource = canUseServerSource && hasServerEndpoint && isEnabledByUser
 
         return if (shouldUseServerSource) {
             serverSource

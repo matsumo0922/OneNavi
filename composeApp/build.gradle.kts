@@ -158,7 +158,6 @@ buildkonfig {
         setField("GOOGLE_API_KEY")
         setField("GOOGLE_CLOUD_TTS_API_KEY")
         setField("SERVER_ROUTE_BASE_URL")
-        setField("SERVER_ROUTE_FORCE_EXISTING_SOURCE", "false")
         setField(
             name = "SERVER_ROUTE_CF_ACCESS_CLIENT_ID_HEADER",
             preferEnvironment = true,

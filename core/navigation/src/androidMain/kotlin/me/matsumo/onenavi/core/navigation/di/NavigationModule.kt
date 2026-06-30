@@ -209,10 +209,8 @@ val navigationModule: Module = module {
         )
     }
     single {
-        val appConfig = get<AppConfig>()
         GuidanceProviderConfig(
             stage = GuidanceMigrationStage.S1,
-            forceExistingSource = appConfig.serverRouteForceExistingSource,
         )
     }
     single<GuidanceApiClient> {

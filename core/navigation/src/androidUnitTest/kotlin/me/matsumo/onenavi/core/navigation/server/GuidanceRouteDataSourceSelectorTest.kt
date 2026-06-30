@@ -48,10 +48,7 @@ class GuidanceRouteDataSourceSelectorTest {
         val selector = GuidanceRouteDataSourceSelector(
             existingSource = existingSource,
             serverSource = serverSource,
-            providerConfig = GuidanceProviderConfig(
-                stage = GuidanceMigrationStage.S1,
-                forceExistingSource = false,
-            ),
+            providerConfig = GuidanceProviderConfig(stage = GuidanceMigrationStage.S1),
             apiConfig = GuidanceApiConfig(baseUrl = "https://route.example.test"),
             serverRouteEnabledProvider = { true },
         )
@@ -77,40 +74,8 @@ class GuidanceRouteDataSourceSelectorTest {
         val selector = GuidanceRouteDataSourceSelector(
             existingSource = existingSource,
             serverSource = serverSource,
-            providerConfig = GuidanceProviderConfig(
-                stage = GuidanceMigrationStage.S1,
-                forceExistingSource = false,
-            ),
+            providerConfig = GuidanceProviderConfig(stage = GuidanceMigrationStage.S1),
             apiConfig = GuidanceApiConfig(baseUrl = ""),
-            serverRouteEnabledProvider = { true },
-        )
-
-        val routes = selector.searchRoutes(
-            originLatitude = 35.0,
-            originLongitude = 139.0,
-            destinationLatitude = 35.01,
-            destinationLongitude = 139.01,
-            intermediateWaypoints = emptyList(),
-            originDirectionDegrees = null,
-        ).getOrThrow()
-
-        assertEquals("existing-route", routes.single().detail.id)
-        assertEquals(1, existingSource.callCount)
-        assertEquals(0, serverSource.callCount)
-    }
-
-    @Test
-    fun `forceExistingSource の kill-switch は runtime トグル ON でも既存 source を強制する`() = runTest {
-        val existingSource = FakeRouteDataSource(routeId = "existing-route")
-        val serverSource = FakeRouteDataSource(routeId = "server-route")
-        val selector = GuidanceRouteDataSourceSelector(
-            existingSource = existingSource,
-            serverSource = serverSource,
-            providerConfig = GuidanceProviderConfig(
-                stage = GuidanceMigrationStage.S1,
-                forceExistingSource = true,
-            ),
-            apiConfig = GuidanceApiConfig(baseUrl = "https://route.example.test"),
             serverRouteEnabledProvider = { true },
         )
 
