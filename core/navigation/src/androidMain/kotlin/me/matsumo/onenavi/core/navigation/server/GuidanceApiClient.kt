@@ -15,8 +15,8 @@ import io.ktor.http.isSuccess
  */
 internal class GuidanceApiConfig(
     val baseUrl: String,
-    val cloudflareAccessClientIdHeader: String = "",
-    val cloudflareAccessClientSecretHeader: String = "",
+    val cloudflareAccessClientId: String = "",
+    val cloudflareAccessClientSecret: String = "",
 ) {
     /**
      * route endpoint の URL を返す。
@@ -29,29 +29,22 @@ internal class GuidanceApiConfig(
     }
 
     /**
-     * Cloudflare Access service token を付与できる設定かを返す。
+     * Cloudflare Access service token のヘッダペアを返す。
      */
     fun cloudflareAccessHeaders(): List<Pair<String, String>> {
-        val hasClientIdHeader = cloudflareAccessClientIdHeader.isNotBlank()
-        val hasClientSecretHeader = cloudflareAccessClientSecretHeader.isNotBlank()
-        if (!hasClientIdHeader || !hasClientSecretHeader) return emptyList()
+        val hasClientId = cloudflareAccessClientId.isNotBlank()
+        val hasClientSecret = cloudflareAccessClientSecret.isNotBlank()
+        if (!hasClientId || !hasClientSecret) return emptyList()
 
         return listOf(
-            cloudflareAccessClientIdHeader.toHeaderPair(),
-            cloudflareAccessClientSecretHeader.toHeaderPair(),
+            CF_ACCESS_CLIENT_ID_HEADER to cloudflareAccessClientId,
+            CF_ACCESS_CLIENT_SECRET_HEADER to cloudflareAccessClientSecret,
         )
     }
 
-    private fun String.toHeaderPair(): Pair<String, String> {
-        val separatorIndex = indexOf(':')
-        require(separatorIndex > 0) { "Cloudflare Access header line must include header name" }
-
-        val headerName = substring(startIndex = 0, endIndex = separatorIndex).trim()
-        val headerValue = substring(startIndex = separatorIndex + 1).trim()
-        require(headerName.isNotBlank()) { "Cloudflare Access header name must not be blank" }
-        require(headerValue.isNotBlank()) { "Cloudflare Access header value must not be blank" }
-
-        return headerName to headerValue
+    private companion object {
+        const val CF_ACCESS_CLIENT_ID_HEADER = "CF-Access-Client-Id"
+        const val CF_ACCESS_CLIENT_SECRET_HEADER = "CF-Access-Client-Secret"
     }
 }
 
