@@ -67,7 +67,7 @@ import me.matsumo.onenavi.feature.setting.components.SettingTitleItem
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
-import java.util.Locale
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -154,6 +154,7 @@ private val developerFeatureSections = listOf(
     Res.string.setting_developer_options_section_access,
     Res.string.setting_developer_options_section_location,
     Res.string.setting_developer_options_section_map,
+    Res.string.setting_developer_options_section_routing,
     Res.string.setting_developer_options_section_android_auto,
 )
 
