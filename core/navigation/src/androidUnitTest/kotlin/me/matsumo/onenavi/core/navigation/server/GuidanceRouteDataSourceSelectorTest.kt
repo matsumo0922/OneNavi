@@ -16,7 +16,7 @@ import kotlin.test.assertEquals
 class GuidanceRouteDataSourceSelectorTest {
 
     @Test
-    fun `default forceExistingSource では既存 source を使う`() = runTest {
+    fun `runtime トグルが OFF なら既存 source を使う`() = runTest {
         val existingSource = FakeRouteDataSource(routeId = "existing-route")
         val serverSource = FakeRouteDataSource(routeId = "server-route")
         val selector = GuidanceRouteDataSourceSelector(
@@ -24,6 +24,7 @@ class GuidanceRouteDataSourceSelectorTest {
             serverSource = serverSource,
             providerConfig = GuidanceProviderConfig(),
             apiConfig = GuidanceApiConfig(baseUrl = "https://route.example.test"),
+            serverRouteEnabledProvider = { false },
         )
 
         val routes = selector.searchRoutes(
@@ -41,7 +42,7 @@ class GuidanceRouteDataSourceSelectorTest {
     }
 
     @Test
-    fun `server source は S1 かつ forceExistingSource false かつ base URL nonblank のときだけ使う`() = runTest {
+    fun `S1 かつ base URL nonblank かつ runtime トグル ON のときだけ server source を使う`() = runTest {
         val existingSource = FakeRouteDataSource(routeId = "existing-route")
         val serverSource = FakeRouteDataSource(routeId = "server-route")
         val selector = GuidanceRouteDataSourceSelector(
@@ -52,6 +53,7 @@ class GuidanceRouteDataSourceSelectorTest {
                 forceExistingSource = false,
             ),
             apiConfig = GuidanceApiConfig(baseUrl = "https://route.example.test"),
+            serverRouteEnabledProvider = { true },
         )
 
         val routes = selector.searchRoutes(
@@ -69,7 +71,7 @@ class GuidanceRouteDataSourceSelectorTest {
     }
 
     @Test
-    fun `base URL が空なら forceExistingSource false でも既存 source を使う`() = runTest {
+    fun `base URL が空なら runtime トグル ON でも既存 source を使う`() = runTest {
         val existingSource = FakeRouteDataSource(routeId = "existing-route")
         val serverSource = FakeRouteDataSource(routeId = "server-route")
         val selector = GuidanceRouteDataSourceSelector(
@@ -80,6 +82,36 @@ class GuidanceRouteDataSourceSelectorTest {
                 forceExistingSource = false,
             ),
             apiConfig = GuidanceApiConfig(baseUrl = ""),
+            serverRouteEnabledProvider = { true },
+        )
+
+        val routes = selector.searchRoutes(
+            originLatitude = 35.0,
+            originLongitude = 139.0,
+            destinationLatitude = 35.01,
+            destinationLongitude = 139.01,
+            intermediateWaypoints = emptyList(),
+            originDirectionDegrees = null,
+        ).getOrThrow()
+
+        assertEquals("existing-route", routes.single().detail.id)
+        assertEquals(1, existingSource.callCount)
+        assertEquals(0, serverSource.callCount)
+    }
+
+    @Test
+    fun `forceExistingSource の kill-switch は runtime トグル ON でも既存 source を強制する`() = runTest {
+        val existingSource = FakeRouteDataSource(routeId = "existing-route")
+        val serverSource = FakeRouteDataSource(routeId = "server-route")
+        val selector = GuidanceRouteDataSourceSelector(
+            existingSource = existingSource,
+            serverSource = serverSource,
+            providerConfig = GuidanceProviderConfig(
+                stage = GuidanceMigrationStage.S1,
+                forceExistingSource = true,
+            ),
+            apiConfig = GuidanceApiConfig(baseUrl = "https://route.example.test"),
+            serverRouteEnabledProvider = { true },
         )
 
         val routes = selector.searchRoutes(
