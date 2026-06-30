@@ -294,7 +294,6 @@ class ExtNavAuthGatewayTest {
         googleApiKey = "",
         googleCloudTtsApiKey = "",
         serverRouteBaseUrl = "",
-        serverRouteForceExistingSource = true,
         serverRouteCfAccessClientIdHeader = "",
         serverRouteCfAccessClientSecretHeader = "",
         adMobAppId = "",

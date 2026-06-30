@@ -37,7 +37,6 @@ val appModule = module {
             googleApiKey = BuildKonfig.GOOGLE_API_KEY,
             googleCloudTtsApiKey = BuildKonfig.GOOGLE_CLOUD_TTS_API_KEY,
             serverRouteBaseUrl = BuildKonfig.SERVER_ROUTE_BASE_URL,
-            serverRouteForceExistingSource = BuildKonfig.SERVER_ROUTE_FORCE_EXISTING_SOURCE.toBooleanStrictOrNull() ?: true,
             serverRouteCfAccessClientIdHeader = BuildKonfig.SERVER_ROUTE_CF_ACCESS_CLIENT_ID_HEADER,
             serverRouteCfAccessClientSecretHeader = BuildKonfig.SERVER_ROUTE_CF_ACCESS_CLIENT_SECRET_HEADER,
             adMobAppId = BuildKonfig.ADMOB_ANDROID_APP_ID,

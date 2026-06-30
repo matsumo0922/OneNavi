@@ -237,6 +237,7 @@
     <string name="setting_developer_options_section_location">位置情報</string>
     <string name="setting_developer_options_section_map">地図</string>
     <string name="setting_developer_options_section_android_auto">Android Auto</string>
+    <string name="setting_developer_options_section_routing">経路ソース</string>
     <string name="setting_developer_options_force_plus_privilege">Plus 権限を強制付与</string>
     <string name="setting_developer_options_force_plus_privilege_description">課金状態に関係なく Plus 相当として扱います。</string>
     <string name="setting_developer_options_show_paywall_section">Paywall セクションを表示</string>
@@ -251,6 +252,8 @@
     <string name="setting_developer_options_car_vd_debug_overlay_description">Android Auto Virtual Display の viewport、タッチ座標、診断パネルを表示します。</string>
     <string name="setting_developer_options_tts_schedule_debug_card">TTS 発話予定デバッグカード</string>
     <string name="setting_developer_options_tts_schedule_debug_card_description">案内中の ETA カード上に直近の TTS 発話予定と取得状態を表示します。</string>
+    <string name="setting_developer_options_use_server_route_source">サーバー経路ソースを使う</string>
+    <string name="setting_developer_options_use_server_route_source_description">経路探索を OneNavi backend (HERE + JARTIC) から取得します。SERVER_ROUTE_BASE_URL 未設定時、または build kill-switch ON 時は無効です。</string>
     <string name="setting_developer_options_car_hardware_diagnostics">車両データ診断</string>
     <string name="setting_developer_options_car_hardware_diagnostics_description">Android Auto host から取得した車速、ETC、燃料/電池、車両位置の値と STATUS_* を表示します。</string>
     <string name="setting_developer_options_car_hardware_diagnostics_connection">接続状態</string>

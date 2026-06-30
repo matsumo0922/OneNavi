@@ -50,6 +50,7 @@ import me.matsumo.onenavi.core.resource.setting_developer_options_section_access
 import me.matsumo.onenavi.core.resource.setting_developer_options_section_android_auto
 import me.matsumo.onenavi.core.resource.setting_developer_options_section_location
 import me.matsumo.onenavi.core.resource.setting_developer_options_section_map
+import me.matsumo.onenavi.core.resource.setting_developer_options_section_routing
 import me.matsumo.onenavi.core.resource.setting_developer_options_show_developer_badge
 import me.matsumo.onenavi.core.resource.setting_developer_options_show_developer_badge_description
 import me.matsumo.onenavi.core.resource.setting_developer_options_show_paywall_section
@@ -57,6 +58,8 @@ import me.matsumo.onenavi.core.resource.setting_developer_options_show_paywall_s
 import me.matsumo.onenavi.core.resource.setting_developer_options_title
 import me.matsumo.onenavi.core.resource.setting_developer_options_tts_schedule_debug_card
 import me.matsumo.onenavi.core.resource.setting_developer_options_tts_schedule_debug_card_description
+import me.matsumo.onenavi.core.resource.setting_developer_options_use_server_route_source
+import me.matsumo.onenavi.core.resource.setting_developer_options_use_server_route_source_description
 import me.matsumo.onenavi.core.ui.theme.LocalNavBackStack
 import me.matsumo.onenavi.feature.setting.components.SettingSwitchItem
 import me.matsumo.onenavi.feature.setting.components.SettingTextItem
@@ -164,6 +167,7 @@ private val DeveloperFeature.sectionTitle: StringResource
         DeveloperFeature.CAR_VD_DEBUG_OVERLAY -> Res.string.setting_developer_options_section_android_auto
         DeveloperFeature.TTS_SCHEDULE_DEBUG_CARD -> Res.string.setting_developer_options_section_android_auto
         DeveloperFeature.CAR_HARDWARE_DIAGNOSTICS -> Res.string.setting_developer_options_section_android_auto
+        DeveloperFeature.USE_SERVER_ROUTE_SOURCE -> Res.string.setting_developer_options_section_routing
     }
 
 private val DeveloperFeature.title: StringResource
@@ -176,6 +180,7 @@ private val DeveloperFeature.title: StringResource
         DeveloperFeature.CAR_VD_DEBUG_OVERLAY -> Res.string.setting_developer_options_car_vd_debug_overlay
         DeveloperFeature.TTS_SCHEDULE_DEBUG_CARD -> Res.string.setting_developer_options_tts_schedule_debug_card
         DeveloperFeature.CAR_HARDWARE_DIAGNOSTICS -> Res.string.setting_developer_options_car_hardware_diagnostics
+        DeveloperFeature.USE_SERVER_ROUTE_SOURCE -> Res.string.setting_developer_options_use_server_route_source
     }
 
 private val DeveloperFeature.description: StringResource
@@ -188,6 +193,7 @@ private val DeveloperFeature.description: StringResource
         DeveloperFeature.CAR_VD_DEBUG_OVERLAY -> Res.string.setting_developer_options_car_vd_debug_overlay_description
         DeveloperFeature.TTS_SCHEDULE_DEBUG_CARD -> Res.string.setting_developer_options_tts_schedule_debug_card_description
         DeveloperFeature.CAR_HARDWARE_DIAGNOSTICS -> Res.string.setting_developer_options_car_hardware_diagnostics_description
+        DeveloperFeature.USE_SERVER_ROUTE_SOURCE -> Res.string.setting_developer_options_use_server_route_source_description
     }
 
 private fun LazyListScope.carHardwareDiagnosticsItems(snapshot: CarHardwareDiagnosticsSnapshot, hasDetectedClusterSession: Boolean) {

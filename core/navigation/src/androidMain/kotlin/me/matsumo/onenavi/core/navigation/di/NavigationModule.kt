@@ -7,8 +7,10 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import me.matsumo.drive.supporter.api.core.model.LogLevel
+import me.matsumo.onenavi.core.datasource.AppSettingDataSource
 import me.matsumo.onenavi.core.datasource.RouteDataSource
 import me.matsumo.onenavi.core.model.AppConfig
+import me.matsumo.onenavi.core.model.DeveloperFeature
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavAuthGateway
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavClientProvider
 import me.matsumo.onenavi.core.navigation.extnav.ExtNavGuidanceTracker
@@ -207,10 +209,8 @@ val navigationModule: Module = module {
         )
     }
     single {
-        val appConfig = get<AppConfig>()
         GuidanceProviderConfig(
             stage = GuidanceMigrationStage.S1,
-            forceExistingSource = appConfig.serverRouteForceExistingSource,
         )
     }
     single<GuidanceApiClient> {
@@ -261,11 +261,15 @@ val navigationModule: Module = module {
         )
     }
     single<RouteDataSource> {
+        val appSettingDataSource = get<AppSettingDataSource>()
         GuidanceRouteDataSourceSelector(
             existingSource = get(named("existingRouteDataSource")),
             serverSource = get(named("serverRouteDataSource")),
             providerConfig = get(),
             apiConfig = get(),
+            serverRouteEnabledProvider = {
+                appSettingDataSource.setting.value.isDeveloperFeatureEnabled(DeveloperFeature.USE_SERVER_ROUTE_SOURCE)
+            },
         )
     }
 }
