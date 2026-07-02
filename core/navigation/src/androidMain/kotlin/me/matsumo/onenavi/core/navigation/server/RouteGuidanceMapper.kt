@@ -397,14 +397,11 @@ internal class RouteGuidanceMapper {
         }
 
     private fun String.toCongestionSource(): CongestionSegmentSource {
-        val normalizedSource = uppercase()
+        val hasServerSource = isNotBlank()
 
-        return when (normalizedSource) {
-            "HERE",
-            "JARTIC",
-            -> CongestionSegmentSource.ROUTE_LINK
-            else -> CongestionSegmentSource.UNKNOWN
-        }
+        if (!hasServerSource) return CongestionSegmentSource.UNKNOWN
+
+        return CongestionSegmentSource.ROUTE_LINK
     }
 
     private fun RouteIncidentCategoryDto.toModel(): RouteIncidentMarkerCategory =

@@ -125,7 +125,7 @@ class GuidanceApiClientTest {
                           "startMeasureMetres": 0.0,
                           "endMeasureMetres": 100.0,
                           "level": "HEAVY",
-                          "source": "HERE"
+                          "source": "SERVER_ROUTE_PROVIDER"
                         }
                       ],
                       "routeIncidents": [
