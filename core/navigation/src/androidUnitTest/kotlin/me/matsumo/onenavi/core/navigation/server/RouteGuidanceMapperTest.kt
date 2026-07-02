@@ -2,6 +2,7 @@ package me.matsumo.onenavi.core.navigation.server
 
 import me.matsumo.drive.supporter.api.guidance.domain.GuidanceCategory
 import me.matsumo.drive.supporter.api.route.domain.CarPriority
+import me.matsumo.onenavi.core.model.CongestionSegmentSource
 import me.matsumo.onenavi.core.model.CongestionSeverity
 import me.matsumo.onenavi.core.model.RouteIncidentMarkerCategory
 import me.matsumo.onenavi.core.model.RoutePriority
@@ -61,6 +62,7 @@ class RouteGuidanceMapperTest {
         assertEquals(0.0, congestionSegment.startDistanceMeters)
         assertEquals(1_000.0, congestionSegment.endDistanceMeters)
         assertEquals("混雑", congestionSegment.headPointName)
+        assertEquals(CongestionSegmentSource.ROUTE_LINK, congestionSegment.source)
         assertEquals(routeDetail.congestionSegments, routeItem.congestionSegments)
         assertEquals(RouteIncidentMarkerCategory.Regulation, incident.category)
         assertEquals("車線規制", incident.displayText)
@@ -174,7 +176,7 @@ class RouteGuidanceMapperTest {
                     startMeasureMetres = 10.4,
                     endMeasureMetres = 1_010.2,
                     speedLimitKmh = 60,
-                    source = "HERE",
+                    source = "SERVER_ROUTE_PROVIDER",
                 ),
             ),
             congestionSegments = listOf(
@@ -183,7 +185,7 @@ class RouteGuidanceMapperTest {
                     startMeasureMetres = 0.0,
                     endMeasureMetres = 1_000.0,
                     level = RouteCongestionLevelDto.CROWDED,
-                    source = "HERE",
+                    source = "SERVER_ROUTE_PROVIDER",
                     displayText = "混雑",
                 ),
             ),
